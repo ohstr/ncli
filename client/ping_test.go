@@ -7,6 +7,32 @@ import (
 	"time"
 )
 
+// TestPingWantsTUI covers pingWantsTUI's precedence rules: the board is
+// opt-in via opts.TUI, requires a real terminal, and is unconditionally
+// vetoed by JSON or Quiet even when TUI and a terminal are both present.
+func TestPingWantsTUI(t *testing.T) {
+	tests := []struct {
+		name       string
+		opts       PingOptions
+		isTerminal bool
+		want       bool
+	}{
+		{"TUI unset defaults to plain even in a terminal", PingOptions{}, true, false},
+		{"TUI requested without a terminal stays plain", PingOptions{TUI: true}, false, false},
+		{"TUI requested in a terminal renders the board", PingOptions{TUI: true}, true, true},
+		{"JSON vetoes TUI even when requested", PingOptions{TUI: true, JSON: true}, true, false},
+		{"Quiet vetoes TUI even when requested", PingOptions{TUI: true, Quiet: true}, true, false},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := pingWantsTUI(test.opts, test.isTerminal); got != test.want {
+				t.Fatalf("pingWantsTUI(%+v, isTerminal=%v) = %v, want %v", test.opts, test.isTerminal, got, test.want)
+			}
+		})
+	}
+}
+
 func TestPing_ReachableAndUnreachable(t *testing.T) {
 	wsURL, _ := mockWSServer(t)
 

@@ -404,6 +404,10 @@ Confirms a relay actually speaks the protocol, not just accepts a
 connection. Fetches no events, and exits non-zero if any relay is
 unreachable.
 
+Results narrate as plain log lines by default. Pass `--tui` for a live
+interactive board instead -- only takes effect in a real terminal and
+without `--json`/`--quiet`, falling back to plain narration otherwise.
+
 ```sh
 # relays are plain arguments, no flag needed -- scheme optional too
 ncli ping relay.damus.io relay.snort.social
@@ -416,6 +420,9 @@ ncli ping
 
 # structured report on stdout, for scripting
 ncli ping relay.damus.io --json
+
+# live interactive board instead of plain log lines
+ncli ping relay.damus.io relay.snort.social --tui
 ```
 
 ![`ncli ping` checking two relays' reachability](docs/vhs/ping.gif)

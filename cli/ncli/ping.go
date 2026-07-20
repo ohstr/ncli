@@ -29,12 +29,12 @@ looks at its relays, not its filters), --targets <file.yaml>; pick one,
 not a mix. Omitting both falls back to every relay configured via
 "ncli prefs relays add".
 
-In an interactive terminal (and without --json/--quiet), results render as
-a live board; otherwise (piped, --quiet, or --json) they narrate as plain
-log lines on stderr instead. --json additionally suppresses that narration
-and prints a structured { results, checked, reachable, unreachable }
-report to stdout, for scripting. Exits non-zero if any relay was
-unreachable.`,
+Results narrate as plain log lines on stderr by default. Pass --tui for a
+live interactive board instead -- only takes effect in a real terminal and
+without --json/--quiet, falling back to plain narration otherwise. --json
+additionally suppresses that narration and prints a structured { results,
+checked, reachable, unreachable } report to stdout, for scripting. Exits
+non-zero if any relay was unreachable.`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		if err := cmd.ValidateRequiredFlags(); err != nil {
 			return common.UsageError(cmd, err)
@@ -56,6 +56,7 @@ unreachable.`,
 		timeout, _ := cmd.Flags().GetDuration("timeout")
 		jsonMode, _ := cmd.Flags().GetBool("json")
 		quiet, _ := cmd.Flags().GetBool("quiet")
+		tuiMode, _ := cmd.Flags().GetBool("tui")
 
 		var targetsSpec *client.TargetsSpec
 		var err error
@@ -87,6 +88,7 @@ unreachable.`,
 		report := client.Ping(ctx, targetsSpec, client.PingOptions{
 			JSON:    jsonMode,
 			Quiet:   quiet,
+			TUI:     tuiMode,
 			Timeout: timeout,
 		})
 
@@ -108,4 +110,5 @@ func init() {
 	pingCmd.MarkFlagFilename("targets", "yaml", "yml")
 
 	pingCmd.Flags().Duration("timeout", 30*time.Second, "Max time to wait per relay before giving up on it (0 = wait forever)")
+	pingCmd.Flags().Bool("tui", false, "Render results as a live interactive board instead of plain log lines (requires a real terminal; ignored otherwise, or with --json/--quiet)")
 }

@@ -46,10 +46,26 @@ type PingOptions struct {
 	// Quiet suppresses narration the same way JSON does, but leaves report
 	// printing to the caller's normal text path rather than forcing JSON.
 	Quiet bool
+	// TUI opts into the live interactive board explicitly. Without it, Ping
+	// always narrates as plain log lines (or stays silent under JSON), even
+	// under a real terminal -- ping's result is a one-shot report, not
+	// something that benefits from a persistent dashboard, so the board is
+	// opt-in rather than automatic. Still ignored (falls back to plain) when
+	// JSON or Quiet is set, or stdout isn't a real terminal.
+	TUI bool
 	// Timeout bounds how long a single relay's connect-and-subscribe gets
 	// before it's counted unreachable and Ping moves on; 0 waits on ctx
 	// alone.
 	Timeout time.Duration
+}
+
+// pingWantsTUI resolves whether Ping should render its interactive board,
+// given isTerminal (the caller's real-terminal check, taken as a parameter
+// so this stays testable without an actual tty): opts.TUI must be requested
+// explicitly, and JSON/Quiet each unconditionally veto it regardless of
+// opts.TUI, same as they already suppress plain narration.
+func pingWantsTUI(opts PingOptions, isTerminal bool) bool {
+	return opts.TUI && !opts.JSON && !opts.Quiet && isTerminal
 }
 
 func relayWord(n int) string {
@@ -69,10 +85,10 @@ func relayWord(n int) string {
 // surface area that looks configurable but silently isn't.
 //
 // Presentation depends on opts and the calling terminal: an interactive
-// tui.ConnectivityBoard when stdout is a real terminal and neither JSON nor
-// Quiet is set, plain log narration otherwise (unless JSON, which stays
-// silent so the caller's stdout is clean for the returned report). Ping
-// always returns a complete report regardless of presentation.
+// tui.ConnectivityBoard when opts.TUI is set, stdout is a real terminal, and
+// neither JSON nor Quiet is set; plain log narration otherwise (unless JSON,
+// which stays silent so the caller's stdout is clean for the returned
+// report). Ping always returns a complete report regardless of presentation.
 func Ping(ctx context.Context, targets *TargetsSpec, opts PingOptions) *PingReport {
 
 	filters := nip01.NewSubscriptionFilterGroup()
@@ -85,7 +101,7 @@ func Ping(ctx context.Context, targets *TargetsSpec, opts PingOptions) *PingRepo
 		}
 	}
 
-	useTUI := !opts.JSON && !opts.Quiet && term.IsTerminal(int(os.Stdout.Fd()))
+	useTUI := pingWantsTUI(opts, term.IsTerminal(int(os.Stdout.Fd())))
 
 	var app *tui.App
 	var logger connectivityLogger

@@ -53,7 +53,9 @@ Initial public release.
   Ctrl-C/SIGTERM waits for. The interactive TUI includes an event detail
   dialog and event table for inspecting individual events as they arrive.
 - `ncli ping` — probe whether targets are reachable (connect + subscribe),
-  no events fetched.
+  no events fetched. Narrates as plain log lines by default; pass `--tui`
+  for a live interactive board instead (falls back to plain if stdout
+  isn't a real terminal, or under `--json`/`--quiet`).
 - `ncli publish` — publish one or more events to one or more relays,
   reporting per-(event, relay) accept/reject outcomes (`--json` for
   scripts). Exits non-zero if any target rejects.

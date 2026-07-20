@@ -129,6 +129,7 @@ ncli ping relay.damus.io relay.snort.social                  # space-separated, 
 ncli ping -t targets.yaml                                    # relays from a file (its filters, if any, are ignored)
 ncli ping                                                    # no relays, no --targets: every `ncli prefs` relay
 ncli ping relay.damus.io --json                              # structured report on stdout, no narration
+ncli ping relay.damus.io relay.snort.social --tui             # live interactive board instead of plain log lines
 ```
 
 Connects to every target and issues a Limit-1, match-everything
@@ -160,12 +161,15 @@ listing exactly which. `--timeout` (default `30s`) bounds how long a
 single relay's connect-and-subscribe gets before it's counted
 unreachable and `ping` moves to the next one.
 
-Presentation follows the same terminal-awareness `apply` uses: an
-interactive board when stdout is a real terminal and neither `--json` nor
-`-q/--quiet` is set, plain log lines on stderr otherwise. `--json` prints
-a `{results: [{relay, reachable, error?}], checked, reachable,
-unreachable}` report to stdout instead, with no narration at all -- the
-report is the only thing on stdout, safe to pipe into `jq`.
+Presentation defaults to plain log lines on stderr, unlike `apply`'s
+stream/sync/inspect boards, which open automatically in a real terminal --
+`ping`'s result is a one-shot report, not a long-running workflow, so the
+board is opt-in via `--tui` rather than automatic. `--tui` only takes
+effect in a real terminal and with neither `--json` nor `-q/--quiet` set
+(both veto it regardless), falling back to plain narration otherwise.
+`--json` prints a `{results: [{relay, reachable, error?}], checked,
+reachable, unreachable}` report to stdout instead, with no narration at
+all -- the report is the only thing on stdout, safe to pipe into `jq`.
 
 `apply` itself has no connectivity pre-check of its own (it trusts that
 relays named in a spec already work) -- run `ncli ping` first, separately,

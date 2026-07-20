@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.3.0]
+
+### Changed
+
+- `ncli ping`'s live board is now opt-in via `--tui` instead of firing
+  automatically whenever stdout is a real terminal. Results narrate as
+  plain log lines by default; pass `--tui` to get the interactive board
+  back (still falls back to plain under `--json`/`--quiet`, or without a
+  real terminal).
+
+
 ## [0.1.0]
 
 Initial public release.
@@ -53,9 +64,7 @@ Initial public release.
   Ctrl-C/SIGTERM waits for. The interactive TUI includes an event detail
   dialog and event table for inspecting individual events as they arrive.
 - `ncli ping` — probe whether targets are reachable (connect + subscribe),
-  no events fetched. Narrates as plain log lines by default; pass `--tui`
-  for a live interactive board instead (falls back to plain if stdout
-  isn't a real terminal, or under `--json`/`--quiet`).
+  no events fetched.
 - `ncli publish` — publish one or more events to one or more relays,
   reporting per-(event, relay) accept/reject outcomes (`--json` for
   scripts). Exits non-zero if any target rejects.

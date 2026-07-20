@@ -22,6 +22,7 @@ that priority order.
 | `ncli relay context add/use/remove` | Save named relay `--config` shortcuts and switch the current one, so `relay` subcommands stop needing `--config` repeated on every call |
 | `ncli id [identifier]` | Generate or inspect a Nostr keypair (local vault) |
 | `ncli id delegate` | Mint a NIP-26 delegation token |
+| `ncli id sign -e <events.json> -o <signed.json>` | Sign one or more unsigned events with a vault/nsec identity |
 | `ncli decode <entity>` | Decode any NIP-19 bech32 entity (npub/nsec/note/nprofile/nevent/naddr) |
 | `ncli miner -e <event.yaml>` | Mine or check NIP-13 proof-of-work on an event |
 | `ncli version` | Build info + on-disk paths |
@@ -37,7 +38,7 @@ Every command's actual result goes to **stdout only**; progress narration
 and errors go to **stderr** — so piping stdout into `jq` or a script's
 parser never picks up log noise. `--json` and `-q/--quiet` are global flags
 (declared once on the root command, available on every subcommand) rather
-than per-command. `id`, `id list`, `version`, `id delegate`, `relay
+than per-command. `id`, `id list`, `id sign`, `version`, `id delegate`, `relay
 stats`/`reindex`/`clear`, `relay members`/`invites`/`roles`, `ping`,
 `miner mine`/`check`, `publish`, and `prefs relays add`/`remove`/`list`/
 `clear`/`prefs path` are human-readable text by default and switch their

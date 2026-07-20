@@ -673,10 +673,14 @@ ncli id list --reveal
 
 # non-interactive, vault password from NCLI_VAULT_PASSWORD
 ncli id --json --save --label mykey
+
+# sign an unsigned event with a saved identity, ready for `ncli publish`
+ncli id sign --identity mykey -e draft.json -o signed.json
 ```
 
-The vault is encrypted under a password. `ncli id delegate` mints a
-NIP-26 delegation token from an identity.
+The vault is encrypted under a password. `ncli id sign` signs an unsigned
+event with an identity's private key; `ncli id delegate` mints a NIP-26
+delegation token from one.
 
 ![`ncli id` generating a keypair, then inspecting a nip-05 address](docs/vhs/id.gif)
 

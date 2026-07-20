@@ -2,6 +2,15 @@
 
 ## [0.2.0]
 
+### Added
+
+- `ncli id sign` — sign an unsigned event (or an array of them) with a
+  vault/nsec identity, writing the result back in the same
+  single-object-or-array shape it was read in so it chains straight into
+  `ncli publish --events`/`ncli miner check --events` with no reshaping.
+  Rejects a pubkey-only identity (no private key to sign with) and a
+  pubkey conflict between the event and the resolved identity.
+
 ### Changed
 
 - `ncli ping`'s live board is now opt-in via `--tui` instead of firing

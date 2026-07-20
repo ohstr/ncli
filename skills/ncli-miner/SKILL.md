@@ -149,6 +149,18 @@ ncli miner mine --content "hello from ncli" --identity mykey -d 20 -o signed.jso
 ncli publish -e signed.json -s wss://relay.damus.io
 ```
 
+If the mined event came out unsigned (no `--identity`, or a pubkey-only
+one), `ncli id sign` is the general-purpose sign step -- see
+`skills/ncli-identity/SKILL.md` -- and its output matches this same
+`-e/--events` single-or-array shape, so it drops straight into `publish`/
+`miner check` with no reshaping:
+
+```sh
+ncli miner mine -e draft.json -o mined.json -d 20        # PoW only, no --identity
+ncli id sign --identity mykey -e mined.json -o signed.json
+ncli publish -e signed.json -s wss://relay.damus.io
+```
+
 ## Check
 
 Two ways to source events to check:

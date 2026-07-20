@@ -29,6 +29,14 @@ syncing, inspecting, querying, and mining events.**
 
 ## Installation
 
+**AI agents:**
+
+```
+Fetch https://ohstr.github.io/ncli/PROMPT.md
+```
+
+See [Agent skills](#agent-skills) below for what that does.
+
 **macOS / Linux:**
 
 ```sh

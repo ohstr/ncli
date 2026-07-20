@@ -1,21 +1,23 @@
 ---
 name: ncli-identity
-description: Generate, inspect, and manage Nostr keypairs with ncli's local vault (`ncli id`), decode any NIP-19 bech32 entity (`ncli decode`), and mint NIP-26 delegation tokens (`ncli id delegate`) for scripted or agent-driven signing. Use when generating or resolving a Nostr identity (hex/npub/nsec/NIP-05), decoding an npub/nsec/note/nprofile/nevent/naddr, scripting vault access with NCLI_VAULT_PASSWORD, or non-interactively creating a delegation token with --issuer-key/NCLI_DELEGATE_ISSUERKEY.
+description: Generate, inspect, and manage Nostr keypairs with ncli's local vault (`ncli id`), decode any NIP-19 bech32 entity (`ncli decode`), sign unsigned events with a vault/nsec identity (`ncli id sign`), and mint NIP-26 delegation tokens (`ncli id delegate`) for scripted or agent-driven signing. Use when generating or resolving a Nostr identity (hex/npub/nsec/NIP-05), decoding an npub/nsec/note/nprofile/nevent/naddr, signing a hand-authored or dumped unsigned event so it can be published, scripting vault access with NCLI_VAULT_PASSWORD, or non-interactively creating a delegation token with --issuer-key/NCLI_DELEGATE_ISSUERKEY.
 license: Unlicense
 ---
 
-<!-- Mirrors ohstr/ncli's cli/ncli/id.go and cli/delegate/command.go as of
-writing. This skill is self-contained by design and won't see repo changes
-automatically — update by hand if flags/schemas change. -->
+<!-- Mirrors ohstr/ncli's cli/ncli/id.go, cli/ncli/id_sign.go, and
+cli/delegate/command.go as of writing. This skill is self-contained by
+design and won't see repo changes automatically — update by hand if
+flags/schemas change. -->
 
-# ncli id / ncli id delegate
+# ncli id / ncli id sign / ncli id delegate
 
-`delegate` is a subcommand of `id` (`ncli id delegate`), but they're **not
-functionally integrated**: `id` manages a local, encrypted vault of
-keypairs; `delegate` mints a NIP-26 delegation token from a raw key you pass
-in directly. `delegate` does not read the vault — you extract a key from
-`id` first if you want to delegate from a vault-saved identity (pattern
-shown below).
+`sign` and `delegate` are both subcommands of `id` (`ncli id sign`, `ncli id
+delegate`), but neither is **functionally integrated** with the vault the
+way `id`/`id list` are: `id sign`'s `--identity` *does* resolve a vault
+label (unlocking it the same way `id --reveal` does), but `delegate`'s
+`--issuer-key` only ever takes a raw key you pass in directly — it does not
+read the vault at all. Extract a key from `id --reveal` first if you want to
+delegate from a vault-saved identity (pattern shown below).
 
 ## `ncli id` — generate
 
@@ -78,6 +80,44 @@ Creating a brand-new vault this way (password from the env var) skips the
 usual confirm-by-retyping step — that only happens on the fully-interactive
 path, since there's no risk of a mistyped confirmation when the password
 came from one authoritative source.
+
+## `ncli id sign` — sign an unsigned event
+
+```sh
+ncli id sign --identity agent-key -e draft.json -o signed.json --json
+ncli id sign --identity nsec1... -e draft.json -o signed.json --json    # raw nsec, no vault involved
+NCLI_VAULT_PASSWORD=hunter2 ncli id sign --identity agent-key -e draft.json -o signed.json --json
+```
+
+- `--identity <vault-label|nsec>` (required) must resolve to a **private**
+  key -- a vault label (needs `NCLI_VAULT_PASSWORD` under `--json`, same as
+  `id --reveal`) or a raw `nsec1...`. A pubkey-only identity (npub/hex/
+  nprofile/nip-05, not vault-saved) has no key to sign with and fails
+  immediately with `code: "auth"` (exit 7) -- unlike `ncli miner mine
+  --identity`, which tolerates a pubkey-only identity and just leaves the
+  event unsigned, signing with no key at all is never a partial result.
+- `-e/--events <file>` (required) -- a single unsigned event object or an
+  array, the same shapes `ncli publish`'s `-e/--events` and `ncli miner
+  check`'s `-e/--events` already accept.
+- `-o/--out <file>` (required) -- written back in the **same shape** it was
+  read in (single object stays a single object, array stays an array), so
+  the result chains straight into `ncli publish --events <out>` or `ncli
+  miner check --events <out>` with no reshaping.
+- If an event already declares a `pubkey` that conflicts with `--identity`'s
+  resolved pubkey, this fails with `code: "invalid_input"` rather than
+  silently re-signing it under a different key -- the same guard `ncli miner
+  mine --identity` applies before mining.
+
+This is the general-purpose sign step for events `ncli miner mine` didn't
+already sign -- a hand-authored draft with a fixed `pubkey`, a batch dumped
+by another tool, or a PoW-mined-but-unsigned draft (`miner mine` without
+`--identity`, or with a pubkey-only one):
+
+```sh
+ncli miner mine -e draft.json -o mined.json -d 20        # PoW only, stays unsigned
+ncli id sign --identity agent-key -e mined.json -o signed.json --json
+ncli publish -e signed.json -s wss://relay.damus.io
+```
 
 ## `ncli id delegate` — mint a NIP-26 token
 
@@ -146,3 +186,7 @@ interchangeably — no separate flags for each form.
   `--config` being passed explicitly.
 - Both `ncli id` and `ncli id delegate` had zero README usage examples as of
   writing — this skill is effectively their first real documentation.
+- `ncli id sign`'s `-e/--events` accepts `.json`/`.jsonp`/`.yaml`/`.yml`
+  (like `mine`'s `-e`, not `miner check`'s JSON-only `-e`). An empty array
+  (`[]`) is rejected (`code: "invalid_input"`) rather than silently
+  succeeding with a zero-length output file.

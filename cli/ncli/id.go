@@ -35,7 +35,8 @@ interactive prompt: saving only happens with --save, the label only comes
 from --label (falling back to the npub if omitted), and the vault password
 only comes from the NCLI_VAULT_PASSWORD environment variable.
 
-See "ncli id delegate" to mint a NIP-26 delegation token from an identity.`,
+See "ncli id delegate" to mint a NIP-26 delegation token from an identity,
+or "ncli id sign" to sign an unsigned event with one.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {

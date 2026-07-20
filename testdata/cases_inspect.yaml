@@ -1,0 +1,81 @@
+
+kind: inspect
+spec:
+  targets:
+    - ../testdata/notes.db
+
+---
+
+kind: inspect
+spec:
+  targets:
+    - wss://relay.damus.io
+
+---
+
+kind: inspect
+spec:
+  targets:
+    - wss://relay.damus.io
+    - ../testdata/notes.db
+
+---
+
+kind: inspect
+spec:
+  targets:
+    - wss://relay.damus.io
+  filters:
+    - kinds:
+        - 1
+      limit: 10
+    - kinds:
+        - 7
+
+---
+
+kind: inspect
+spec:
+  targets:
+    - wss://relay.damus.io
+    - ../testdata/notes.db
+
+---
+
+kind: inspect
+spec:
+  targets:
+    - wss://relay.damus.io
+    - null
+
+---
+
+kind: inspect
+spec:
+  targets:
+    - wss://relay.damus.io
+  filters:
+    - kinds:
+        - 1
+    - null
+
+---
+
+kind: inspect
+spec:
+  targets:
+    - ../testdata/does-not-exist.db
+
+---
+
+kind: inspect
+spec:
+  targets:
+    - wss://relay.damus.io
+  filters:
+    - kinds:
+        - 1
+      since: 1mo1k
+
+---
+

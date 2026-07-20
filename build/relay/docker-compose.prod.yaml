@@ -1,0 +1,41 @@
+# Production stack: relay + Meilisearch.
+# Usage (from repo root): docker compose -f build/relay/docker-compose.prod.yaml up -d
+#
+# Copy build/relay/.env.example to build/relay/.env and set MEILI_MASTER_KEY
+# (and RELAY_CONFIG, if not using the default) before starting this stack.
+# Unlike the dev stack, there is no weak default master key, and Meilisearch
+# is not exposed on the host — only the relay is reachable from outside.
+services:
+  relay:
+    image: ghcr.io/ohstr/ncli:latest
+    container_name: ncli_relay
+    command: ["relay", "--config", "/app/ncli/config.yaml"]
+    ports:
+      - "5500:5500"
+    volumes:
+      # RELAY_CONFIG sets store/logdir under ./data/db and ./data/logs
+      # (relative to the relay's cwd, /app/ncli) — one volume covers both.
+      - ncli_data:/app/ncli/data
+      - ${RELAY_CONFIG:-../../examples/relay/minimal.yaml}:/app/ncli/config.yaml:ro
+    depends_on:
+      - meilisearch
+    environment:
+      - SEARCH_ENABLED=true
+      - SEARCH_HOST=http://meilisearch:7700
+      - SEARCH_KEY=${MEILI_MASTER_KEY:?Set MEILI_MASTER_KEY in build/relay/.env}
+    restart: unless-stopped
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.35
+    container_name: ncli_search
+    environment:
+      - MEILI_MASTER_KEY=${MEILI_MASTER_KEY:?Set MEILI_MASTER_KEY in build/relay/.env}
+      - MEILI_ENV=production
+      - MEILI_NO_ANALYTICS=true
+    volumes:
+      - meili_data:/meili_data
+    restart: unless-stopped
+
+volumes:
+  meili_data:
+  ncli_data:

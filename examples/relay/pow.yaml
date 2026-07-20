@@ -1,0 +1,20 @@
+# See examples/relay/full.yaml for the complete set of nip11 fields and
+# which ones `ncli relay` actually honors from config vs. always overwrites.
+#
+# NIP-13 proof-of-work required: strict: true actually rejects (OK false,
+# "pow: ...") any event whose real difficulty falls short of min, instead of
+# just advertising it via NIP-11. Roll a new requirement out safely by
+# announcing min here first with strict: false (the default), then flipping
+# strict once clients have caught up mining to it.
+nip11:
+  name: "ncli PoW Relay"
+  pubkey: "d3345d36e7885ad6340263309a96e0821b22e176ebc721098492063df5516086"
+  contact: "admin@example.com"
+
+logdir: "./data/logs"
+store: "./data/db/pow.db"
+port: 5505
+
+pow:
+  strict: true
+  min: 20

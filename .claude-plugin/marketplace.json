@@ -1,0 +1,54 @@
+{
+  "name": "ncli",
+  "owner": {
+    "name": "ohstr"
+  },
+  "description": "Agent skills for the ncli Nostr CLI — apply workflows, queries, relay ops, identity, and PoW mining.",
+  "plugins": [
+    {
+      "name": "ncli-apply",
+      "source": "./",
+      "skills": ["./skills/ncli-apply"],
+      "strict": false,
+      "description": "Author and run ncli apply workflow specs (kind: stream, sync, or inspect) that tail live events, sync via NIP-77 negentropy, or read-only query across relays/local stores.",
+      "license": "Unlicense",
+      "keywords": ["ncli", "nostr", "apply", "stream", "sync", "inspect"]
+    },
+    {
+      "name": "ncli-query",
+      "source": "./",
+      "skills": ["./skills/ncli-query"],
+      "strict": false,
+      "description": "Query and export Nostr events with ncli's dump and find commands — look up an event by ID or NIP-01 filter across relays/local event stores, or export matches to JSON.",
+      "license": "Unlicense",
+      "keywords": ["ncli", "nostr", "dump", "find", "filters", "targets"]
+    },
+    {
+      "name": "ncli-relay-ops",
+      "source": "./",
+      "skills": ["./skills/ncli-relay-ops"],
+      "strict": false,
+      "description": "Configure, run, and operate a live ncli Nostr relay — author relay.yaml, start the server, monitor/administer it remotely, rebuild search/zap indexes offline or online, and manage NIP-43 relay membership/invite-codes/roles.",
+      "license": "Unlicense",
+      "keywords": ["ncli", "nostr", "relay", "admin", "reindex", "nip-43", "membership"]
+    },
+    {
+      "name": "ncli-identity",
+      "source": "./",
+      "skills": ["./skills/ncli-identity"],
+      "strict": false,
+      "description": "Generate, inspect, and manage Nostr keypairs with ncli's local vault, and mint NIP-26 delegation tokens for scripted or agent-driven signing.",
+      "license": "Unlicense",
+      "keywords": ["ncli", "nostr", "id", "delegate", "vault", "nip-26"]
+    },
+    {
+      "name": "ncli-miner",
+      "source": "./",
+      "skills": ["./skills/ncli-miner"],
+      "strict": false,
+      "description": "Mine or verify NIP-13 proof-of-work for a Nostr event with ncli's miner command (authored inline via --content/--content-file, or from an unsigned event YAML/JSON file, auto-signed when an identity's key is available), then publish the result to relays with ncli publish.",
+      "license": "Unlicense",
+      "keywords": ["ncli", "nostr", "miner", "nip-13", "pow", "publish"]
+    }
+  ]
+}

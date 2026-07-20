@@ -1,0 +1,25 @@
+# Event to mine, for:
+#   ncli miner mine -e examples/event.yaml -o mined.json -d 20
+# (NIP-13 proof-of-work) -- --identity fills in `pubkey` and (if a private
+# key is available) signs the result automatically, so `sig` is left
+# empty/omitted here. To verify once mined:
+#   ncli miner check -e <events.json>
+#
+# For a plain note like this one, --content/--content-file is simpler --
+# it fills in `created_at` (now) and `kind` (default 1) for you:
+#   ncli miner mine --content "hello from ncli" --tag t=nostr --identity <id> -o mined.json -d 20
+#
+# This structured-file form is for anything --content/--content-file can't
+# express (a specific created_at, richer tags, etc.). `pubkey` must already
+# be a valid 32-byte hex key unless you pass --identity. created_at below is
+# a fixed sample value for this example -- replace it with the current unix
+# time (e.g. `date +%s`) before mining a real event, or most relays will
+# reject/deprioritize it as stale. `mine` never overwrites this file unless
+# you pass --in-place instead of -o.
+
+pubkey: 3c1db3dd55e2ff09ba5317dd8eec2339797e9e2ddf74591172735c47f3a2ad6e
+created_at: 1719759720 # <-- replace with the current unix time, e.g. `date +%s`
+kind: 1
+tags:
+  - ["t", "nostr"]
+content: "hello from ncli"

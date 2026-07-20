@@ -1,0 +1,28 @@
+# See examples/relay/full.yaml for the complete set of nip11 fields and
+# which ones `ncli relay` actually honors from config vs. always overwrites.
+#
+# Nothing below is ephemeral-specific to configure -- NIP-16 ephemeral
+# handling (kinds 20000-29999) is automatic based on an event's own kind,
+# not a config toggle. Publish an ephemeral-kind event against this relay to
+# see it in action: it's accepted and briefly queryable, then expired --
+# retained for 10 minutes by default (see nmilat/relay's store.go), rather
+# than persisted like an ordinary event. This preset is otherwise a plain
+# open (no-auth) relay with search enabled, same as examples/relay/open.yaml,
+# just under its own name/port/store so it can run independently.
+nip11:
+  name: "ncli Ephemeral Relay"
+  pubkey: "d3345d36e7885ad6340263309a96e0821b22e176ebc721098492063df5516086"
+  contact: "admin@example.com"
+
+logdir: "./data/logs"
+store: "./data/db/ephemeral.db"
+port: 5502
+
+cache:
+  search:
+    enabled: true
+    host: "http://127.0.0.1:7700"
+    key: "masterKey"
+    index_name: "ncli_ephemeral"
+    batch_size: 1000
+    max_ch_size: 10000

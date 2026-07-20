@@ -1,0 +1,163 @@
+# Full-featured relay config for `ncli relay --config`, documenting every
+# field RelayConfig understands. For a minimal working config, see
+# examples/relay/minimal.yaml (that's the one `just dev relay` actually uses).
+
+port: 5500
+
+nip11:
+  name: ncli-dev-relay
+  pubkey: 3c1db3dd55e2ff09ba5317dd8eec2339797e9e2ddf74591172735c47f3a2ad6e
+  contact: admin@example.com
+  description: "A community relay"
+
+  # url: required if limitation.auth_required is true.
+  # url: "wss://relay.example.com"
+
+  # privkey (optional): if set, pubkey is derived from it automatically at
+  # startup, and must match `pubkey` above if both are set.
+  # privkey: ""
+
+  # delegation (optional, NIP-26): paste the block `ncli delegate` prints.
+  # delegation:
+  #   issuer: ""
+  #   conditions: ""
+  #   token: ""
+
+  # A few more NIP-11 document fields exist but aren't config-settable, so
+  # they're omitted above rather than shown as live fields:
+  #   software/version -- always filled in from ncli's own build info at
+  #     startup, overwriting anything set here.
+  #   supported_nips -- always derived from what this build actually
+  #     implements.
+  #   self -- always mirrors `pubkey` above once membership.enabled is
+  #     true; there is no separate "self" key to set.
+
+  # unset or zero-valued fields fall back to the defaults shown below.
+  limitation:
+    auth_required: false
+    # membership_required gates REQ/EVENT on NIP-43 membership, in addition
+    # to (requires) auth_required and membership.enabled below -- the relay
+    # refuses to start if either is missing while this is true.
+    membership_required: false
+    max_limit: 555555
+    # max_message_length left at 0/unset would fall back to this same
+    # 1101005 -- the relay's websocket session enforces that many bytes
+    # regardless, so this is the real advertised default, not "0 = no
+    # limit". Shown explicitly here (rather than as 0, like a truly unset
+    # field) for consistency with the other three limits below.
+    max_message_length: 1101005
+    max_subscriptions: 355
+    max_indexable_tags: 5
+
+    # min_pow_difficulty/strict_pow also exist under limitation in the
+    # NIP-11 document, but aren't settable here -- the top-level pow: block
+    # below is their single source of truth and fills these in internally.
+
+store: ./data/db/notes.db
+logdir: ./data/logs
+
+# Proof-of-work requirement (optional). Off by default: min: 0 means no
+# requirement, the relay accepts events regardless of PoW.
+pow:
+  # strict: false (the default) makes `min` advisory only -- it's still
+  # advertised to clients via the NIP-11 min_pow_difficulty field, so they
+  # can start mining to it, but under-difficulty events are still accepted.
+  # Set true to actually reject (OK false, "pow: ...") events that fall
+  # short -- the way to roll out a new requirement without breaking every
+  # client the moment you turn it on: announce it here first, flip strict
+  # once clients have caught up.
+  strict: false
+
+  # min is the minimum NIP-13 leading-zero-bit difficulty required of
+  # published events. 0 (shown here) is the default: accept everything.
+  min: 0
+
+# Cache-response and search features (optional). Each one is off by default.
+cache:
+  # Serve a privkey-signed "top zapped" cache response. Requires
+  # nip11.privkey to be set - the relay refuses to start if this is true
+  # and privkey is empty.
+  topZapped:
+    enabled: false
+
+    # Default time window for "top-zapped" queries when a client's cache
+    # filter omits its own window (see examples/filters.yaml). Same
+    # duration units as filter since/until: h, mo, m, s, d, w (e.g. "24h",
+    # "7d", "2w", "1mo"). Empty or unparseable falls back to 24h.
+    window: 24h
+
+  # Profile search via Meilisearch (optional), nested here as a sibling of
+  # topZapped, the relay's other optional serving-layer feature. Indexes
+  # kind-0 profiles only (name/about/nip05/lud16) -- not note content.
+  search:
+    enabled: true
+    readonly: false
+    host: http://localhost:7700
+    key: masterKey
+    index_name: ncli_events
+    batch_size: 100
+    max_ch_size: 1000
+
+# NIP-43 relay membership (optional). Off by default: omitting this block
+# entirely, or leaving enabled false, means the relay behaves exactly as it
+# did before NIP-43 existed -- fully backward compatible with configs that
+# predate it. See examples/relay/membership.yaml for a focused, minimal
+# working example.
+membership:
+  # Requires nip11.privkey to be set -- the relay signs role
+  # definitions, membership lists, add/remove-user, and invite-response
+  # events with it, and refuses to start if this is true and privkey is
+  # empty.
+  enabled: false
+
+  # How long an issued invite claim (kind 28935) stays valid, as a Go
+  # duration string. Unset/unparseable falls back to the relay SDK's own
+  # default (24h).
+  inviteTTL: 24h
+
+  # How many times a single invite claim may be consumed via a Join
+  # Request. 0 means unlimited.
+  inviteMaxUses: 1
+
+  # If true, the relay also publishes a signed kind:8000/8001 event
+  # whenever membership changes via Join/Leave Request, in addition to
+  # updating its own internal membership store (authoritative either way).
+  publishAddRemoveEvents: false
+
+# NIP-AA (optional). Requires nip11.limitation.membership_required above
+# (which itself requires membership.enabled and limitation.auth_required)
+# -- enabling this genuinely changes AUTH-time behavior, so it only makes
+# sense once membership is actually enforced.
+agent_auth:
+  enabled: false
+
+  # How far an AUTH event's created_at may drift from now, as a Go
+  # duration string. Unset/unparseable falls back to the relay SDK's own
+  # default (the spec-recommended ±120s).
+  freshnessWindow: 120s
+
+  # If true, additionally checks a virtual member's retained credential's
+  # kind= clauses against every EVENT it submits. Off by default -- per
+  # spec, kind= clauses are advisory only unless a relay opts into this.
+  kindEnforcement: false
+
+# WebSocket connection tuning (optional, Go duration strings).
+handshakeTimeout: 5s
+pingInterval: 30s
+pongTimeout: 60s
+writeTimeout: 60s
+
+# Session engine tuning (optional). Unset/zero falls back to the defaults
+# shown here.
+outgoingBufferSize: 1024      # per-session outgoing message channel buffer size
+maxConcurrentStoreTasks: 2048 # cap on concurrent event-store operations
+verificationWorkers: 50       # number of signature-verification worker goroutines
+
+# Custom log rotation (optional). If omitted, logs go to
+# <logdir>/nrelay.log with the same defaults shown here.
+logs:
+  filename: ./data/logs/nrelay.log
+  maxSize: 100 # megabytes
+  maxBackups: 3
+  maxAge: 28 # days
+  compress: true

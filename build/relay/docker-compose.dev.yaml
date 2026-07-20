@@ -1,0 +1,42 @@
+# Local dev stack: relay + Meilisearch.
+# Usage (from repo root): docker compose -f build/relay/docker-compose.dev.yaml up
+# Runtime data lands in ./.dev/ next to this file, which is gitignored.
+services:
+  relay:
+    build:
+      context: ../..
+      dockerfile: build/relay/Dockerfile
+    image: ncli:latest
+    container_name: ncli_relay
+    command: ["relay", "--config", "/app/ncli/config.yaml"]
+    ports:
+      - "5500:5500"
+    volumes:
+      # examples/relay/minimal.yaml sets store/logdir to ./data/db and
+      # ./data/logs (relative to the relay's cwd, /app/ncli) — one mount
+      # covers both.
+      - ./.dev/data:/app/ncli/data
+      - ../../examples/relay/minimal.yaml:/app/ncli/config.yaml
+    depends_on:
+      - meilisearch
+    environment:
+      - SEARCH_ENABLED=true
+      - SEARCH_HOST=http://meilisearch:7700
+      - SEARCH_KEY=${MEILI_MASTER_KEY:-masterKey}
+    restart: unless-stopped
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.35
+    container_name: ncli_search
+    ports:
+      - "7700:7700"
+    environment:
+      - MEILI_MASTER_KEY=${MEILI_MASTER_KEY:-masterKey}
+      - MEILI_ENV=development
+      - MEILI_NO_ANALYTICS=true
+    volumes:
+      - meili_data:/meili_data
+    restart: unless-stopped
+
+volumes:
+  meili_data:

@@ -1,0 +1,35 @@
+# See examples/relay/full.yaml for the complete set of nip11 fields and
+# which ones `ncli relay` actually honors from config vs. always overwrites.
+#
+# NIP-43 relay membership: enrolled pubkeys can REQ/EVENT; everyone else
+# must first request an invite claim (REQ kind:28935), then join with it
+# (EVENT kind:28934). membership.enabled requires nip11.privkey -- the
+# relay signs its own membership-list/add/remove/invite events with it.
+nip11:
+  name: "ncli Membership Relay"
+  privkey: "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+  contact: "admin@example.com"
+  # url: required whenever auth_required is true (below).
+  url: "ws://localhost:5504"
+  limitation:
+    auth_required: true
+    membership_required: true
+
+membership:
+  enabled: true
+  inviteTTL: "24h"
+  inviteMaxUses: 1
+  publishAddRemoveEvents: true
+
+# NIP-AA (optional, requires membership_required above): an agent key
+# presenting a valid NIP-OA credential during AUTH gains virtual
+# membership derived from its owner's NIP-43 membership, without separate
+# enrollment. Uncomment to enable:
+# agent_auth:
+#   enabled: true
+#   freshnessWindow: "120s"
+#   kindEnforcement: false
+
+logdir: "./data/logs"
+store: "./data/db/membership.db"
+port: 5504

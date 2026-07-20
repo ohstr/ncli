@@ -1,0 +1,12 @@
+# Minimal relay config for local development.
+# Run with: just dev relay  (or: go run ./cmd/ncli relay --config ./examples/relay/minimal.yaml)
+
+port: 5500
+
+nip11:
+  name: ncli-dev-relay
+  pubkey: 9b14dff44fb8d74e2b90d5ae1501b935e073a5245749458a3e261021646f4e11
+  contact: admin@example.com
+
+store: ./data/db/notes.db
+logdir: ./data/logs

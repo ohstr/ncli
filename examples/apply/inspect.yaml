@@ -1,0 +1,37 @@
+# Spec for `ncli apply -f examples/apply/inspect.yaml`.
+# Read-only: queries the given targets for events matching `filters` and
+# prints/saves them. Doesn't publish or store anything.
+
+kind: inspect
+spec:
+  # Targets: any mix of remote relays and local event-store paths. Each
+  # entry may be a bare string (a ws(s):// URL is a remote relay, anything
+  # else must be an existing local path) or a full object with
+  # `relay`/`path` + `trusted` (optional, default false -- skips
+  # re-verifying this source's event signatures before use; only safe for
+  # a relay/store you already trust to hand you validly-signed events) +
+  # `ensure` (for local paths, default "exists" — fails to parse if the
+  # path is missing; "create" is shown here purely so this example parses
+  # in a fresh checkout, but inspecting a store you expect to already
+  # contain data normally means using the default "exists" instead).
+  targets:
+    - wss://relay.damus.io
+    - relay: wss://relay.snort.social
+      trusted: true
+    - path: ./data/db/notes.db
+      ensure: create
+
+  # Filters: same NIP-01 filter fields as examples/filters.yaml. Multiple
+  # filters are OR'd together. If omitted entirely, an empty filter
+  # (matches everything) is used automatically.
+  filters:
+    - kinds: [1]
+      limit: 10
+    - kinds: [7]
+      # `since` already looks backward by default — "1d" means "in the
+      # last day". Don't prefix it with "-", that flips it to the future.
+      since: "1d"
+      "#e":
+        # All-digit tag/id/author values must be quoted, otherwise YAML
+        # reads them as numbers and unmarshalling fails.
+        - "0000000000000000000000000000000000000000000000000000000000000001"

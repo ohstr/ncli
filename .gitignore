@@ -1,0 +1,40 @@
+# Local-only dev/test scratch data, not meant to be tracked
+/test/
+*.log
+
+# Runtime data for the local Docker dev stack (build/relay/docker-compose.dev.yaml)
+/build/.dev/
+
+# Docker Compose env files (hold secrets like MEILI_MASTER_KEY) - keep the
+# .example template tracked, never the real file
+.env
+.env.*
+!.env.example
+
+# Runtime/cache data (regenerated on demand, not shipped)
+/data/db/*.db
+/data/cache/
+
+# Binaries and compiled files
+/ncli
+*.exe
+*.bin
+*.out
+debug
+dist/
+bin/
+obj/
+
+# Project meta/tools
+.cache
+.gocache
+core*
+vendor/
+
+# Homebrew tap content developed here temporarily, before it's pushed to its
+# own ohstr/homebrew-ncli repo and removed from this workspace.
+/homebrew-ncli/
+
+
+# Claude Code
+.claude/

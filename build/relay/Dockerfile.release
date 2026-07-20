@@ -1,0 +1,12 @@
+FROM alpine:3.16
+LABEL org.opencontainers.image.source="https://github.com/ohstr/ncli"
+
+COPY ncli /bin/ncli
+
+# Relay configs use relative paths (db: ./data/db/..., logdir: ./data/logs),
+# so the working directory has to be where those are expected to land —
+# matching the volume mounts in docker-compose.dev.yaml/prod.yaml.
+WORKDIR /app/ncli
+
+EXPOSE 5500
+ENTRYPOINT ["/bin/ncli"]

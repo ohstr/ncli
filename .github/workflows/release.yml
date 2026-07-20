@@ -1,0 +1,136 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: >-
+          Version to release (e.g. 0.1.0, no "v" prefix). Leave blank to use
+          the topmost "## [X.Y.Z]" heading in CHANGELOG.md.
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout ncli
+        uses: actions/checkout@v4
+        with:
+          path: ncli
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: ncli/go.mod
+
+      # Build/test gate, same commands as .github/workflows/ci.yml. A
+      # release is never cut from a state that wouldn't also pass CI.
+      - name: Vet
+        working-directory: ncli
+        run: go vet ./...
+
+      - name: Test
+        working-directory: ncli
+        run: go test -short ./...
+
+      # No git event ever triggers a release by itself (see `on:` above,
+      # workflow_dispatch only) and GitHub never auto-writes the release
+      # notes: they always come from CHANGELOG.md, maintained by hand as
+      # part of normal development.
+      - name: Resolve version and notes from CHANGELOG.md
+        id: changelog
+        working-directory: ncli
+        env:
+          VERSION_INPUT: ${{ inputs.version }}
+        run: |
+          VERSION="$VERSION_INPUT"
+          if [ -z "$VERSION" ]; then
+            TOP_HEADING=$(grep -m1 -oP '^## \[\K[^\]]+' CHANGELOG.md || true)
+            if [ "$TOP_HEADING" = "Unreleased" ]; then
+              echo "::error::Topmost CHANGELOG.md heading is '## [Unreleased]' - rename it to the version being released (e.g. '## [0.3.0]') and commit that before running this workflow, or pass the version input explicitly"
+              exit 1
+            fi
+            VERSION="$TOP_HEADING"
+          fi
+          if [ -z "$VERSION" ]; then
+            echo "::error::Could not resolve a version: no version input given and no '## [X.Y.Z]' heading found in CHANGELOG.md"
+            exit 1
+          fi
+
+          awk -v ver="$VERSION" '
+            $0 ~ "^## \\[" ver "\\]" { found=1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md > /tmp/notes.raw
+
+          # Trim leading/trailing blank lines.
+          sed -e '/./,$!d' -e ':a' -e '/^\n*$/{$d;N;ba' -e '}' /tmp/notes.raw > /tmp/release-notes.md
+
+          if [ ! -s /tmp/release-notes.md ]; then
+            echo "::error::No changelog entry found for version $VERSION in CHANGELOG.md (heading missing or section is empty)"
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Resolved release version: $VERSION"
+          echo "--- release notes ---"
+          cat /tmp/release-notes.md
+
+      - name: Tag release
+        working-directory: ncli
+        env:
+          VERSION: ${{ steps.changelog.outputs.version }}
+          ACTOR: ${{ github.actor }}
+          ACTOR_EMAIL: ${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com
+        run: |
+          git config user.name "$ACTOR"
+          git config user.email "$ACTOR_EMAIL"
+
+          # Re-running a release (e.g. after a failed GoReleaser step) should
+          # replace the existing tag rather than fail, both locally and on
+          # the remote.
+          git tag -d "v$VERSION" 2>/dev/null || true
+          git push origin ":refs/tags/v$VERSION" 2>/dev/null || true
+
+          # The tag's own annotation message is the same CHANGELOG.md
+          # section as --release-notes below (-F, not -m "v$VERSION") --
+          # belt and suspenders: GoReleaser is passed the notes file
+          # explicitly, but if it (or any other tool) ever falls back to
+          # reading the tag's message instead, that message is the real
+          # changelog text too, not just the bare version string.
+          git tag -a "v$VERSION" -F /tmp/release-notes.md
+          git push origin "v$VERSION"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # GoReleaser cross-compiles the binaries, publishes the GitHub Release
+      # (archives + checksums.txt) with the CHANGELOG.md-derived notes above
+      # instead of its own auto-generated changelog, pushes the multi-arch
+      # ghcr.io/ohstr/ncli image, and updates the ohstr/homebrew-tap formula.
+      # version is pinned to the v2 line (matching .goreleaser.yaml's own
+      # `version: 2` schema) instead of resolving whatever "latest" is at
+      # run time, so a future GoReleaser release can't silently change
+      # --release-notes/other flag behavior out from under this workflow.
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: "~> v2"
+          workdir: ncli
+          args: release --clean --release-notes=/tmp/release-notes.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}

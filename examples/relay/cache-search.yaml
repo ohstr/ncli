@@ -1,0 +1,40 @@
+# Relay with search (Meilisearch) and the "top zapped" cache response both
+# enabled. Also the config shape you need for `ncli relay stats`/`reindex`/
+# `clear` and `ncli id delegate` -- both require nip11.privkey.
+#
+# See examples/relay/full.yaml for the complete set of nip11 fields and
+# which ones `ncli relay` actually honors from config vs. always overwrites.
+nip11:
+  name: "ncli Cache+Search Relay"
+  # Generated with `ncli id --json` for this example only -- never reuse a
+  # privkey that's ever appeared in a public repo for anything real.
+  privkey: "93896ebec1bb438fe92348a83f85cc5d8f29870acf8420a1ce3763bedfef529b"
+  # pubkey is optional once privkey is set -- ncli derives and fills it in
+  # automatically at startup. Left here anyway so it's visible without
+  # running the binary; must match the privkey above if both are present.
+  pubkey: "0024f3f0f3b093a4584728f19b9fbb5ab2f019797085f6ed6e096d2508052dd0"
+  contact: "admin@example.com"
+
+logdir: "./data/logs"
+store: "./data/db/cache-search.db"
+port: 5503
+
+# cache.topZapped.enabled requires nip11.privkey -- the relay refuses to
+# start otherwise ("cache.topZapped.enabled requires nip11.privkey").
+# search lives under cache too, alongside topZapped, as the relay's other
+# optional serving-layer feature.
+cache:
+  topZapped:
+    enabled: true
+    # Default window for "top-zapped" queries when the client's cache
+    # filter doesn't specify its own -- same duration units as filter
+    # since/until (h, mo, m, s, d, w). Falls back to 24h if omitted.
+    window: 12h
+
+  search:
+    enabled: true
+    host: "http://127.0.0.1:7700"
+    key: "masterKey"
+    index_name: "ncli_cache_search"
+    batch_size: 1000
+    max_ch_size: 10000

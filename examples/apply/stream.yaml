@@ -1,0 +1,81 @@
+# Spec for `ncli apply -f examples/apply/stream.yaml`.
+# Streams events matching `filters` from every `from` flow to every `to`
+# flow, live, until interrupted.
+#
+# NIP-13 proof-of-work is accepted regardless of nonce validity by default
+# (a `nonce` tag is optional per-event, so a bad one isn't treated as fatal);
+# set `strictPow: true` below, or pass --strict-pow to `ncli apply` (which
+# overrides this field when given explicitly), to reject events whose nonce
+# doesn't meet its declared difficulty. Doesn't apply to `trusted: true`
+# flows.
+
+kind: stream
+spec:
+  # Custom connection timeouts (optional). Values are Go duration strings.
+  timeouts:
+    handshake: "5s"
+    ping: "30s"
+    pong: "60s"
+    write: "60s"
+
+  # Source flows (where to read events from). Each entry may be a bare
+  # string ("wss://..." is a remote relay, anything else must be an
+  # existing local path) or a full object with `relay`/`path`, `trusted`,
+  # and (for local paths) `ensure`.
+  from:
+    # Remote relay.
+    - relay: wss://relay.damus.io
+      trusted: true
+    # Remote relay.
+    - relay: wss://relay.primal.net
+      trusted: true
+    # Remote relay. Kept as a source, not a destination -- it enforces its
+    # own PoW policy on writes and was rejecting some forwarded events with
+    # "invalid: invalid difficulty ..." (that's relay.ohstr.com's own
+    # accept/reject call on publish, unrelated to this spec's strictPow:
+    # false above, which only ever governs what this client keeps from a
+    # source, not what a destination relay chooses to accept).
+    - relay: wss://relay.ohstr.com
+      trusted: true
+    # Local store. A `from` entry doesn't have to be remote -- this merges
+    # in whatever's already sitting in a local store (e.g. from an earlier
+    # `dump`/`sync`) as just another source, alongside the relays above.
+    - path: ./data/db/notes.db
+      ensure: create
+
+  # Destination flows (where to write matched events to). Mixed
+  # local/remote here too -- a `to` entry doesn't have to be local either.
+  to:
+    - path: ./build/.dev/db/notes-stream-1.db
+      ensure: "create"
+      # writeConcurrency (optional): concurrent workers for this local
+      # destination's writes. Defaults to 32; raise it if inserts are the
+      # bottleneck, lower it to reduce contention on a slower disk.
+      writeConcurrency: 32
+    - path: ./build/.dev/db/notes-stream-1.db
+      ensure: "create"
+    - relay: wss://relay.snort.social
+      trusted: true
+
+  # Filters to select events. Multiple filters are OR'd together; omit
+  # `filters` entirely to stream everything.
+  filters:
+    - since: 4d
+
+  # Recovery persists events that failed to publish and retries them in the
+  # background. It's always on; by default the store lives in the OS temp
+  # directory, keyed to this stream's destinations. Override store_path here
+  # if you want a durable, fixed location instead.
+  recovery:
+    store_path: ./build/.dev/db/notes-stream-1-recovery.db
+    max_retries: 5
+    retry_interval: "30s"
+
+  # raw (optional, default false): disable the interactive TUI and just log
+  # to stdout — useful when running under systemd/docker without a tty.
+  raw: false
+
+  # strictPow (optional, default false): reject untrusted events whose
+  # `nonce` tag fails NIP-13 validation, instead of accepting them
+  # regardless. See the note at the top of this file.
+  strictPow: false

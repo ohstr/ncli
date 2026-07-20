@@ -1,0 +1,19 @@
+# See examples/relay/full.yaml for the complete set of nip11 fields and
+# which ones `ncli relay` actually honors from config vs. always overwrites.
+nip11:
+  name: "ncli Open Relay"
+  pubkey: "d3345d36e7885ad6340263309a96e0821b22e176ebc721098492063df5516086"
+  contact: "admin@example.com"
+
+logdir: "./data/logs"
+store: "./data/db/open.db"
+port: 5500
+
+cache:
+  search:
+    enabled: true
+    host: "http://127.0.0.1:7700"
+    key: "masterKey"
+    index_name: "ncli_open"
+    batch_size: 1000
+    max_ch_size: 10000

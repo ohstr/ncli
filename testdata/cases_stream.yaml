@@ -1,0 +1,141 @@
+kind: stream
+spec:
+  from:
+    - type: local
+      path: ../testdata/notes.db
+    - type: remote
+      relay: wss://relay.local
+  to:
+    - wss://backup.relay.io
+  filters:
+    - kinds:
+        - 0
+        - 1
+        - 2
+      authors:
+        - aef0d6b212827f3ba1de6189613e6d4824f181f567b1205273c16895fdaf0b23
+      limit: 10
+    - kinds:
+        - 15550
+      limit: 100
+
+---
+
+kind: stream
+spec:
+
+
+---
+
+kind: stream
+spec:
+  from: ws://relay.local
+
+
+---
+
+kind: stream
+spec:
+  from: 
+    - ws://relay.local
+  to: ws://relay.local
+
+
+---
+
+kind: stream
+spec:
+  from: 
+    - ws://relay.local
+  to: 
+    - ws://relay.local
+
+
+---
+
+
+kind: stream
+spec:
+  from: 
+    - ws://relay.local
+  to: 
+    - ws://relay.local
+  filters:
+    - kinds: 
+        - 9999999
+
+---
+
+kind: stream
+spec:
+  from: 
+    - ws://relay.local
+  to: 
+    - ws://relay.local
+  filters:
+    - kinds: 
+        - 0
+      until: 1w 2d
+      since: 1mo1d
+    - kinds: 
+        - 0
+        - 1
+      until: 1mo
+
+---
+
+
+
+kind: stream
+spec:
+  from: 
+    - ws://relay.local
+  to: 
+    - ws://relay.local
+  filters:
+    - kinds: 
+        - 1
+      until: 1w 2s
+      since: 1mo1k
+
+
+---
+
+kind: stream
+spec:
+  from: 
+    - type: local
+      path: /data/ncli_notes.db
+      ensure: create
+  to: 
+    - ws://relay.local
+  
+
+
+---
+
+kind: stream
+spec:
+  from: 
+    - type: local
+      path: /data/ncli_notes.db
+      ensure: not
+  to: 
+    - ws://relay.local
+  
+
+
+---
+kind: stream
+spec:
+  from: 
+    - ws://relay-source.local
+  to: 
+    - ws://relay.local
+  filters:
+    - since: 1s
+      limit: 10
+  
+
+
+---

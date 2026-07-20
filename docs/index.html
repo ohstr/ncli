@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>ncli</title>
+  <meta name="description" content="A Nostr relay server and command-line client toolkit for streaming, syncing, inspecting, querying, and mining events." />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0" />
+  <meta name="color-scheme" content="light dark" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>" />
+
+  <link rel="stylesheet" media="(prefers-color-scheme: dark)"
+        href="https://cdn.jsdelivr.net/npm/docsify@4/lib/themes/dark.css" />
+  <link rel="stylesheet" media="(prefers-color-scheme: light)"
+        href="https://cdn.jsdelivr.net/npm/docsify@4/lib/themes/vue.css" />
+  <style>
+    :root { --base-font-size: 16px; }
+    .app-name-link img { height: 28px; }
+    .markdown-section img[src*="vhs"] {
+      max-width: 100%;
+      border-radius: 6px;
+      border: 1px solid rgba(128, 128, 128, 0.3);
+    }
+    .cover-main { text-shadow: none !important; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script>
+    // "Self" reader: content is fetched live from the repo's default branch
+    // at render time, so this page always mirrors README.md — no copy, no
+    // build step, nothing to keep in sync.
+    window.$docsify = {
+      name: 'ncli',
+      repo: 'https://github.com/ohstr/ncli',
+      basePath: 'https://raw.githubusercontent.com/ohstr/ncli/main/',
+      homepage: 'README.md',
+      loadSidebar: false,
+      loadNavbar: false,
+      subMaxLevel: 3,
+      auto2top: true,
+      copyCode: {
+        buttonText: 'Copy',
+        errorText: 'Error',
+        successText: 'Copied',
+      },
+      search: {
+        maxAge: 86400000, // one day
+        paths: ['/README.md', '/AGENTS.md', '/CHANGELOG.md'],
+        placeholder: 'Search docs',
+        noData: 'No results',
+        depth: 3,
+      },
+      pagination: {
+        crossChapter: false,
+      },
+      formatUpdated: '{MM}/{DD}/{YYYY}',
+    };
+  </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/docsify@4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/docsify/lib/plugins/search.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/docsify-copy-code@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/docsify-pagination@2/dist/docsify-pagination.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-bash.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-yaml.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-json.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-powershell.min.js"></script>
+</body>
+</html>

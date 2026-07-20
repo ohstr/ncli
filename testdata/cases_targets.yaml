@@ -1,0 +1,66 @@
+kind: targets
+spec:
+  relays:
+    - wss://relay.damus.io
+    - relay: wss://relay.snort.social
+      trusted: true
+    - path: ../testdata/notes.db
+
+---
+
+kind: targets
+spec:
+  relays:
+    - path: ../testdata/does-not-exist-yet.db
+      ensure: create
+
+---
+
+kind: targets
+spec:
+  relays:
+    - path: ../testdata/does-not-exist.db
+
+---
+
+kind: targets
+spec:
+  relays:
+    - wss://relay.damus.io
+    - null
+    - wss://relay.snort.social
+
+---
+
+kind: targets
+spec:
+  relays:
+    - 123
+
+---
+
+kind: targets
+spec:
+  relays: []
+
+---
+
+kind: targets
+spec:
+  relays:
+    - wss://relay.damus.io
+  filters:
+    - kinds: [1]
+      authors:
+        - cd50647935202dd319529eea22d58d4e1c212f422995701c732358590559c4af
+    - kinds: [7]
+
+---
+
+kind: targets
+spec:
+  relays:
+    - wss://relay.damus.io
+  filters:
+    - kinds: [1]
+    - null

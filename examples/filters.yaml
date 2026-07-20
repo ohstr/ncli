@@ -1,0 +1,67 @@
+# Reference for the NIP-01 filter fields usable under a --targets file's
+# `filters:` key (see examples/targets.yaml) with find/dump/miner check.
+# This file's own bare-array shape (no `kind:`/`spec:` wrapper) isn't
+# loaded by any flag directly -- paste entries from it under `filters:` in
+# a targets file, or set the equivalent inline flags
+# (--kinds/--authors/--ids/--since/--until/--limit/--search/--tag). If a
+# targets file's `filters:` has more than one entry, an event matches if it
+# satisfies ANY ONE of them (OR across filters); within a single filter,
+# every field you set must match (AND across fields).
+
+# Filter 1: recent text notes (kind 1) from specific authors. authors
+# accepts hex pubkeys (full or prefix) and nip-05 "name@domain" addresses
+# mixed together -- nip-05 entries are resolved to hex automatically.
+- kinds:
+    - 1
+  authors:
+    - cd50647935202dd319529eea22d58d4e1c212f422995701c732358590559c4af
+    - alice@example.com
+  since: 1719759720 # absolute unix timestamp (seconds)
+  until: "1d" # relative duration, resolved forward from now
+  limit: 200
+
+# Filter 2: specific event IDs. Any value shorter than 64 hex chars is
+# treated as a prefix match against the full event ID. All-digit values
+# MUST be quoted — otherwise the YAML parser reads them as numbers and
+# unmarshalling fails (ids/authors/tag values are all strings).
+- ids:
+    - "0000000000000000"
+
+# Filter 3: relative time window using combined duration units. Supported
+# units: s (seconds), m (minutes), h (hours), d (days), w (weeks), mo
+# (30-day months) — combine them ("1w 2d"). `since` already looks BACKWARD
+# by default, so an unsigned value here means "N ago" — do not prefix it
+# with "-", that flips the direction to the future instead (since negates
+# the duration itself, and an explicit "-" negates it a second time,
+# canceling out). `+` before a `since` value is a harmless no-op. `until`
+# is the mirror case: it looks FORWARD by default, so "-" there means "N
+# ago" and is the intuitive one to use (see examples/apply/inspect.yaml).
+- kinds: [7]
+  since: "1w 2d"
+
+# Filter 4: tag filters. NIP-01 tag filter keys are `#<letter>`, e.g. `#e`
+# (referenced event ids) or `#p` (referenced pubkeys). The key MUST be
+# quoted in YAML — an unquoted leading `#` starts a comment and the field
+# is silently dropped instead of raising an error.
+- kinds: [1]
+  "#e":
+    - "0000000000000000000000000000000000000000000000000000000000000001"
+  "#p":
+    - 3c1db3dd55e2ff09ba5317dd8eec2339797e9e2ddf74591172735c47f3a2ad6e
+
+# Filter 5: NIP-50 full-text search (interpretation is relay-specific).
+- kinds: [1]
+  search: "lightning"
+
+# Filter 6: relay-side "cache" query, an nmilat/ncli-specific extension (not
+# a NIP). Instead of matching stored events, the relay computes a one-shot
+# response and replies with a single synthetic event, then EOSE/CLOSED.
+# Shape is [action, params] -- today the only action is "top-zapped"
+# (alias: "get_top_zapped"), which returns the top-zapped pubkeys over
+# `window` (Go duration string, default relay-defined) as a kind:25521
+# event. Only works against a relay with cache.topZapped enabled in its own
+# config (see examples/relay/full.yaml) -- otherwise the request is ignored.
+# A filter with `cache` set is handled standalone; combining it with
+# kinds/authors/etc. in the same filter has no effect, since it never
+# queries the store.
+- cache: ["top-zapped", { window: "24h", limit: 5 }]

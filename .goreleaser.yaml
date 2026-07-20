@@ -1,0 +1,97 @@
+version: 2
+
+project_name: ncli
+
+builds:
+  - id: ncli
+    main: ./cmd/ncli
+    binary: ncli
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w -X github.com/ohstr/ncli/cli/common.version={{.Version}}+{{.ShortCommit}}
+
+archives:
+  - id: ncli
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Os }}_{{ .Arch }}
+
+checksum:
+  name_template: checksums.txt
+
+# dockers_v2 (buildx, single multi-platform build) hit intermittent
+# "failed to calculate checksum of ref ...: not found" COPY failures in CI,
+# twice in a row on linux/amd64, that we couldn't pin down or reproduce
+# locally. Rolled back to the older per-arch dockers + docker_manifests
+# pipe (deprecated but battle-tested): each arch gets its own
+# single-platform buildx build, then docker_manifests stitches the two
+# per-arch tags into the multi-arch tag.
+dockers:
+  - id: ncli-amd64
+    ids: [ncli]
+    goos: linux
+    goarch: amd64
+    use: buildx
+    dockerfile: build/relay/Dockerfile.release
+    image_templates:
+      - "ghcr.io/ohstr/ncli:{{ .Version }}-amd64"
+      - "ghcr.io/ohstr/ncli:latest-amd64"
+    build_flag_templates:
+      - "--platform=linux/amd64"
+  - id: ncli-arm64
+    ids: [ncli]
+    goos: linux
+    goarch: arm64
+    use: buildx
+    dockerfile: build/relay/Dockerfile.release
+    image_templates:
+      - "ghcr.io/ohstr/ncli:{{ .Version }}-arm64"
+      - "ghcr.io/ohstr/ncli:latest-arm64"
+    build_flag_templates:
+      - "--platform=linux/arm64"
+
+docker_manifests:
+  - name_template: "ghcr.io/ohstr/ncli:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/ohstr/ncli:{{ .Version }}-amd64"
+      - "ghcr.io/ohstr/ncli:{{ .Version }}-arm64"
+  - name_template: "ghcr.io/ohstr/ncli:latest"
+    image_templates:
+      - "ghcr.io/ohstr/ncli:latest-amd64"
+      - "ghcr.io/ohstr/ncli:latest-arm64"
+
+brews:
+  - name: ncli
+    repository:
+      owner: ohstr
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/ohstr/ncli"
+    description: "A single binary for running and operating Nostr relays: serve, stream, sync, inspect, search, export, and mine events."
+    license: "Unlicense"
+    install: |
+      bin.install "ncli"
+    test: |
+      system "#{bin}/ncli", "version"
+
+release:
+  github:
+    owner: ohstr
+    name: ncli
+  # Default is keep-existing, which would leave a stale/minimal body in
+  # place if a Release for the tag already exists (e.g. from a prior
+  # failed/retried run) instead of using --release-notes below.
+  mode: replace
+
+# Release notes always come from CHANGELOG.md, passed explicitly via
+# `goreleaser release --release-notes=<file>` in release.yml, never from
+# GoReleaser's own commit-log-derived changelog.
+changelog:
+  disable: true

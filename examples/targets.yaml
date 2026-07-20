@@ -1,0 +1,32 @@
+# Spec for `ncli find -t examples/targets.yaml` (also usable with `dump -t`
+# and `miner check -t`). One file for both "where to look" (relays/local
+# stores) and "what to match" (filters) -- find tries relays in order and
+# stops at the first match; dump/miner check merge across all of them.
+
+kind: targets
+spec:
+  relays:
+    - wss://relay.damus.io
+    # trusted (optional, default false): skip re-verifying this source's
+    # event signatures before use -- only safe for a relay/store you
+    # already trust to hand you validly-signed events.
+    - relay: wss://relay.snort.social
+      trusted: true
+    # ensure defaults to "exists" (fails to parse if the path is missing).
+    # "create" is used here purely so this example parses in a fresh
+    # checkout — a real lookup target should normally already exist.
+    - path: ./data/db/notes.db
+      ensure: create
+
+  # filters (optional, omit entirely to match everything): same NIP-01
+  # fields as examples/filters.yaml. Multiple filters are OR'd together;
+  # within one filter every field set must match (AND). Left commented out
+  # here so this file's plain `find -i <id> -t ...` examples stay a pure ID
+  # lookup -- uncomment to see it combined with a filter.
+  # filters:
+  #   - kinds: [1]
+  #     authors:
+  #       # hex pubkeys and nip-05 "name@domain" addresses can be mixed --
+  #       # nip-05 entries are resolved to hex automatically.
+  #       - alice@example.com
+  #     limit: 200

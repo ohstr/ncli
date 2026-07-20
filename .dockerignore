@@ -1,0 +1,13 @@
+.docs
+.lab
+.vscode
+data
+.git
+.github
+.claude
+bin
+logs
+test
+build/relay/.dev
+.env
+.env.*

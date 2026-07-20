@@ -1,0 +1,49 @@
+name: Publish edge image
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  packages: write
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout ncli
+        uses: actions/checkout@v4
+        with:
+          path: ncli
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: ncli/go.mod
+
+      - name: Build linux/amd64 binary
+        working-directory: ncli
+        env:
+          CGO_ENABLED: 0
+          GOOS: linux
+          GOARCH: amd64
+        run: |
+          mkdir -p ../dist
+          go build -o ../dist/ncli ./cmd/ncli
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: dist
+          file: ncli/build/relay/Dockerfile.release
+          push: true
+          tags: |
+            ghcr.io/ohstr/ncli:edge
+            ghcr.io/ohstr/ncli:${{ github.sha }}

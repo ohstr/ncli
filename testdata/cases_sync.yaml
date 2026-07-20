@@ -1,0 +1,124 @@
+kind: sync
+spec:
+  direction: down
+  from:
+    type: local
+    path: test.db
+    ensure: create
+  to:
+    type: remote
+    relay: wss://relay.ohstr.com
+
+---
+
+kind: sync
+spec:
+  direction: both
+  to:
+    type: local
+    path: test.db
+    ensure: create
+  from:
+    type: remote
+    relay: wss://relay.ohstr.com
+
+---
+
+kind: sync
+spec:
+  from:
+    type: local
+    path: a.db
+    ensure: create
+  to:
+    type: local
+    path: b.db
+    ensure: create
+
+---
+
+kind: sync
+spec:
+  from: wss://relay-a.com
+  to: wss://relay-b.com
+
+---
+
+kind: sync
+spec:
+  from: wss://relay-a.com
+
+---
+
+kind: sync
+spec:
+  from:
+    type: local
+    path: c.db
+    ensure: create
+
+---
+
+kind: sync
+spec: {}
+
+---
+
+kind: sync
+spec:
+  direction: sideways
+  from:
+    type: local
+    path: d.db
+    ensure: create
+  to: wss://relay-c.com
+
+---
+
+kind: sync
+spec:
+  direction: up
+  from:
+    type: local
+    path: e.db
+    ensure: create
+  to: wss://relay-d.com
+
+---
+
+kind: sync
+spec:
+  from:
+    type: local
+    path: f.db
+    ensure: create
+  to: wss://relay-e.com
+  maxReconcileRounds: 5
+  pullBatchSize: 250
+
+---
+
+kind: sync
+spec:
+  from:
+    type: local
+    path: g.db
+    ensure: create
+  to: wss://relay-f.com
+  filters:
+    - kinds:
+        - 35500
+      since: "40d"
+
+---
+
+kind: sync
+spec:
+  from:
+    type: local
+    path: h.db
+    ensure: create
+  to: wss://relay-g.com
+  timeouts:
+    handshake: "5s"
+    ping: "30s"

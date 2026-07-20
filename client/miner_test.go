@@ -142,6 +142,195 @@ func TestMineUnsupportedExtension(t *testing.T) {
 	}
 }
 
+// TestLoadDraftEventsSingleObject proves a lone unsigned event object loads
+// as a one-element slice with wasArray=false, so WriteDraftEvents can later
+// round-trip it back out as a single object rather than a one-element array.
+func TestLoadDraftEventsSingleObject(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "draft.json")
+	writeUnsignedEventYAML(t, path, testPubKey, "hello")
+
+	events, wasArray, err := LoadDraftEvents(path)
+	if err != nil {
+		t.Fatalf("LoadDraftEvents failed: %v", err)
+	}
+	if wasArray {
+		t.Error("wasArray = true, want false for a single event object")
+	}
+	if len(events) != 1 {
+		t.Fatalf("len(events) = %d, want 1", len(events))
+	}
+	if events[0].PubKey != testPubKey {
+		t.Errorf("pubkey = %q, want %q", events[0].PubKey, testPubKey)
+	}
+}
+
+// TestLoadDraftEventsArray proves a JSON array of unsigned events loads with
+// wasArray=true and every element present, mirroring LoadEvents' shape.
+func TestLoadDraftEventsArray(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "drafts.json")
+	data := `[{"pubkey":"` + testPubKey + `","created_at":1,"kind":1,"tags":[],"content":"a"},` +
+		`{"pubkey":"` + testPubKey + `","created_at":2,"kind":1,"tags":[],"content":"b"}]`
+	if err := os.WriteFile(path, []byte(data), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	events, wasArray, err := LoadDraftEvents(path)
+	if err != nil {
+		t.Fatalf("LoadDraftEvents failed: %v", err)
+	}
+	if !wasArray {
+		t.Error("wasArray = false, want true for a JSON array")
+	}
+	if len(events) != 2 {
+		t.Fatalf("len(events) = %d, want 2", len(events))
+	}
+	if events[0].Content != "a" || events[1].Content != "b" {
+		t.Errorf("unexpected content order: %q, %q", events[0].Content, events[1].Content)
+	}
+}
+
+// TestLoadDraftEventsEmptyArray proves an empty array loads successfully
+// (zero events, no error) -- LoadDraftEvents itself has no opinion on
+// whether zero events is useful; that's a caller-level decision (ncli id
+// sign rejects it explicitly).
+func TestLoadDraftEventsEmptyArray(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "empty.json")
+	if err := os.WriteFile(path, []byte("[]"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	events, wasArray, err := LoadDraftEvents(path)
+	if err != nil {
+		t.Fatalf("LoadDraftEvents failed: %v", err)
+	}
+	if !wasArray {
+		t.Error("wasArray = false, want true for []")
+	}
+	if len(events) != 0 {
+		t.Errorf("len(events) = %d, want 0", len(events))
+	}
+}
+
+// TestLoadDraftEventsMalformed proves neither the array nor the single-
+// object fallback silently accepts unrelated JSON (e.g. a POWCheckReport-
+// shaped file) -- both UnmarshalStrict attempts must fail before
+// LoadDraftEvents reports an error.
+func TestLoadDraftEventsMalformed(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "bad.json")
+	if err := os.WriteFile(path, []byte(`{"checked": 3, "valid": 2}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := LoadDraftEvents(path); err == nil {
+		t.Fatal("expected an error for a file that is neither an event array nor a single event object")
+	}
+}
+
+// TestWriteDraftEventsRoundTripsShape proves WriteDraftEvents writes back
+// exactly the shape (single object vs. array) that wasArray declares,
+// regardless of how many events are passed -- the property "ncli id sign"
+// relies on to hand its output straight to "ncli publish --events"/"ncli
+// miner check --events" without reshaping.
+func TestWriteDraftEventsRoundTripsShape(t *testing.T) {
+	t.Run("single object in, single object out", func(t *testing.T) {
+		dir := t.TempDir()
+		in := filepath.Join(dir, "draft.json")
+		writeUnsignedEventYAML(t, in, testPubKey, "hello")
+
+		events, wasArray, err := LoadDraftEvents(in)
+		if err != nil {
+			t.Fatalf("LoadDraftEvents failed: %v", err)
+		}
+		signer, err := GenerateIdentity()
+		if err != nil {
+			t.Fatalf("GenerateIdentity failed: %v", err)
+		}
+		for _, e := range events {
+			if err := e.Sign(signer.PrivKeyHex); err != nil {
+				t.Fatalf("Sign failed: %v", err)
+			}
+		}
+
+		out := filepath.Join(dir, "signed.json")
+		if err := WriteDraftEvents(out, events, wasArray); err != nil {
+			t.Fatalf("WriteDraftEvents failed: %v", err)
+		}
+
+		raw, err := os.ReadFile(out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var single nip01.Event
+		if err := json.Unmarshal(raw, &single); err != nil {
+			t.Fatalf("expected a single JSON object, got: %s (%v)", raw, err)
+		}
+		if single.Sig == "" {
+			t.Error("expected the round-tripped event to be signed")
+		}
+
+		// Round-tripping back through LoadDraftEvents must also see it as a
+		// single object, not a one-element array -- the shape genuinely
+		// persisted, not just "happens to parse either way."
+		_, wasArrayAfter, err := LoadDraftEvents(out)
+		if err != nil {
+			t.Fatalf("LoadDraftEvents(out) failed: %v", err)
+		}
+		if wasArrayAfter {
+			t.Error("re-loaded output as an array, want a single object")
+		}
+	})
+
+	t.Run("array in, array out", func(t *testing.T) {
+		dir := t.TempDir()
+		in := filepath.Join(dir, "drafts.json")
+		data := `[{"pubkey":"` + testPubKey + `","created_at":1,"kind":1,"tags":[],"content":"a"}]`
+		if err := os.WriteFile(in, []byte(data), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		events, wasArray, err := LoadDraftEvents(in)
+		if err != nil {
+			t.Fatalf("LoadDraftEvents failed: %v", err)
+		}
+
+		out := filepath.Join(dir, "signed.json")
+		if err := WriteDraftEvents(out, events, wasArray); err != nil {
+			t.Fatalf("WriteDraftEvents failed: %v", err)
+		}
+
+		raw, err := os.ReadFile(out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var arr []nip01.Event
+		if err := json.Unmarshal(raw, &arr); err != nil {
+			t.Fatalf("expected a JSON array, got: %s (%v)", raw, err)
+		}
+		if len(arr) != 1 {
+			t.Fatalf("len(arr) = %d, want 1", len(arr))
+		}
+	})
+}
+
+// TestWriteDraftEventsUnsupportedExtension proves an unsupported -o
+// extension fails clearly, same as Mine's own check -- and writes nothing.
+func TestWriteDraftEventsUnsupportedExtension(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "signed.txt")
+
+	err := WriteDraftEvents(out, []*nip01.Event{{PubKey: testPubKey}}, false)
+	if err == nil {
+		t.Fatal("expected an error for an unsupported output extension")
+	}
+	if _, statErr := os.Stat(out); statErr == nil {
+		t.Error("expected no output file to be written for an unsupported extension")
+	}
+}
+
 func TestMineIdentityFillsEmptyPubkey(t *testing.T) {
 	dir := t.TempDir()
 	eventPath := filepath.Join(dir, "event.yaml")

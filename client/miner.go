@@ -69,6 +69,62 @@ func LoadDraftEvent(eventPath string) (*nip01.Event, error) {
 	return event, nil
 }
 
+// LoadDraftEvents reads eventPath as either an array of unsigned events or a
+// single unsigned event object -- the same single-or-array fallback
+// LoadEvents uses for already-signed events, mirrored here so "ncli id
+// sign"'s input accepts exactly the same shapes "ncli publish"'s --events
+// and "ncli miner check"'s --events already do. wasArray reports which
+// shape was read, so a caller that re-writes the result (see
+// WriteDraftEvents) can round-trip the same shape back out.
+func LoadDraftEvents(eventPath string) (events []*nip01.Event, wasArray bool, err error) {
+	bytes, err := os.ReadFile(eventPath)
+	if err != nil {
+		return nil, false, err
+	}
+
+	if err := yaml.UnmarshalStrict(bytes, &events); err == nil {
+		return events, true, nil
+	}
+
+	var event *nip01.Event
+	if err := yaml.UnmarshalStrict(bytes, &event); err != nil {
+		return nil, false, fmt.Errorf("%s is neither an array of events nor a single event object: %w", eventPath, err)
+	}
+	return []*nip01.Event{event}, false, nil
+}
+
+// WriteDraftEvents writes events to outPath in the shape LoadDraftEvents
+// read them in (see wasArray there) -- a single object if wasArray is false,
+// otherwise an array -- so e.g. "ncli id sign"'s output matches its own
+// input shape and chains straight into "ncli publish --events"/"ncli miner
+// check --events" (see LoadEvents) with no reshaping. outPath's extension
+// governs the format, same as Mine's -o.
+func WriteDraftEvents(outPath string, events []*nip01.Event, wasArray bool) error {
+	var v any = events
+	if !wasArray && len(events) == 1 {
+		v = events[0]
+	}
+	data, err := marshalEventFile(outPath, v)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(outPath, data, 0644)
+}
+
+// marshalEventFile encodes v (an *nip01.Event or []*nip01.Event) per
+// outPath's extension -- the shared format switch behind Mine's single-event
+// output and WriteDraftEvents' single-or-array output.
+func marshalEventFile(outPath string, v any) ([]byte, error) {
+	switch strings.ToLower(filepath.Ext(outPath)) {
+	case ".json", ".jsonp":
+		return json.MarshalIndent(v, "", "    ")
+	case ".yaml", ".yml":
+		return yaml.Marshal(v)
+	default:
+		return nil, fmt.Errorf("unsupported output extension %q (must be .json, .jsonp, .yaml, or .yml)", filepath.Ext(outPath))
+	}
+}
+
 // Mine mines draft at difficulty (in place), optionally signs it (see
 // MineOptions.SignPrivKeyHex), writes the result to outPath, and returns the
 // mined event. outPath's own extension (.json/.jsonp/.yaml/.yml) governs the
@@ -109,16 +165,7 @@ func Mine(ctx context.Context, event *nip01.Event, outPath string, difficulty in
 		}
 	}
 
-	var data []byte
-
-	switch strings.ToLower(filepath.Ext(outPath)) {
-	case ".json", ".jsonp":
-		data, err = json.MarshalIndent(event, "", "    ")
-	case ".yaml", ".yml":
-		data, err = yaml.Marshal(event)
-	default:
-		return nil, fmt.Errorf("unsupported output extension %q (must be .json, .jsonp, .yaml, or .yml)", filepath.Ext(outPath))
-	}
+	data, err := marshalEventFile(outPath, event)
 	if err != nil {
 		return nil, err
 	}

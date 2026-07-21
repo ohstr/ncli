@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ohstr/ncli/cli/common"
+	"github.com/ohstr/ncli/cli/keyresolve"
 	"github.com/ohstr/ncli/client"
 	"github.com/ohstr/nmilat/nip01"
 	"github.com/ohstr/nmilat/nip13"
@@ -151,11 +152,11 @@ silent gap in the output.`,
 		if identity, _ := cmd.Flags().GetString("identity"); identity != "" {
 			resolved, err := client.ResolveIdentifier(identity)
 			if err != nil {
-				return classifyIdentifierError(cmd, identity, err)
+				return keyresolve.ClassifyIdentifierError(cmd, identity, err)
 			}
 			opts.IdentityPubKeyHex = resolved.PubKeyHex
 
-			privKeyHex, err := resolveSigningKey(cmd, jsonMode, resolved)
+			privKeyHex, err := keyresolve.ResolveSigningKey(cmd, jsonMode, resolved)
 			if err != nil {
 				return err
 			}
@@ -265,44 +266,6 @@ func parseTagFlags(pairs []string) ([][]string, error) {
 	return tags, nil
 }
 
-// resolveSigningKey returns the private key to sign a freshly mined event
-// with, if one is available for resolved -- directly, for an nsec identity
-// (ResolveIdentifier already decoded it, see client/identity.go), or via the
-// vault, for a saved vault label (same resolveVaultPassword ->
-// UnlockVaultIdentity -> FindVaultEntry -> DecryptVaultEntry sequence
-// id.go's "id --reveal" uses). Returns "", nil (not an error) for a
-// pubkey-only identity (npub/hex/nprofile/nip-05) that has no private key to
-// sign with at all -- mine still succeeds, just unsigned.
-func resolveSigningKey(cmd *cobra.Command, jsonMode bool, resolved *client.IdentityInspection) (string, error) {
-	if resolved.PrivKeyHex != "" {
-		return resolved.PrivKeyHex, nil
-	}
-	if !resolved.InVault {
-		return "", nil
-	}
-
-	password, err := resolveVaultPassword(jsonMode, "Vault password: ")
-	if err != nil {
-		return "", common.UsageError(cmd, err)
-	}
-	vaultPrivKeyHex, err := client.UnlockVaultIdentity(password)
-	if err != nil {
-		return "", common.AuthError(cmd, err)
-	}
-	entry, found, err := client.FindVaultEntry(resolved.Npub)
-	if err != nil {
-		return "", common.RuntimeError(cmd, err)
-	}
-	if !found {
-		return "", common.NotFoundError(cmd, resolved.Npub, fmt.Errorf("vault entry disappeared during signing"))
-	}
-	privKeyHex, err := client.DecryptVaultEntry(vaultPrivKeyHex, *entry)
-	if err != nil {
-		return "", common.RuntimeError(cmd, err)
-	}
-	return privKeyHex, nil
-}
-
 var minerCheckCmd = &cobra.Command{
 	Use:   "check",
 	Short: "Verify proof-of-work",
@@ -373,7 +336,7 @@ checked event fails.`,
 			if identity, _ := cmd.Flags().GetString("identity"); identity != "" {
 				resolved, ferr := client.ResolveIdentifier(identity)
 				if ferr != nil {
-					return classifyIdentifierError(cmd, identity, ferr)
+					return keyresolve.ClassifyIdentifierError(cmd, identity, ferr)
 				}
 				filtersSpec, ferr = client.ApplyIdentityFilter(filtersSpec, resolved.PubKeyHex)
 				if ferr != nil {

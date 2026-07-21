@@ -1,6 +1,6 @@
 ---
 name: ncli-identity
-description: Generate, inspect, and manage Nostr keypairs with ncli's local vault (`ncli id`), decode any NIP-19 bech32 entity (`ncli decode`), sign unsigned events with a vault/nsec identity (`ncli id sign`), and mint NIP-26 delegation tokens (`ncli id delegate`) for scripted or agent-driven signing. Use when generating or resolving a Nostr identity (hex/npub/nsec/NIP-05), decoding an npub/nsec/note/nprofile/nevent/naddr, signing a hand-authored or dumped unsigned event so it can be published, scripting vault access with NCLI_VAULT_PASSWORD, or non-interactively creating a delegation token with --issuer-key/NCLI_DELEGATE_ISSUERKEY.
+description: Generate, inspect, and manage Nostr keypairs with ncli's local vault (`ncli id`), decode any NIP-19 bech32 entity (`ncli decode`), sign unsigned events with a vault/nsec identity (`ncli id sign`), and mint NIP-26 delegation tokens (`ncli id delegate`) for scripted or agent-driven signing. Use when generating or resolving a Nostr identity (hex/npub/nsec/NIP-05), decoding an npub/nsec/note/nprofile/nevent/naddr, signing a hand-authored or dumped unsigned event so it can be published, scripting vault access with NCLI_VAULT_PASSWORD, or non-interactively creating a delegation token with --issuer/NCLI_DELEGATE_ISSUER.
 license: Unlicense
 ---
 
@@ -12,12 +12,13 @@ flags/schemas change. -->
 # ncli id / ncli id sign / ncli id delegate
 
 `sign` and `delegate` are both subcommands of `id` (`ncli id sign`, `ncli id
-delegate`), but neither is **functionally integrated** with the vault the
-way `id`/`id list` are: `id sign`'s `--identity` *does* resolve a vault
-label (unlocking it the same way `id --reveal` does), but `delegate`'s
-`--issuer-key` only ever takes a raw key you pass in directly — it does not
-read the vault at all. Extract a key from `id --reveal` first if you want to
-delegate from a vault-saved identity (pattern shown below).
+delegate`). Both resolve a vault label the same way `id --reveal` does:
+`id sign`'s `--identity` and `delegate`'s `--issuer`/`--delegatee` all accept a
+vault label, an nsec, an npub, a hex pubkey, an nprofile, or a nip-05
+address, unlocking the vault (`NCLI_VAULT_PASSWORD`) when the identifier
+resolves to one. A bare 64-char hex string is always read as a **public**
+key, never a private one, for all three flags -- pass `nsec1...` (or a
+vault label) if you have a raw private key rather than hex.
 
 ## `ncli id` — generate
 
@@ -122,36 +123,43 @@ ncli publish -e signed.json -s wss://relay.damus.io
 ## `ncli id delegate` — mint a NIP-26 token
 
 ```sh
-ncli id delegate                                                            # interactive Bubble Tea wizard (needs a real tty)
-ncli id delegate --issuer-key <nsec-or-hex> --json                          # non-interactive, --relay-key falls back to config's nip11.privkey
-ncli id delegate --issuer-key <nsec-or-hex> --relay-key <nsec-or-hex> \
+ncli id delegate                                                    # interactive Bubble Tea wizard (needs a real tty)
+ncli id delegate --issuer agent-key --delegatee relay-signer --json # vault labels, NCLI_VAULT_PASSWORD to unlock
+ncli id delegate --issuer nsec1... --delegatee nsec1... --json      # raw nsecs, no vault involved
+ncli id delegate --issuer agent-key --delegatee relay-signer \
   --kinds 25521,10002 --duration 365 --json
 ```
 
-`--issuer-key` (or `NCLI_DELEGATE_ISSUERKEY`) is what skips the wizard.
-Output (`--json` or text) is a ready-to-paste `nip11.delegation` block for
-`relay.yaml` — see `ncli-relay-ops`.
+`--issuer` (or `NCLI_DELEGATE_ISSUER`) is what skips the wizard;
+`--delegatee` -- the identity being granted authority, e.g. a relay's own
+signing key -- is always required. Named `--delegatee`, not `--relay`, on
+purpose: this command has no relation to `relay.yaml`/`nip11`, so a flag
+named "relay" would misleadingly suggest a `wss://...` URL like every
+other `--relay`-adjacent flag in this CLI. Both accept the same identifier
+shapes as `id sign --identity` (see the intro above) and both must resolve
+to a **private** key (the issuer to actually sign, the delegatee side
+because a bare pubkey isn't distinguishable from a typo here); a
+pubkey-only identity fails with `code: "auth"` (exit 7). No config
+fallback. Output (`--json` or text) is the token's raw fields --
+`issuer_pubkey`/`delegatee_pubkey`/`conditions`/`token` -- plus, in text
+mode, the literal `["delegation", issuer, conditions, token]` tag to
+attach to events signed by the delegatee's key, per NIP-26 itself. It's a
+standalone token generator: nothing in this codebase reads its output
+back in automatically, unlike `id sign`'s output chaining into `publish`.
 
-## Bridging `id` → `id delegate`
-
-```sh
-NCLI_VAULT_PASSWORD=hunter2 ncli id agent-key --json --reveal | jq -r .nsec
-# then:
-ncli id delegate --issuer-key <nsec-from-above> --relay-key <relay-nsec> --json
-```
-
-`id`/`id delegate` both accept either `nsec` or hex for any key input
-interchangeably — no separate flags for each form.
+The wizard itself (no `--issuer`) is unchanged and still takes a raw
+private key (nsec or hex) typed directly into each step -- it does not
+resolve vault labels interactively.
 
 ## Gotchas learned
 
 - `ncli id delegate`'s wizard needs a real tty on both stdin and stdout —
-  in any agent/CI/non-interactive context, always pass `--issuer-key` (or
-  set `NCLI_DELEGATE_ISSUERKEY`). Omitting it no longer launches the wizard
-  blind: `--json`, or stdin/stdout not both being a real terminal, fails
-  immediately with `--issuer-key is required (or set
-  NCLI_DELEGATE_ISSUERKEY) when not running interactively` (`code:
-  "usage"`, exit 2) instead of hanging waiting for terminal input.
+  in any agent/CI/non-interactive context, always pass `--issuer` (or set
+  `NCLI_DELEGATE_ISSUER`). Omitting it no longer launches the wizard blind:
+  `--json`, or stdin/stdout not both being a real terminal, fails
+  immediately with `--issuer is required (or set NCLI_DELEGATE_ISSUER)
+  when not running interactively` (`code: "usage"`, exit 2) instead of
+  hanging waiting for terminal input.
 - `ncli id --json` never prompts, including for the vault password — it
   must come from `NCLI_VAULT_PASSWORD`, or any vault-touching call fails
   immediately with `vault password required; set NCLI_VAULT_PASSWORD`,
@@ -175,17 +183,13 @@ interchangeably — no separate flags for each form.
 - `delegate`'s default `--kinds` is `"25521"` — ncli's own "Top Zapped"
   cache-response kind, not a generally meaningful NIP kind. Pass `--kinds`
   explicitly for anything else.
-- `id delegate --relay-key` falls back to `nip11.privkey` from `--config` if
-  omitted; if neither is available, it fails immediately (`code: "usage"`,
-  exit 2) with `--relay-key is required (or set nip11.privkey in config)`
-  rather than launching the wizard. A malformed `--issuer-key`/`--relay-key`
-  is `invalid_input` instead, and never echoes the key value in `input`.
-  "`--config` if omitted" also includes a saved `ncli relay context` (see
-  `skills/ncli-relay-ops/SKILL.md`) or a `ncli.yaml`/`relay.yaml` in the
-  working directory -- any of those can supply `nip11.privkey` without
-  `--config` being passed explicitly.
-- Both `ncli id` and `ncli id delegate` had zero README usage examples as of
-  writing — this skill is effectively their first real documentation.
+- `id delegate --delegatee` has no config fallback -- omitting it fails
+  immediately (`code: "usage"`, exit 2) with `--delegatee is required`
+  rather than launching the wizard or reading `relay.yaml`. A malformed
+  `--issuer`/`--delegatee` identifier is `invalid_input`; a pubkey-only one
+  (npub/hex/nprofile/nip-05, not vault-saved) is `auth`, exit 7 -- neither
+  ever echoes the raw value back in `input` (see the intro above for the
+  hex-is-always-a-pubkey rule behind that last case).
 - `ncli id sign`'s `-e/--events` accepts `.json`/`.jsonp`/`.yaml`/`.yml`
   (like `mine`'s `-e`, not `miner check`'s JSON-only `-e`). An empty array
   (`[]`) is rejected (`code: "invalid_input"`) rather than silently

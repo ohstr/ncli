@@ -11,7 +11,6 @@ import (
 	"github.com/ohstr/ncli/cli/reindex"
 	"github.com/ohstr/ncli/client"
 	"github.com/ohstr/nmilat/nip11"
-	"github.com/ohstr/nmilat/nip26"
 	"github.com/ohstr/nmilat/nip98"
 	"github.com/ohstr/nmilat/relay"
 	"github.com/ohstr/nmilat/search"
@@ -78,24 +77,6 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 			sessionConfig.AgentAuthFreshnessWindow = d
 		}
 		sessionConfig.AgentKindEnforcement = config.AgentAuth.KindEnforcement
-	}
-
-	// Delegation is optional. If present, it MUST be valid.
-	if config.Nip11.Delegation != nil {
-		if err := nip26.VerifyDelegationToken(
-			config.Nip11.Delegation.Issuer,
-			config.Nip11.PubKey,
-			config.Nip11.Delegation.Conditions,
-			config.Nip11.Delegation.Token,
-		); err != nil {
-			log.Fatal().Err(err).Msg("invalid delegation token or issuer signature")
-		}
-
-		sessionConfig.Delegation = &relay.DelegationConfig{
-			Issuer:     config.Nip11.Delegation.Issuer,
-			Conditions: config.Nip11.Delegation.Conditions,
-			Token:      config.Nip11.Delegation.Token,
-		}
 	}
 
 	wsHandler := relay.NewSessionHandler(

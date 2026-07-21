@@ -18,6 +18,25 @@
   plain log lines by default; pass `--tui` to get the interactive board
   back (still falls back to plain under `--json`/`--quiet`, or without a
   real terminal).
+- `ncli id delegate` no longer has any relation to `nip11`/`relay.yaml`,
+  and `--issuer-key`/`--relay-key` are renamed to `--issuer`/`--delegatee`
+  (env var `NCLI_DELEGATE_ISSUERKEY` renamed to `NCLI_DELEGATE_ISSUER`).
+  `--delegatee` (not `--relay`) is deliberate: this command has no
+  relation to relay config, so a flag named "relay" would misleadingly
+  suggest a `wss://...` URL like every other relay-adjacent flag in this
+  CLI. Both now accept the same identifier shapes `ncli id sign --identity`
+  does — a vault label, nsec, npub, hex, nprofile, or nip-05 — resolved via
+  the vault (`NCLI_VAULT_PASSWORD`) the same way. Both are always required
+  (no more falling back to `nip11.privkey` from config) and must resolve to
+  a private key; a bare hex string is now always read as a public key
+  (never inferred as a raw private key, matching `id sign`/`miner mine`
+  elsewhere), and a pubkey-only identity is rejected with `code: "auth"`.
+  Output is `issuer_pubkey`/`delegatee_pubkey`/`conditions`/`token` plus
+  the literal `["delegation", issuer, conditions, token]` tag to attach to
+  an event, instead of a paste-into-`relay.yaml` `nip11:` block. The relay
+  itself no longer verifies or signs under a NIP-26 delegation
+  (`nip11.delegation` is no longer a config field — a `relay.yaml` that
+  still sets it is now silently ignored rather than validated at startup).
 
 
 ## [0.1.0]

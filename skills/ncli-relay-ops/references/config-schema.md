@@ -40,9 +40,6 @@ of writing. Update by hand if the Go types change. -->
 | `limitation.max_message_length` | int | `1101005` | 0/unset falls back to this default — see gotchas in the main SKILL.md |
 | `limitation.max_subscriptions` | int | `355` | 0/unset falls back to this default |
 | `limitation.max_indexable_tags` | int | `5` | 0/unset falls back to this default |
-| `delegation.issuer` | string | none | NIP-26 block — paste from `ncli id delegate` output |
-| `delegation.conditions` | string | none | |
-| `delegation.token` | string | none | |
 | `self` | string | mirrors `pubkey` | Not directly configurable — set automatically to `pubkey` when `membership.enabled` is `true`. NIP-43's relay-authored events (role definitions, membership lists, add/remove-user, invite responses) must be signed by this identity |
 
 `Software`/`Version` in the advertised NIP-11 document are always

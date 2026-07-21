@@ -16,6 +16,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/flokiorg/go-flokicoin/crypto"
 	"github.com/ohstr/ncli/cli/common"
+	"github.com/ohstr/ncli/cli/keyresolve"
+	"github.com/ohstr/ncli/client"
 	"github.com/ohstr/nmilat/nip26"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -27,18 +29,25 @@ func NewDelegateCommand() *cobra.Command {
 		Use:   "delegate",
 		Short: "Generate a NIP-26 delegation token",
 		Long: `Launch an interactive wizard that creates and signs NIP-26 delegation
-tokens. With --issuer-key set (via flag or the NCLI_DELEGATE_ISSUERKEY
-environment variable), skips the wizard entirely and generates the token
-non-interactively instead -- suitable for scripts or an AI agent.`,
+tokens. With --issuer set (via flag or the NCLI_DELEGATE_ISSUER environment
+variable), skips the wizard entirely and generates the token
+non-interactively instead -- suitable for scripts or an AI agent.
+
+--issuer and --delegatee both accept a vault label, an nsec, an npub, a hex
+pubkey, an nprofile, or a nip-05 address -- the same identifier shapes "id
+sign --identity" accepts (resolved via NCLI_VAULT_PASSWORD for a vault
+label, same as "id sign"). Both must resolve to a private key: a
+pubkey-only identity (npub/hex/nprofile/nip-05, not vault-saved) has
+nothing to sign or derive a delegatee key from and is rejected.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// No config reload here: root's InitConfig (cli/ncli/root.go)
 			// already loaded it once via the nearest ancestor's
 			// PersistentPreRun, before this RunE runs.
-			issuerKey, _ := cmd.Flags().GetString("issuer-key")
-			if issuerKey == "" {
-				issuerKey = viper.GetString("delegate.issuerkey")
+			issuer, _ := cmd.Flags().GetString("issuer")
+			if issuer == "" {
+				issuer = viper.GetString("delegate.issuer")
 			}
-			if issuerKey == "" {
+			if issuer == "" {
 				// The wizard takes over the terminal via bubbletea, which
 				// needs a real tty on both ends -- an agent invoking this
 				// non-interactively (or any --json caller, which must never
@@ -50,7 +59,7 @@ non-interactively instead -- suitable for scripts or an AI agent.`,
 				jsonMode, _ := cmd.Flags().GetBool("json")
 				interactive := term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd()))
 				if jsonMode || !interactive {
-					return common.UsageError(cmd, errors.New("--issuer-key is required (or set NCLI_DELEGATE_ISSUERKEY) when not running interactively"))
+					return common.UsageError(cmd, errors.New("--issuer is required (or set NCLI_DELEGATE_ISSUER) when not running interactively"))
 				}
 				if err := RunWizard(); err != nil {
 					return common.RuntimeError(cmd, err)
@@ -58,12 +67,12 @@ non-interactively instead -- suitable for scripts or an AI agent.`,
 				return nil
 			}
 
-			return runNonInteractive(cmd, issuerKey)
+			return runNonInteractive(cmd, issuer)
 		},
 	}
 
-	cmd.Flags().String("issuer-key", "", "Issuer private key (nsec or hex); also settable via NCLI_DELEGATE_ISSUERKEY. Providing this skips the interactive wizard.")
-	cmd.Flags().String("relay-key", "", "Relay private key (nsec or hex); defaults to nip11.privkey from config if omitted")
+	cmd.Flags().String("issuer", "", "Issuer identity to sign with -- vault label, nsec, npub, hex, nprofile, or nip-05 (must resolve to a private key); also settable via NCLI_DELEGATE_ISSUER. Providing this skips the interactive wizard.")
+	cmd.Flags().String("delegatee", "", "Delegatee identity being granted authority -- same accepted shapes as --issuer (must resolve to a private key)")
 	cmd.Flags().String("kinds", "", `Comma-separated event kinds to delegate (default: "25521", Top Zapped)`)
 	cmd.Flags().Int("duration", 365, "Validity duration in days")
 	return cmd
@@ -71,25 +80,21 @@ non-interactively instead -- suitable for scripts or an AI agent.`,
 
 // runNonInteractive mirrors model.process()'s logic (the wizard's signing
 // step) without any TUI involved, for scripted/agent use.
-func runNonInteractive(cmd *cobra.Command, issuerKeyRaw string) error {
+func runNonInteractive(cmd *cobra.Command, issuer string) error {
 	jsonMode, _ := cmd.Flags().GetBool("json")
 
-	relayKeyRaw, _ := cmd.Flags().GetString("relay-key")
-	if relayKeyRaw == "" {
-		relayKeyRaw = viper.GetString("nip11.privkey")
-	}
-	if relayKeyRaw == "" {
-		return common.UsageError(cmd, errors.New("--relay-key is required (or set nip11.privkey in config)"))
+	delegatee, _ := cmd.Flags().GetString("delegatee")
+	if delegatee == "" {
+		return common.UsageError(cmd, errors.New("--delegatee is required"))
 	}
 
-	issuerKey := common.NormalizeKey(issuerKeyRaw)
-	relayKey := common.NormalizeKey(relayKeyRaw)
-
-	relayPubHex, err := derivePubkey(relayKey)
+	issuerPrivKeyHex, issuerPubHex, err := resolveDelegationKey(cmd, jsonMode, issuer)
 	if err != nil {
-		// input intentionally left blank -- relayKey is private-key
-		// material and must never be echoed back, even malformed.
-		return common.InvalidInputError(cmd, "", fmt.Errorf("invalid relay key: %w", err))
+		return err
+	}
+	_, delegateePubHex, err := resolveDelegationKey(cmd, jsonMode, delegatee)
+	if err != nil {
+		return err
 	}
 
 	kindsFlag, _ := cmd.Flags().GetString("kinds")
@@ -119,37 +124,58 @@ func runNonInteractive(cmd *cobra.Command, issuerKeyRaw string) error {
 	expiry := time.Now().Unix() + int64(durationDays*24*3600)
 	conditions := fmt.Sprintf("kind=%s&created_at<%d", strings.Join(kinds, ","), expiry)
 
-	token, err := nip26.SignDelegationToken(issuerKey, relayPubHex, conditions)
+	token, err := nip26.SignDelegationToken(issuerPrivKeyHex, delegateePubHex, conditions)
 	if err != nil {
-		// input intentionally left blank -- issuerKey is private-key
+		// input intentionally left blank -- issuerPrivKeyHex is private-key
 		// material and must never be echoed back, even malformed.
 		return common.InvalidInputError(cmd, "", err)
 	}
-	issuerPubHex := tryToPubkey(issuerKey)
 
 	if jsonMode {
 		common.PrintJSON(map[string]any{
-			"issuer_pubkey": issuerPubHex,
-			"relay_pubkey":  relayPubHex,
-			"relay_privkey": relayKey,
-			"conditions":    conditions,
-			"token":         token,
+			"issuer_pubkey":    issuerPubHex,
+			"delegatee_pubkey": delegateePubHex,
+			"conditions":       conditions,
+			"token":            token,
 		})
 		return nil
 	}
 
 	fmt.Println("Delegation token generated.")
 	fmt.Println()
-	fmt.Println("Add to relay.yaml:")
+	fmt.Println("issuer:    ", issuerPubHex)
+	fmt.Println("delegatee: ", delegateePubHex)
+	fmt.Println("conditions:", conditions)
+	fmt.Println("token:     ", token)
 	fmt.Println()
-	fmt.Println("nip11:")
-	fmt.Printf("  pubkey: %q\n", relayPubHex)
-	fmt.Printf("  privkey: %q\n", relayKey)
-	fmt.Println("  delegation:")
-	fmt.Printf("    issuer: %q\n", issuerPubHex)
-	fmt.Printf("    conditions: %q\n", conditions)
-	fmt.Printf("    token: %q\n", token)
+	fmt.Println("Attach to events signed by the delegatee's key as a tag:")
+	fmt.Printf("  [\"delegation\", %q, %q, %q]\n", issuerPubHex, conditions, token)
 	return nil
+}
+
+// resolveDelegationKey resolves keyOrIdentity -- a vault label, an npub/
+// hex/nprofile/nip-05, or a raw nsec/hex private key -- to the private key
+// and pubkey needed to build a delegation token, the same identifier shapes
+// "id sign --identity" accepts. A pubkey-only identity (not vault-saved)
+// has no private key and is rejected: unlike "miner mine --identity", which
+// tolerates a pubkey-only identity and just leaves the event unsigned, both
+// the issuer and delegatee side here always need real key material -- the
+// issuer to actually sign, the delegatee because a bare pubkey with no
+// vault/nsec behind it isn't distinguishable from a typo.
+func resolveDelegationKey(cmd *cobra.Command, jsonMode bool, keyOrIdentity string) (privKeyHex, pubKeyHex string, err error) {
+	resolved, err := client.ResolveIdentifier(keyOrIdentity)
+	if err != nil {
+		return "", "", keyresolve.ClassifyIdentifierError(cmd, keyOrIdentity, err)
+	}
+
+	privKeyHex, err = keyresolve.ResolveSigningKey(cmd, jsonMode, resolved)
+	if err != nil {
+		return "", "", err
+	}
+	if privKeyHex == "" {
+		return "", "", common.AuthError(cmd, fmt.Errorf("identity %q has no private key available", common.RedactSecretInput(keyOrIdentity)))
+	}
+	return privKeyHex, resolved.PubKeyHex, nil
 }
 
 // Model for the wizard
@@ -157,7 +183,7 @@ type state int
 
 const (
 	stateIssuerKey state = iota
-	stateRelayKey
+	stateDelegateeKey
 	stateKinds
 	stateCustomKinds
 	stateDuration
@@ -165,20 +191,20 @@ const (
 )
 
 type model struct {
-	state           state
-	issuerInput     textinput.Model
-	relayInput      textinput.Model
-	durationInput   textinput.Model
-	customKindInput textinput.Model
-	kinds           []kindOption
-	cursor          int
-	selectedKinds   map[int]struct{}
-	err             error
-	genToken        string
-	genConditions   string
-	genRelayPub     string
-	realRelayPriv   string
-	realIssuerPriv  string
+	state             state
+	issuerInput       textinput.Model
+	delegateeInput    textinput.Model
+	durationInput     textinput.Model
+	customKindInput   textinput.Model
+	kinds             []kindOption
+	cursor            int
+	selectedKinds     map[int]struct{}
+	err               error
+	genToken          string
+	genConditions     string
+	genDelegateePub   string
+	realDelegateePriv string
+	realIssuerPriv    string
 }
 
 type kindOption struct {
@@ -187,20 +213,16 @@ type kindOption struct {
 }
 
 func initialModel() model {
-	// Pre-fill from new nested config path
-	defaultRelayPriv := viper.GetString("nip11.privkey")
-
 	ti := textinput.New()
 	ti.Placeholder = "nsec... or hex..."
 	ti.Focus()
 	ti.CharLimit = 156
 	ti.Width = 64
 
-	ri := textinput.New()
-	ri.Placeholder = "nsec... or hex..."
-	ri.SetValue(defaultRelayPriv)
-	ri.CharLimit = 156
-	ri.Width = 64
+	dei := textinput.New()
+	dei.Placeholder = "nsec... or hex..."
+	dei.CharLimit = 156
+	dei.Width = 64
 
 	ki := textinput.New()
 	ki.Placeholder = "10002, 30023"
@@ -216,7 +238,7 @@ func initialModel() model {
 	return model{
 		state:           stateIssuerKey,
 		issuerInput:     ti,
-		relayInput:      ri,
+		delegateeInput:  dei,
 		customKindInput: ki,
 		durationInput:   di,
 		kinds: []kindOption{
@@ -250,10 +272,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.issuerInput.Value() == "" {
 					return m, nil
 				}
-				m.state = stateRelayKey
-				m.relayInput.Focus()
-			case stateRelayKey:
-				if m.relayInput.Value() == "" {
+				m.state = stateDelegateeKey
+				m.delegateeInput.Focus()
+			case stateDelegateeKey:
+				if m.delegateeInput.Value() == "" {
 					return m, nil
 				}
 				m.state = stateKinds
@@ -301,8 +323,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch m.state {
 	case stateIssuerKey:
 		m.issuerInput, cmd = m.issuerInput.Update(msg)
-	case stateRelayKey:
-		m.relayInput, cmd = m.relayInput.Update(msg)
+	case stateDelegateeKey:
+		m.delegateeInput, cmd = m.delegateeInput.Update(msg)
 	case stateCustomKinds:
 		m.customKindInput, cmd = m.customKindInput.Update(msg)
 	case stateDuration:
@@ -314,14 +336,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) process() (tea.Model, tea.Cmd) {
 	m.realIssuerPriv = common.NormalizeKey(m.issuerInput.Value())
-	m.realRelayPriv = common.NormalizeKey(m.relayInput.Value())
+	m.realDelegateePriv = common.NormalizeKey(m.delegateeInput.Value())
 
-	relayPubHex, err := derivePubkey(m.realRelayPriv)
+	delegateePubHex, err := derivePubkey(m.realDelegateePriv)
 	if err != nil {
 		m.err = err
 		return m, nil
 	}
-	m.genRelayPub = relayPubHex
+	m.genDelegateePub = delegateePubHex
 
 	durationDays, _ := strconv.Atoi(m.durationInput.Value())
 	if durationDays == 0 {
@@ -351,7 +373,7 @@ func (m model) process() (tea.Model, tea.Cmd) {
 	conditions := fmt.Sprintf("kind=%s&created_at<%d", strings.Join(kinds, ","), expiry)
 	m.genConditions = conditions
 
-	token, err := nip26.SignDelegationToken(m.realIssuerPriv, relayPubHex, conditions)
+	token, err := nip26.SignDelegationToken(m.realIssuerPriv, delegateePubHex, conditions)
 	if err != nil {
 		m.err = err
 		return m, nil
@@ -378,11 +400,11 @@ func (m model) View() string {
 			header,
 			m.issuerInput.View(),
 		)
-	case stateRelayKey:
+	case stateDelegateeKey:
 		s = fmt.Sprintf(
-			"%s\n\nStep 2: Enter your relay identity private key\n%s\n\n(Pre-filled if found in relay.yaml)",
+			"%s\n\nStep 2: Enter the delegatee identity's private key\n%s",
 			header,
-			m.relayInput.View(),
+			m.delegateeInput.View(),
 		)
 	case stateKinds:
 		var kindList strings.Builder
@@ -421,11 +443,14 @@ func (m model) View() string {
 				Padding(1).
 				MarginTop(1)
 
+			issuerPub := tryToPubkey(m.realIssuerPriv)
 			content := fmt.Sprintf(
-				"[✅] Delegation Token Generated!\n\nAdd to relay.yaml:\n\nnip11:\n  pubkey: \"%s\"\n  privkey: \"%s\"\n  delegation:\n    issuer: \"%s\"\n    conditions: \"%s\"\n    token: \"%s\"",
-				m.genRelayPub,
-				m.realRelayPriv,
-				tryToPubkey(m.realIssuerPriv),
+				"[✅] Delegation Token Generated!\n\nissuer:     %s\ndelegatee:  %s\nconditions: %s\ntoken:      %s\n\nAttach to events signed by the delegatee's key as a tag:\n[\"delegation\", %q, %q, %q]",
+				issuerPub,
+				m.genDelegateePub,
+				m.genConditions,
+				m.genToken,
+				issuerPub,
 				m.genConditions,
 				m.genToken,
 			)

@@ -10,12 +10,12 @@ import (
 
 	"github.com/ohstr/ncli/cli/common"
 	"github.com/ohstr/ncli/cli/delegate"
+	"github.com/ohstr/ncli/cli/keyresolve"
 	"github.com/ohstr/ncli/client"
 	"github.com/ohstr/nmilat/nip19"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"golang.org/x/term"
 )
 
 var idCmd = &cobra.Command{
@@ -73,41 +73,13 @@ func init() {
 	idListCmd.Flags().Bool("reveal", false, "Decrypt and include the private key of vault-saved identities")
 }
 
-// classifyIdentifierError picks InvalidInputError (a malformed npub/nsec/
-// hex/nprofile string) or NetworkError (a nip-05 "name@domain" lookup that
-// failed to resolve, e.g. DNS/HTTP) for a client.ResolveIdentifier/
-// ResolveFindIdentifier failure -- both funnel into one error return
-// without a distinguishable type, and a "name@domain"-shaped identifier's
-// failure is overwhelmingly a network problem, not a malformed-string one.
-func classifyIdentifierError(cmd *cobra.Command, identifier string, err error) error {
-	input := common.RedactSecretInput(identifier)
-	if strings.Contains(identifier, "@") {
-		return common.NetworkError(cmd, input, err)
-	}
-	return common.InvalidInputError(cmd, input, err)
-}
-
-// resolveVaultPassword sources the vault password from NCLI_VAULT_PASSWORD
-// if set (a universal override, in any mode), otherwise errors in JSON
-// mode (never prompts -- an agent driving this over a pipe has no TTY to
-// prompt), otherwise prompts interactively with promptText.
-func resolveVaultPassword(jsonMode bool, promptText string) (string, error) {
-	if pw := viper.GetString("vault.password"); pw != "" {
-		return pw, nil
-	}
-	if jsonMode {
-		return "", errors.New("vault password required; set NCLI_VAULT_PASSWORD")
-	}
-	return promptPassword(promptText)
-}
-
 func runIDInspect(cmd *cobra.Command, arg string) error {
 	jsonMode, _ := cmd.Flags().GetBool("json")
 	reveal, _ := cmd.Flags().GetBool("reveal")
 
 	result, err := client.ResolveIdentifier(arg)
 	if err != nil {
-		return classifyIdentifierError(cmd, arg, err)
+		return keyresolve.ClassifyIdentifierError(cmd, arg, err)
 	}
 
 	if reveal && result.PrivKeyHex == "" {
@@ -115,7 +87,7 @@ func runIDInspect(cmd *cobra.Command, arg string) error {
 			return common.NotFoundError(cmd, common.RedactSecretInput(arg), errors.New("identity not saved in vault, nothing to reveal"))
 		}
 
-		password, err := resolveVaultPassword(jsonMode, "Vault password: ")
+		password, err := keyresolve.ResolveVaultPassword(jsonMode, "Vault password: ")
 		if err != nil {
 			return common.UsageError(cmd, err)
 		}
@@ -253,7 +225,7 @@ func saveIdentity(cmd *cobra.Command, jsonMode bool, id *client.Identity, label 
 		}
 		vaultPrivKeyHex = privHex
 	} else {
-		password, err := resolveVaultPassword(jsonMode, "Vault password: ")
+		password, err := keyresolve.ResolveVaultPassword(jsonMode, "Vault password: ")
 		if err != nil {
 			return nil, err
 		}
@@ -299,7 +271,7 @@ func runIDList(cmd *cobra.Command) error {
 
 	var vaultPrivKeyHex string
 	if reveal && len(entries) > 0 {
-		password, err := resolveVaultPassword(jsonMode, "Vault password: ")
+		password, err := keyresolve.ResolveVaultPassword(jsonMode, "Vault password: ")
 		if err != nil {
 			return common.UsageError(cmd, err)
 		}
@@ -375,30 +347,15 @@ func promptLine(r *bufio.Reader, prompt string) (string, error) {
 	return strings.TrimRight(line, "\r\n"), nil
 }
 
-// promptPassword reads a password with echo disabled. This requires stdin
-// to be an actual terminal (it issues a termios ioctl); piped/non-
-// interactive stdin will error here -- only reached when --json is unset
-// and NCLI_VAULT_PASSWORD is unset, i.e. the deliberately-interactive-only
-// path (the same trade-off ssh-keygen/sudo make).
-func promptPassword(prompt string) (string, error) {
-	fmt.Print(prompt)
-	pw, err := term.ReadPassword(int(os.Stdin.Fd()))
-	fmt.Println()
-	if err != nil {
-		return "", err
-	}
-	return string(pw), nil
-}
-
 func promptNewPassword() (string, error) {
-	pw, err := promptPassword("Set a vault password: ")
+	pw, err := keyresolve.PromptPassword("Set a vault password: ")
 	if err != nil {
 		return "", err
 	}
 	if pw == "" {
 		return "", errors.New("password must not be empty")
 	}
-	confirm, err := promptPassword("Confirm vault password: ")
+	confirm, err := keyresolve.PromptPassword("Confirm vault password: ")
 	if err != nil {
 		return "", err
 	}

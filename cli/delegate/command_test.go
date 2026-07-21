@@ -25,12 +25,12 @@ func buildTestBinary(t *testing.T) string {
 
 // TestDelegateWizardGuard is the regression test for the bubbletea wizard
 // launching unconditionally (ignoring --json, and with no tty check at all)
-// whenever --issuer-key/NCLI_DELEGATE_ISSUERKEY was unset -- unlike
-// "apply"'s headless() check or id.go's resolveVaultPassword, an agent or
-// script invoking "ncli id delegate" without --issuer-key would hang or get
-// garbled output deep inside bubbletea's screen init instead of a clear,
-// immediate answer. Both cases below must now come back fast with a
-// classified usage error instead of ever reaching RunWizard.
+// whenever --issuer/NCLI_DELEGATE_ISSUER was unset -- unlike "apply"'s
+// headless() check or id.go's resolveVaultPassword, an agent or script
+// invoking "ncli id delegate" without --issuer would hang or get garbled
+// output deep inside bubbletea's screen init instead of a clear, immediate
+// answer. Both cases below must now come back fast with a classified usage
+// error instead of ever reaching RunWizard.
 func TestDelegateWizardGuard(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds and spawns the ncli binary; skipped in -short mode")

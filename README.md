@@ -676,6 +676,9 @@ ncli id --json --save --label mykey
 
 # sign an unsigned event with a saved identity, ready for `ncli publish`
 ncli id sign --identity mykey -e draft.json -o signed.json
+
+# mint a NIP-26 delegation token from two saved identities
+ncli id delegate --issuer mykey --delegatee otherkey --json
 ```
 
 The vault is encrypted under a password. `ncli id sign` signs an unsigned

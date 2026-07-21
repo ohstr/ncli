@@ -17,12 +17,6 @@ nip11:
   # startup, and must match `pubkey` above if both are set.
   # privkey: ""
 
-  # delegation (optional, NIP-26): paste the block `ncli delegate` prints.
-  # delegation:
-  #   issuer: ""
-  #   conditions: ""
-  #   token: ""
-
   # A few more NIP-11 document fields exist but aren't config-settable, so
   # they're omitted above rather than shown as live fields:
   #   software/version -- always filled in from ncli's own build info at

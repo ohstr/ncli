@@ -135,13 +135,21 @@ review, but the merge click itself is a human action for now.
 When a human does merge, use **"Rebase and merge"** or **"Create a merge
 commit"** -- not squash. Squashing collapses the atomic commit history from
 step 3 back into one commit on `main`, defeating the point of splitting it.
-Squash-merge is
-disabled repo-wide (`allow_squash_merge: false`) so the button isn't there
-to reach for; rebase-merge and merge-commit are both still linear-history-
-compatible enough for our purposes and remain available. (Full linear
-history -- i.e. also banning merge commits -- was considered and dropped:
-it would leave rebase-merge as the *only* legal method, which is stricter
-than this step actually needs.)
+Squash-merge is disabled repo-wide (`allow_squash_merge: false`) so the
+button isn't there to reach for; rebase-merge and merge-commit are both
+still available. (Full linear history -- i.e. also banning merge commits --
+was considered and dropped: it would leave rebase-merge as the *only* legal
+method, which is stricter than this step actually needs.)
+
+Immediately after merging, delete the remote branch (`git push origin
+--delete <branch>`, or the "Delete branch" button GitHub shows on a merged
+PR's page -- this repo has `deleteBranchOnMerge` off, so nothing does this
+automatically). Unlike the merge click itself, this is routine cleanup an
+agent can do without a human in the loop -- it's trivially recoverable
+(the commits live on in `main`'s history via the merge commit either way).
+If the branch has a local worktree tied to it (`EnterWorktree`/`git
+worktree add`), it's safe to remove too, but ask first or wait to be
+asked -- `ExitWorktree` deliberately won't remove one unprompted.
 
 ## `main` branch protection
 
@@ -159,23 +167,99 @@ verified with a follow-up `GET`):
 
 ## Cutting a release
 
-1. Confirm the topmost `## [X.Y.Z]` heading in `CHANGELOG.md` is the version
-   actually being shipped (rename/re-bump via a normal PR if not).
-2. Merge everything intended for this release.
-3. Fire `.github/workflows/release.yml` by hand -- it's `workflow_dispatch`
-   only, nothing triggers it automatically:
+### 1. Review CHANGELOG.md's topmost section before touching anything else
 
-   ```sh
-   gh workflow run release.yml                    # uses the topmost CHANGELOG.md heading
-   gh workflow run release.yml -f version=0.3.0    # or pin it explicitly
-   ```
+This becomes the public GitHub Release notes verbatim (§4 below, "Fire
+release.yml") -- read every
+bullet under the topmost `## [X.Y.Z]` heading top to bottom and fix, in a
+normal commit, anything that fails these checks:
 
-   It vets/tests, resolves notes from that CHANGELOG.md section verbatim
-   (which is why step 4's `(#N)` references matter -- they're what makes the
-   release notes point back at the PRs that shipped it), tags `vX.Y.Z`, and
-   runs GoReleaser (binaries, `ghcr.io` image, homebrew tap).
-4. Nothing needs to happen after -- the next feature/hotfix branch opens a
-   fresh `## [X.Y.Z]` heading per step 3 when it lands its first entry.
+- **Correctness** -- does the bullet still match what actually shipped?
+  Flag names, error codes, behavior described in prose can go stale between
+  when it was written and release time, especially if a later PR touched
+  the same area again. Spot-check anything that looks even slightly off
+  against the real diff/`git log`, don't just trust the prose.
+- **No sensitive info** -- no real hostnames/URLs, tokens, keys, internal
+  infra details, or anything else that isn't meant to be public. Easy to
+  miss if a bullet was drafted quickly mid-session and copied from a
+  debugging example.
+- **No noise** -- only user-facing `ncli` behavior belongs here (see the
+  feature/hotfix-vs-trivial and product-vs-process splits in step 1,
+  "Decide: feature/hotfix, or trivial?", near the top of this file).
+  Internal refactors, test-only changes, or process/doc-only work (like
+  this skill file) should never have a bullet. Delete any that snuck in.
+- **Every bullet has its `(#N)` PR backreference** (step 4, "Push, open a
+  draft PR"). Fill in any that are missing now -- once tagged, the release
+  notes are frozen, and that traceability is gone for good if it's absent.
+
+### 2. Confirm the version number
+
+`ncli` is pre-1.0 (`0.y.z`), so semver's initial-development rule applies:
+MAJOR doesn't come into play yet. **MINOR** covers anything that isn't a
+pure bug fix -- including breaking changes to flags/output (see `0.1.0` →
+`0.2.0`, which bumped minor despite the `id delegate` flag rename being
+breaking). **PATCH** is reserved for a release that's *only*
+backwards-compatible bug fixes, nothing under `### Added`/`### Changed`.
+
+Look at what's actually accumulated under the topmost heading's
+subsections and match the number to that verdict -- if the heading was
+opened assuming a patch release but a feature landed on top of it later
+(common, since the number is picked up front per step 3, "Implement"),
+re-bump it now via a normal commit before shipping. Don't let a stale
+number ship just because it was the first guess.
+
+### 3. Merge everything intended for this release
+
+(Manual UI merge, per step 5, "Merging: by hand in the GitHub UI, no
+squash", above -- nothing new here, just the checkpoint
+to confirm everything intended for this cycle actually landed on `main`
+before firing the workflow.)
+
+### 4. Fire `.github/workflows/release.yml` by hand
+
+It's `workflow_dispatch` only -- nothing triggers it automatically:
+
+```sh
+gh workflow run release.yml                    # uses the topmost CHANGELOG.md heading
+gh workflow run release.yml -f version=0.3.0    # or pin it explicitly, no "v" prefix
+```
+
+`-f version=` takes the bare number (`0.3.0`), never `v0.3.0` -- the tag
+itself gets the `v` prefix added internally (`vX.Y.Z`), but the input and
+the `## [X.Y.Z]` CHANGELOG heading it's matched against never have one. It
+vets/tests as a gate (so a red `main` doesn't silently ship), resolves
+notes from that CHANGELOG.md section verbatim (why the review in §1 above
+and each bullet's `(#N)` PR backreference from step 4, "Push, open a draft
+PR, iterate", matter), tags `vX.Y.Z`, and runs
+GoReleaser (binaries + checksums, `ghcr.io` image, homebrew tap). Safe to
+re-run if GoReleaser fails partway -- the tag step deletes and recreates
+`vX.Y.Z` before retrying rather than erroring on "tag already exists".
+
+### 5. Verify it actually published
+
+```sh
+gh release view vX.Y.Z
+```
+
+Check the tag landed, the binaries/`checksums.txt` are attached, and the
+notes match what was reviewed in §1 above. Spot-check the `ghcr.io` image
+tag and the homebrew tap formula bump too if either matters for this
+release.
+
+### 6. Clean up any stragglers
+
+Every PR that went into this release should already have had its branch
+(and worktree, if any) cleaned up immediately after merging, per step 5,
+"Merging: by hand in the GitHub UI, no squash", above. Use the release as
+a checkpoint to sweep anything that was missed:
+
+```sh
+git branch -r --merged origin/main | grep -v 'origin/main$'
+```
+
+Nothing else needs to happen after that -- the next feature/hotfix branch
+opens a fresh `## [X.Y.Z]` heading (step 3, "Implement") when it lands its
+first entry.
 
 ## Gotchas learned
 

@@ -89,8 +89,8 @@ github.com/muesli/cancelreader v0.2.2 h1:3I4Kt4BQjOR54NavqnDogx/MIoWBFa0StPA8ELU
 github.com/muesli/cancelreader v0.2.2/go.mod h1:3XuTXfFS2VjM+HTLZY9Ak0l6eUKfijIfMUZ4EgX0QYo=
 github.com/muesli/termenv v0.16.0 h1:S5AlUN9dENB57rsbnkPyfdGuWIlkmzJjbFf0Tf5FWUc=
 github.com/muesli/termenv v0.16.0/go.mod h1:ZRfOIKPFDYQoDFF4Olj7/QJbW60Ol/kL1pU3VfY/Cnk=
-github.com/ohstr/nmilat v0.2.3 h1:J3S4Jcctfa2c11tDfHjTX48P2sGLC00XLq8BfB8hGR0=
-github.com/ohstr/nmilat v0.2.3/go.mod h1:jWIyGhWgCuWv+cDZ0hdivvCmYjSh8bTxnk54NxXtqvA=
+github.com/ohstr/nmilat v0.2.4 h1:hqff4TgooVXbB+By+m10Uew8X1wB9sq8Q6EYUAoG2vY=
+github.com/ohstr/nmilat v0.2.4/go.mod h1:jWIyGhWgCuWv+cDZ0hdivvCmYjSh8bTxnk54NxXtqvA=
 github.com/pelletier/go-toml/v2 v2.2.3 h1:YmeHyLY8mFWbdkNWwpr+qIL2bEqT0o95WSdkNHvL12M=
 github.com/pelletier/go-toml/v2 v2.2.3/go.mod h1:MfCQTFTvCcUyyvvwm1+G6H/jORL20Xlb6rzQu9GuUkc=
 github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=

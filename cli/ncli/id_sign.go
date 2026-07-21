@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/ohstr/ncli/cli/common"
+	"github.com/ohstr/ncli/cli/keyresolve"
 	"github.com/ohstr/ncli/client"
 	"github.com/spf13/cobra"
 )
@@ -44,10 +45,10 @@ different key.`,
 		identity, _ := cmd.Flags().GetString("identity")
 		resolved, err := client.ResolveIdentifier(identity)
 		if err != nil {
-			return classifyIdentifierError(cmd, identity, err)
+			return keyresolve.ClassifyIdentifierError(cmd, identity, err)
 		}
 
-		privKeyHex, err := resolveSigningKey(cmd, jsonMode, resolved)
+		privKeyHex, err := keyresolve.ResolveSigningKey(cmd, jsonMode, resolved)
 		if err != nil {
 			return err
 		}

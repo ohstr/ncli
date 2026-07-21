@@ -31,8 +31,7 @@ logdir: ./data/logs
 ```
 
 `pubkey` alone is enough to start; `privkey` is only required if you also
-want `cache.topZapped.enabled` or `ncli relay stats`/`reindex`/`clear`/`ncli id
-delegate`'s relay-signing side.
+want `cache.topZapped.enabled` or `ncli relay stats`/`reindex`/`clear`.
 
 ## Preset shapes
 
@@ -221,9 +220,6 @@ Full endpoint list and subcommand reference: `references/admin-reindex-reference
   to clients), while every event is still accepted regardless of its actual
   difficulty. Setting `nip11.limitation.min_pow_difficulty` directly in YAML
   does nothing — `pow.min` is the only field that reaches it.
-- `nip11.delegation` (the block `ncli id delegate` prints — see
-  `ncli-identity`) is validated at server startup if present; an invalid
-  token or issuer signature is a fatal error, not a soft warning.
 - Both `store` and `logdir`'s parent directories are auto-created on `ncli
   relay` startup, but a missing `store` value is caught at config-load time
   (before either directory is touched), same as a missing `nip11.pubkey`.

@@ -137,7 +137,7 @@ func TestCommandTree_GroupCommandsRequireSubcommand(t *testing.T) {
 func TestCommandTree_IDNestsDelegate(t *testing.T) {
 	delegateCmd := resolve(t, "id", "delegate")
 
-	for _, want := range []string{"issuer-key", "relay-key", "kinds", "duration"} {
+	for _, want := range []string{"issuer", "delegatee", "kinds", "duration"} {
 		if delegateCmd.Flags().Lookup(want) == nil {
 			t.Errorf("id delegate: expected --%s flag, not found", want)
 		}

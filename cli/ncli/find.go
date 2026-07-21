@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ohstr/ncli/cli/common"
+	"github.com/ohstr/ncli/cli/keyresolve"
 	"github.com/ohstr/ncli/client"
 	"github.com/ohstr/nmilat/nip01"
 	"github.com/spf13/cobra"
@@ -79,7 +80,7 @@ that can't rely on the two streams being captured separately.`,
 			if len(args) == 1 {
 				identifier, err = client.ResolveFindIdentifier(args[0])
 				if err != nil {
-					return classifyIdentifierError(cmd, args[0], err)
+					return keyresolve.ClassifyIdentifierError(cmd, args[0], err)
 				}
 			}
 

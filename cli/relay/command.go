@@ -358,7 +358,6 @@ func initConfig() error {
 
 	// Preserve fields before resetting defaults
 	priv := config.Nip11.PrivKey
-	deleg := config.Nip11.Delegation
 	url := config.Nip11.URL
 	build := common.ReadBuildInfo()
 
@@ -411,7 +410,6 @@ func initConfig() error {
 		Version:     build.Version,
 		Limitation:  limitation,
 		PrivKey:     priv,
-		Delegation:  (*nip11.DelegationConfig)(deleg),
 		URL:         url,
 		Self:        self,
 	}

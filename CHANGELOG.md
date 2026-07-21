@@ -37,6 +37,7 @@
   itself no longer verifies or signs under a NIP-26 delegation
   (`nip11.delegation` is no longer a config field — a `relay.yaml` that
   still sets it is now silently ignored rather than validated at startup).
+  (#1)
 
 
 ## [0.1.0]

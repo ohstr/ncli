@@ -172,15 +172,14 @@ func applyPortDefault(cfg *RelayConfig) {
 
 // applyNip11Reset mirrors the Nip11 field-overwrite block in initConfig
 // (command.go): Name/Description default to hardcoded strings only if
-// empty; PubKey/Contact/PrivKey/Delegation survive as-is. Software/Version
-// are always derived from build info (not config input) - a relay must not
-// be able to self-report a different software identity/version than what
-// it's actually running. Limitation starts from whatever the user
-// configured and only fills in fields left at their zero value with the
-// hardcoded defaults below.
+// empty; PubKey/Contact/PrivKey survive as-is. Software/Version are always
+// derived from build info (not config input) - a relay must not be able to
+// self-report a different software identity/version than what it's
+// actually running. Limitation starts from whatever the user configured
+// and only fills in fields left at their zero value with the hardcoded
+// defaults below.
 func applyNip11Reset(cfg *RelayConfig) {
 	priv := cfg.Nip11.PrivKey
-	deleg := cfg.Nip11.Delegation
 	url := cfg.Nip11.URL
 	build := common.ReadBuildInfo()
 
@@ -218,7 +217,6 @@ func applyNip11Reset(cfg *RelayConfig) {
 		Version:     build.Version,
 		Limitation:  limitation,
 		PrivKey:     priv,
-		Delegation:  deleg,
 		URL:         url,
 	}
 }

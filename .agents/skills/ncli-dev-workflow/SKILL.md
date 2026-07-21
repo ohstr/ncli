@@ -191,6 +191,12 @@ normal commit, anything that fails these checks:
 - **Every bullet has its `(#N)` PR backreference** (step 4, "Push, open a
   draft PR"). Fill in any that are missing now -- once tagged, the release
   notes are frozen, and that traceability is gone for good if it's absent.
+  `(#N)` renders as plain text in CHANGELOG.md itself (GitHub only
+  autolinks issue/PR numbers in "rich" surfaces -- issues, PRs, commits,
+  releases -- not in a tracked file's blob view, verified via `gh api
+  markdown` with repo context vs. the file's own rendered HTML). It
+  becomes a real link once this section is copied into the GitHub Release
+  body below, which is the only place it needs to be one.
 
 ### 2. Confirm the version number
 

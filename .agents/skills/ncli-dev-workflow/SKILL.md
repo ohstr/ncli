@@ -15,7 +15,7 @@ unlike `skills/*` (binary-only, written for agents/users who only have the
 verification, not process).
 
 `main` is protected -- nothing lands there except through a merged PR. See
-"Target `main` branch protection" below for the exact ruleset.
+"`main` branch protection" below for the live ruleset.
 
 ## 0. Always start in a worktree
 
@@ -127,26 +127,27 @@ uniformly for both the feature/hotfix and trivial paths.
 
 Merge with **"Rebase and merge"** or **"Create a merge commit"** -- not
 squash. Squashing collapses the atomic commit history from step 3 back into
-one commit on `main`, defeating the point of splitting it. (Target repo
-setting: disable squash merge entirely, or at least default away from it --
-see below.)
+one commit on `main`, defeating the point of splitting it. Squash-merge is
+disabled repo-wide (`allow_squash_merge: false`) so the button isn't there
+to reach for; rebase-merge and merge-commit are both still linear-history-
+compatible enough for our purposes and remain available. (Full linear
+history -- i.e. also banning merge commits -- was considered and dropped:
+it would leave rebase-merge as the *only* legal method, which is stricter
+than this step actually needs.)
 
-## Target `main` branch protection
+## `main` branch protection
 
-This is the ruleset `main` should have. As of writing it has **not been
-applied yet** -- confirm before running, since it's a shared/hard-to-reverse
-setting change:
+Applied as of 2026-07-21 (`gh api repos/ohstr/ncli/branches/main/protection`,
+verified with a follow-up `GET`):
 
-- Require a pull request before merging (blocks direct pushes).
+- Require a pull request before merging, 0 required approvals (single
+  maintainer for now -- add a review-count requirement once there's a
+  second regular reviewer).
 - Require the `check` status check from `.github/workflows/ci.yml` to pass.
-- Require linear history; disable/discourage squash merge (see step 5).
 - Block force pushes to `main`.
 - Block deletion of `main`.
 - Require conversation resolution before merging.
-- Apply the rule to administrators too, not just other contributors.
-
-Skip requiring a minimum review-approval count while it's a single
-maintainer -- add it once there's a second regular reviewer.
+- Enforced on admins too, not just other contributors.
 
 ## Cutting a release
 

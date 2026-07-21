@@ -123,11 +123,19 @@ Use the **PR** number here, not the issue number: every change has a PR,
 not every change has an issue, so PR-number is the one reference that works
 uniformly for both the feature/hotfix and trivial paths.
 
-## 5. Merging: no squash
+## 5. Merging: by hand in the GitHub UI, no squash
 
-Merge with **"Rebase and merge"** or **"Create a merge commit"** -- not
-squash. Squashing collapses the atomic commit history from step 3 back into
-one commit on `main`, defeating the point of splitting it. Squash-merge is
+Merging a PR is a manual step done through the GitHub UI -- never `gh pr
+merge`, even from an agent-driven session. This is a deliberate, temporary
+guardrail while the team builds confidence/process maturity around
+unattended merges, not a permanent rule -- revisit it once that maturity
+exists. An agent may push commits, open/update a PR, and mark it ready for
+review, but the merge click itself is a human action for now.
+
+When a human does merge, use **"Rebase and merge"** or **"Create a merge
+commit"** -- not squash. Squashing collapses the atomic commit history from
+step 3 back into one commit on `main`, defeating the point of splitting it.
+Squash-merge is
 disabled repo-wide (`allow_squash_merge: false`) so the button isn't there
 to reach for; rebase-merge and merge-commit are both still linear-history-
 compatible enough for our purposes and remain available. (Full linear

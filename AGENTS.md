@@ -117,3 +117,8 @@ or invoking a command in that area:
 These skills assume only the `ncli` binary is available — no access to this
 source tree. (For building/testing `ncli` itself from source, see
 `.claude/skills/verify` instead, which is scoped to contributors.)
+
+Contributing a change to this repo (not just using the `ncli` binary)? Read
+`.agents/skills/ncli-dev-workflow/SKILL.md` first — worktrees, when a
+tracking issue is required, commit/CHANGELOG conventions, PR mechanics, and
+how a release gets cut.

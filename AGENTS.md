@@ -118,7 +118,11 @@ These skills assume only the `ncli` binary is available — no access to this
 source tree. (For building/testing `ncli` itself from source, see
 `.claude/skills/verify` instead, which is scoped to contributors.)
 
-Contributing a change to this repo (not just using the `ncli` binary)? Read
-`.agents/skills/ncli-dev-workflow/SKILL.md` first — worktrees, when a
-tracking issue is required, commit/CHANGELOG conventions, PR mechanics, and
-how a release gets cut.
+Contributing a change to this repo (not just using the `ncli` binary)? The
+workflow strategy — worktrees, when a tracking issue is required,
+commit/CHANGELOG conventions, PR mechanics, and how a release gets cut — now
+lives in two parts: read the org-wide shape first
+(`/u/flzpace/xgit/orgs/ohstr/.agents/skills/dev-workflow/SKILL.md`, shared
+across ohstr repos, not part of this git tree), then
+`.agents/skills/ncli-dev-workflow/SKILL.md` for what's specific to ncli
+(branch-protection ruleset, `GOWORK=off`, release.yml/GoReleaser mechanics).

@@ -1,24 +1,25 @@
 ---
 name: ncli-dev-workflow
-description: ncli-specific overlay on top of the org-wide ../../../../.agents/skills/dev-workflow/SKILL.md strategy -- this repo's actual branch-protection ruleset, commit-prefix convention, the GOWORK=off build gotcha, the Co-Authored-By policy, and the concrete release.yml/GoReleaser/homebrew mechanics for cutting a release. Read the generic doc first for the workflow shape (worktree-first, issue-vs-trivial, atomic commits, draft-PR mechanics, release-cut checklist); read this one for what's actually true of ohstr/ncli. Use before starting any change to this source tree (not the ncli binary's own commands -- see skills/ for those), and always before committing, pushing, or opening a PR against ohstr/ncli.
+description: ncli-specific overlay on top of the org-wide ohstr/dev-workflow skill -- this repo's actual branch-protection ruleset, commit-prefix convention, the GOWORK=off build gotcha, the Co-Authored-By policy, and the concrete release.yml/GoReleaser/homebrew mechanics for cutting a release. Read the generic skill first for the workflow shape (worktree-first, issue-vs-trivial, atomic commits, draft-PR mechanics, release-cut checklist); read this one for what's actually true of ohstr/ncli. Use before starting any change to this source tree (not the ncli binary's own commands -- see skills/ for those), and always before committing, pushing, or opening a PR against ohstr/ncli.
 ---
 
 <!-- Process doc, not a command reference. Update by hand when the workflow
 changes -- nothing here is derived automatically from the repo. This is the
-ncli-specific overlay; the shared shape lives in the org-wide
-../../../../.agents/skills/dev-workflow/SKILL.md (outside this repo's git
-tree, at /u/flzpace/xgit/orgs/ohstr/.agents/skills/dev-workflow/SKILL.md --
-not git-tracked here, since it's shared across ohstr repos, not ncli-owned).
-Read that doc first; this file only states what's specific to ncli. -->
+ncli-specific overlay; the shared shape lives in the standalone
+ohstr/dev-workflow repo (https://github.com/ohstr/dev-workflow), installed
+locally at /u/flzpace/xgit/orgs/ohstr/dev-workflow -- its own git repo, not
+git-tracked here, since it's shared across ohstr repos, not ncli-owned.
+Read `skills/dev-workflow/SKILL.md` there first; this file only states
+what's specific to ncli. -->
 
 # Contributing to ncli
 
-Read `../../../../.agents/skills/dev-workflow/SKILL.md` (the org-wide
-`dev-workflow` skill) first for the full shape: worktrees, the
-issue-vs-trivial decision, atomic commits, draft-PR mechanics, merge
-policy, and the release-cut checklist. This file only fills in what that
-doc leaves as "check the repo": the parts that are actually specific to
-ohstr/ncli.
+Read `/u/flzpace/xgit/orgs/ohstr/dev-workflow/skills/dev-workflow/SKILL.md`
+(the `ohstr/dev-workflow` repo's core skill) first for the full shape:
+worktrees, the issue-vs-trivial decision, atomic commits, draft-PR
+mechanics, merge policy, and the release-cut checklist. This file only
+fills in what that doc leaves as "check the repo": the parts that are
+actually specific to ohstr/ncli.
 
 `main` is protected -- nothing lands there except through a merged PR. See
 "`main` branch protection" below for the live ruleset. Unlike `skills/*`
@@ -141,10 +142,10 @@ too if either matters for this release.
   never actually reaches a teammate via `git clone` no matter what's written
   there. If a process doc needs the whole team to have it, it can't live
   under `.claude/`. The org-wide `dev-workflow` doc this file overlays is a
-  deliberate exception: it lives outside any repo's git tree entirely
-  (`/u/flzpace/xgit/orgs/ohstr/.agents/skills/dev-workflow/`), shared across
-  ohstr repos on this machine rather than distributed via any one repo's
-  clone.
+  deliberate exception: it lives in its own repo,
+  [`ohstr/dev-workflow`](https://github.com/ohstr/dev-workflow), shared
+  across ohstr repos rather than owned by any one of them -- cloned
+  locally at `/u/flzpace/xgit/orgs/ohstr/dev-workflow`, sibling to `ncli`.
 - `skills/*` (top-level, no leading dot) is a different audience entirely --
   written for agents/users who only have the `ncli` binary, no source tree,
   distributed via the plugin marketplace (`/plugin install ncli-apply@ncli`,

@@ -122,8 +122,9 @@ Contributing a change to this repo (not just using the `ncli` binary)? The
 workflow strategy — worktrees, when a tracking issue is required,
 commit/CHANGELOG conventions, PR mechanics, and how a release gets cut — now
 lives in two parts: read the org-wide shape first (the `ohstr/dev-workflow`
-repo's `skills/dev-workflow/SKILL.md`, https://github.com/ohstr/dev-workflow,
-cloned locally at `/u/flzpace/xgit/orgs/ohstr/dev-workflow`, not part of
-this git tree), then `.agents/skills/ncli-dev-workflow/SKILL.md` for what's
-specific to ncli (branch-protection ruleset, `GOWORK=off`,
-release.yml/GoReleaser mechanics).
+repo's `skills/dev-workflow/SKILL.md`, checked out locally at
+`/u/flzpace/xgit/orgs/ohstr/dev-workflow` -- local-only for now, not yet
+pushed to GitHub, not part of this git tree), then
+`.agents/skills/ncli-dev-workflow/SKILL.md` for what's specific to ncli
+(branch-protection ruleset, `GOWORK=off`, release.yml/GoReleaser
+mechanics).

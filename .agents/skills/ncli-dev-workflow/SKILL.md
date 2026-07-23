@@ -6,11 +6,12 @@ description: ncli-specific overlay on top of the org-wide ohstr/dev-workflow ski
 <!-- Process doc, not a command reference. Update by hand when the workflow
 changes -- nothing here is derived automatically from the repo. This is the
 ncli-specific overlay; the shared shape lives in the standalone
-ohstr/dev-workflow repo (https://github.com/ohstr/dev-workflow), installed
-locally at /u/flzpace/xgit/orgs/ohstr/dev-workflow -- its own git repo, not
-git-tracked here, since it's shared across ohstr repos, not ncli-owned.
-Read `skills/dev-workflow/SKILL.md` there first; this file only states
-what's specific to ncli. -->
+ohstr/dev-workflow repo, checked out locally at
+/u/flzpace/xgit/orgs/ohstr/dev-workflow -- its own git repo, not
+git-tracked here since it's shared across ohstr repos, not ncli-owned.
+Local-only for now (not yet pushed to GitHub); update this note once
+github.com/ohstr/dev-workflow exists. Read `skills/dev-workflow/SKILL.md`
+there first; this file only states what's specific to ncli. -->
 
 # Contributing to ncli
 
@@ -142,10 +143,10 @@ too if either matters for this release.
   never actually reaches a teammate via `git clone` no matter what's written
   there. If a process doc needs the whole team to have it, it can't live
   under `.claude/`. The org-wide `dev-workflow` doc this file overlays is a
-  deliberate exception: it lives in its own repo,
-  [`ohstr/dev-workflow`](https://github.com/ohstr/dev-workflow), shared
-  across ohstr repos rather than owned by any one of them -- cloned
-  locally at `/u/flzpace/xgit/orgs/ohstr/dev-workflow`, sibling to `ncli`.
+  deliberate exception: it lives in its own repo, `ohstr/dev-workflow`,
+  shared across ohstr repos rather than owned by any one of them -- local
+  only for now (not yet pushed to GitHub), checked out at
+  `/u/flzpace/xgit/orgs/ohstr/dev-workflow`, sibling to `ncli`.
 - `skills/*` (top-level, no leading dot) is a different audience entirely --
   written for agents/users who only have the `ncli` binary, no source tree,
   distributed via the plugin marketplace (`/plugin install ncli-apply@ncli`,

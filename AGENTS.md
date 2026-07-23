@@ -118,7 +118,7 @@ These skills assume only the `ncli` binary is available — no access to this
 source tree. (For building/testing `ncli` itself from source, see
 `.claude/skills/verify` instead, which is scoped to contributors.)
 
-Contributing a change to this repo (not just using the `ncli` binary)? Read
-`.agents/skills/ncli-dev-workflow/SKILL.md` first — worktrees, when a
-tracking issue is required, commit/CHANGELOG conventions, PR mechanics, and
-how a release gets cut.
+Contributing a change to this repo (not just using the `ncli` binary)?
+Work in a branch, keep commits atomic, update CHANGELOG.md alongside the
+behavior it describes, and open a PR against `main` (protected — no direct
+pushes).

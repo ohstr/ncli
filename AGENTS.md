@@ -20,6 +20,8 @@ that priority order.
 | `ncli relay stats/reindex/clear` | Administer a *running* relay over NIP-98 HTTP, incl. rebuilding search/zap indexes |
 | `ncli relay members/invites/roles` | Administer a *running* relay's NIP-43 membership over NIP-98 HTTP: enroll/remove members, issue/revoke invite codes, define roles |
 | `ncli relay context add/use/remove` | Save named relay `--config` shortcuts and switch the current one, so `relay` subcommands stop needing `--config` repeated on every call |
+| `ncli bunker` | Run as a NIP-46 remote signer: approve/reject other clients' signing requests from a live TUI, remembering per-app decisions so you aren't re-prompted every time |
+| `ncli bunker attach/status/stop/sessions/connect` | Reattach to, query, stop, or pair a running bunker daemon without opening the TUI |
 | `ncli id [identifier]` | Generate or inspect a Nostr keypair (local vault) |
 | `ncli id delegate` | Mint a NIP-26 delegation token |
 | `ncli id sign -e <events.json> -o <signed.json>` | Sign one or more unsigned events with a vault/nsec identity |
@@ -113,6 +115,10 @@ or invoking a command in that area:
 - Generating/managing keys or delegation tokens (`id`, `id delegate`), or
   decoding a NIP-19 entity (`decode`) → `skills/ncli-identity/SKILL.md`
 - Mining or verifying proof-of-work (`miner`) → `skills/ncli-miner/SKILL.md`
+- Running `ncli` as a remote NIP-46 signer (`bunker`, `bunker attach/
+  status/stop/sessions/history/connect`), including pairing an agent as
+  its NIP-46 client so it can get events signed without holding a raw
+  key → `skills/ncli-bunker/SKILL.md`
 
 These skills assume only the `ncli` binary is available — no access to this
 source tree. (For building/testing `ncli` itself from source, see

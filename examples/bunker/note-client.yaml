@@ -1,0 +1,59 @@
+# Spec for `ncli bunker connect --grants examples/bunker/note-client.yaml`
+# (or `ncli bunker connect <nostrconnect-uri> --grants ...` for the
+# signer-speaks-first direction). Applied automatically to whichever app
+# completes THIS ONE pairing attempt -- generate a fresh bunker:// URI (or
+# accept a fresh nostrconnect:// one) per app you're granting this to, the
+# same as you would without --grants.
+#
+# This one is a reasonable everyday-use starting point for a normal
+# social/note-posting client (Amethyst, Damus, a web client, ...): it can
+# read your identity and post/react/repost without asking every time, but
+# still has to ask for anything touching your profile, contact list, or
+# encrypted messages -- and every grant here expires or runs out on its
+# own, rather than lasting until you remember to revoke it.
+
+kind: bunker
+spec:
+  # Optional: becomes this app's Trusted Apps nickname the moment it
+  # pairs (Session.Nickname -- see `ncli bunker sessions rename`), so you
+  # don't have to set it separately afterward. Omit to fall back to the
+  # app's own self-reported name (nostrconnect:// only) or its pubkey.
+  nickname: "My Note Client"
+
+  grants:
+    # Read-only identity methods: harmless to leave always-on.
+    - method: get_public_key
+    - method: get_relays
+    - method: ping
+
+    # Everyday posting/reacting/reposting -- kinds 1 (notes), 6 (reposts),
+    # 7 (reactions). Good for 30 days, then it'll ask again once, at which
+    # point you can extend it from the TUI's Manage Grants overlay (Enter
+    # on the app's Trusted Apps row) without re-running this whole file.
+    - method: sign_event
+      kinds: [1, 6, 7]
+      expires: 30d
+
+    # NOT included, deliberately: kind 0 (profile), kind 3 (contacts), and
+    # kind 5 (deletions) -- policy.go's own sensitiveKinds list, which no
+    # "any kind" grant is ever allowed to cover anyway (see the any-kind
+    # entry commented out below). Editing your profile or contact list, or
+    # deleting something, should keep prompting every time regardless of
+    # what else this app is trusted for.
+
+    # Uncomment for a client that also needs to send/receive encrypted
+    # DMs -- left off by default since not every note client needs it:
+    # - method: nip44_encrypt
+    # - method: nip44_decrypt
+
+    # A broader alternative to the kinds: [1, 6, 7] entry above, if you'd
+    # rather trust this app for every kind it might ever want (long-form
+    # posts, zap requests, custom app-specific kinds, ...) except the
+    # always-sensitive ones. An exact-kind entry and an any-kind entry are
+    # different scopes, so both CAN coexist (the exact one just wins for
+    # kinds 1/6/7, the any-kind one covers everything else) -- but there's
+    # normally no reason to keep both; pick whichever matches how much
+    # you actually trust this app.
+    # - method: sign_event
+    #   kinds: any
+    #   uses: 50

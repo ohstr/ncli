@@ -26,16 +26,13 @@ spec:
     # Remote relay.
     - relay: wss://relay.damus.io
       trusted: true
-    # Remote relay.
-    - relay: wss://relay.primal.net
-      trusted: true
     # Remote relay. Kept as a source, not a destination -- it enforces its
     # own PoW policy on writes and was rejecting some forwarded events with
     # "invalid: invalid difficulty ..." (that's relay.ohstr.com's own
     # accept/reject call on publish, unrelated to this spec's strictPow:
     # false above, which only ever governs what this client keeps from a
     # source, not what a destination relay chooses to accept).
-    - relay: wss://relay.ohstr.com
+    - relay: wss://relay.primal.net
       trusted: true
     # Local store. A `from` entry doesn't have to be remote -- this merges
     # in whatever's already sitting in a local store (e.g. from an earlier
@@ -52,9 +49,9 @@ spec:
       # destination's writes. Defaults to 32; raise it if inserts are the
       # bottleneck, lower it to reduce contention on a slower disk.
       writeConcurrency: 32
-    - path: ./build/.dev/db/notes-stream-1.db
+    - path: ./build/.dev/db/notes-stream-2.db
       ensure: "create"
-    - relay: wss://relay.snort.social
+    - relay: wss://relay.ohstr.com
       trusted: true
 
   # Filters to select events. Multiple filters are OR'd together; omit

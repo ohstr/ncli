@@ -17,12 +17,12 @@ func NewBlossomCommand() *cobra.Command {
 		Long: `A client for the Blossom protocol (BUD-01..12): content-addressed blob
 storage authenticated with a Nostr identity instead of a login.
 
-Every write (upload, rm, mirror) targets every server from --server
-(repeatable) or, if omitted, the default list configured via "ncli blossom
-servers add" -- and reports a result per (item, server) pair, exiting
-non-zero if any pair failed. "download" instead tries the configured
-servers in order and stops at the first that answers; "list" queries one
-server by default, or every configured server with --all.`,
+Every write (upload, rm, mirror) targets every server from --server, or
+the default list from "ncli blossom servers add" -- reporting a result
+per (item, server) pair, and exiting non-zero if any pair failed.
+"download" tries the configured servers in order, stopping at the first
+that answers; "list" queries one server by default, or every server with
+--all.`,
 		RunE: common.RequireSubcommand,
 	}
 

@@ -259,15 +259,13 @@ func newServersDiscoverCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "discover <identifier>",
 		Short: "Discover another identity's published Blossom server list (BUD-03)",
-		Long: `Resolves <identifier> (vault label/nsec/npub/hex pubkey/nprofile/nip-05) to
-a pubkey, then queries your configured Nostr relays (see "ncli prefs relays
-add") for that pubkey's most recently published kind:10063 server-list
-event, and prints the server URLs it declares.
+		Long: `Resolves <identifier> (vault label/nsec/npub/hex pubkey/nprofile/nip-05)
+to a pubkey, then queries your configured Nostr relays for that pubkey's
+most recent kind:10063 server-list event, and prints the servers it
+declares.
 
-This is different from "servers add/remove/list", which only manage your
-own default server list -- "discover" looks up someone else's, so you can
-find where their media actually lives without already knowing/manually
-adding their server(s) yourself.`,
+Unlike "servers add/remove/list", which manage your own default list,
+this looks up someone else's published servers.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, cancel := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)

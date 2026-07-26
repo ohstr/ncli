@@ -14,13 +14,13 @@ import (
 var publishCmd = &cobra.Command{
 	Use:   "publish",
 	Short: "Publish signed events to one or more relays",
-	Long: `Send one or more already-signed events (e.g. produced by "ncli miner mine"
---identity, or "ncli dump") to one or more relays, waiting for each relay's
-OK. --events accepts either a single event object or a JSON array of
-events, and every event is sent to every relay in --relays -- the full
-(event, relay) result is reported. Omitting --relays falls back to the
-relays configured via "ncli prefs relays add". Exits non-zero if any
-(event, relay) pair fails.`,
+	Long: `Send already-signed events (e.g. from "ncli miner mine --identity" or
+"ncli dump") to one or more relays, waiting for each relay's OK.
+
+--events accepts a single event or a JSON array; every event is sent to
+every relay, and the full (event, relay) result is reported. Omitting
+--relays falls back to the relays configured via "ncli prefs relays add".
+Exits non-zero if any pair fails.`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		if err := cmd.ValidateRequiredFlags(); err != nil {
 			return common.UsageError(cmd, err)

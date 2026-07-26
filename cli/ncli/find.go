@@ -19,31 +19,22 @@ var (
 		Use:   "find [identifier]",
 		Short: "Query events by ID and/or filter",
 		Long: `Look up events by ID and/or filter across one or more relays or local
-stores, stopping at the first target with any match.
+stores, stopping at the first target with a match.
 
-The identifier is a positional argument, event-shaped or author-shaped:
-  - event: a plain hex event ID, or a note1.../nevent1... NIP-19 string
-    (an nevent's embedded relay/author/kind hints are ignored -- only its
-    ID is used)
-  - author: npub1..., nprofile1... (relay hints likewise ignored), or a
-    nip-05 "name@domain" address -- matches that author's events, ANDed
-    with any other filters given. With no other filters at all, defaults
-    to just their profile (kind 0) rather than everything they've
-    published -- pass --kinds explicitly to widen it.
+identifier is a positional argument:
+  - event: a hex event ID, or note1.../nevent1...
+  - author: npub1.../nprofile1..., or a nip-05 address -- ANDed with any
+    other filters given. With no other filters, defaults to just their
+    profile (kind 0); pass --kinds to widen it.
 
---authors (inline, or inside --targets) also accepts nip-05 addresses
-mixed freely with hex pubkeys, for combining an author with other filters
-like --kinds/--limit.
+--authors also accepts nip-05 addresses alongside hex pubkeys.
 
-Targets and filters come from --targets (a YAML file that may declare
-both), or from --relays plus inline filter flags -- pick one, not a mix.
-Omitting both --targets and --relays falls back to the relays configured
-via "ncli prefs relays add".
+Targets and filters come from --targets (a YAML file), or --relays plus
+inline filter flags -- pick one, not both. Omitting both falls back to
+the relays configured via "ncli prefs relays add".
 
-Result is always a single JSON array on stdout, whether or not anything
-matched -- safe to pipe into jq or parse directly. Progress and errors go
-to stderr; pass --quiet to drop the progress narration too, for callers
-that can't rely on the two streams being captured separately.`,
+Always prints a single JSON array to stdout. --quiet also drops the
+progress narration on stderr.`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if err := cmd.ValidateRequiredFlags(); err != nil {
 				return common.UsageError(cmd, err)

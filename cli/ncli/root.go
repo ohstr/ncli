@@ -31,8 +31,7 @@ var (
 var RootCmd = &cobra.Command{
 	Use:   "ncli",
 	Short: "Nostr relay & toolkit CLI",
-	Long: `A single binary for running and operating Nostr relays: serve, stream,
-sync, inspect, export, delegate, administer, and mine events.`,
+	Long:  `Run and operate Nostr relays, and manage events: serve, stream, sync, inspect, export, delegate, administer, and mine.`,
 }
 
 func init() {

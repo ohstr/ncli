@@ -343,7 +343,8 @@ ncli prefs relays list
 ncli find jack@primal.net -k 1 -l 2
 
 ncli prefs relays remove relay.damus.io
-ncli prefs relays clear   # remove all of them
+# remove all of them
+ncli prefs relays clear
 
 # print where prefs.yaml lives
 ncli prefs path
@@ -666,11 +667,15 @@ grant handles it automatically.
 ```sh
 ncli bunker --identity mykey --relay wss://relay.example
 
-ncli bunker attach                  # reattach from another terminal
-ncli bunker status --json           # {"running", "identity_pub", "relays", "pending_count", "session_count"}
-ncli bunker sessions list           # every app with a remembered permission
+# reattach from another terminal
+ncli bunker attach
+# {"running", "identity_pub", "relays", "pending_count", "session_count"}
+ncli bunker status --json
+# every app with a remembered permission
+ncli bunker sessions list
 ncli bunker sessions revoke <pubkey>
-ncli bunker history                 # recently resolved requests, most recent first
+# recently resolved requests, most recent first
+ncli bunker history
 ncli bunker stop
 ```
 
@@ -685,9 +690,11 @@ Pairing works both directions other bunker apps expect (`bunker://` and
 `nostrconnect://`), from inside the TUI (`c`) or scripted:
 
 ```sh
-ncli bunker connect                                       # prints a bunker:// URI to paste into a client
+# prints a bunker:// URI to paste into a client
+ncli bunker connect
 ncli bunker connect "nostrconnect://..."
-ncli bunker connect --grants examples/bunker/agent.yaml    # pre-authorize the app, no prompts
+# pre-authorize the app, no prompts
+ncli bunker connect --grants examples/bunker/agent.yaml
 ```
 
 See [`skills/ncli-bunker/SKILL.md`](skills/ncli-bunker/SKILL.md) for the
@@ -719,8 +726,10 @@ vault label, nsec, npub, hex pubkey, nprofile, or nip-05 address, resolved
 the same way `--identity` is everywhere else in `ncli`:
 
 ```sh
-ncli blossom list alice@example.com                      # someone else's media, not just your own
-ncli blossom servers discover alice@example.com --add     # find (and adopt) their published servers
+# someone else's media, not just your own
+ncli blossom list alice@example.com
+# find (and adopt) their published servers
+ncli blossom servers discover alice@example.com --add
 ```
 
 See [`skills/ncli-blossom/SKILL.md`](skills/ncli-blossom/SKILL.md) for the

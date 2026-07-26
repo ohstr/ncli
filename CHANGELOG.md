@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.4.0]
+
+### Changed
+
+- Every `client/tui`-based board (`apply stream`/`sync`/`inspect`, `ping
+  --tui`, `bunker`) now renders with a fixed truecolor palette
+  (`client/tui.ColorPrimary`/`ColorAccent`/`ColorMuted`/`ColorText`/
+  `ColorBadge`/`ColorSuccess`/`ColorDanger`/`ColorWarning`, see
+  `client/tui/colors.go`) instead of tcell's named ANSI-16 colors, which
+  used to resolve to a different shade depending on the terminal's own
+  theme. Also fixes a couple of black-on-black legibility spots (event
+  and metrics table column headers) that this indexed-color dependence
+  used to leave unreadable.
+
 ## [0.3.0]
 
 ### Added

@@ -37,8 +37,9 @@ func NewLogger(app *App, logger *FlowLogger) *Logger {
 func (t *Logger) Init(ctx context.Context) *Logger {
 
 	t.SetBorder(true).
-		SetBorderColor(ColorPrimary).
 		SetBorderPadding(0, 0, 1, 1)
+
+	WireFocusBorder(t.logs, t.Flex.Box)
 
 	t.actions.SetDynamicColors(true).
 		SetWrap(false).

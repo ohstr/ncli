@@ -823,6 +823,67 @@ func TestSessionsTableOnCountChangeFiresOnUpdate(t *testing.T) {
 	}
 }
 
+// TestWireButtonArrowNavMovesBetweenButtonsButNotWhileEditing guards
+// wireButtonArrowNav, which openNostrconnectInput and openRenameInput both
+// use so their Connect/Cancel and Save/Cancel buttons support Left/Right
+// the same way ShowDialog's tview.Modal-based dialogs already do (Modal
+// remaps arrow keys to Tab/Backtab itself; a plain tview.Form has no such
+// mapping otherwise -- Button.InputHandler only reacts to Enter/Tab/
+// Backtab/Escape). Driven through form.InputHandler() (not the focused
+// child's InputHandler() directly, unlike this file's Tab-only tests
+// above/below) since SetInputCapture only ever runs as part of the Form's
+// own wrapped InputHandler -- calling a child's InputHandler straight
+// from a test would skip the capture entirely and silently prove nothing.
+func TestWireButtonArrowNavMovesBetweenButtonsButNotWhileEditing(t *testing.T) {
+	app := tui.NewApp()
+	screen := tcell.NewSimulationScreen("")
+	screen.SetSize(80, 25)
+	app.SetScreen(screen)
+
+	input := tview.NewInputField().SetLabel("Name: ").SetFieldWidth(0)
+	form := tview.NewForm()
+	form.AddFormItem(input)
+	form.AddButton("Connect", func() {})
+	form.AddButton("Cancel", func() {})
+	wireButtonArrowNav(form, input)
+
+	app.SetFocus(form)
+	setFocus := func(p tview.Primitive) { app.SetFocus(p) }
+	left := tcell.NewEventKey(tcell.KeyLeft, 0, tcell.ModNone)
+	right := tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone)
+	tab := tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)
+
+	// While the InputField has focus, Left/Right must keep moving the text
+	// cursor, not jump to a button -- the whole reason wireButtonArrowNav
+	// takes skip and checks its focus first.
+	form.InputHandler()(left, setFocus)
+	if _, ok := app.GetFocus().(*tview.InputField); !ok {
+		t.Fatalf("GetFocus() after Left while editing = %T, want *tview.InputField", app.GetFocus())
+	}
+	form.InputHandler()(right, setFocus)
+	if _, ok := app.GetFocus().(*tview.InputField); !ok {
+		t.Fatalf("GetFocus() after Right while editing = %T, want *tview.InputField", app.GetFocus())
+	}
+
+	form.InputHandler()(tab, setFocus)
+	button, ok := app.GetFocus().(*tview.Button)
+	if !ok || button.GetLabel() != "Connect" {
+		t.Fatalf("focus after Tab off the field = %v, want %q", app.GetFocus(), "Connect")
+	}
+
+	form.InputHandler()(right, setFocus)
+	button, ok = app.GetFocus().(*tview.Button)
+	if !ok || button.GetLabel() != "Cancel" {
+		t.Fatalf("focus after Right = %v, want %q", app.GetFocus(), "Cancel")
+	}
+
+	form.InputHandler()(left, setFocus)
+	button, ok = app.GetFocus().(*tview.Button)
+	if !ok || button.GetLabel() != "Connect" {
+		t.Fatalf("focus after Left = %v, want %q", app.GetFocus(), "Connect")
+	}
+}
+
 // TestSessionsTableRenameModalPrefillSaveUnmodified guards openRenameInput's
 // pre-fill: opening it for a session that already has a Nickname shows
 // that Nickname in the InputField, and saving without editing it calls

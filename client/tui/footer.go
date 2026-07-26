@@ -29,11 +29,11 @@ func NewStatus(initText string, showPanelNav bool) *Status {
 func (s *Status) Update(text string) {
 	s.Clear()
 	if s.showPanelNav {
-		fmt.Fprintf(s, "[blue:-:b]<Tab> [gray:-:-]Next Panel   \t")
-		fmt.Fprintf(s, "[blue:-:b]<Shift+Tab> [gray:-:-]Prev Panel   \t")
+		fmt.Fprintf(s, "[%s:-:b]<Tab> [%s:-:-]Next Panel   \t", ColorAccent, ColorMuted)
+		fmt.Fprintf(s, "[%s:-:b]<Shift+Tab> [%s:-:-]Prev Panel   \t", ColorAccent, ColorMuted)
 	}
-	fmt.Fprintf(s, "[blue:-:b]<w> [gray:-:-]Toggle Wrap   \t")
-	fmt.Fprintf(s, "[blue:-:b]<s> [gray:-:-]Toggle AutoScroll")
+	fmt.Fprintf(s, "[%s:-:b]<w> [%s:-:-]Toggle Wrap   \t", ColorAccent, ColorMuted)
+	fmt.Fprintf(s, "[%s:-:b]<s> [%s:-:-]Toggle AutoScroll", ColorAccent, ColorMuted)
 }
 
 type Footer struct {

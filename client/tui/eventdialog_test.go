@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gdamore/tcell/v2"
 	"github.com/ohstr/nmilat/nip01"
 	"github.com/rivo/tview"
 )
@@ -16,10 +15,10 @@ func TestColorizeJSONValue(t *testing.T) {
 		value string
 		want  string
 	}{
-		{"string value", `"hello",`, fmt.Sprintf("[%s]%s[-:-:-]%s", tcell.ColorWhite, tview.Escape(`"hello"`), ",")},
-		{"number value", "42,", fmt.Sprintf("[%s]%s[-:-:-]%s", tcell.ColorBlue, "42", ",")},
-		{"bool value", "true,", fmt.Sprintf("[%s]%s[-:-:-]%s", tcell.ColorYellow, "true", ",")},
-		{"null value", "null", fmt.Sprintf("[%s]%s[-:-:-]%s", tcell.ColorYellow, "null", "")},
+		{"string value", `"hello",`, fmt.Sprintf("[%s]%s[-:-:-]%s", ColorText, tview.Escape(`"hello"`), ",")},
+		{"number value", "42,", fmt.Sprintf("[%s]%s[-:-:-]%s", ColorAccent, "42", ",")},
+		{"bool value", "true,", fmt.Sprintf("[%s]%s[-:-:-]%s", ColorWarning, "true", ",")},
+		{"null value", "null", fmt.Sprintf("[%s]%s[-:-:-]%s", ColorWarning, "null", "")},
 		{"bare open brace", "{", tview.Escape("{")},
 		{"bare open bracket", "[", tview.Escape("[")},
 		{"bare close bracket with comma", "],", tview.Escape("],")},

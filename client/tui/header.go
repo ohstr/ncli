@@ -67,7 +67,7 @@ func (h *Header) drawLogo() {
 	h.Logo.SetDynamicColors(true)
 
 	lines := strings.Split(LOGO, "\n")
-	fmt.Fprint(h.Logo, "[purple]")
+	fmt.Fprintf(h.Logo, "[%s]", ColorPrimary)
 	for i := 1; i < len(lines)-1; i++ {
 		fmt.Fprintf(h.Logo, "   [%s::b]%s", "", lines[i])
 		fmt.Fprintf(h.Logo, "\n")

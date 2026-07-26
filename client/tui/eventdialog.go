@@ -76,7 +76,7 @@ func (a *App) ShowEvent(event *nip01.Event, onSave func()) {
 		// stock white activated background. Explicit
 		// SetButtonActivatedStyle overrides both, matching every table's
 		// own SetSelectedStyle "this is selected" convention.
-		SetButtonActivatedStyle(tcell.Style{}.Background(tcell.ColorPurple).Foreground(tcell.ColorWhite))
+		SetButtonActivatedStyle(tcell.Style{}.Background(ColorPrimary).Foreground(ColorText))
 	form.AddButton("Close", dismiss)
 	form.AddButton("Save", save)
 	form.SetFocus(0) // "Close" -- default selected, so a stray Enter can't save
@@ -112,7 +112,7 @@ func (a *App) ShowEvent(event *nip01.Event, onSave func()) {
 		AddItem(text, 0, 1, false).
 		AddItem(form, 3, 0, true)
 	view.SetBorder(true).
-		SetBorderColor(tcell.ColorPurple).
+		SetBorderColor(ColorPrimary).
 		SetTitle(" Event ").
 		SetBackgroundColor(tcell.ColorDefault)
 
@@ -186,7 +186,7 @@ func ColorizeEventJSON(event *nip01.Event) string {
 func colorizeJSONLine(line string) string {
 	if m := jsonKeyLineRe.FindStringSubmatch(line); m != nil {
 		indent, key, rest := m[1], m[2], m[3]
-		return fmt.Sprintf("%s[%s]%s[-:-:-]: %s", indent, tcell.ColorPurple, tview.Escape(`"`+key+`"`), colorizeJSONValue(rest))
+		return fmt.Sprintf("%s[%s]%s[-:-:-]: %s", indent, ColorPrimary, tview.Escape(`"`+key+`"`), colorizeJSONValue(rest))
 	}
 
 	trimmed := strings.TrimLeft(line, " ")
@@ -208,12 +208,12 @@ func colorizeJSONValue(value string) string {
 	case v == "" || v == "{" || v == "}" || v == "[" || v == "]" || v == "{}" || v == "[]":
 		return tview.Escape(value)
 	case strings.HasPrefix(v, `"`) && strings.HasSuffix(v, `"`):
-		return fmt.Sprintf("[%s]%s[-:-:-]%s", tcell.ColorWhite, tview.Escape(v), suffix)
+		return fmt.Sprintf("[%s]%s[-:-:-]%s", ColorText, tview.Escape(v), suffix)
 	case v == "true" || v == "false" || v == "null":
-		return fmt.Sprintf("[%s]%s[-:-:-]%s", tcell.ColorYellow, v, suffix)
+		return fmt.Sprintf("[%s]%s[-:-:-]%s", ColorWarning, v, suffix)
 	default:
 		if _, err := strconv.ParseFloat(v, 64); err == nil {
-			return fmt.Sprintf("[%s]%s[-:-:-]%s", tcell.ColorBlue, v, suffix)
+			return fmt.Sprintf("[%s]%s[-:-:-]%s", ColorAccent, v, suffix)
 		}
 		return tview.Escape(value)
 	}

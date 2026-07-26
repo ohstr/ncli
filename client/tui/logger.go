@@ -37,7 +37,7 @@ func NewLogger(app *App, logger *FlowLogger) *Logger {
 func (t *Logger) Init(ctx context.Context) *Logger {
 
 	t.SetBorder(true).
-		SetBorderColor(tcell.ColorPurple).
+		SetBorderColor(ColorPrimary).
 		SetBorderPadding(0, 0, 1, 1)
 
 	t.actions.SetDynamicColors(true).
@@ -96,7 +96,7 @@ func (t *Logger) UpdateActions() {
 
 	autoColor, autoText := StatusText(t.autoscroll)
 	wrapColor, wrapText := StatusText(t.wrap)
-	fmt.Fprintf(t.actions, "[purple::b]Autoscroll:[%s]%s \t [purple]Wrap:[%s]%s", autoColor, autoText, wrapColor, wrapText)
+	fmt.Fprintf(t.actions, "[%s::b]Autoscroll:[%s]%s \t [%s]Wrap:[%s]%s", ColorPrimary, autoColor, autoText, ColorPrimary, wrapColor, wrapText)
 }
 
 func (t *Logger) Update() {
@@ -151,7 +151,7 @@ func (t *Logger) render(ctx context.Context) {
 // with -- green "On", gray "Off".
 func StatusText(status bool) (tcell.Color, string) {
 	if status {
-		return tcell.ColorGreen, "On"
+		return ColorSuccess, "On"
 	}
-	return tcell.ColorGray, "Off"
+	return ColorMuted, "Off"
 }

@@ -32,7 +32,13 @@ func NewLayout() *Layout {
 // (e.g. always returns the same string) gets the old fixed-hint-set
 // behavior for free.
 type FooterHintsProvider interface {
-	FooterHints(focused tview.Primitive) string // tview color-tag markup, e.g. "[blue:-:b]<Enter> [gray:-:-]Decide"
+	// FooterHints returns tview color-tag markup, built with fmt.Sprintf
+	// against this package's own ColorAccent/ColorMuted constants (see
+	// colors.go) -- e.g. fmt.Sprintf("[%s:-:b]<Enter> [%s:-:-]Decide",
+	// ColorAccent, ColorMuted) -- so a caller's hints match the rest of
+	// the app's palette instead of hardcoding a terminal-theme-dependent
+	// named color.
+	FooterHints(focused tview.Primitive) string
 }
 
 func (l *Layout) Init(app *App, board tview.Primitive) *Layout {

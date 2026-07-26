@@ -78,12 +78,24 @@ func (t *Logger) Init(ctx context.Context) *Logger {
 	return t
 }
 
+// FocusTarget returns the actual focusable primitive within this Logger --
+// its inner log TextView, not the outer Flex wrapper (which has no visual
+// "selected" state of its own and doesn't forward key input the same way,
+// per the comment on Init's SetInputCapture above). This package's own
+// boards (InspectBoard/StreamBoard/SyncBoard) already register logs
+// directly for exactly this reason; exposed here for a board built outside
+// this package (e.g. cli/bunker's BunkerBoard) that needs the same
+// Tab-cycling correctness.
+func (t *Logger) FocusTarget() tview.Primitive {
+	return t.logs
+}
+
 func (t *Logger) UpdateActions() {
 	t.logs.SetWrap(t.wrap)
 	t.actions.Clear()
 
-	autoColor, autoText := statusText(t.autoscroll)
-	wrapColor, wrapText := statusText(t.wrap)
+	autoColor, autoText := StatusText(t.autoscroll)
+	wrapColor, wrapText := StatusText(t.wrap)
 	fmt.Fprintf(t.actions, "[purple::b]Autoscroll:[%s]%s \t [purple]Wrap:[%s]%s", autoColor, autoText, wrapColor, wrapText)
 }
 
@@ -133,7 +145,11 @@ func (t *Logger) render(ctx context.Context) {
 	}
 }
 
-func statusText(status bool) (tcell.Color, string) {
+// StatusText renders an On/Off toggle's current state as a color/label
+// pair, the shared convention every On/Off toggle in this package (and
+// cli/bunker's own board, e.g. its Auto-Prompt toggle) renders itself
+// with -- green "On", gray "Off".
+func StatusText(status bool) (tcell.Color, string) {
 	if status {
 		return tcell.ColorGreen, "On"
 	}

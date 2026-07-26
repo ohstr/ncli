@@ -56,13 +56,27 @@ func (a *App) ShowEvent(event *nip01.Event, onSave func()) {
 		SetDynamicColors(true).
 		SetWordWrap(true).
 		SetScrollable(true)
-	text.SetBorderPadding(1, 0, 2, 2)
-	fmt.Fprint(text, colorizeEventJSON(event))
+	// No SetBorderPadding here -- see centerBoxSpacer's own doc comment:
+	// a Box's own border-padding is the same kind of gap the nil-Flex-
+	// margin bug was, and was independently found (in cli/bunker, which
+	// shares this exact dialog pattern) to bleed the exact same way under
+	// a board's real concurrent redraw traffic.
+	fmt.Fprint(text, ColorizeEventJSON(event))
 	text.ScrollToBeginning()
 
 	form := tview.NewForm().
 		SetButtonsAlign(tview.AlignCenter).
-		SetButtonBackgroundColor(tcell.ColorDefault)
+		SetButtonBackgroundColor(tcell.ColorDefault).
+		// SetButtonBackgroundColor alone also (mis)sets the *focused*
+		// button's text color to that same ColorDefault (tview's
+		// Form.SetButtonBackgroundColor mutates buttonActivatedStyle's
+		// foreground too, assuming it's always paired with
+		// SetButtonTextColor) -- left uncorrected, the focused button
+		// renders as barely-visible default-colored text on tview's own
+		// stock white activated background. Explicit
+		// SetButtonActivatedStyle overrides both, matching every table's
+		// own SetSelectedStyle "this is selected" convention.
+		SetButtonActivatedStyle(tcell.Style{}.Background(tcell.ColorPurple).Foreground(tcell.ColorWhite))
 	form.AddButton("Close", dismiss)
 	form.AddButton("Save", save)
 	form.SetFocus(0) // "Close" -- default selected, so a stray Enter can't save
@@ -107,38 +121,56 @@ func (a *App) ShowEvent(event *nip01.Event, onSave func()) {
 	a.SetFocus(form)
 }
 
-// centerBox centers box within nil-item spacers sized to leave widthPercent/
-// heightPercent of the screen for it -- the same technique SplashScreen uses
-// for its own fixed-size content, generalized to a percentage of whatever
-// the terminal's current size is.
+// centerBoxSpacer is a blank margin cell for centerBox -- a real Box, not
+// a nil Flex item. A nil item is never drawn at all (Flex skips it
+// outright), leaving that margin's fill entirely up to the ancestor
+// Flex's own one-time background fill from its own Draw call -- fine for
+// a single isolated Draw, but not once whatever's underneath keeps
+// independently redrawing itself (a board with its own live-updating
+// panels, e.g. cli/bunker's), where the margin was observed to keep
+// showing stale content through from underneath instead of staying
+// blank. A real Box gets its own Draw call, and so its own background
+// fill, on every redraw, removing the dependency on an ancestor's fill
+// alone.
+func centerBoxSpacer() *tview.Box {
+	return tview.NewBox().SetBackgroundColor(tcell.ColorDefault)
+}
+
+// centerBox centers box within blank margin spacers (see centerBoxSpacer)
+// sized to leave widthPercent/heightPercent of the screen for it -- the
+// same technique SplashScreen uses for its own fixed-size content,
+// generalized to a percentage of whatever the terminal's current size is.
 func centerBox(box tview.Primitive, widthPercent, heightPercent int) tview.Primitive {
 	widthRest := (100 - widthPercent) / 2
 	heightRest := (100 - heightPercent) / 2
 
 	row := tview.NewFlex().
-		AddItem(nil, 0, widthRest, false).
+		AddItem(centerBoxSpacer(), 0, widthRest, false).
 		AddItem(box, 0, widthPercent, true).
-		AddItem(nil, 0, widthRest, false)
+		AddItem(centerBoxSpacer(), 0, widthRest, false)
 
 	return tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(nil, 0, heightRest, false).
+		AddItem(centerBoxSpacer(), 0, heightRest, false).
 		AddItem(row, 0, heightPercent, true).
-		AddItem(nil, 0, heightRest, false)
+		AddItem(centerBoxSpacer(), 0, heightRest, false)
 }
 
 // jsonKeyLineRe matches one "key": value line from json.MarshalIndent's
-// two-space-indented output (used by colorizeEventJSON below).
+// two-space-indented output (used by ColorizeEventJSON below).
 var jsonKeyLineRe = regexp.MustCompile(`^(\s*)"([^"]*)":\s*(.*)$`)
 
-// colorizeEventJSON pretty-prints event as its canonical nostr JSON shape
+// ColorizeEventJSON pretty-prints event as its canonical nostr JSON shape
 // (json.MarshalIndent on *nip01.Event, the same encoding saved to file) and
 // applies tview color tags line by line: keys in purple, string values in
 // white, numbers in blue, true/false/null in yellow, structural punctuation
 // left as-is. This is deliberately simple (regex over MarshalIndent's fixed,
 // predictable layout) rather than a general JSON tokenizer -- nip01.Event
 // only ever has string/int/nested-string-array fields, so a value never
-// spans multiple lines.
-func colorizeEventJSON(event *nip01.Event) string {
+// spans multiple lines. Exported so a caller outside this package (e.g.
+// cli/bunker's own event-viewing overlays) can render the exact same
+// colored JSON shape ShowEvent uses here, rather than duplicating this
+// regex-based colorizer.
+func ColorizeEventJSON(event *nip01.Event) string {
 	raw, err := json.MarshalIndent(event, "", "  ")
 	if err != nil {
 		return tview.Escape(fmt.Sprintf("failed to render event: %s", err))

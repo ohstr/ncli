@@ -130,6 +130,17 @@ func NewSyncBoard(app *App, ctx context.Context, logger *FlowLogger) *SyncBoard 
 
 ////
 
+// ChildProvider is implemented by a board built outside this package that
+// wants Tab/Shift+Tab cycling across its own panels -- Childs' fixed type
+// switch below only knows this package's own board types (InspectBoard/
+// StreamBoard/SyncBoard) and can't be extended to recognize a board type
+// from a downstream package (e.g. cli/bunker's BunkerBoard) without that
+// package importing this one, which already runs the other way. A new
+// board just implements this one method instead.
+type ChildProvider interface {
+	Childs() []tview.Primitive
+}
+
 type Body struct {
 	*tview.Flex
 	board tview.Primitive
@@ -147,6 +158,10 @@ func NewBody(board tview.Primitive) *Body {
 }
 
 func (b *Body) Childs() []tview.Primitive {
+	if cp, ok := b.board.(ChildProvider); ok {
+		return cp.Childs()
+	}
+
 	var childs []tview.Primitive
 	switch c := b.board.(type) {
 	case *InspectBoard:

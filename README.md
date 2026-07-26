@@ -4,8 +4,9 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/ohstr/ncli.svg)](https://pkg.go.dev/github.com/ohstr/ncli)
 [![License: Unlicense](https://img.shields.io/badge/license-Unlicense-blue.svg)](LICENSE)
 
-**A Nostr relay server, and a command-line client toolkit for streaming,
-syncing, inspecting, querying, and mining events.**
+**Built for humans and agents, a Nostr relay, and a command-line
+client toolkit for streaming, syncing, inspecting, querying, and mining
+events.**
 
 ## Features
 
@@ -20,6 +21,7 @@ syncing, inspecting, querying, and mining events.**
 - [`ncli publish`](#publish-send-events-to-relays) — Publish signed events to one or more relays
 - [`ncli prefs`](#prefs-default-relays-for-finddumpminerpublish) — Set default relays for `find`/`dump`/`miner check`/`publish`
 - [`ncli miner`](#miner-mine-and-verify-proof-of-work) — Mine NIP-13 proof-of-work into an event, or verify it on published events
+- [`ncli bunker`](#bunker-run-as-a-nip-46-remote-signer) — Run as a NIP-46 remote signer
 - [`ncli id`](#id-generate-or-inspect-a-nostr-identity) — Generate or inspect a Nostr keypair
 - [`ncli decode`](#decode-decode-a-nip-19-entity) — Decode any NIP-19 bech32 entity (npub/nsec/note/nprofile/nevent/naddr)
 
@@ -652,6 +654,44 @@ directly into CI/cron:
 ```sh
 ncli miner check -e events.json || alert-oncall "PoW compliance regression"
 ```
+
+## `bunker`: run as a NIP-46 remote signer
+
+Turns `ncli` into a NIP-46 remote signer: your private key never leaves
+this process. Other Nostr apps send it encrypted signing requests over a
+relay; you approve or reject each one from a live TUI, or a remembered
+grant handles it automatically.
+
+```sh
+ncli bunker --identity mykey --relay wss://relay.example
+
+ncli bunker attach                  # reattach from another terminal
+ncli bunker status --json           # {"running", "identity_pub", "relays", "pending_count", "session_count"}
+ncli bunker sessions list           # every app with a remembered permission
+ncli bunker sessions revoke <pubkey>
+ncli bunker history                 # recently resolved requests, most recent first
+ncli bunker stop
+```
+
+![`ncli bunker` pairing an app via nostrconnect://, approving one request with a remembered grant, rejecting another outside its scope](docs/vhs/bunker.gif)
+
+Approving a request offers a scoped, timed "Always" grant, not just a
+one-off approve/reject — revoke or extend any grant later from Trusted
+Apps. On Linux/macOS, closing the TUI (`b`) can detach into a background
+daemon instead of stopping it, so other apps stay connected.
+
+Pairing works both directions other bunker apps expect (`bunker://` and
+`nostrconnect://`), from inside the TUI (`c`) or scripted:
+
+```sh
+ncli bunker connect                                       # prints a bunker:// URI to paste into a client
+ncli bunker connect "nostrconnect://..."
+ncli bunker connect --grants examples/bunker/agent.yaml    # pre-authorize the app, no prompts
+```
+
+See [`skills/ncli-bunker/SKILL.md`](skills/ncli-bunker/SKILL.md) for the
+full walkthrough, including the Windows platform gap, the `kind: bunker`
+grants-spec format, and pairing an AI agent for unattended signing.
 
 ## `id`: generate or inspect a Nostr identity
 

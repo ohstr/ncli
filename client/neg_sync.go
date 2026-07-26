@@ -8,7 +8,6 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/gdamore/tcell/v2"
 	"github.com/google/uuid"
 	"github.com/ohstr/ncli/client/tui"
 	"github.com/ohstr/nmilat/nip01"
@@ -24,7 +23,7 @@ import (
 var syncAttr = tui.FlowAttr{
 	Index:     1,
 	Name:      "sync",
-	FlagColor: tcell.ColorPurple,
+	FlagColor: tui.ColorPrimary,
 }
 
 // SyncModule implements Module for NIP-77 Negentropy reconciliation.

@@ -63,7 +63,8 @@
 #
 # Same Width/FontSize/Theme as apply-stream.tape (this board is built on
 # the same client/tui App -- see cli/bunker/board.go's own imports -- so it
-# needs the same ANSI-16 palette match, not a generic vhs theme; Trusted
+# uses the same theme, not a generic vhs theme; mainly for the black
+# background match apply-stream.tape's own comments explain -- Trusted
 # Apps' own column count is why this uses apply-stream's wide layout, not
 # ping's narrower one), but taller: identity(2) + logger(16, fixed) +
 # sessions(8, one trusted app) already eats ~26 rows before

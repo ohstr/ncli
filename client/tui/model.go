@@ -157,7 +157,7 @@ func (fl *FlowLogger) Log(text string, attr FlowAttr) {
 
 func (fl *FlowLogger) Error(err error, attr FlowAttr) {
 	if fl.shouldLog(LogLevelError) {
-		msg := fmt.Sprintf("[red]●[-] %s", err.Error())
+		msg := fmt.Sprintf("[%s]●[-] %s", ColorDanger, err.Error())
 		fl.Log(msg, attr)
 		if fl.Raw {
 			fmt.Fprintf(os.Stderr, "%s ERR [%s] %v\n", formatTimestamp(time.Now()), attr.Name, err)
@@ -167,31 +167,31 @@ func (fl *FlowLogger) Error(err error, attr FlowAttr) {
 
 func (fl *FlowLogger) Warn(text string, attr FlowAttr) {
 	if fl.shouldLog(LogLevelWarn) {
-		fl.Log(fmt.Sprintf("[yellow]●[-] %s", text), attr)
+		fl.Log(fmt.Sprintf("[%s]●[-] %s", ColorWarning, text), attr)
 	}
 }
 
 func (fl *FlowLogger) Success(text string, attr FlowAttr) {
 	if fl.shouldLog(LogLevelSuccess) {
-		fl.Log(fmt.Sprintf("[green]●[-] %s", text), attr)
+		fl.Log(fmt.Sprintf("[%s]●[-] %s", ColorSuccess, text), attr)
 	}
 }
 
 func (fl *FlowLogger) Info(text string, attr FlowAttr) {
 	if fl.shouldLog(LogLevelInfo) {
-		fl.Log(fmt.Sprintf("[white]●[-] %s", text), attr)
+		fl.Log(fmt.Sprintf("[%s]●[-] %s", ColorText, text), attr)
 	}
 }
 
 func (fl *FlowLogger) Debug(text string, attr FlowAttr) {
 	if fl.shouldLog(LogLevelDebug) {
-		fl.Log(fmt.Sprintf("[blue]●[-] %s", text), attr)
+		fl.Log(fmt.Sprintf("[%s]●[-] %s", ColorAccent, text), attr)
 	}
 }
 
 func (fl *FlowLogger) Trace(text string, attr FlowAttr) {
 	if fl.shouldLog(LogLevelTrace) {
-		fl.Log(fmt.Sprintf("[gray]●[-] %s", text), attr)
+		fl.Log(fmt.Sprintf("[%s]●[-] %s", ColorMuted, text), attr)
 	}
 }
 
@@ -220,20 +220,20 @@ func (fl *FlowLogger) GetLastLogs() [][]string {
 	for _, log := range logs {
 		switch l := log.(type) {
 		case *FlowLogCounter:
-			subArr := []string{fmt.Sprintf("[gray:-:-]%s", formatTimestamp(l.createdAt))}
+			subArr := []string{fmt.Sprintf("[%s:-:-]%s", ColorMuted, formatTimestamp(l.createdAt))}
 			if l.Index > 0 {
-				subArr = append(subArr, fmt.Sprintf("%s [green]●[-]", renderFlag(l.FlagColor, l.Index, fl.indexWidth)))
+				subArr = append(subArr, fmt.Sprintf("%s [%s]●[-]", renderFlag(l.FlagColor, l.Index, fl.indexWidth), ColorSuccess))
 			}
 
 			if l.count > 1 {
-				subArr = append(subArr, fmt.Sprintf("EVENTS [purple]%d", l.count))
+				subArr = append(subArr, fmt.Sprintf("EVENTS [%s]%d", ColorPrimary, l.count))
 			} else {
 				subArr = append(subArr, fmt.Sprintf("EVENT %s", l.lastEventID))
 			}
 			logsArr = append(logsArr, subArr)
 
 		case *FlowLogText:
-			entryLog := []string{fmt.Sprintf("[gray:-:-]%s", formatTimestamp(l.createdAt))}
+			entryLog := []string{fmt.Sprintf("[%s:-:-]%s", ColorMuted, formatTimestamp(l.createdAt))}
 			if l.Index > 0 {
 				entryLog = append(entryLog, renderFlag(l.FlagColor, l.Index, fl.indexWidth))
 			}
@@ -355,7 +355,7 @@ func (fm *FlowMetrics) Row() []string {
 	defer fm.mu.RUnlock()
 
 	output := []string{
-		fmt.Sprintf(`%s [%s]%s`, renderFlag(fm.color, fm.id, fm.indexWidth), tcell.ColorWhite, fm.name),
+		fmt.Sprintf(`%s [%s]%s`, renderFlag(fm.color, fm.id, fm.indexWidth), ColorText, fm.name),
 		strconv.Itoa(fm.events),
 	}
 
@@ -371,7 +371,7 @@ func (fm *FlowMetrics) Row() []string {
 	// IncreaseLost) -- fold it into this cell instead of a separate column so
 	// a healthy row doesn't carry a redundant "0".
 	if fm.lost > 0 {
-		output = append(output, fmt.Sprintf("%d [red](%d lost)[-]", fm.failures, fm.lost))
+		output = append(output, fmt.Sprintf("%d [%s](%d lost)[-]", fm.failures, ColorDanger, fm.lost))
 	} else {
 		output = append(output, strconv.Itoa(fm.failures))
 	}
@@ -382,7 +382,7 @@ func (fm *FlowMetrics) Row() []string {
 
 	nextRetry := time.Until(fm.nextRetry)
 	if nextRetry > 0 {
-		output = append(output, fmt.Sprintf("%d [red]%s", fm.retries, nextRetry.Truncate(time.Second).String()))
+		output = append(output, fmt.Sprintf("%d [%s]%s", fm.retries, ColorDanger, nextRetry.Truncate(time.Second).String()))
 	} else {
 		output = append(output, strconv.Itoa(fm.retries))
 	}
@@ -571,7 +571,7 @@ func NewInboundMetrics(id int, name string, closeCallback func()) *InboundMetric
 	// distinct origin with its own diversity; see NewOutboundMetrics for why
 	// destinations don't track the same thing.
 	return &InboundMetrics{
-		FlowMetrics: NewFlowMetrics(id, name, tcell.ColorGreen, []string{"Synced"}, true, closeCallback),
+		FlowMetrics: NewFlowMetrics(id, name, ColorSuccess, []string{"Synced"}, true, closeCallback),
 	}
 }
 
@@ -593,7 +593,7 @@ func NewOutboundMetrics(id int, name string, closeCallback func()) *OutboundMetr
 	// numbers would be near-identical across every destination row and
 	// against Sources -- diversity only varies meaningfully per source.
 	return &OutboundMetrics{
-		FlowMetrics: NewFlowMetrics(id, name, tcell.ColorBlue, []string{"Pubkeys", "Kinds"}, false, closeCallback),
+		FlowMetrics: NewFlowMetrics(id, name, ColorAccent, []string{"Pubkeys", "Kinds"}, false, closeCallback),
 	}
 }
 

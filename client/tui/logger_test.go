@@ -19,7 +19,7 @@ func init() {
 func createFlowAttr() FlowAttr {
 	return FlowAttr{
 		Index:     1,
-		FlagColor: tcell.ColorBlue,
+		FlagColor: ColorAccent,
 	}
 }
 

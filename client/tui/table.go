@@ -60,7 +60,7 @@ func NewTable(app *App, title string, data *FlowMetricsSlice) *Table {
 }
 
 func (t *Table) UpdateTitle(count int) {
-	t.SetTitle(fmt.Sprintf(" [::b][%s]%s [[%s]%d[%s]] ", tcell.ColorPurple, strings.ToUpper(t.title), tcell.ColorWhiteSmoke, count, tcell.Color53))
+	t.SetTitle(fmt.Sprintf(" [::b][%s]%s [[%s]%d[%s]] ", ColorPrimary, strings.ToUpper(t.title), ColorBadge, count, ColorPrimary))
 }
 
 func (t *Table) Init(ctx context.Context) *Table {
@@ -68,12 +68,12 @@ func (t *Table) Init(ctx context.Context) *Table {
 	t.SetFixed(1, 1).
 		SetSelectable(true, false).
 		SetBorder(true).
-		SetBorderColor(tcell.ColorPurple).
+		SetBorderColor(ColorPrimary).
 		SetBorderPadding(0, 1, 1, 1)
 
 	t.SetSelectedStyle(tcell.Style{}.
-		Background(tcell.ColorPurple).
-		Foreground(tcell.ColorWhite),
+		Background(ColorPrimary).
+		Foreground(ColorText),
 	)
 
 	t.UpdateTitle(0)
@@ -154,16 +154,16 @@ func (t *Table) DrawHeaders() {
 		if c.IsSorted {
 			switch c.SortDir {
 			case SortAsc:
-				header += fmt.Sprintf("[%s::]↑", tcell.ColorPurple)
+				header += fmt.Sprintf("[%s::]↑", ColorPrimary)
 
 			default: // SortDesc
-				header += fmt.Sprintf("[%s::]↓", tcell.ColorPurple)
+				header += fmt.Sprintf("[%s::]↓", ColorPrimary)
 			}
 		}
 		t.SetCell(0, ci,
 			tview.NewTableCell(header).
 				SetExpansion(1).
-				SetTextColor(tcell.ColorBlack).
+				SetTextColor(ColorMuted).
 				SetAlign(tview.AlignLeft).
 				SetSelectable(false))
 	}

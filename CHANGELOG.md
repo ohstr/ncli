@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.1]
+
+### Changed
+
+- Every bordered TUI panel now dims its border while it doesn't hold
+  keyboard focus, and bunker's form dialogs support Left/Right button
+  navigation. (#23)
+- `ncli bunker`'s TUI now shows its splashscreen for the full duration of a
+  slow startup instead of skipping straight to an incomplete board. (#24)
+- CLI help text and CHANGELOG.md entries are trimmed for conciseness, with
+  no change in behavior. (#22)
+
 ## [0.4.0]
 
 ### Added

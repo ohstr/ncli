@@ -1,0 +1,62 @@
+# Spec for `ncli bunker connect --grants examples/bunker/agent.yaml`.
+#
+# For an unattended NIP-46 client -- a bot, an autonomous agent, a CI job
+# -- with nobody watching the TUI to click "Approve" when it makes its
+# first request. Everything the agent is expected to need is granted
+# up front so it never blocks on a human who isn't there; anything NOT
+# listed here still falls through to the normal approval queue and
+# auto-rejects after 5 minutes unanswered (Handler's own DefaultPendingTTL)
+# rather than hanging forever -- which is a real limitation to know about,
+# not a feature: if the agent turns out to need a method this file didn't
+# anticipate, every one of those requests will silently time out until you
+# notice and extend its grants (`ncli bunker sessions grants <pubkey>`
+# shows what it actually has; the TUI's Manage Grants overlay, or a second
+# `connect` with an updated file, can add more without starting over).
+#
+# "Until revoked" (no expires/uses -- see the sign_event entry below) is a
+# deliberate choice here, not a default to copy blindly: an agent identity
+# is usually meant to keep working across restarts with no one around to
+# renew it. Prefer examples/bunker/note-client.yaml's time-boxed style if
+# that's not true for your setup.
+
+kind: bunker
+spec:
+  nickname: "Automation Agent"
+
+  grants:
+    - method: get_public_key
+    - method: get_relays
+    - method: ping
+
+    # Broad by design: an agent's own posting behavior is usually driven
+    # by its own logic, not a fixed kind list decided ahead of time here.
+    # Sensitive kinds (0/3/5 -- profile, contacts, deletions) are excluded
+    # regardless, same as every any-kind grant -- add them explicitly
+    # below if this agent genuinely needs to manage its own profile.
+    - method: sign_event
+      kinds: any
+
+    # Uncomment only if this agent needs to edit its own profile metadata
+    # -- deliberately not bundled into the any-kind grant above:
+    # - method: sign_event
+    #   kinds: [0]
+
+    # Encrypted DMs -- needed if the agent sends/receives NIP-44 messages
+    # (e.g. relaying results back to a human over DM). Comment out
+    # whichever direction this agent doesn't use.
+    - method: nip44_encrypt
+    - method: nip44_decrypt
+
+    # Legacy NIP-04 is deliberately NOT granted here -- most current
+    # agent tooling speaks NIP-44. Add it explicitly if yours doesn't:
+    # - method: nip04_encrypt
+    # - method: nip04_decrypt
+
+    # Deletions stay off entirely (no grant, sensitive, and there's no
+    # legitimate "agent needs to delete things unattended" default this
+    # file should encourage) -- every kind:5 request still prompts, and
+    # will time out unanswered rather than run automatically. Grant it
+    # explicitly, narrowly, only if you actually mean to:
+    # - method: sign_event
+    #   kinds: [5]
+    #   uses: 1

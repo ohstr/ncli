@@ -12,7 +12,7 @@
   used to resolve to a different shade depending on the terminal's own
   theme. Also fixes a couple of black-on-black legibility spots (event
   and metrics table column headers) that this indexed-color dependence
-  used to leave unreadable.
+  used to leave unreadable. (#19)
 
 ## [0.3.0]
 

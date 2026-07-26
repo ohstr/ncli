@@ -47,7 +47,7 @@ func TestColorizeJSONLineDetectsKeys(t *testing.T) {
 // TestColorizeEventJSONRendersCleanlyThroughTextView is the important
 // regression guard: content/tags can contain literal "[" and "]" (e.g. a
 // note linking "[text](url)"), and tview's own dynamic-color parser treats
-// unescaped brackets as the start of a tag. If colorizeEventJSON doesn't
+// unescaped brackets as the start of a tag. If ColorizeEventJSON doesn't
 // escape them (via tview.Escape), a TextView would silently mangle that
 // content instead of displaying it -- so this round-trips real event data
 // through an actual TextView and checks it survives intact.
@@ -62,7 +62,7 @@ func TestColorizeEventJSONRendersCleanlyThroughTextView(t *testing.T) {
 		Sig:       "sig123",
 	}
 
-	colored := colorizeEventJSON(event)
+	colored := ColorizeEventJSON(event)
 
 	tv := tview.NewTextView().SetDynamicColors(true)
 	fmt.Fprint(tv, colored)

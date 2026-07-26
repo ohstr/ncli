@@ -18,6 +18,16 @@ func NewDialog(title, text string, buttons []string, funcs ...func()) *Dialog {
 	modal.SetText(text)
 	modal.SetBackgroundColor(tcell.ColorDefault)
 	modal.Box.SetBackgroundColor(tcell.ColorDefault)
+	// NewModal's own constructor pairs SetButtonBackgroundColor with
+	// SetButtonTextColor, so its focused-button style is already a clean
+	// inversion of whatever those resolve to -- but left at tview's own
+	// Styles defaults, that's black-on-white, not this app's own
+	// purple-on-white "this is selected" convention every table's own
+	// SetSelectedStyle already uses (table.go/eventtable.go/board.go) --
+	// overridden explicitly here so a dialog's focused button matches
+	// every other focus/selection indicator in the app, not tview's stock
+	// look.
+	modal.SetButtonActivatedStyle(tcell.Style{}.Background(tcell.ColorPurple).Foreground(tcell.ColorWhite))
 
 	modal.AddButtons(buttons).
 		SetDoneFunc(func(buttonIndex int, buttonLabel string) {

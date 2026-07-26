@@ -20,7 +20,7 @@
   with `--identity`, `servers discover`) accepts the same shapes as
   `--identity` everywhere else in `ncli` — vault label, nsec, npub,
   hex, nprofile, or nip-05 — resolved before it's sent anywhere.
-  Signing is local-key only for now (no `bunker`/NIP-46 backend).
+  Signing is local-key only for now (no `bunker`/NIP-46 backend). (#18)
 
 ## [0.3.0]
 

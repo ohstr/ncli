@@ -376,7 +376,7 @@ func (a *App) Alert(text string) {
 }
 
 func (a *App) Error(text string) {
-	a.showDialog("Error", text, tcell.ColorRed, []string{"OK"},
+	a.showDialog("Error", text, ColorDanger, []string{"OK"},
 		func() {
 			a.pages.SwitchToPage("main")
 			a.Focus(a.lastFocusedIndex)
@@ -433,7 +433,7 @@ func (a *App) Restart() {
 func SplashScreen() *tview.Flex {
 	text := tview.NewTextView().
 		SetDynamicColors(true).
-		SetText(fmt.Sprintf("[purple:-:b]%s[silver:-:-] %s", alignedLogo(), WELCOME_MESSAGE)).
+		SetText(fmt.Sprintf("[%s:-:b]%s[%s:-:-] %s", ColorPrimary, alignedLogo(), ColorMuted, WELCOME_MESSAGE)).
 		SetTextAlign(tview.AlignCenter)
 
 	flex := tview.NewFlex().
@@ -455,7 +455,7 @@ func ReloadingScreen() *tview.Flex {
 
 	text := tview.NewTextView().
 		SetDynamicColors(true).
-		SetText(fmt.Sprintf("[purple:-:b]%s[purple:-:-] %s", alignedLogo(), "loading...")).
+		SetText(fmt.Sprintf("[%s:-:b]%s[%s:-:-] %s", ColorPrimary, alignedLogo(), ColorPrimary, "loading...")).
 		SetTextAlign(tview.AlignCenter)
 
 	flex := tview.NewFlex().

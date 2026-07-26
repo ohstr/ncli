@@ -68,12 +68,12 @@ func (t *EventTable) Init(ctx context.Context) *EventTable {
 	t.SetFixed(1, 0).
 		SetSelectable(true, false).
 		SetBorder(true).
-		SetBorderColor(tcell.ColorPurple).
+		SetBorderColor(ColorPrimary).
 		SetBorderPadding(0, 1, 1, 1)
 
 	t.SetSelectedStyle(tcell.Style{}.
-		Background(tcell.ColorPurple).
-		Foreground(tcell.ColorWhite),
+		Background(ColorPrimary).
+		Foreground(ColorText),
 	)
 
 	t.SetSelectedFunc(func(row, _ int) {
@@ -185,8 +185,8 @@ func (t *EventTable) eventAt(row int) *nip01.Event {
 func (t *EventTable) updateTitle(count int) {
 	autoColor, autoText := StatusText(t.autoscroll)
 	t.SetTitle(fmt.Sprintf(" [::b][%s]EVENTS [[%s]%d[%s]] [%s]Autoscroll:[%s]%s[-:-:-] ",
-		tcell.ColorPurple, tcell.ColorWhiteSmoke, count, tcell.Color53,
-		tcell.ColorPurple, autoColor, autoText))
+		ColorPrimary, ColorBadge, count, ColorPrimary,
+		ColorPrimary, autoColor, autoText))
 }
 
 var eventTableHeaders = []string{"Time", "Src", "Kind", "Pubkey", "Id", "Content"}
@@ -195,7 +195,7 @@ func (t *EventTable) drawHeader() {
 	for c, name := range eventTableHeaders {
 		t.SetCell(0, c, tview.NewTableCell(fmt.Sprintf("[-:-:b]%s", strings.ToUpper(name))).
 			SetExpansion(1).
-			SetTextColor(tcell.ColorBlack).
+			SetTextColor(ColorMuted).
 			SetAlign(tview.AlignLeft).
 			SetSelectable(false))
 	}
@@ -215,7 +215,7 @@ func (t *EventTable) Update() {
 
 	for i, r := range rows {
 		cells := []string{
-			fmt.Sprintf("[gray:-:-]%s", formatTimestamp(r.createdAt)),
+			fmt.Sprintf("[%s:-:-]%s", ColorMuted, formatTimestamp(r.createdAt)),
 			renderFlag(r.attr.FlagColor, r.attr.Index, indexWidth),
 			strconv.Itoa(r.event.Kind),
 			shortHex(r.event.PubKey),

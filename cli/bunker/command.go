@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
 
@@ -746,9 +747,42 @@ func runTUI(cmd *cobra.Command, bunkerClient BunkerClient, cancel context.Cancel
 		}
 	}
 
+	// NewBunkerBoard blocks on real IPC (each panel's Init(ctx) does a
+	// synchronous first Status()/list call against the daemon) before it
+	// has anything to show -- built synchronously here, the same way it
+	// used to be, that work would all finish before app.Run() ever starts
+	// pumping draws, so the splashscreen page Init() already added would
+	// get swapped out for "main" while still invisible and never actually
+	// appear on screen. client.Client.run avoids exactly this by starting
+	// its own board construction in a goroutine and calling app.Run()
+	// immediately alongside it (see client/client.go's "go c.render(ctx)"
+	// right before "c.app.Run()"); mirrored here so the splash is visible
+	// for as long as this board's own startup IPC (plus splashOnce's 1s
+	// floor) actually takes.
+	//
+	// The construction itself (NewBunkerBoard) stays in this plain
+	// goroutine, off the Application's own event-loop goroutine, so the
+	// splash keeps redrawing/responding to input while it runs -- but the
+	// actual app.Load(board) that swaps the visible page must not: once
+	// Run() below is underway, its event loop is the only goroutine
+	// allowed to touch a.pages (tview.Pages.Draw, called from that same
+	// loop, iterates it with no locking of its own); mutating it directly
+	// from here would race that read. QueueUpdateDraw is tview's own
+	// sanctioned way to run code on the event-loop goroutine instead --
+	// it also forces the redraw that actually makes the swap visible,
+	// which a bare, un-queued app.Load call has no way to trigger until
+	// whatever next unrelated redraw happens to come along (e.g. a
+	// panel's own renderInterval ticker, up to 2s later).
 	canDetach := cancel == nil
-	board := NewBunkerBoard(app, ctx, bunkerClient, app.Logger(), canDetach)
-	app.Load(board)
+	var board *BunkerBoard
+	var boardReady sync.WaitGroup
+	boardReady.Go(func() {
+		b := NewBunkerBoard(app, ctx, bunkerClient, app.Logger(), canDetach)
+		app.QueueUpdateDraw(func() {
+			board = b
+			app.Load(board)
+		})
+	})
 
 	go func() {
 		<-ctx.Done()
@@ -758,6 +792,12 @@ func runTUI(cmd *cobra.Command, bunkerClient BunkerClient, cancel context.Cancel
 	if err := app.Run(); err != nil {
 		return common.RuntimeError(cmd, err)
 	}
+
+	// Run() can return (via the ctx-cancellation goroutine above calling
+	// Stop()) before the goroutine above finishes building board -- wait
+	// for it so the board.DaemonLost() read below never races the write
+	// to board.
+	boardReady.Wait()
 
 	// tview's own Run() has already restored the normal terminal (and
 	// exited the alternate screen) by the time it returns, whether that's

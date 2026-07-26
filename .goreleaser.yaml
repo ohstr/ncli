@@ -81,6 +81,18 @@ brews:
     test: |
       system "#{bin}/ncli", "version"
 
+# No `changelog:` block here, deliberately -- GoReleaser's changelog pipe
+# is also the only place that loads a `--release-notes` file into the
+# release body (internal/pipe/changelog.(Pipe).Run, before it ever
+# reaches the auto-changelog-from-commits code that follows that early
+# return). `changelog.disable: true` used to be set here to mean "don't
+# auto-generate from commits, we pass --release-notes explicitly" --
+# but that disables the whole pipe, including the --release-notes load,
+# so every release's body ended up empty despite release.yml passing
+# `--release-notes` correctly. Since release.yml always passes that
+# flag, the pipe's own early-return already guarantees notes come from
+# CHANGELOG.md, never GoReleaser's commit-log changelog, with no
+# `disable` needed.
 release:
   github:
     owner: ohstr
@@ -89,9 +101,3 @@ release:
   # place if a Release for the tag already exists (e.g. from a prior
   # failed/retried run) instead of using --release-notes below.
   mode: replace
-
-# Release notes always come from CHANGELOG.md, passed explicitly via
-# `goreleaser release --release-notes=<file>` in release.yml, never from
-# GoReleaser's own commit-log-derived changelog.
-changelog:
-  disable: true

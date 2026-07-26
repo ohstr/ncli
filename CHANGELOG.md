@@ -2,6 +2,26 @@
 
 ## [0.4.0]
 
+### Added
+
+- `ncli blossom` — a client for the Blossom protocol (BUD-01..12):
+  content-addressed blob storage authenticated with a Nostr identity
+  instead of a login. `upload`/`download`/`list`/`rm`/`mirror`/`report`
+  cover the direct blob operations; `servers add`/`remove`/`list`
+  manage the default server list these fall back to when not given an
+  explicit `--server`, with `--publish` broadcasting it as a signed
+  kind:10063 (BUD-03) event to your relays and `servers discover
+  <identifier>` fetching another identity's published list the same
+  way. `upload`/`rm`/`mirror` fan out to every configured server and
+  report a result per (item, server) pair, matching `publish`'s
+  (event, relay) report shape; `download` instead falls back through
+  the configured servers in order, stopping at the first that answers.
+  Every subcommand that takes a target identity (`list`, `download`
+  with `--identity`, `servers discover`) accepts the same shapes as
+  `--identity` everywhere else in `ncli` — vault label, nsec, npub,
+  hex, nprofile, or nip-05 — resolved before it's sent anywhere.
+  Signing is local-key only for now (no `bunker`/NIP-46 backend). (#18)
+
 ### Changed
 
 - Every `client/tui`-based board (`apply stream`/`sync`/`inspect`, `ping

@@ -15,8 +15,8 @@
 # Escape closes it back out.
 #
 # Same Width/FontSize/Theme as apply-stream.tape -- see that file's
-# comments for why (SOURCES/DESTINATIONS column widths, tcell's named
-# colors resolving through the ANSI palette rather than truecolor).
+# comments for why (SOURCES/DESTINATIONS column widths, matching the
+# black widget background tview.Box paints every panel with).
 
 Output docs/vhs/apply-inspect.gif
 

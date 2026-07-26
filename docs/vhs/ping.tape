@@ -7,11 +7,11 @@
 # so Ctrl+C is needed to close it.
 #
 # ping's board is built on the same client/tui package as apply, so it
-# needs the same ANSI-16 theme apply-stream.tape uses (not a generic vhs
-# theme like Dracula) -- see that file's comments for why tcell's named
-# colors specifically need this palette to render right. Width/Height stay
-# ping's own (its board has no wide SOURCES/DESTINATIONS-style table to
-# fit, unlike stream/sync).
+# uses the same theme apply-stream.tape uses (not a generic vhs theme
+# like Dracula) -- see that file's comments for why: mainly matching the
+# black widget background tview.Box paints every panel with. Width/Height
+# stay ping's own (its board has no wide SOURCES/DESTINATIONS-style table
+# to fit, unlike stream/sync).
 
 Output docs/vhs/ping.gif
 

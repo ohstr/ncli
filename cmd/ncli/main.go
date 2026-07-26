@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 
+	"github.com/ohstr/ncli/cli/bunker"
 	"github.com/ohstr/ncli/cli/common"
 	"github.com/ohstr/ncli/cli/ncli"
 	relaycli "github.com/ohstr/ncli/cli/relay"
@@ -39,6 +40,11 @@ func init() {
 	// already running over NIP-98 authenticated HTTP; see NewRelayCommand.
 	// "delegate" is mounted under "id" instead, in cli/ncli/id.go's init().
 	rootCmd.AddCommand(relaycli.NewRelayCommand())
+
+	// Register the NIP-46 remote-signer ("bunker") command -- mounts
+	// "attach"/"status"/"stop"/"sessions"/"connect" as its own children;
+	// see NewBunkerCommand.
+	rootCmd.AddCommand(bunker.NewBunkerCommand())
 }
 
 func main() {

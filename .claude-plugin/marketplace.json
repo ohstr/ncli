@@ -49,6 +49,15 @@
       "description": "Mine or verify NIP-13 proof-of-work for a Nostr event with ncli's miner command (authored inline via --content/--content-file, or from an unsigned event YAML/JSON file, auto-signed when an identity's key is available), then publish the result to relays with ncli publish.",
       "license": "Unlicense",
       "keywords": ["ncli", "nostr", "miner", "nip-13", "pow", "publish"]
+    },
+    {
+      "name": "ncli-bunker",
+      "source": "./",
+      "skills": ["./skills/ncli-bunker"],
+      "strict": false,
+      "description": "Run ncli as a NIP-46 remote signer (bunker) — approve/reject other Nostr clients' signing requests from a live TUI, remember per-app permissions, and run it detached in the background via ncli bunker attach/status/stop/sessions/connect.",
+      "license": "Unlicense",
+      "keywords": ["ncli", "nostr", "bunker", "nip-46", "remote-signer", "nsecbunker"]
     }
   ]
 }

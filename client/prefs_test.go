@@ -271,7 +271,7 @@ func TestTargetsFromRelayList_SchemelessHost(t *testing.T) {
 
 // TestTargetsFromRelayList_ExistingFileWinsAmbiguity locks in that a
 // schemeless bare string resolves to a local store, not a relay host, when
-// a file actually exists at that path -- resolveRelayURL's schemeless
+// a file actually exists at that path -- ResolveRelayURL's schemeless
 // acceptance must not swallow the pre-existing local-path shorthand.
 func TestTargetsFromRelayList_ExistingFileWinsAmbiguity(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "notes.db")

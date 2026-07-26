@@ -22,26 +22,22 @@ Set FontSize 18
 Set Width 1600
 Set Height 800
 Set Padding 20
-# The TUI (client/tui) colors its widgets with tcell's named colors
-# (tcell.ColorPurple, ColorBlue, ColorGreen, ...), not raw hex -- tcell
-# deliberately renders these as plain indexed ANSI codes rather than
-# truecolor, specifically so they follow whatever palette the terminal
-# defines. That makes this theme's 16 ANSI slots (not a generic vhs theme
-# like Dracula) the actual knob for matching a real terminal. This is VS
-# Code's default "Dark Modern" integrated-terminal palette, since that's
-# what the reference recordings were taken in:
-#   - magenta: ColorPurple (borders, titles, selection) -- bold, so it's
-#     drawn in the *bright* variant (VS Code's drawBoldTextInBrightColors
-#     default), which xterm.js replicates
-#   - green: ColorGreen (source-flow flags)
-#   - blue: ColorBlue -- resolves to the *bright* slot, not plain blue,
-#     since 0x0000FF is nearer the bright-blue reference (destination flows)
-# `background` is pure black to match the padding to the TUI's own black
-# widget background (see client/tui) -- no seam. `black` itself no longer
-# needs to dodge that background: the widget-black/text-black collision that
-# made timestamps and a few labels invisible was a real bug in client/tui,
-# fixed separately (formerly "[black:-:-]"/tcell.ColorBlack for timestamps,
-# the footer's "Off" label, and the Info log level).
+# The TUI (client/tui) colors its widgets via client/tui/colors.go's own
+# truecolor hex constants (ColorPrimary, ColorAccent, ColorSuccess, ...),
+# not tcell's named/indexed colors -- so those foreground colors render
+# identically here no matter what this theme's own magenta/green/blue
+# slots are set to. That wasn't always true: before colors.go existed,
+# tcell rendered ColorPurple/ColorBlue/ColorGreen through whatever ANSI
+# palette the terminal defined, and matching this theme's specific slot
+# values to VS Code's default "Dark Modern" integrated-terminal palette
+# (the reference recordings' own terminal) was the only way to get a
+# recording that looked like a real terminal instead of vhs's own default
+# theme. What still matters here: `background` is pure black to match the
+# padding to every tview.Box's own black widget background
+# (tview.Styles.PrimitiveBackgroundColor -- still a genuinely indexed
+# ANSI color this app doesn't control) -- no seam. The rest of this
+# theme is now just a reasonable-looking shell theme for the typed
+# command line itself, not something the TUI's own rendering depends on.
 Set Theme {"name": "vscode-dark-modern", "black": "#000000", "red": "#cd3131", "green": "#0dbc79", "yellow": "#e5e510", "blue": "#2472c8", "magenta": "#bc3fbc", "cyan": "#11a8cd", "white": "#e5e5e5", "brightBlack": "#666666", "brightRed": "#f14c4c", "brightGreen": "#23d18b", "brightYellow": "#f5f543", "brightBlue": "#3b8eea", "brightMagenta": "#d670d6", "brightCyan": "#29b8db", "brightWhite": "#e5e5e5", "background": "#000000", "foreground": "#cccccc", "cursor": "#ffffff", "selection": "#264f78"}
 Set TypingSpeed 40ms
 

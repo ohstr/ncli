@@ -12,9 +12,8 @@ import (
 var prefsCmd = &cobra.Command{
 	Use:   "prefs",
 	Short: "Manage persistent ncli preferences",
-	Long: `Manage preferences that persist across projects, stored outside any
-single spec file. Currently just the default relay list that find, dump,
-and miner check fall back to when they aren't given explicit targets.`,
+	Long: `Manage preferences that persist across projects. Currently just the
+default relay list that find, dump, and miner check fall back to.`,
 	RunE: common.RequireSubcommand,
 }
 

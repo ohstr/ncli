@@ -13,20 +13,16 @@ import (
 var idSignCmd = &cobra.Command{
 	Use:   "sign",
 	Short: "Sign one or more unsigned events with a Nostr identity",
-	Long: `Sign an unsigned event (or an array of them) with the private key behind
---identity -- a saved vault label or an nsec resolves to a private key
-directly; a pubkey-only identity (npub/hex/nprofile/nip-05, not saved in
-the vault) has no private key to sign with and is rejected.
+	Long: `Sign an unsigned event (or array of them) with the private key behind
+--identity -- a vault label or nsec; a pubkey-only identity (npub/hex/
+nprofile/nip-05) has no private key and is rejected.
 
---events accepts a single event object or an array, the same shapes "ncli
-publish"'s --events and "ncli miner check"'s --events already accept -- and
---out is written back in the same shape it was read in, so the result
-chains straight into "ncli publish --events <out>" or "ncli miner check
---events <out>" with no reshaping.
+--events accepts a single event or an array; --out is written in the same
+shape, so it chains directly into "ncli publish --events <out>" or
+"ncli miner check --events <out>".
 
-If an event already declares a pubkey that conflicts with --identity's
-resolved pubkey, this fails rather than silently re-signing it under a
-different key.`,
+Fails if an event already declares a pubkey that conflicts with
+--identity's resolved pubkey, rather than re-signing under a different key.`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		if err := cmd.ValidateRequiredFlags(); err != nil {
 			return common.UsageError(cmd, err)

@@ -15,26 +15,17 @@ import (
 var pingCmd = &cobra.Command{
 	Use:   "ping [relay...]",
 	Short: "Test relay connectivity",
-	Long: `Probe reachability of every target relay by connecting and issuing a
-Limit-1 subscription -- a bare TCP/WebSocket connect isn't enough to
-confirm a relay actually speaks the protocol. Local store paths (if any
-end up in the target list) are skipped -- there's nothing to dial. There
-are no filter flags: ping never reads a relay's response to judge
-reachability, so a filter's content wouldn't change the result either way.
+	Long: `Probe reachability of each target relay with a Limit-1 subscription.
+Local store paths in the target list are skipped.
 
-Relays are given directly as positional arguments -- "ncli ping
-relay.primal.net" just works, no flag required -- or, for a relay list
-kept in a file (the same shape as find/dump's --targets, though ping only
-looks at its relays, not its filters), --targets <file.yaml>; pick one,
-not a mix. Omitting both falls back to every relay configured via
-"ncli prefs relays add".
+Give relays as positional arguments, or --targets <file.yaml> for a relay
+list file -- pick one, not both. Omitting both falls back to the relays
+configured via "ncli prefs relays add".
 
-Results narrate as plain log lines on stderr by default. Pass --tui for a
-live interactive board instead -- only takes effect in a real terminal and
-without --json/--quiet, falling back to plain narration otherwise. --json
-additionally suppresses that narration and prints a structured { results,
-checked, reachable, unreachable } report to stdout, for scripting. Exits
-non-zero if any relay was unreachable.`,
+Results narrate as plain log lines on stderr by default. --tui shows a
+live interactive board instead (requires a real terminal; ignored with
+--json/--quiet). --json prints a structured report to stdout instead of
+narrating. Exits non-zero if any relay was unreachable.`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		if err := cmd.ValidateRequiredFlags(); err != nil {
 			return common.UsageError(cmd, err)

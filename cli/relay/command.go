@@ -216,9 +216,8 @@ func NewRelayCommand() *cobra.Command {
 		Use:   "relay",
 		Short: "Run the relay server, or operate one that's already running",
 		Long: `Bare invocation runs the Nostr relay server: WebSocket protocol,
-NIP-11 metadata, and optional search. Its "stats", "reindex", and "clear"
-subcommands instead operate a relay that's already running, over NIP-98
-authenticated HTTP -- including triggering a live search/zap reindex.`,
+NIP-11 metadata, and optional search. Its subcommands instead operate a
+relay that's already running, over NIP-98 authenticated HTTP.`,
 		PreRunE: func(cmd *cobra.Command, args []string) error {
 			if err := initConfig(); err != nil {
 				return common.RuntimeError(cmd, err)

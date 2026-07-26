@@ -22,6 +22,8 @@ that priority order.
 | `ncli relay context add/use/remove` | Save named relay `--config` shortcuts and switch the current one, so `relay` subcommands stop needing `--config` repeated on every call |
 | `ncli bunker` | Run as a NIP-46 remote signer: approve/reject other clients' signing requests from a live TUI, remembering per-app decisions so you aren't re-prompted every time |
 | `ncli bunker attach/status/stop/sessions/connect` | Reattach to, query, stop, or pair a running bunker daemon without opening the TUI |
+| `ncli blossom upload/download/list/rm/mirror/report` | Client for the Blossom protocol (BUD-01..12): content-addressed blob storage authenticated with a Nostr identity |
+| `ncli blossom servers add/remove/list/discover` | Manage the default Blossom server list, optionally publishing/discovering it as a signed kind:10063 (BUD-03) event |
 | `ncli id [identifier]` | Generate or inspect a Nostr keypair (local vault) |
 | `ncli id delegate` | Mint a NIP-26 delegation token |
 | `ncli id sign -e <events.json> -o <signed.json>` | Sign one or more unsigned events with a vault/nsec identity |
@@ -119,6 +121,9 @@ or invoking a command in that area:
   status/stop/sessions/history/connect`), including pairing an agent as
   its NIP-46 client so it can get events signed without holding a raw
   key → `skills/ncli-bunker/SKILL.md`
+- Uploading/fetching/managing content on Blossom media servers
+  (`blossom upload/download/list/rm/mirror/report/servers`) →
+  `skills/ncli-blossom/SKILL.md`
 
 These skills assume only the `ncli` binary is available — no access to this
 source tree. (For building/testing `ncli` itself from source, see

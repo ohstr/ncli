@@ -116,11 +116,11 @@ func ensureLocalStoreDir(spec *FlowSpec) error {
 // relay. A bare string with no scheme is ambiguous between a relay host and
 // a local store path -- an existing local file wins (preserving the
 // pre-existing path shorthand); otherwise it's treated as a relay host,
-// resolved via resolveRelayURL (wss:// primary, ws:// fallback). Shared by
+// resolved via ResolveRelayURL (wss:// primary, ws:// fallback). Shared by
 // FlowSpec.UnmarshalJSON and TargetsFromRelayList (--relays' comma-list).
 func flowSpecFromString(str string) (*FlowSpec, error) {
 	if strings.Contains(str, "://") {
-		if u, _, err := resolveRelayURL(str); err == nil {
+		if u, _, err := ResolveRelayURL(str); err == nil {
 			return &FlowSpec{Type: FlOW_REMOTE, Relay: str, relayURI: u}, nil
 		}
 		return nil, fmt.Errorf("invalid input: %s", str)
@@ -128,7 +128,7 @@ func flowSpecFromString(str string) (*FlowSpec, error) {
 	if path, err := fileExists(str); err == nil {
 		return &FlowSpec{Type: FlOW_LOCAL, Path: path}, nil
 	}
-	if u, fallback, err := resolveRelayURL(str); err == nil {
+	if u, fallback, err := ResolveRelayURL(str); err == nil {
 		return &FlowSpec{Type: FlOW_REMOTE, Relay: str, relayURI: u, relayFallbackURI: fallback}, nil
 	}
 	return nil, fmt.Errorf("invalid input: %s", str)
@@ -164,7 +164,7 @@ func (ds *FlowSpec) UnmarshalJSON(data []byte) error {
 
 	switch flowSpec.Type {
 	case FlOW_REMOTE:
-		if u, fallback, err := resolveRelayURL(flowSpec.Relay); err != nil {
+		if u, fallback, err := ResolveRelayURL(flowSpec.Relay); err != nil {
 			return err
 		} else {
 			flowSpec.relayURI = u
@@ -534,13 +534,13 @@ func (ss *SyncSpec) UnmarshalJSON(data []byte) error {
 
 //////
 
-// resolveRelayURL parses a relay input into its primary connection URL and,
+// ResolveRelayURL parses a relay input into its primary connection URL and,
 // when raw has no explicit ws(s):// scheme, a ws:// fallback candidate --
 // wss:// is tried first (see connectRelayWithFallback/
 // readEventsWithFallback), falling back to ws:// only if that fails to
 // connect. An explicit scheme is taken at face value with no fallback:
 // writing "ws://" or "wss://" already says exactly what's wanted.
-func resolveRelayURL(raw string) (primary *url.URL, fallback *url.URL, err error) {
+func ResolveRelayURL(raw string) (primary *url.URL, fallback *url.URL, err error) {
 	if !strings.Contains(raw, "://") {
 		if !looksLikeRelayHost(raw) {
 			return nil, nil, fmt.Errorf("invalid relay URL %s", raw)
@@ -567,7 +567,7 @@ func resolveRelayURL(raw string) (primary *url.URL, fallback *url.URL, err error
 	return uri, nil, nil
 }
 
-// looksLikeRelayHost is resolveRelayURL's gate on schemeless input: any
+// looksLikeRelayHost is ResolveRelayURL's gate on schemeless input: any
 // bare string technically parses as a syntactically "valid" single-label
 // URL host, which would otherwise swallow plain typos ("not-a-relay-url")
 // and local store paths ("../notes.db") as relay candidates instead of

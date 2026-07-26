@@ -94,7 +94,7 @@ func SavePrefs(p *Prefs) error {
 // AddRelay validates and appends relay to p.Relays, reporting false
 // (without modifying p) if it's already present.
 func (p *Prefs) AddRelay(relay string) (bool, error) {
-	if _, _, err := resolveRelayURL(relay); err != nil {
+	if _, _, err := ResolveRelayURL(relay); err != nil {
 		return false, err
 	}
 	if slices.Contains(p.Relays, relay) {
@@ -198,7 +198,7 @@ func PrefsRelayURLs() ([]*url.URL, error) {
 
 	urls := make([]*url.URL, 0, len(prefs.Relays))
 	for _, r := range prefs.Relays {
-		u, _, err := resolveRelayURL(r)
+		u, _, err := ResolveRelayURL(r)
 		if err != nil {
 			return nil, fmt.Errorf("invalid relay in prefs (%s): %w", r, err)
 		}
@@ -224,7 +224,7 @@ func TargetsFromPrefs() (*TargetsSpec, error) {
 
 	spec := &TargetsSpec{}
 	for _, r := range prefs.Relays {
-		u, fallback, err := resolveRelayURL(r)
+		u, fallback, err := ResolveRelayURL(r)
 		if err != nil {
 			return nil, fmt.Errorf("invalid relay in prefs (%s): %w", r, err)
 		}

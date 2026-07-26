@@ -3,9 +3,9 @@ package client
 import "testing"
 
 func TestResolveRelayURL_ExplicitWss(t *testing.T) {
-	primary, fallback, err := resolveRelayURL("wss://relay.damus.io")
+	primary, fallback, err := ResolveRelayURL("wss://relay.damus.io")
 	if err != nil {
-		t.Fatalf("resolveRelayURL() error = %v", err)
+		t.Fatalf("ResolveRelayURL() error = %v", err)
 	}
 	if primary.String() != "wss://relay.damus.io" {
 		t.Fatalf("primary = %q, want wss://relay.damus.io", primary.String())
@@ -16,9 +16,9 @@ func TestResolveRelayURL_ExplicitWss(t *testing.T) {
 }
 
 func TestResolveRelayURL_ExplicitWs(t *testing.T) {
-	primary, fallback, err := resolveRelayURL("ws://localhost:5500")
+	primary, fallback, err := ResolveRelayURL("ws://localhost:5500")
 	if err != nil {
-		t.Fatalf("resolveRelayURL() error = %v", err)
+		t.Fatalf("ResolveRelayURL() error = %v", err)
 	}
 	if primary.String() != "ws://localhost:5500" {
 		t.Fatalf("primary = %q, want ws://localhost:5500", primary.String())
@@ -29,21 +29,21 @@ func TestResolveRelayURL_ExplicitWs(t *testing.T) {
 }
 
 func TestResolveRelayURL_UnsupportedScheme(t *testing.T) {
-	if _, _, err := resolveRelayURL("https://example.com"); err == nil {
-		t.Fatal("resolveRelayURL(https://...) error = nil, want an error")
+	if _, _, err := ResolveRelayURL("https://example.com"); err == nil {
+		t.Fatal("ResolveRelayURL(https://...) error = nil, want an error")
 	}
 }
 
 func TestResolveRelayURL_EmptyHost(t *testing.T) {
-	if _, _, err := resolveRelayURL("wss://"); err == nil {
-		t.Fatal("resolveRelayURL(wss://) error = nil, want an error (empty host)")
+	if _, _, err := ResolveRelayURL("wss://"); err == nil {
+		t.Fatal("ResolveRelayURL(wss://) error = nil, want an error (empty host)")
 	}
 }
 
 func TestResolveRelayURL_SchemelessHost(t *testing.T) {
-	primary, fallback, err := resolveRelayURL("relay.primal.net")
+	primary, fallback, err := ResolveRelayURL("relay.primal.net")
 	if err != nil {
-		t.Fatalf("resolveRelayURL() error = %v", err)
+		t.Fatalf("ResolveRelayURL() error = %v", err)
 	}
 	if primary.String() != "wss://relay.primal.net" {
 		t.Fatalf("primary = %q, want wss://relay.primal.net", primary.String())
@@ -54,9 +54,9 @@ func TestResolveRelayURL_SchemelessHost(t *testing.T) {
 }
 
 func TestResolveRelayURL_SchemelessHostPort(t *testing.T) {
-	primary, fallback, err := resolveRelayURL("localhost:4869")
+	primary, fallback, err := ResolveRelayURL("localhost:4869")
 	if err != nil {
-		t.Fatalf("resolveRelayURL() error = %v", err)
+		t.Fatalf("ResolveRelayURL() error = %v", err)
 	}
 	if primary.String() != "wss://localhost:4869" {
 		t.Fatalf("primary = %q, want wss://localhost:4869", primary.String())
@@ -67,9 +67,9 @@ func TestResolveRelayURL_SchemelessHostPort(t *testing.T) {
 }
 
 func TestResolveRelayURL_SchemelessIP(t *testing.T) {
-	primary, fallback, err := resolveRelayURL("192.168.1.5:7000")
+	primary, fallback, err := ResolveRelayURL("192.168.1.5:7000")
 	if err != nil {
-		t.Fatalf("resolveRelayURL() error = %v", err)
+		t.Fatalf("ResolveRelayURL() error = %v", err)
 	}
 	if primary.String() != "wss://192.168.1.5:7000" {
 		t.Fatalf("primary = %q, want wss://192.168.1.5:7000", primary.String())
@@ -80,14 +80,14 @@ func TestResolveRelayURL_SchemelessIP(t *testing.T) {
 }
 
 func TestResolveRelayURL_SchemelessGarbageRejected(t *testing.T) {
-	if _, _, err := resolveRelayURL("not-a-relay-url"); err == nil {
-		t.Fatal("resolveRelayURL(no dot, no scheme) error = nil, want an error")
+	if _, _, err := ResolveRelayURL("not-a-relay-url"); err == nil {
+		t.Fatal("ResolveRelayURL(no dot, no scheme) error = nil, want an error")
 	}
 }
 
 func TestResolveRelayURL_SchemelessPathRejected(t *testing.T) {
-	if _, _, err := resolveRelayURL("../testdata/notes.db"); err == nil {
-		t.Fatal("resolveRelayURL(path with slash) error = nil, want an error")
+	if _, _, err := ResolveRelayURL("../testdata/notes.db"); err == nil {
+		t.Fatal("ResolveRelayURL(path with slash) error = nil, want an error")
 	}
 }
 

@@ -21,22 +21,16 @@ import (
 var idCmd = &cobra.Command{
 	Use:   "id [identifier]",
 	Short: "Generate or inspect a Nostr identity",
-	Long: `With no argument, generates a brand-new Nostr keypair, displays every
-form of it (hex, nsec, npub -- the only time the private key is ever shown
-in plaintext unless later revealed from the vault), and offers to save it
-to the local vault.
+	Long: `With no argument, generates a new Nostr keypair (hex, nsec, npub) and
+offers to save it to the local vault.
 
-With an argument, resolves identifier -- a saved vault label, an npub, a
-hex pubkey, an nsec, an nprofile, or a nip-05 "name@domain" address -- and
-displays its forms plus whether it's already saved in the vault.
+With an identifier -- a vault label, npub, hex pubkey, nsec, nprofile, or
+nip-05 address -- resolves and displays it, plus its vault status.
 
---json switches to structured JSON output on stdout and disables every
-interactive prompt: saving only happens with --save, the label only comes
-from --label (falling back to the npub if omitted), and the vault password
-only comes from the NCLI_VAULT_PASSWORD environment variable.
+--json disables interactive prompts: saves only with --save, labels only
+from --label, and reads the vault password from NCLI_VAULT_PASSWORD.
 
-See "ncli id delegate" to mint a NIP-26 delegation token from an identity,
-or "ncli id sign" to sign an unsigned event with one.`,
+See "ncli id delegate" and "ncli id sign" for delegation tokens and signing.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {

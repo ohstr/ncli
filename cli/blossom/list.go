@@ -28,9 +28,8 @@ configured server), or every configured server with --all, merged and
 deduped by hash.
 
 identifier may be a vault label, nsec, npub, hex pubkey, nprofile, or
-nip-05 address -- resolved to a hex pubkey the same way --identity is
-(client.ResolveIdentifier), before it's sent to the server. It defaults to
---identity's resolved pubkey when omitted.`,
+nip-05 address, resolved to a hex pubkey; defaults to --identity's
+resolved pubkey when omitted.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, cancel := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)

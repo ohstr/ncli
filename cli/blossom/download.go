@@ -29,13 +29,11 @@ func newDownloadCommand() *cobra.Command {
 		Use:   "download <hash|blossom-uri|url>",
 		Short: "Download a blob by hash, blossom: URI, or server URL",
 		Long: `Accepts a bare sha256 hash, a "blossom:<hash>.<ext>" URI (BUD-10), or a
-full server URL ending in a hash -- normalizes to a hash and tries the
-configured servers in order (--server, repeatable, or the default list),
-stopping at the first that answers.
+server URL ending in a hash -- tries the configured servers in order
+(--server, or the default list), stopping at the first that answers.
 
 Writes to --output, or "<hash>.<ext>" in the current directory if
-omitted, or streams to stdout with "-o -" (which also suppresses the
-summary line, so the stream stays clean for piping).`,
+omitted, or streams to stdout with "-o -" (suppressing the summary line).`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, cancel := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)

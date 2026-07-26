@@ -23,8 +23,8 @@ func newUploadCommand() *cobra.Command {
 		Use:   "upload <file> [file...]",
 		Short: "Upload one or more files to your Blossom server(s)",
 		Long: `Sign a BUD-11 authorization and PUT each file to every target server
-(--server, repeatable, or the configured default list), reporting a result
-per (file, server) pair. Exits non-zero if any pair failed.
+(--server, or the configured default list), reporting a result per
+(file, server) pair. Exits non-zero if any pair failed.
 
 Pass --optimize to request server-side transcoding/optimization (BUD-05's
 PUT /media) instead of a byte-for-byte store.`,

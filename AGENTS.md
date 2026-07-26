@@ -126,10 +126,5 @@ or invoking a command in that area:
   `skills/ncli-blossom/SKILL.md`
 
 These skills assume only the `ncli` binary is available — no access to this
-source tree. (For building/testing `ncli` itself from source, see
-`.claude/skills/verify` instead, which is scoped to contributors.)
-
-Contributing a change to this repo (not just using the `ncli` binary)?
-Work in a branch, keep commits atomic, update CHANGELOG.md alongside the
-behavior it describes, and open a PR against `main` (protected — no direct
-pushes).
+source tree. (Building/contributing to `ncli` itself is a different task —
+see CONTRIBUTING.md and `.claude/skills/verify`.)

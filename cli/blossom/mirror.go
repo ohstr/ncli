@@ -15,9 +15,9 @@ func newMirrorCommand() *cobra.Command {
 		Use:   "mirror <source-url>",
 		Short: "Ask your Blossom server(s) to fetch and store a blob from a URL",
 		Long: `Sign a BUD-11 authorization and PUT /mirror to every target server
-(--server, repeatable, or the configured default list) -- each server
-fetches source-url itself; no bytes pass through ncli. Reports a result
-per server.`,
+(--server, or the configured default list) -- each server fetches
+source-url itself; no bytes pass through ncli. Reports a result per
+server.`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {
 				return common.UsageError(cmd, fmt.Errorf("exactly one source URL is required"))

@@ -21,10 +21,9 @@ var dumpCmd = &cobra.Command{
 	Long: `Export events matching a filter to a JSON file, merged and deduplicated
 by event ID across every target.
 
-Targets and filters come from --targets (a YAML file that may declare
-both), or from --relays plus inline filter flags -- pick one, not a mix.
-Omitting both --targets and --relays falls back to every relay configured
-via "ncli prefs relays add".`,
+Targets and filters come from --targets (a YAML file), or --relays plus
+inline filter flags -- pick one, not both. Omitting both falls back to
+the relays configured via "ncli prefs relays add".`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		if err := cmd.ValidateRequiredFlags(); err != nil {
 			return common.UsageError(cmd, err)

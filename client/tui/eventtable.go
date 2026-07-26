@@ -183,7 +183,7 @@ func (t *EventTable) eventAt(row int) *nip01.Event {
 }
 
 func (t *EventTable) updateTitle(count int) {
-	autoColor, autoText := statusText(t.autoscroll)
+	autoColor, autoText := StatusText(t.autoscroll)
 	t.SetTitle(fmt.Sprintf(" [::b][%s]EVENTS [[%s]%d[%s]] [%s]Autoscroll:[%s]%s[-:-:-] ",
 		tcell.ColorPurple, tcell.ColorWhiteSmoke, count, tcell.Color53,
 		tcell.ColorPurple, autoColor, autoText))

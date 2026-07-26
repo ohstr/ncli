@@ -64,3 +64,28 @@ func NewFooter(showPanelNav bool) *Footer {
 
 	return f
 }
+
+// NewFooterWithHints builds a Footer showing exactly hints (tview
+// color-tag markup) instead of Status.Update's hardcoded Tab/Shift+Tab/
+// Wrap/AutoScroll set -- for a board (see FooterHintsProvider) whose own
+// keybindings don't match apply's fixed hint bar.
+func NewFooterWithHints(hints string) *Footer {
+	status := &Status{TextView: tview.NewTextView()}
+	status.SetDynamicColors(true).
+		SetTextAlign(tview.AlignLeft).
+		SetBorderPadding(0, 0, 1, 1)
+	fmt.Fprint(status, hints)
+
+	f := &Footer{Flex: tview.NewFlex(), status: status}
+	f.AddItem(f.status, 0, 1, false)
+	return f
+}
+
+// SetHints replaces a NewFooterWithHints footer's text -- for a
+// FooterHintsProvider board (see layout.go) whose hints change as focus
+// moves between its own panels, refreshed by App.refreshFooterHints on
+// every focus change rather than fixed once at Layout.Init.
+func (f *Footer) SetHints(text string) {
+	f.status.Clear()
+	fmt.Fprint(f.status, text)
+}

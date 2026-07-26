@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/gdamore/tcell/v2"
 	"github.com/google/uuid"
 	"github.com/ohstr/ncli/cli/common"
 	"github.com/ohstr/ncli/client/tui"
@@ -132,7 +131,7 @@ func Ping(ctx context.Context, targets *TargetsSpec, opts PingOptions) *PingRepo
 			default:
 			}
 
-			attr := tui.FlowAttr{Index: i + 1, FlagColor: tcell.ColorPurple}
+			attr := tui.FlowAttr{Index: i + 1, FlagColor: tui.ColorPrimary}
 			result := &PingResult{Relay: r.Relay}
 
 			if history[r.Relay] {

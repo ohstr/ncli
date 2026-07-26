@@ -471,7 +471,7 @@ func (sc *StreamChannel) handleFlow(ctx context.Context, fc *FlowContext) {
 				}
 
 			case *wire.EOSESubscriptionResponse:
-				sc.logger.Success(fmt.Sprintf("EOSE received [purple]%d", fc.stat.EOSECount()), fc.stat.GetAttributes())
+				sc.logger.Success(fmt.Sprintf("EOSE received [%s]%d", tui.ColorPrimary, fc.stat.EOSECount()), fc.stat.GetAttributes())
 				fc.stat.ResetEOSECounter()
 
 			case *wire.NoticeSubscriptionResponse:

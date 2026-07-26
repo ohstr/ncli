@@ -58,6 +58,15 @@
       "description": "Run ncli as a NIP-46 remote signer (bunker) — approve/reject other Nostr clients' signing requests from a live TUI, remember per-app permissions, and run it detached in the background via ncli bunker attach/status/stop/sessions/connect.",
       "license": "Unlicense",
       "keywords": ["ncli", "nostr", "bunker", "nip-46", "remote-signer", "nsecbunker"]
+    },
+    {
+      "name": "ncli-blossom",
+      "source": "./",
+      "skills": ["./skills/ncli-blossom"],
+      "strict": false,
+      "description": "Upload, fetch, and manage content on Blossom media servers with ncli — content-addressed blob storage authenticated with a Nostr identity, including publishing/discovering a server list as a signed kind:10063 event (BUD-03).",
+      "license": "Unlicense",
+      "keywords": ["ncli", "nostr", "blossom", "bud-01", "bud-03", "media", "blob-storage"]
     }
   ]
 }

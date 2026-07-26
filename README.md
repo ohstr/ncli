@@ -22,6 +22,7 @@ events.**
 - [`ncli prefs`](#prefs-default-relays-for-finddumpminerpublish) — Set default relays for `find`/`dump`/`miner check`/`publish`
 - [`ncli miner`](#miner-mine-and-verify-proof-of-work) — Mine NIP-13 proof-of-work into an event, or verify it on published events
 - [`ncli bunker`](#bunker-run-as-a-nip-46-remote-signer) — Run as a NIP-46 remote signer
+- [`ncli blossom`](#blossom-upload-fetch-and-manage-media) — Upload, fetch, and manage content on Blossom media servers
 - [`ncli id`](#id-generate-or-inspect-a-nostr-identity) — Generate or inspect a Nostr keypair
 - [`ncli decode`](#decode-decode-a-nip-19-entity) — Decode any NIP-19 bech32 entity (npub/nsec/note/nprofile/nevent/naddr)
 
@@ -692,6 +693,39 @@ ncli bunker connect --grants examples/bunker/agent.yaml    # pre-authorize the a
 See [`skills/ncli-bunker/SKILL.md`](skills/ncli-bunker/SKILL.md) for the
 full walkthrough, including the Windows platform gap, the `kind: bunker`
 grants-spec format, and pairing an AI agent for unattended signing.
+
+## `blossom`: upload, fetch, and manage media
+
+A client for the [Blossom protocol](https://github.com/hzrd149/blossom)
+(BUD-01..12): content-addressed blob storage authenticated with your
+Nostr identity instead of a login.
+
+```sh
+ncli blossom servers add https://blossom.example --identity mykey --publish
+
+ncli blossom upload photo.jpg --identity mykey
+ncli blossom list --identity mykey
+ncli blossom download <hash> -o photo.jpg
+ncli blossom rm <hash> --identity mykey --yes
+```
+
+`upload`/`rm`/`mirror` fan out to every configured server (`--server`,
+repeatable, or the list managed by `servers add`/`remove`) and report a
+result per (item, server) pair — the same shape `ncli publish` reports
+for (event, relay); `download` instead tries the configured servers in
+order and stops at the first that answers. Any command taking a target
+identity (`list <identifier>`, `servers discover <identifier>`) accepts a
+vault label, nsec, npub, hex pubkey, nprofile, or nip-05 address, resolved
+the same way `--identity` is everywhere else in `ncli`:
+
+```sh
+ncli blossom list alice@example.com                      # someone else's media, not just your own
+ncli blossom servers discover alice@example.com --add     # find (and adopt) their published servers
+```
+
+See [`skills/ncli-blossom/SKILL.md`](skills/ncli-blossom/SKILL.md) for the
+full walkthrough, including the multi-server fan-out/fallback model and
+BUD-03 server-list publishing/discovery.
 
 ## `id`: generate or inspect a Nostr identity
 

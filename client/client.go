@@ -186,6 +186,17 @@ func mergeEventsFromTargets(ctx context.Context, targets *TargetsSpec, filters *
 	return merged, nil
 }
 
+// QueryTargets fetches events matching filters from every target in
+// targets, merged and deduplicated by event ID -- mergeEventsFromTargets'
+// logic exactly, just exported. Find and DumpFromTargets both build on the
+// same merge/dedupe semantics but print JSON straight to stdout or write it
+// to a file rather than handing events back; this is for a caller (e.g.
+// "blossom servers discover") that needs to inspect/parse the result
+// itself instead of just reporting it.
+func QueryTargets(ctx context.Context, targets *TargetsSpec, filters *nip01.SubscriptionFilterGroup, timeout time.Duration) ([]*nip01.Event, error) {
+	return mergeEventsFromTargets(ctx, targets, filters, timeout)
+}
+
 func Find(parent context.Context, idFilter *nip01.SubscriptionFilter, filtersSpec []*FilterSpec, targets *TargetsSpec, savePath string, timeout time.Duration) error {
 
 	filters := nip01.NewSubscriptionFilterGroup()

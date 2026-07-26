@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 
+	"github.com/ohstr/ncli/cli/blossom"
 	"github.com/ohstr/ncli/cli/bunker"
 	"github.com/ohstr/ncli/cli/common"
 	"github.com/ohstr/ncli/cli/ncli"
@@ -45,6 +46,11 @@ func init() {
 	// "attach"/"status"/"stop"/"sessions"/"connect" as its own children;
 	// see NewBunkerCommand.
 	rootCmd.AddCommand(bunker.NewBunkerCommand())
+
+	// Register the Blossom media-server ("blossom") command -- mounts
+	// "upload"/"download"/"list"/"rm"/"mirror"/"servers"/"report" as its
+	// own children; see NewBlossomCommand.
+	rootCmd.AddCommand(blossom.NewBlossomCommand())
 }
 
 func main() {

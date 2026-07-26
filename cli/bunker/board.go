@@ -101,7 +101,7 @@ func NewPendingTable(app *tui.App, client BunkerClient, canDetach bool) *Pending
 func (t *PendingTable) Init(ctx context.Context) *PendingTable {
 	t.ctx = ctx
 	t.SetBorder(true).
-		SetBorderColor(tcell.ColorPurple).
+		SetBorderColor(tui.ColorPrimary).
 		SetBorderPadding(0, 1, 1, 1)
 
 	t.actions.SetDynamicColors(true).SetTextAlign(tview.AlignCenter)
@@ -110,8 +110,8 @@ func (t *PendingTable) Init(ctx context.Context) *PendingTable {
 		SetSelectable(true, false)
 
 	t.table.SetSelectedStyle(tcell.Style{}.
-		Background(tcell.ColorPurple).
-		Foreground(tcell.ColorWhite),
+		Background(tui.ColorPrimary).
+		Foreground(tui.ColorText),
 	)
 
 	t.Flex.SetDirection(tview.FlexRow).
@@ -258,7 +258,7 @@ func (t *PendingTable) showBunkerURI() {
 
 	uriView := tview.NewTextView().
 		SetText(uri).
-		SetTextColor(tcell.ColorWhite)
+		SetTextColor(tui.ColorText)
 
 	// waiting is this dialog's whole reason for existing beyond a plain
 	// static URI display: pairing otherwise gives no feedback at all --
@@ -293,10 +293,10 @@ func (t *PendingTable) showBunkerURI() {
 		// background, not this app's black/purple/white palette. Explicit
 		// SetButtonActivatedStyle overrides both, matching every table's
 		// own SetSelectedStyle "this is selected" convention.
-		SetButtonActivatedStyle(tcell.Style{}.Background(tcell.ColorPurple).Foreground(tcell.ColorWhite))
+		SetButtonActivatedStyle(tcell.Style{}.Background(tui.ColorPrimary).Foreground(tui.ColorText))
 	form.AddButton("Copy", func() {
 		copyToClipboard(uri)
-		status.SetText("[green:-:-]Attempted to copy to your clipboard -- if that didn't work, select the line above manually.")
+		status.SetText(fmt.Sprintf("[%s:-:-]Attempted to copy to your clipboard -- if that didn't work, select the line above manually.", tui.ColorSuccess))
 	})
 	form.AddButton("Close", dismiss)
 	form.SetCancelFunc(dismiss)
@@ -315,7 +315,7 @@ func (t *PendingTable) showBunkerURI() {
 	// dialog like this one (a bordered Box containing the focused Form)
 	// is open long enough for other panels' tickers to redraw around it.
 	view.SetBorder(true).
-		SetBorderColor(tcell.ColorPurple).
+		SetBorderColor(tui.ColorPrimary).
 		SetTitle(" bunker:// pairing URI ").
 		SetBackgroundColor(tcell.ColorDefault)
 
@@ -420,9 +420,9 @@ func (t *PendingTable) watchForPairing(ctx context.Context, stop <-chan struct{}
 // leaving that to be guessed at.
 func formatWaitingStatus(deadline time.Time) string {
 	if time.Now().After(deadline) {
-		return "[red]This link expired with no client connecting -- press 'c' again for a new one.[-:-:-]"
+		return fmt.Sprintf("[%s]This link expired with no client connecting -- press 'c' again for a new one.[-:-:-]", tui.ColorDanger)
 	}
-	return fmt.Sprintf("[gray]Waiting for a client to connect... (expires in %s)[-:-:-]", formatCountdown(deadline))
+	return fmt.Sprintf("[%s]Waiting for a client to connect... (expires in %s)[-:-:-]", tui.ColorMuted, formatCountdown(deadline))
 }
 
 // hasPendingConnect reports whether pending contains a not-yet-decided
@@ -477,10 +477,10 @@ func (t *PendingTable) openNostrconnectInput() {
 		// See showBunkerURI's own comment on why SetButtonActivatedStyle
 		// has to be explicit here too -- SetButtonBackgroundColor alone
 		// leaves a focused button's text near-invisible.
-		SetButtonActivatedStyle(tcell.Style{}.Background(tcell.ColorPurple).Foreground(tcell.ColorWhite)).
-		SetLabelColor(tcell.ColorWhite).
-		SetFieldBackgroundColor(tcell.ColorPurple).
-		SetFieldTextColor(tcell.ColorWhite)
+		SetButtonActivatedStyle(tcell.Style{}.Background(tui.ColorPrimary).Foreground(tui.ColorText)).
+		SetLabelColor(tui.ColorText).
+		SetFieldBackgroundColor(tui.ColorPrimary).
+		SetFieldTextColor(tui.ColorText)
 	form.AddFormItem(input)
 	form.AddButton("Connect", submit)
 	form.AddButton("Cancel", dismiss)
@@ -490,7 +490,7 @@ func (t *PendingTable) openNostrconnectInput() {
 	view := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(form, 0, 1, true)
 	view.SetBorder(true).
-		SetBorderColor(tcell.ColorPurple).
+		SetBorderColor(tui.ColorPrimary).
 		SetTitle(" Paste nostrconnect:// URI ").
 		SetBackgroundColor(tcell.ColorDefault)
 
@@ -527,14 +527,14 @@ func (t *PendingTable) showConnecting(uri string) {
 
 	status := tview.NewTextView().
 		SetText("Connecting... this can take up to a minute while the client confirms.").
-		SetTextColor(tcell.ColorWhite).
+		SetTextColor(tui.ColorText).
 		SetWordWrap(true)
 
 	form := tview.NewForm().
 		SetButtonsAlign(tview.AlignCenter).
 		SetButtonBackgroundColor(tcell.ColorDefault).
 		// See showBunkerURI's own comment on why this is needed.
-		SetButtonActivatedStyle(tcell.Style{}.Background(tcell.ColorPurple).Foreground(tcell.ColorWhite))
+		SetButtonActivatedStyle(tcell.Style{}.Background(tui.ColorPrimary).Foreground(tui.ColorText))
 	form.AddButton("OK", dismiss)
 	form.SetCancelFunc(dismiss)
 	form.SetBackgroundColor(tcell.ColorDefault)
@@ -543,7 +543,7 @@ func (t *PendingTable) showConnecting(uri string) {
 		AddItem(status, 2, 0, false).
 		AddItem(form, 3, 0, true)
 	view.SetBorder(true).
-		SetBorderColor(tcell.ColorPurple).
+		SetBorderColor(tui.ColorPrimary).
 		SetTitle(" Connecting ").
 		SetBackgroundColor(tcell.ColorDefault)
 
@@ -720,7 +720,7 @@ func (t *PendingTable) drawHeader() {
 	for c, name := range pendingTableHeaders {
 		t.table.SetCell(0, c, tview.NewTableCell(fmt.Sprintf("[-:-:b]%s", strings.ToUpper(name))).
 			SetExpansion(1).
-			SetTextColor(tcell.ColorBlack).
+			SetTextColor(tui.ColorMuted).
 			SetAlign(tview.AlignLeft).
 			SetSelectable(false))
 	}
@@ -728,7 +728,7 @@ func (t *PendingTable) drawHeader() {
 
 func (t *PendingTable) updateTitle(count int) {
 	t.SetTitle(fmt.Sprintf(" [::b][%s]PENDING REQUESTS [[%s]%d[%s]] ",
-		tcell.ColorPurple, tcell.ColorWhiteSmoke, count, tcell.Color53))
+		tui.ColorPrimary, tui.ColorBadge, count, tui.ColorPrimary))
 }
 
 // updateActionsBar redraws the hint row above the table with the
@@ -746,7 +746,7 @@ func (t *PendingTable) updateActionsBar() {
 
 	autoColor, autoText := tui.StatusText(auto)
 	t.actions.Clear()
-	fmt.Fprintf(t.actions, "[purple::b]Auto-Prompt:[%s]%s", autoColor, autoText)
+	fmt.Fprintf(t.actions, "[%s::b]Auto-Prompt:[%s]%s", tui.ColorPrimary, autoColor, autoText)
 }
 
 // appLabel resolves pubkey to labelFor(session) against the cache
@@ -1021,7 +1021,7 @@ func (t *PendingTable) openSignEventApprovalDialog(p Pending, title, text string
 		// See showBunkerURI's own comment on why this is needed -- this is
 		// the approve/reject overlay itself, so it's the one most worth
 		// getting right.
-		SetButtonActivatedStyle(tcell.Style{}.Background(tcell.ColorPurple).Foreground(tcell.ColorWhite))
+		SetButtonActivatedStyle(tcell.Style{}.Background(tui.ColorPrimary).Foreground(tui.ColorText))
 	for i, label := range buttons {
 		fn := funcs[i]
 		form.AddButton(label, func() {
@@ -1058,7 +1058,7 @@ func (t *PendingTable) openSignEventApprovalDialog(p Pending, title, text string
 	// content area proper, was observed to not reliably get its own fill
 	// applied while that's happening).
 	view.SetBorder(true).
-		SetBorderColor(tcell.ColorPurple).
+		SetBorderColor(tui.ColorPrimary).
 		SetTitle(" Approve request? ").
 		SetBackgroundColor(tcell.ColorDefault)
 
@@ -1176,12 +1176,12 @@ func (t *SessionsTable) Init(ctx context.Context) *SessionsTable {
 	t.SetFixed(1, 0).
 		SetSelectable(true, false).
 		SetBorder(true).
-		SetBorderColor(tcell.ColorPurple).
+		SetBorderColor(tui.ColorPrimary).
 		SetBorderPadding(0, 1, 1, 1)
 
 	t.SetSelectedStyle(tcell.Style{}.
-		Background(tcell.ColorPurple).
-		Foreground(tcell.ColorWhite),
+		Background(tui.ColorPrimary).
+		Foreground(tui.ColorText),
 	)
 
 	t.updateTitle(0)
@@ -1272,10 +1272,10 @@ func (t *SessionsTable) openRenameInput(s Session) {
 		SetButtonsAlign(tview.AlignCenter).
 		SetButtonBackgroundColor(tcell.ColorDefault).
 		// See showBunkerURI's own comment on why this is needed.
-		SetButtonActivatedStyle(tcell.Style{}.Background(tcell.ColorPurple).Foreground(tcell.ColorWhite)).
-		SetLabelColor(tcell.ColorWhite).
-		SetFieldBackgroundColor(tcell.ColorPurple).
-		SetFieldTextColor(tcell.ColorWhite)
+		SetButtonActivatedStyle(tcell.Style{}.Background(tui.ColorPrimary).Foreground(tui.ColorText)).
+		SetLabelColor(tui.ColorText).
+		SetFieldBackgroundColor(tui.ColorPrimary).
+		SetFieldTextColor(tui.ColorText)
 	form.AddFormItem(input)
 	form.AddButton("Save", submit)
 	form.AddButton("Cancel", dismiss)
@@ -1285,7 +1285,7 @@ func (t *SessionsTable) openRenameInput(s Session) {
 	view := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(form, 0, 1, true)
 	view.SetBorder(true).
-		SetBorderColor(tcell.ColorPurple).
+		SetBorderColor(tui.ColorPrimary).
 		SetTitle(" Set App Name ").
 		SetBackgroundColor(tcell.ColorDefault)
 
@@ -1311,8 +1311,8 @@ func (t *SessionsTable) openGrantsOverlay(s Session) {
 	grants := s.Grants
 	table := tview.NewTable().SetSelectable(true, false)
 	table.SetSelectedStyle(tcell.Style{}.
-		Background(tcell.ColorPurple).
-		Foreground(tcell.ColorWhite),
+		Background(tui.ColorPrimary).
+		Foreground(tui.ColorText),
 	)
 	table.SetFixed(1, 0)
 
@@ -1320,13 +1320,13 @@ func (t *SessionsTable) openGrantsOverlay(s Session) {
 		table.Clear()
 		for c, h := range []string{"Permission", "Status", "Expires"} {
 			table.SetCell(0, c, tview.NewTableCell(h).
-				SetTextColor(tcell.ColorPurple).
+				SetTextColor(tui.ColorPrimary).
 				SetSelectable(false).
 				SetAttributes(tcell.AttrBold))
 		}
 		if len(grants) == 0 {
 			table.SetCell(1, 0, tview.NewTableCell("(no remembered grants)").
-				SetTextColor(tcell.ColorGray).
+				SetTextColor(tui.ColorMuted).
 				SetSelectable(false))
 			return
 		}
@@ -1349,7 +1349,11 @@ func (t *SessionsTable) openGrantsOverlay(s Session) {
 	}
 
 	hint := tview.NewTextView().SetDynamicColors(true).SetTextAlign(tview.AlignCenter)
-	fmt.Fprint(hint, "[blue:-:b]<x> [gray:-:-]Revoke   \t[blue:-:b]<e> [gray:-:-]Extend   \t[blue:-:b]<Esc> [gray:-:-]Close")
+	fmt.Fprint(hint, strings.Join([]string{
+		hintTag("<x>", "Revoke"),
+		hintTag("<e>", "Extend"),
+		hintTag("<Esc>", "Close"),
+	}, "   \t"))
 
 	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEscape {
@@ -1417,7 +1421,7 @@ func (t *SessionsTable) openGrantsOverlay(s Session) {
 		AddItem(table, 0, 1, true).
 		AddItem(hint, 1, 0, false)
 	view.SetBorder(true).
-		SetBorderColor(tcell.ColorPurple).
+		SetBorderColor(tui.ColorPrimary).
 		SetTitle(fmt.Sprintf(" Grants for %s ", labelFor(s))).
 		SetBackgroundColor(tcell.ColorDefault)
 
@@ -1496,7 +1500,7 @@ func (t *SessionsTable) drawHeader() {
 	for c, name := range sessionsTableHeaders {
 		t.SetCell(0, c, tview.NewTableCell(fmt.Sprintf("[-:-:b]%s", strings.ToUpper(name))).
 			SetExpansion(1).
-			SetTextColor(tcell.ColorBlack).
+			SetTextColor(tui.ColorMuted).
 			SetAlign(tview.AlignLeft).
 			SetSelectable(false))
 	}
@@ -1504,7 +1508,7 @@ func (t *SessionsTable) drawHeader() {
 
 func (t *SessionsTable) updateTitle(count int) {
 	t.SetTitle(fmt.Sprintf(" [::b][%s]TRUSTED APPS [[%s]%d[%s]] ",
-		tcell.ColorPurple, tcell.ColorWhiteSmoke, count, tcell.Color53))
+		tui.ColorPrimary, tui.ColorBadge, count, tui.ColorPrimary))
 }
 
 func (t *SessionsTable) Update() {
@@ -1619,12 +1623,12 @@ func (t *HistoryTable) Init(ctx context.Context) *HistoryTable {
 	t.SetFixed(1, 0).
 		SetSelectable(true, false).
 		SetBorder(true).
-		SetBorderColor(tcell.ColorPurple).
+		SetBorderColor(tui.ColorPrimary).
 		SetBorderPadding(0, 1, 1, 1)
 
 	t.SetSelectedStyle(tcell.Style{}.
-		Background(tcell.ColorPurple).
-		Foreground(tcell.ColorWhite),
+		Background(tui.ColorPrimary).
+		Foreground(tui.ColorText),
 	)
 
 	t.updateTitle(0)
@@ -1685,7 +1689,7 @@ func (t *HistoryTable) drawHeader() {
 	for c, name := range historyTableHeaders {
 		t.SetCell(0, c, tview.NewTableCell(fmt.Sprintf("[-:-:b]%s", strings.ToUpper(name))).
 			SetExpansion(1).
-			SetTextColor(tcell.ColorBlack).
+			SetTextColor(tui.ColorMuted).
 			SetAlign(tview.AlignLeft).
 			SetSelectable(false))
 	}
@@ -1693,7 +1697,7 @@ func (t *HistoryTable) drawHeader() {
 
 func (t *HistoryTable) updateTitle(count int) {
 	t.SetTitle(fmt.Sprintf(" [::b][%s]REQUEST HISTORY [[%s]%d[%s]] ",
-		tcell.ColorPurple, tcell.ColorWhiteSmoke, count, tcell.Color53))
+		tui.ColorPrimary, tui.ColorBadge, count, tui.ColorPrimary))
 }
 
 func (t *HistoryTable) Update() {
@@ -1807,18 +1811,18 @@ func (t *HistoryTable) showEventDetail(h HistoryEntry) {
 		SetButtonsAlign(tview.AlignCenter).
 		SetButtonBackgroundColor(tcell.ColorDefault).
 		// See showBunkerURI's own comment on why this is needed.
-		SetButtonActivatedStyle(tcell.Style{}.Background(tcell.ColorPurple).Foreground(tcell.ColorWhite))
+		SetButtonActivatedStyle(tcell.Style{}.Background(tui.ColorPrimary).Foreground(tui.ColorText))
 	form.AddButton("Copy", func() {
 		raw, err := json.Marshal(h.Event)
 		if err != nil {
-			status.SetText(fmt.Sprintf("[red:-:-]failed to encode: %s", err))
+			status.SetText(fmt.Sprintf("[%s:-:-]failed to encode: %s", tui.ColorDanger, err))
 			return
 		}
 		copyToClipboard(string(raw))
 		if signed {
-			status.SetText("[green:-:-]Attempted to copy the signed event JSON to your clipboard.")
+			status.SetText(fmt.Sprintf("[%s:-:-]Attempted to copy the signed event JSON to your clipboard.", tui.ColorSuccess))
 		} else {
-			status.SetText("[green:-:-]Attempted to copy the unsigned event JSON to your clipboard.")
+			status.SetText(fmt.Sprintf("[%s:-:-]Attempted to copy the unsigned event JSON to your clipboard.", tui.ColorSuccess))
 		}
 	})
 	form.AddButton("Close", dismiss)
@@ -1834,7 +1838,7 @@ func (t *HistoryTable) showEventDetail(h HistoryEntry) {
 	// No SetBorderPadding here -- see openSignEventApprovalDialog's own
 	// comment on the same choice for the same reason.
 	view.SetBorder(true).
-		SetBorderColor(tcell.ColorPurple)
+		SetBorderColor(tui.ColorPrimary)
 	// Status (Approved/Rejected/Expired, optionally "(always)") lives in
 	// the title now, not as its own body line -- title rendering already
 	// supports the same color tags (see e.g. HistoryTable.updateTitle),
@@ -1863,15 +1867,15 @@ func (t *HistoryTable) showEventDetail(h HistoryEntry) {
 func historyStatus(h HistoryEntry) (text string, color tcell.Color) {
 	switch {
 	case h.Expired:
-		return "Expired", tcell.ColorYellow
+		return "Expired", tui.ColorWarning
 	case h.Verdict == Allow && h.Remembered:
-		return "Approved (always)", tcell.ColorGreen
+		return "Approved (always)", tui.ColorSuccess
 	case h.Verdict == Allow:
-		return "Approved", tcell.ColorGreen
+		return "Approved", tui.ColorSuccess
 	case h.Remembered:
-		return "Rejected (always)", tcell.ColorRed
+		return "Rejected (always)", tui.ColorDanger
 	default:
-		return "Rejected", tcell.ColorRed
+		return "Rejected", tui.ColorDanger
 	}
 }
 
@@ -2055,9 +2059,9 @@ func grantScopeLabel(g Grant) string {
 // the Grants overlay's own "Status" column.
 func grantStatusLabel(g Grant) (text string, color tcell.Color) {
 	if g.Verdict == Deny {
-		return "Blocked", tcell.ColorRed
+		return "Blocked", tui.ColorDanger
 	}
-	return "Allowed", tcell.ColorGreen
+	return "Allowed", tui.ColorSuccess
 }
 
 // grantDurationLabel renders how long g lasts, in the same plain-language
@@ -2103,9 +2107,9 @@ func formatCountdown(t time.Time) string {
 func urgencyColor(expiresAt time.Time) (color tcell.Color, ok bool) {
 	switch remaining := time.Until(expiresAt); {
 	case remaining <= 30*time.Second:
-		return tcell.ColorRed, true
+		return tui.ColorDanger, true
 	case remaining <= 2*time.Minute:
-		return tcell.ColorYellow, true
+		return tui.ColorWarning, true
 	default:
 		return 0, false
 	}
@@ -2165,8 +2169,8 @@ func (b *IdentityBar) Update() {
 		return
 	}
 	b.Clear()
-	fmt.Fprintf(b, " [purple::b]Signing as:[-:-:-] %s\n", formatIdentity(st))
-	fmt.Fprintf(b, " [purple::b]Relays:[-:-:-] %s", formatRelayStatuses(st.RelayStatuses))
+	fmt.Fprintf(b, " [%s::b]Signing as:[-:-:-] %s\n", tui.ColorPrimary, formatIdentity(st))
+	fmt.Fprintf(b, " [%s::b]Relays:[-:-:-] %s", tui.ColorPrimary, formatRelayStatuses(st.RelayStatuses))
 }
 
 func (b *IdentityBar) render(ctx context.Context) {
@@ -2200,13 +2204,13 @@ func formatIdentity(st StatusInfo) string {
 	vault := formatVaultSuffix(st.VaultLabel)
 	switch {
 	case name != "" && nip05 != "":
-		return fmt.Sprintf("[white]%s[-:-:-] [gray](%s)[-:-:-] [gray](%s)[-:-:-]%s", name, nip05, npub, vault)
+		return fmt.Sprintf("[%s]%s[-:-:-] [%s](%s)[-:-:-] [%s](%s)[-:-:-]%s", tui.ColorText, name, tui.ColorMuted, nip05, tui.ColorMuted, npub, vault)
 	case name != "":
-		return fmt.Sprintf("[white]%s[-:-:-] [gray](%s)[-:-:-]%s", name, npub, vault)
+		return fmt.Sprintf("[%s]%s[-:-:-] [%s](%s)[-:-:-]%s", tui.ColorText, name, tui.ColorMuted, npub, vault)
 	case nip05 != "":
-		return fmt.Sprintf("[white]%s[-:-:-] [gray](%s)[-:-:-]%s", nip05, npub, vault)
+		return fmt.Sprintf("[%s]%s[-:-:-] [%s](%s)[-:-:-]%s", tui.ColorText, nip05, tui.ColorMuted, npub, vault)
 	default:
-		return fmt.Sprintf("[white]%s[-:-:-]%s", npub, vault)
+		return fmt.Sprintf("[%s]%s[-:-:-]%s", tui.ColorText, npub, vault)
 	}
 }
 
@@ -2219,7 +2223,7 @@ func formatVaultSuffix(label string) string {
 	if label == "" {
 		return ""
 	}
-	return fmt.Sprintf(" [gray](vault: %s)[-:-:-]", tview.Escape(label))
+	return fmt.Sprintf(" [%s](vault: %s)[-:-:-]", tui.ColorMuted, tview.Escape(label))
 }
 
 // formatRelayStatuses renders each configured relay as a colored bullet
@@ -2234,16 +2238,16 @@ func formatVaultSuffix(label string) string {
 // progress," not "broken."
 func formatRelayStatuses(statuses []RelayStatus) string {
 	if len(statuses) == 0 {
-		return "[gray]none configured[-:-:-]"
+		return fmt.Sprintf("[%s]none configured[-:-:-]", tui.ColorMuted)
 	}
 	parts := make([]string, 0, len(statuses))
 	for _, s := range statuses {
-		bullet, color := "○", "red"
+		bullet, color := "○", tui.ColorDanger
 		switch {
 		case s.Connected:
-			bullet, color = "●", "green"
+			bullet, color = "●", tui.ColorSuccess
 		case s.Connecting:
-			bullet, color = "◐", "yellow"
+			bullet, color = "◐", tui.ColorWarning
 		}
 		parts = append(parts, fmt.Sprintf("[%s]%s[-:-:-] %s", color, bullet, tview.Escape(s.URL)))
 	}
@@ -2303,7 +2307,7 @@ func (b *AlertBar) Update() {
 	active := !anyRelayConnected(st.RelayStatuses) && !anyRelayConnecting(st.RelayStatuses)
 	b.Clear()
 	if active {
-		fmt.Fprint(b, "[red::b] ⚠ No relay connected -- signer can't receive requests. Check your network or relay config.[-:-:-]")
+		fmt.Fprintf(b, "[%s::b] ⚠ No relay connected -- signer can't receive requests. Check your network or relay config.[-:-:-]", tui.ColorDanger)
 	}
 	if b.onAlert != nil {
 		b.onAlert(active)
@@ -2737,6 +2741,14 @@ func (b *BunkerBoard) Childs() []tview.Primitive {
 	return []tview.Primitive{b.logger.FocusTarget(), b.sessions, b.history, b.pending.FocusTarget()}
 }
 
+// hintTag renders one "<key> label" hint-bar entry using this board's
+// shared accent-key/muted-label color pair -- the repeated building block
+// behind every hint string in this file (FooterHints' own four variants,
+// plus the Grants overlay's own hint line).
+func hintTag(key, label string) string {
+	return fmt.Sprintf("[%s:-:b]%s [%s:-:-]%s", tui.ColorAccent, key, tui.ColorMuted, label)
+}
+
 // FooterHints implements client/tui.FooterHintsProvider, replacing the
 // default Tab/Shift+Tab/Wrap/AutoScroll hint bar (apply-specific -- Wrap/
 // AutoScroll are Logger-only toggles, not central here) with bunker's
@@ -2753,21 +2765,25 @@ func (b *BunkerBoard) Childs() []tview.Primitive {
 // never interleaved with it, so the board-wide keys are always found in
 // the same place regardless of which panel happens to be focused.
 func (b *BunkerBoard) FooterHints(focused tview.Primitive) string {
-	const global = "[blue:-:b]<Tab>/<Shift+Tab> [gray:-:-]Switch Panel   \t" +
-		"[blue:-:b]<b> [gray:-:-]Background   \t" +
-		"[blue:-:b]<c> [gray:-:-]Connect   \t"
+	global := strings.Join([]string{
+		hintTag("<Tab>/<Shift+Tab>", "Switch Panel"),
+		hintTag("<b>", "Background"),
+		hintTag("<c>", "Connect"),
+	}, "   \t") + "   \t"
 
 	switch focused {
 	case b.sessions:
-		return global +
-			"[blue:-:b]<Enter> [gray:-:-]Manage Grants   \t" +
-			"[blue:-:b]<r> [gray:-:-]Revoke All   \t" +
-			"[blue:-:b]<n> [gray:-:-]Set Name"
+		return global + strings.Join([]string{
+			hintTag("<Enter>", "Manage Grants"),
+			hintTag("<r>", "Revoke All"),
+			hintTag("<n>", "Set Name"),
+		}, "   \t")
 
 	case b.logger.FocusTarget():
-		return global +
-			"[blue:-:b]<w> [gray:-:-]Toggle Wrap   \t" +
-			"[blue:-:b]<s> [gray:-:-]Toggle AutoScroll"
+		return global + strings.Join([]string{
+			hintTag("<w>", "Toggle Wrap"),
+			hintTag("<s>", "Toggle AutoScroll"),
+		}, "   \t")
 
 	case b.history:
 		// Read-only for deciding anything (see HistoryTable's own doc
@@ -2781,7 +2797,7 @@ func (b *BunkerBoard) FooterHints(focused tview.Primitive) string {
 		// current as the selection moves within the still-focused table.
 		row, _ := b.history.GetSelection()
 		if h, ok := b.history.historyAt(row); ok && h.Event != nil {
-			return global + "[blue:-:b]<Enter> [gray:-:-]View Event"
+			return global + hintTag("<Enter>", "View Event")
 		}
 		return global
 
@@ -2795,8 +2811,9 @@ func (b *BunkerBoard) FooterHints(focused tview.Primitive) string {
 		// each panel's SetInputCapture only runs while it's the one
 		// actually focused (see PendingTable.Init's own doc comment), and
 		// the hint bar itself always matches whichever key really does.
-		return global +
-			"[blue:-:b]<a>/<r>/<Enter> [gray:-:-]Approve/Reject/More   \t" +
-			"[blue:-:b]<p> [gray:-:-]Toggle Auto-Prompt"
+		return global + strings.Join([]string{
+			hintTag("<a>/<r>/<Enter>", "Approve/Reject/More"),
+			hintTag("<p>", "Toggle Auto-Prompt"),
+		}, "   \t")
 	}
 }

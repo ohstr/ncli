@@ -112,7 +112,7 @@
   queues for a human even once the secret checks out — making unattended
   agent pairing genuinely possible for the first time; see
   `examples/bunker/` for a ready-to-copy everyday-client and
-  unattended-agent spec.
+  unattended-agent spec. (#15)
 
 ## [0.2.0]
 

@@ -2022,9 +2022,22 @@ type fullBoardTestClient struct {
 	// dialog) against Connect's own completion. nil (the common case) means
 	// Connect returns immediately, as before this field existed.
 	connectGate chan struct{}
+
+	// statusDelay, if non-zero, makes Status() block for that long before
+	// returning -- standing in for the real IPC round-trip that
+	// IdentityBar.Init and AlertBar.Init each make synchronously as part
+	// of NewBunkerBoard's own construction. Used by
+	// TestBunkerTUIStartupShowsSplashWhileBoardLoads to make that
+	// construction slow enough to observe.
+	statusDelay time.Duration
 }
 
-func (c *fullBoardTestClient) Status() (StatusInfo, error) { return c.status, nil }
+func (c *fullBoardTestClient) Status() (StatusInfo, error) {
+	if c.statusDelay > 0 {
+		time.Sleep(c.statusDelay)
+	}
+	return c.status, nil
+}
 func (c *fullBoardTestClient) ListPending() ([]Pending, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -2043,6 +2056,110 @@ func (c *fullBoardTestClient) Connect(uri string, spec *GrantSpec) (string, erro
 		<-c.connectGate
 	}
 	return "bunker://" + testNpubPub + "?relay=wss://relay.example&secret=deadbeef", nil
+}
+
+// screenContains reports whether substr appears, intact, within any single
+// row of screen's current contents -- checked one row at a time (not the
+// whole buffer joined together) so a phrase that happens to wrap across
+// rows can't produce a false match from two unrelated rows getting
+// concatenated.
+func screenContains(screen tcell.SimulationScreen, substr string) bool {
+	cells, width, height := screen.GetContents()
+	for y := 0; y < height; y++ {
+		var row strings.Builder
+		for x := 0; x < width; x++ {
+			idx := y*width + x
+			if idx < 0 || idx >= len(cells) || len(cells[idx].Runes) == 0 {
+				row.WriteRune(' ')
+				continue
+			}
+			row.WriteRune(cells[idx].Runes[0])
+		}
+		if strings.Contains(row.String(), substr) {
+			return true
+		}
+	}
+	return false
+}
+
+// TestBunkerTUIStartupShowsSplashWhileBoardLoads is a regression guard for
+// runTUI's own board-loading order (cli/bunker/command.go): NewBunkerBoard
+// blocks on real IPC (IdentityBar.Init and AlertBar.Init both call
+// Status() synchronously) before it has anything to show, and app.Load's
+// own splashOnce sleep adds a further fixed 1s floor on top of that. If
+// that work ran to completion *before* app.Run() ever started (as it used
+// to, when runTUI built the board and called app.Load synchronously ahead
+// of app.Run()), the splashscreen page Init() already added would get
+// swapped out for "main" before the very first frame was ever drawn --
+// tview only starts pumping draws once Run() begins, so an operator would
+// never actually see the splash, just an instant jump to (an incomplete)
+// board. This mirrors runTUI's real fix (board construction + Load moved
+// into a goroutine, started concurrently with Run(), not before it)
+// against a fullBoardTestClient whose Status() is slowed down to stand in
+// for that real IPC latency, and checks tui.WELCOME_MESSAGE (the splash's
+// one bit of text the ordinary board header doesn't also share -- both
+// show the same logo art, via client/tui/header.go's own Header, so that
+// alone can't tell them apart) is genuinely visible on screen while the
+// board is still loading, then gone once it's done.
+func TestBunkerTUIStartupShowsSplashWhileBoardLoads(t *testing.T) {
+	client := &fullBoardTestClient{
+		status:      StatusInfo{IdentityPub: testNpubPub},
+		statusDelay: 300 * time.Millisecond,
+	}
+
+	app := tui.NewApp().Init()
+	screen := tcell.NewSimulationScreen("")
+	screen.SetSize(80, 25)
+	app.SetScreen(screen)
+
+	go app.Run()
+	defer app.Stop()
+
+	// Mirrors runTUI's own ordering exactly: board construction happens in
+	// the background, started concurrently with Run() above, not before
+	// it; the actual app.Load that swaps the visible page is dispatched
+	// through QueueUpdateDraw rather than called directly from this
+	// goroutine, since Run() is by now the only goroutine allowed to
+	// touch app's pages (see runTUI's own doc comment on this exact
+	// point).
+	go func() {
+		flowLogger := &tui.FlowLogger{}
+		board := NewBunkerBoard(app, t.Context(), client, flowLogger, true)
+		app.QueueUpdateDraw(func() { app.Load(board) })
+	}()
+
+	// screenHas reads screen's contents on the Application's own
+	// event-loop goroutine (via QueueUpdate) instead of straight from this
+	// one -- Run()'s own draw() calls write to the same SimulationScreen
+	// concurrently, and, unlike app's own pages, tcell.SimulationScreen
+	// has no locking of its own that would make a direct cross-goroutine
+	// read safe. "ownership" (a single word, so immune to wherever
+	// SplashScreen's own word-wrap happens to break the fuller message)
+	// stands in for tui.WELCOME_MESSAGE itself.
+	screenHas := func(substr string) bool {
+		var found bool
+		app.QueueUpdate(func() { found = screenContains(screen, substr) })
+		return found
+	}
+
+	// Well before NewBunkerBoard's own artificially-slowed Status() calls
+	// (300ms each, called at least twice -- once from IdentityBar.Init,
+	// once from AlertBar.Init) can have returned.
+	time.Sleep(100 * time.Millisecond)
+	if !screenHas("ownership") {
+		t.Fatal("splashscreen's welcome message isn't visible at t=100ms -- want it still showing while the board is still loading")
+	}
+
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) && !screenHas("Signing as") {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !screenHas("Signing as") {
+		t.Fatal("board content (IdentityBar's \"Signing as:\") never appeared on screen within the deadline")
+	}
+	if screenHas("ownership") {
+		t.Error("splashscreen's welcome message is still visible after the board finished loading -- want it fully swapped out for the board")
+	}
 }
 
 // TestBunkerBoardOverlayDoesNotBleedThroughToPanelBorders is a regression

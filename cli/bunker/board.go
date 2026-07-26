@@ -101,13 +101,14 @@ func NewPendingTable(app *tui.App, client BunkerClient, canDetach bool) *Pending
 func (t *PendingTable) Init(ctx context.Context) *PendingTable {
 	t.ctx = ctx
 	t.SetBorder(true).
-		SetBorderColor(tui.ColorPrimary).
 		SetBorderPadding(0, 1, 1, 1)
 
 	t.actions.SetDynamicColors(true).SetTextAlign(tview.AlignCenter)
 
 	t.table.SetFixed(1, 0).
 		SetSelectable(true, false)
+
+	tui.WireFocusBorder(t.table, t.Flex.Box)
 
 	t.table.SetSelectedStyle(tcell.Style{}.
 		Background(tui.ColorPrimary).
@@ -486,6 +487,7 @@ func (t *PendingTable) openNostrconnectInput() {
 	form.AddButton("Cancel", dismiss)
 	form.SetCancelFunc(dismiss)
 	form.SetBackgroundColor(tcell.ColorDefault)
+	wireButtonArrowNav(form, input)
 
 	view := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(form, 0, 1, true)
@@ -674,8 +676,10 @@ func positionedOverlayRectFixedHeight(app *tui.App, widthPercent, heightRows int
 
 // wireScrollCapture makes Up/Down/PageUp/PageDown/Home/End scroll text
 // regardless of which button form currently has selected -- form's own
-// left/right button navigation, Enter-to-activate, and Escape-to-cancel
-// are untouched. Duplicates client/tui/eventdialog.go's own (unexported)
+// Tab/Backtab button navigation, Enter-to-activate, and Escape-to-cancel
+// are untouched (tview.Form has no left/right button navigation of its
+// own to begin with -- see wireButtonArrowNav below). Duplicates
+// client/tui/eventdialog.go's own (unexported)
 // scroll-capture logic from ShowEvent, the same event-JSON-viewer pattern
 // this package's own overlays already lean on (see ColorizeEventJSON's own
 // doc comment) -- shared locally, not exported, since two overlays in this
@@ -701,6 +705,32 @@ func wireScrollCapture(form *tview.Form, text *tview.TextView) {
 			return event
 		}
 		return nil
+	})
+}
+
+// wireButtonArrowNav lets Left/Right move between form's buttons the same
+// way ShowDialog's tview.Modal-based dialogs already do -- Modal remaps
+// arrow keys to Tab/Backtab itself (see rivo/tview's modal.go), but a
+// plain tview.Form (what every ShowOverlay dialog in this file uses,
+// since Modal can't hold an InputField) has no such mapping: Button.
+// InputHandler only ever reacts to Enter/Tab/Backtab/Escape, so Left/
+// Right silently do nothing on a focused button. skip is the form's own
+// InputField -- while it has focus, Left/Right must keep moving the text
+// cursor, not jump to a button, so the remap only applies once focus has
+// moved past it.
+func wireButtonArrowNav(form *tview.Form, skip tview.Primitive) {
+	form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if skip.HasFocus() {
+			return event
+		}
+		switch event.Key() {
+		case tcell.KeyLeft:
+			return tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone)
+		case tcell.KeyRight:
+			return tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)
+		default:
+			return event
+		}
 	})
 }
 
@@ -1176,8 +1206,9 @@ func (t *SessionsTable) Init(ctx context.Context) *SessionsTable {
 	t.SetFixed(1, 0).
 		SetSelectable(true, false).
 		SetBorder(true).
-		SetBorderColor(tui.ColorPrimary).
 		SetBorderPadding(0, 1, 1, 1)
+
+	tui.WireFocusBorder(t.Table, t.Table.Box)
 
 	t.SetSelectedStyle(tcell.Style{}.
 		Background(tui.ColorPrimary).
@@ -1281,6 +1312,7 @@ func (t *SessionsTable) openRenameInput(s Session) {
 	form.AddButton("Cancel", dismiss)
 	form.SetCancelFunc(dismiss)
 	form.SetBackgroundColor(tcell.ColorDefault)
+	wireButtonArrowNav(form, input)
 
 	view := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(form, 0, 1, true)
@@ -1623,8 +1655,9 @@ func (t *HistoryTable) Init(ctx context.Context) *HistoryTable {
 	t.SetFixed(1, 0).
 		SetSelectable(true, false).
 		SetBorder(true).
-		SetBorderColor(tui.ColorPrimary).
 		SetBorderPadding(0, 1, 1, 1)
+
+	tui.WireFocusBorder(t.Table, t.Table.Box)
 
 	t.SetSelectedStyle(tcell.Style{}.
 		Background(tui.ColorPrimary).

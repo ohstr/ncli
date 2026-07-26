@@ -68,8 +68,9 @@ func (t *EventTable) Init(ctx context.Context) *EventTable {
 	t.SetFixed(1, 0).
 		SetSelectable(true, false).
 		SetBorder(true).
-		SetBorderColor(ColorPrimary).
 		SetBorderPadding(0, 1, 1, 1)
+
+	WireFocusBorder(t.Table, t.Table.Box)
 
 	t.SetSelectedStyle(tcell.Style{}.
 		Background(ColorPrimary).

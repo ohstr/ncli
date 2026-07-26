@@ -29,37 +29,37 @@ func TestFormatIdentity(t *testing.T) {
 		{
 			name: "name and nip05 both resolved -- npub still shown",
 			st:   StatusInfo{IdentityPub: testNpubPub, IdentityName: "Alice", IdentityNip05: "alice@example.com"},
-			want: "[white]Alice[-:-:-] [gray](alice@example.com)[-:-:-] [gray](" + npub + ")[-:-:-]",
+			want: fmt.Sprintf("[%s]Alice[-:-:-] [%s](alice@example.com)[-:-:-] [%s](%s)[-:-:-]", tui.ColorText, tui.ColorMuted, tui.ColorMuted, npub),
 		},
 		{
 			name: "name only -- npub still shown",
 			st:   StatusInfo{IdentityPub: testNpubPub, IdentityName: "Alice"},
-			want: "[white]Alice[-:-:-] [gray](" + npub + ")[-:-:-]",
+			want: fmt.Sprintf("[%s]Alice[-:-:-] [%s](%s)[-:-:-]", tui.ColorText, tui.ColorMuted, npub),
 		},
 		{
 			name: "nip05 only -- npub still shown",
 			st:   StatusInfo{IdentityPub: testNpubPub, IdentityNip05: "alice@example.com"},
-			want: "[white]alice@example.com[-:-:-] [gray](" + npub + ")[-:-:-]",
+			want: fmt.Sprintf("[%s]alice@example.com[-:-:-] [%s](%s)[-:-:-]", tui.ColorText, tui.ColorMuted, npub),
 		},
 		{
 			name: "neither resolved falls back to just the npub, not repeated",
 			st:   StatusInfo{IdentityPub: testNpubPub},
-			want: "[white]" + npub + "[-:-:-]",
+			want: fmt.Sprintf("[%s]%s[-:-:-]", tui.ColorText, npub),
 		},
 		{
 			name: "vault label appended alongside name, nip05, and npub",
 			st:   StatusInfo{IdentityPub: testNpubPub, IdentityName: "Alice", IdentityNip05: "alice@example.com", VaultLabel: "agent-key"},
-			want: "[white]Alice[-:-:-] [gray](alice@example.com)[-:-:-] [gray](" + npub + ")[-:-:-] [gray](vault: agent-key)[-:-:-]",
+			want: fmt.Sprintf("[%s]Alice[-:-:-] [%s](alice@example.com)[-:-:-] [%s](%s)[-:-:-] [%s](vault: agent-key)[-:-:-]", tui.ColorText, tui.ColorMuted, tui.ColorMuted, npub, tui.ColorMuted),
 		},
 		{
 			name: "vault label appended to the npub fallback",
 			st:   StatusInfo{IdentityPub: testNpubPub, VaultLabel: "agent-key"},
-			want: "[white]" + npub + "[-:-:-] [gray](vault: agent-key)[-:-:-]",
+			want: fmt.Sprintf("[%s]%s[-:-:-] [%s](vault: agent-key)[-:-:-]", tui.ColorText, npub, tui.ColorMuted),
 		},
 		{
 			name: "no vault label -- no suffix at all, not even an empty one",
 			st:   StatusInfo{IdentityPub: testNpubPub, IdentityName: "Alice"},
-			want: "[white]Alice[-:-:-] [gray](" + npub + ")[-:-:-]",
+			want: fmt.Sprintf("[%s]Alice[-:-:-] [%s](%s)[-:-:-]", tui.ColorText, tui.ColorMuted, npub),
 		},
 	}
 	for _, tt := range tests {
@@ -110,17 +110,17 @@ func TestFormatRelayStatuses(t *testing.T) {
 	}{
 		{
 			name: "none configured",
-			want: "[gray]none configured[-:-:-]",
+			want: fmt.Sprintf("[%s]none configured[-:-:-]", tui.ColorMuted),
 		},
 		{
 			name:     "one connected",
 			statuses: []RelayStatus{{URL: "wss://relay.damus.io", Connected: true}},
-			want:     "[green]●[-:-:-] wss://relay.damus.io",
+			want:     fmt.Sprintf("[%s]●[-:-:-] wss://relay.damus.io", tui.ColorSuccess),
 		},
 		{
 			name:     "one disconnected",
 			statuses: []RelayStatus{{URL: "wss://relay.damus.io", Connected: false}},
-			want:     "[red]○[-:-:-] wss://relay.damus.io",
+			want:     fmt.Sprintf("[%s]○[-:-:-] wss://relay.damus.io", tui.ColorDanger),
 		},
 		{
 			name: "mixed",
@@ -128,12 +128,12 @@ func TestFormatRelayStatuses(t *testing.T) {
 				{URL: "wss://a.example", Connected: true},
 				{URL: "wss://b.example", Connected: false},
 			},
-			want: "[green]●[-:-:-] wss://a.example   [red]○[-:-:-] wss://b.example",
+			want: fmt.Sprintf("[%s]●[-:-:-] wss://a.example   [%s]○[-:-:-] wss://b.example", tui.ColorSuccess, tui.ColorDanger),
 		},
 		{
 			name:     "still trying its first connection -- yellow, not red",
 			statuses: []RelayStatus{{URL: "wss://relay.damus.io", Connecting: true}},
-			want:     "[yellow]◐[-:-:-] wss://relay.damus.io",
+			want:     fmt.Sprintf("[%s]◐[-:-:-] wss://relay.damus.io", tui.ColorWarning),
 		},
 	}
 	for _, tt := range tests {
@@ -268,9 +268,9 @@ func TestUrgencyColor(t *testing.T) {
 		wantOK    bool
 	}{
 		{name: "comfortable remaining time is left alone", remaining: 10 * time.Minute, wantOK: false},
-		{name: "under 2 minutes turns yellow", remaining: time.Minute, wantColor: tcell.ColorYellow, wantOK: true},
-		{name: "under 30 seconds turns red", remaining: 10 * time.Second, wantColor: tcell.ColorRed, wantOK: true},
-		{name: "already expired is still red, not a crash on a negative duration", remaining: -time.Second, wantColor: tcell.ColorRed, wantOK: true},
+		{name: "under 2 minutes turns yellow", remaining: time.Minute, wantColor: tui.ColorWarning, wantOK: true},
+		{name: "under 30 seconds turns red", remaining: 10 * time.Second, wantColor: tui.ColorDanger, wantOK: true},
+		{name: "already expired is still red, not a crash on a negative duration", remaining: -time.Second, wantColor: tui.ColorDanger, wantOK: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -292,15 +292,15 @@ func TestHistoryStatus(t *testing.T) {
 		wantText  string
 		wantColor tcell.Color
 	}{
-		{name: "approved once", entry: HistoryEntry{Verdict: Allow}, wantText: "Approved", wantColor: tcell.ColorGreen},
-		{name: "approved always", entry: HistoryEntry{Verdict: Allow, Remembered: true}, wantText: "Approved (always)", wantColor: tcell.ColorGreen},
-		{name: "rejected once", entry: HistoryEntry{Verdict: Deny}, wantText: "Rejected", wantColor: tcell.ColorRed},
-		{name: "rejected always", entry: HistoryEntry{Verdict: Deny, Remembered: true}, wantText: "Rejected (always)", wantColor: tcell.ColorRed},
+		{name: "approved once", entry: HistoryEntry{Verdict: Allow}, wantText: "Approved", wantColor: tui.ColorSuccess},
+		{name: "approved always", entry: HistoryEntry{Verdict: Allow, Remembered: true}, wantText: "Approved (always)", wantColor: tui.ColorSuccess},
+		{name: "rejected once", entry: HistoryEntry{Verdict: Deny}, wantText: "Rejected", wantColor: tui.ColorDanger},
+		{name: "rejected always", entry: HistoryEntry{Verdict: Deny, Remembered: true}, wantText: "Rejected (always)", wantColor: tui.ColorDanger},
 		// Expired takes priority over Verdict/Remembered -- sweepExpired
 		// always sets Verdict=Deny alongside Expired=true, but "expired,
 		// nobody actually decided" is a materially different outcome from
 		// "a human said no," and must never be labeled/colored as the same.
-		{name: "expired overrides any verdict/remembered combination", entry: HistoryEntry{Verdict: Deny, Remembered: true, Expired: true}, wantText: "Expired", wantColor: tcell.ColorYellow},
+		{name: "expired overrides any verdict/remembered combination", entry: HistoryEntry{Verdict: Deny, Remembered: true, Expired: true}, wantText: "Expired", wantColor: tui.ColorWarning},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

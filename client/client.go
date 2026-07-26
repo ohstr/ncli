@@ -640,7 +640,7 @@ type Module interface {
 // connectRelayWithFallback dials primary; if that fails to even connect
 // (not a later read/write error once connected) and fallback is non-nil --
 // meaning the relay input had no explicit ws(s):// scheme, see
-// resolveRelayURL -- it retries once against fallback before giving up.
+// ResolveRelayURL -- it retries once against fallback before giving up.
 // cfg may be nil (relayclient.NewConnection fills in its own defaults).
 func connectRelayWithFallback(ctx context.Context, primary, fallback *url.URL, cfg *relayclient.ConnectionConfig) (*relayclient.Connection, error) {
 	conn, err := relayclient.NewConnection(ctx, primary, cfg)

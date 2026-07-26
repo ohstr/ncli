@@ -15,8 +15,8 @@ spec:
   # in a fresh checkout, but inspecting a store you expect to already
   # contain data normally means using the default "exists" instead).
   targets:
-    - wss://relay.damus.io
-    - relay: wss://relay.snort.social
+    - wss://relay.primal.net
+    - relay: wss://relay.ohstr.com
       trusted: true
     - path: ./data/db/notes.db
       ensure: create

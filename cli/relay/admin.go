@@ -48,29 +48,26 @@ func addRemoteAdminCommands(cmd *cobra.Command) {
 	statsCmd := &cobra.Command{
 		Use:   "stats",
 		Short: "Display live relay metrics and worker status",
-		Long:  `Fetch and display live reindexer and verification worker metrics from a running relay.`,
 		RunE:  runStats,
 	}
 	cmd.AddCommand(statsCmd)
 
 	reindexCmd := &cobra.Command{
 		Use:   "reindex",
-		Short: "Trigger a reindex on the running relay",
-		Long:  `Trigger a reindex job on a running relay without restarting it.`,
+		Short: "Trigger a reindex on the running relay, without restarting it",
 		RunE:  common.RequireSubcommand,
 	}
-	reindexCmd.AddCommand(&cobra.Command{Use: "search", Short: "Reindex profiles to the search index", Long: `Trigger a search-index reindex on the running relay.`, RunE: runReindexSearch})
-	reindexCmd.AddCommand(&cobra.Command{Use: "zaps", Short: "Reindex zap stats", Long: `Trigger a zap-stats reindex on the running relay.`, RunE: runReindexZaps})
+	reindexCmd.AddCommand(&cobra.Command{Use: "search", Short: "Reindex profiles to the search index", RunE: runReindexSearch})
+	reindexCmd.AddCommand(&cobra.Command{Use: "zaps", Short: "Reindex zap stats", RunE: runReindexZaps})
 	cmd.AddCommand(reindexCmd)
 
 	clearCmd := &cobra.Command{
 		Use:   "clear",
-		Short: "Clear indexes on the running relay",
-		Long:  `Clear an index on a running relay without restarting it.`,
+		Short: "Clear indexes on the running relay, without restarting it",
 		RunE:  common.RequireSubcommand,
 	}
-	clearCmd.AddCommand(&cobra.Command{Use: "search", Short: "Delete all profiles from the search index", Long: `Delete every profile from the running relay's search index.`, RunE: runClearSearch})
-	clearCmd.AddCommand(&cobra.Command{Use: "zaps", Short: "Delete all zap counters", Long: `Delete every zap counter from the running relay.`, RunE: runClearZaps})
+	clearCmd.AddCommand(&cobra.Command{Use: "search", Short: "Delete all profiles from the search index", RunE: runClearSearch})
+	clearCmd.AddCommand(&cobra.Command{Use: "zaps", Short: "Delete all zap counters", RunE: runClearZaps})
 	cmd.AddCommand(clearCmd)
 
 	addMembershipAdminCommands(cmd)
@@ -85,30 +82,26 @@ func addMembershipAdminCommands(cmd *cobra.Command) {
 	membersCmd := &cobra.Command{
 		Use:   "members",
 		Short: "Manage NIP-43 relay membership",
-		Long:  `Manage NIP-43 relay membership (list/show/add/remove) on a running relay.`,
 		RunE:  common.RequireSubcommand,
 	}
 	membersCmd.AddCommand(&cobra.Command{
 		Use: "list", Short: "List all members",
-		Long: `List every NIP-43 member currently enrolled on the running relay.`,
 		RunE: runMembersList,
 	})
 	membersCmd.AddCommand(&cobra.Command{
 		Use: "show <pubkey>", Short: "Show one member's record",
-		Long: `Show a single pubkey's NIP-43 membership record on the running relay.`,
 		Args: cobra.ExactArgs(1), RunE: runMembersShow,
 	})
 	membersAddCmd := &cobra.Command{
 		Use: "add <pubkey>", Short: "Enroll a pubkey as a member",
-		Long: `Enroll a pubkey as a NIP-43 member directly -- the admin bypass of the
-self-service invite-code join flow, no invite claim required.`,
+		Long: `Enroll a pubkey as a member directly -- bypasses the self-service
+invite-code join flow, no invite claim required.`,
 		Args: cobra.ExactArgs(1), RunE: runMembersAdd,
 	}
 	membersAddCmd.Flags().StringArray("role", nil, "role id to assign (repeatable)")
 	membersCmd.AddCommand(membersAddCmd)
 	membersCmd.AddCommand(&cobra.Command{
 		Use: "remove <pubkey>", Short: "Remove a member",
-		Long: `Remove a pubkey's NIP-43 membership from the running relay.`,
 		Args: cobra.ExactArgs(1), RunE: runMembersRemove,
 	})
 	cmd.AddCommand(membersCmd)
@@ -116,14 +109,12 @@ self-service invite-code join flow, no invite claim required.`,
 	invitesCmd := &cobra.Command{
 		Use:   "invites",
 		Short: "Manage NIP-43 invite codes",
-		Long:  `Manage NIP-43 invite codes (create/list/revoke) on a running relay.`,
 		RunE:  common.RequireSubcommand,
 	}
 	invitesCreateCmd := &cobra.Command{
 		Use: "create", Short: "Issue a new invite code",
-		Long: `Issue a new NIP-43 invite code on the running relay -- for handing out
-out-of-band (a signup email, a Discord invite flow) without the invitee
-needing a working Nostr client yet.`,
+		Long: `Issue a new invite code, for handing out out-of-band (a signup email, a
+Discord invite flow) before the invitee has a working Nostr client.`,
 		RunE: runInvitesCreate,
 	}
 	invitesCreateCmd.Flags().Duration("ttl", 0, "how long the code stays valid (default: relay's configured default)")
@@ -132,12 +123,10 @@ needing a working Nostr client yet.`,
 	invitesCmd.AddCommand(invitesCreateCmd)
 	invitesCmd.AddCommand(&cobra.Command{
 		Use: "list", Short: "List all invite codes",
-		Long: `List every currently-stored NIP-43 invite code on the running relay.`,
 		RunE: runInvitesList,
 	})
 	invitesCmd.AddCommand(&cobra.Command{
 		Use: "revoke <code>", Short: "Revoke an invite code",
-		Long: `Revoke a NIP-43 invite code on the running relay, so it can no longer be used to join.`,
 		Args: cobra.ExactArgs(1), RunE: runInvitesRevoke,
 	})
 	cmd.AddCommand(invitesCmd)
@@ -145,20 +134,17 @@ needing a working Nostr client yet.`,
 	rolesCmd := &cobra.Command{
 		Use:   "roles",
 		Short: "Manage NIP-43 role definitions",
-		Long:  `Manage NIP-43 role definitions (list/create) on a running relay.`,
 		RunE:  common.RequireSubcommand,
 	}
 	rolesCmd.AddCommand(&cobra.Command{
 		Use: "list", Short: "List all role definitions",
-		Long: `List every NIP-43 role definition on the running relay.`,
 		RunE: runRolesList,
 	})
 	rolesCreateCmd := &cobra.Command{
 		Use: "create <id>", Short: "Create a role definition",
-		Long: `Create a NIP-43 role definition on the running relay. NIP-43 defines no
-"delete" event for a role -- once created, a role id can only be
+		Long: `NIP-43 defines no "delete" for a role -- once created, an id can only be
 superseded (re-run "create" with the same id and new label/description/
-color/order), never truly removed.`,
+color/order), never removed.`,
 		Args: cobra.ExactArgs(1), RunE: runRolesCreate,
 	}
 	rolesCreateCmd.Flags().String("label", "", "human-readable role label")

@@ -30,19 +30,16 @@ var minerMineCmd = &cobra.Command{
 	Use:   "mine",
 	Short: "Mine proof-of-work into an unsigned event",
 	Long: `Mine proof-of-work (NIP-13) for an event, writing the result to --out (or
-back to --event in place, with --in-place). Mining runs across multiple CPU
-cores by default (see --workers).
+back to --event with --in-place). Runs across multiple CPU cores by
+default (see --workers).
 
-The event to mine comes from --event (a structured NIP-01 event file) or,
-inline, from --content/--content-file plus --kind/--tag -- pick one, not a
-mix. --content/--content-file mode fills in created_at (now) and kind
-(default 1) for you and has no pubkey source other than --identity.
+The event comes from --event (a NIP-01 event file), or inline from
+--content/--content-file plus --kind/--tag -- pick one, not both.
+--content/--content-file mode fills in created_at and kind (default 1).
 
-If --identity resolves to a private key (an nsec, or a vault label whose
-password is available), the mined event is signed automatically before
-being written -- no separate signing step needed. A pubkey-only identity
-(npub/hex/nprofile/nip-05) mines but cannot sign; this is logged, not a
-silent gap in the output.`,
+If --identity resolves to a private key, the mined event is signed
+automatically before being written. A pubkey-only identity mines but
+can't sign (logged, not silent).`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		if err := cmd.ValidateRequiredFlags(); err != nil {
 			return common.UsageError(cmd, err)
@@ -269,14 +266,16 @@ func parseTagFlags(pairs []string) ([][]string, error) {
 var minerCheckCmd = &cobra.Command{
 	Use:   "check",
 	Short: "Verify proof-of-work",
-	Long: `Verify proof-of-work (NIP-13) on already-mined events, sourced either from
-a JSON file (--events, e.g. one produced by "ncli dump") or fetched live,
-merged across every target. Live mode's targets and filters come from
---targets (a YAML file that may declare both), or from --relays plus
-inline filter flags -- pick one, not a mix. Omitting both falls back to
-the relays configured via "ncli prefs relays add". --identity further
-narrows live mode to one identity's own events. Exits non-zero if any
-checked event fails.`,
+	Long: `Verify proof-of-work (NIP-13) on already-mined events, sourced from a
+JSON file (--events, e.g. from "ncli dump") or fetched live, merged
+across every target.
+
+Live mode's targets and filters come from --targets (a YAML file), or
+--relays plus inline filter flags -- pick one, not both. Omitting both
+falls back to the relays configured via "ncli prefs relays add".
+--identity further narrows live mode to one identity's own events.
+
+Exits non-zero if any checked event fails.`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		if err := cmd.ValidateRequiredFlags(); err != nil {
 			return common.UsageError(cmd, err)

@@ -29,16 +29,13 @@ func NewDelegateCommand() *cobra.Command {
 		Use:   "delegate",
 		Short: "Generate a NIP-26 delegation token",
 		Long: `Launch an interactive wizard that creates and signs NIP-26 delegation
-tokens. With --issuer set (via flag or the NCLI_DELEGATE_ISSUER environment
-variable), skips the wizard entirely and generates the token
-non-interactively instead -- suitable for scripts or an AI agent.
+tokens. With --issuer set (via flag or NCLI_DELEGATE_ISSUER), skips the
+wizard and generates the token non-interactively instead.
 
---issuer and --delegatee both accept a vault label, an nsec, an npub, a hex
-pubkey, an nprofile, or a nip-05 address -- the same identifier shapes "id
-sign --identity" accepts (resolved via NCLI_VAULT_PASSWORD for a vault
-label, same as "id sign"). Both must resolve to a private key: a
-pubkey-only identity (npub/hex/nprofile/nip-05, not vault-saved) has
-nothing to sign or derive a delegatee key from and is rejected.`,
+--issuer and --delegatee both accept a vault label, nsec, npub, hex
+pubkey, nprofile, or nip-05 address, and must resolve to a private key --
+a pubkey-only identity has nothing to sign or derive a delegatee key from
+and is rejected.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// No config reload here: root's InitConfig (cli/ncli/root.go)
 			// already loaded it once via the nearest ancestor's

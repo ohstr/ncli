@@ -24,10 +24,10 @@ func addContextCommands(cmd *cobra.Command) {
 		Use:   "context",
 		Short: "List or switch the current relay config context",
 		Long: `Bare invocation lists saved relay contexts (name -> config file path),
-marking the current one with "*". See "add", "remove", and "use" to manage
-contexts -- a context is what every relay command (stats, members,
-invites, roles, and "relay" itself) falls back to when --config is
-omitted and the working directory has no ncli.yaml/relay.yaml of its own.`,
+marking the current one with "*". A context is what every relay command
+falls back to when --config is omitted and the working directory has no
+ncli.yaml/relay.yaml of its own. See "add", "remove", and "use" to manage
+contexts.`,
 		Args: cobra.NoArgs,
 		RunE: runContextList,
 	}
@@ -52,8 +52,8 @@ omitted and the working directory has no ncli.yaml/relay.yaml of its own.`,
 	useCmd := &cobra.Command{
 		Use:   "use <name>",
 		Short: "Switch the current relay context",
-		Long: `Set name as the current relay context. Every relay command falls back
-to this context's config file whenever --config is omitted and there's no
+		Long: `Set name as the current relay context -- every relay command falls
+back to its config file when --config is omitted and there's no
 ncli.yaml/relay.yaml in the working directory.`,
 		Args: cobra.ExactArgs(1),
 		RunE: runContextUse,

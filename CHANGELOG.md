@@ -1,5 +1,119 @@
 # Changelog
 
+## [0.3.0]
+
+### Added
+
+- `ncli bunker` — run `ncli` as a NIP-46 remote signer: listen on one or
+  more relays for `connect`/`sign_event`/`get_public_key`/`get_relays`/
+  `nip04_*`/`nip44_*` requests from other Nostr clients, approve or reject
+  each one from a live TUI (matching `apply`'s own art direction and
+  chrome), and remember per-app decisions so you aren't re-prompted for
+  every action. Every app that completes pairing shows up in the TUI's
+  Trusted Apps panel right away, whether or not you've remembered any
+  specific permission for it yet. Pending Requests can also auto-advance
+  from one request straight to the next as each is decided — on by
+  default, toggle with "p" — so a client walks through connect and its
+  first few requests without you hunting down and selecting each row by
+  hand; "Decide Later" on the approval dialog backs out of a request
+  without deciding it and switches auto-advance off, so it never turns
+  into an unclosable loop on the same undecided request. A remembered
+  grant is the product of three independent
+  axes — scope (method, and for `sign_event`, optionally one specific
+  kind), duration (1h/24h/7d/until revoked), and budget (next N uses) —
+  with kinds 0/3/5 (metadata/contacts/deletion) always excluded from a
+  broad any-kind grant, only ever covered by one that names them
+  explicitly. On Linux/macOS, closing the TUI ("b", from any panel) offers
+  detaching (the daemon keeps running in the background; reattach with
+  `ncli bunker attach`) or stopping it entirely — a background daemon is
+  otherwise unaffected by the terminal that started it closing. The
+  footer's own hints track whichever panel is currently focused, showing
+  only that panel's own keys. `ncli
+  bunker status`/`stop`/`sessions list`/`sessions revoke <pubkey>`/
+  `sessions rename <pubkey> <name>`/`connect [nostrconnect-uri]` manage a
+  running daemon without opening the
+  TUI (`--json` supported); `status`/`stop` also report the identity's
+  vault label (`vault_label`), when the signing identity is a saved vault
+  entry, alongside its resolved name/nip05. Windows runs the same TUI
+  directly in the foreground with no background/attach support (a
+  documented platform gap). Supports both connection flows: `bunker://`
+  (this signer generates the pairing secret; a client pastes it in) and
+  `nostrconnect://` (a
+  client generates it; this signer initiates once given the URI via
+  `ncli bunker connect`). Both are also reachable without leaving the
+  TUI via the "c" key — board-wide, reachable from any panel, the same
+  as "b" — which offers a "Copy" button (OSC 52 first — reaches the
+  local clipboard even over SSH/tmux with no clipboard tool installed
+  remotely — then a native clipboard tool as fallback) alongside the URI
+  shown on its own selectable line. A Request History panel/`ncli bunker
+  history` command lists recently resolved requests (Approved/Rejected,
+  optionally "(always)" for one that also created a remembered grant, or
+  Expired), most recent first, alongside Pending Requests rather than
+  replacing it — a request moves there the moment it's decided rather
+  than just disappearing; the two sit side by side in one row in the TUI
+  rather than stacked, since they're the two panels worth watching
+  together. Selecting any `sign_event` row in Request History (approved,
+  rejected, or expired) opens its full event JSON, with a Copy button
+  suggested alongside Close — the real signed event if it was approved,
+  or the original unsigned request if nothing was ever signed; the
+  Pending Requests approval dialog shows that same request's unsigned
+  JSON above its own Approve/Reject buttons, so you can see exactly what
+  you're about to sign before deciding either way.
+  Request History is now durably persisted (`events.wal`, fsync'd per
+  write, bounded to the most recent 200 entries) instead of resetting on
+  every restart; a request still undecided when the daemon last stopped
+  running shows up afterward as Expired rather than vanishing without a
+  trace or silently resuming, since a NIP-46 client already resends an
+  unanswered request on its own. Trusted Apps also shows each app's own
+  self-reported name (nostrconnect:// pairings only — bunker:// has no
+  equivalent at the protocol level), how long ago it first paired, how
+  recently it last actually made a request (from Request History, "-" if
+  it hasn't asked for anything yet), and which `sign_event` kinds it can
+  currently sign without asking, alongside the existing pubkey and full
+  grant detail. Rows sort by that last-request time, most recently used
+  first, with apps that haven't made a request at all sinking to the
+  bottom, rather than sitting in whatever order `sessions list` happens
+  to return. Trusted Apps also has an "n" shortcut ("Set Name") that
+  opens a modal for giving an app your own name (or `ncli bunker sessions
+  rename <pubkey> <name>` outside the TUI, `""` to clear it) — useful for
+  telling apart two `bunker://` pairings, which otherwise both show up
+  nameless. In Trusted Apps itself this shows up in the Name column,
+  preferred there over the app's own self-reported name — App keeps
+  showing the raw pubkey either way. Everywhere else an app is identified
+  (Pending Requests, the approval dialog, Request History, `sessions
+  list`/`history`'s own text output, the daemon's activity log), there's
+  no separate name/pubkey split, so the name is preferred over the raw
+  pubkey directly. Ctrl+C in the
+  TUI stops the daemon outright (the same as choosing "Stop bunker
+  entirely" from "b"'s own dialog, but without asking first) instead of
+  silently detaching and leaving it running unattended. The identity
+  line always shows the signing identity's npub alongside any resolved
+  name/nip05, not only as a fallback when neither has resolved yet. The
+  "no relay connected" alert and each relay's own status bullet withhold
+  judgment for the first instant after startup (a distinct "still
+  trying its first connection" state) rather than flashing a false
+  alarm before any relay has even had a chance to dial yet.
+  Trusted Apps' grants no longer have to be revoked all at once: "Enter"
+  on an app's row opens Manage Grants, listing every grant it holds
+  individually with its own revoke ("x") and extend/re-scope ("e", the
+  same duration/budget choices the approval dialog's own second step
+  offers) — "r" on the row itself still revokes everything at once.
+  `ncli bunker sessions grants <pubkey>`/`sessions revoke-grant <pubkey>
+  --method ... [--kind N]` are the scriptable equivalents. `ncli bunker
+  connect --grants <file>` pre-authorizes a whole pairing attempt in one
+  step from a `kind: bunker` YAML spec (the same `kind:`/`spec:` envelope
+  `ncli apply` uses) declaring method/kind scope, verdict (allow/deny),
+  and an optional expires duration or use budget per grant, plus an
+  optional nickname — resolved against the moment the app actually pairs,
+  not when the file was loaded, so a bunker:// URI that sits unused
+  doesn't burn its own grant's clock early. A "connect" request completes
+  without ever going through the usual approval queue when a spec was
+  staged for it this way — unlike an unscripted pairing, which still
+  queues for a human even once the secret checks out — making unattended
+  agent pairing genuinely possible for the first time; see
+  `examples/bunker/` for a ready-to-copy everyday-client and
+  unattended-agent spec.
+
 ## [0.2.0]
 
 ### Added

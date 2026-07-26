@@ -27,7 +27,7 @@ func NewDialog(title, text string, buttons []string, funcs ...func()) *Dialog {
 	// overridden explicitly here so a dialog's focused button matches
 	// every other focus/selection indicator in the app, not tview's stock
 	// look.
-	modal.SetButtonActivatedStyle(tcell.Style{}.Background(tcell.ColorPurple).Foreground(tcell.ColorWhite))
+	modal.SetButtonActivatedStyle(tcell.Style{}.Background(ColorPrimary).Foreground(ColorText))
 
 	modal.AddButtons(buttons).
 		SetDoneFunc(func(buttonIndex int, buttonLabel string) {

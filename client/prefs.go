@@ -23,6 +23,11 @@ type Prefs struct {
 	Relays        []string          `json:"relays,omitempty" yaml:"relays,omitempty"`
 	VaultIdentity *VaultIdentityRef `json:"vault_identity,omitempty" yaml:"vault_identity,omitempty"`
 
+	// BlossomServers is the default Blossom server list "ncli blossom"
+	// commands fall back to when not given an explicit --server. Managed
+	// via `ncli blossom servers add/remove/list`.
+	BlossomServers []string `json:"blossom_servers,omitempty" yaml:"blossom_servers,omitempty"`
+
 	// RelayContexts maps a short name to an absolute ncli/relay config
 	// file path -- e.g. {"prod": "/etc/ncli/prod.yaml"} -- so relay admin
 	// commands (stats, members, invites, roles, ...) can target a
@@ -113,6 +118,49 @@ func (p *Prefs) RemoveRelay(relay string) bool {
 	}
 	p.Relays = slices.Delete(p.Relays, idx, idx+1)
 	return true
+}
+
+// AddBlossomServer validates and appends server to p.BlossomServers,
+// reporting false (without modifying p) if it's already present.
+func (p *Prefs) AddBlossomServer(server string) (bool, error) {
+	u, err := url.ParseRequestURI(server)
+	if err != nil {
+		return false, fmt.Errorf("invalid blossom server url %q: %w", server, err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return false, fmt.Errorf("blossom server url %q must use http or https scheme", server)
+	}
+	if slices.Contains(p.BlossomServers, server) {
+		return false, nil
+	}
+	p.BlossomServers = append(p.BlossomServers, server)
+	return true, nil
+}
+
+// RemoveBlossomServer removes server from p.BlossomServers, reporting
+// false if it wasn't present.
+func (p *Prefs) RemoveBlossomServer(server string) bool {
+	idx := slices.Index(p.BlossomServers, server)
+	if idx == -1 {
+		return false
+	}
+	p.BlossomServers = slices.Delete(p.BlossomServers, idx, idx+1)
+	return true
+}
+
+// BlossomServersFromPrefs loads prefs.yaml and returns the configured
+// Blossom server list, erroring out (naming `ncli blossom servers add`) if
+// none are configured -- callers use this as the fallback for an omitted
+// explicit --server.
+func BlossomServersFromPrefs() ([]string, error) {
+	prefs, err := LoadPrefs()
+	if err != nil {
+		return nil, err
+	}
+	if len(prefs.BlossomServers) == 0 {
+		return nil, errors.New("no blossom servers configured; pass --server explicitly, or run `ncli blossom servers add <url>`")
+	}
+	return prefs.BlossomServers, nil
 }
 
 // AddRelayContext saves name -> configPath's absolute form in

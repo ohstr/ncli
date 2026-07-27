@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.3]
+
+### Fixed
+
+- Saving a vault identity under an already-taken `--label` reported
+  `code: "internal"` instead of the documented `conflict`.
+  ([#28](https://github.com/ohstr/ncli/pull/28))
+
 ## [0.4.2]
 
 ### Added

@@ -301,6 +301,14 @@ func TestHistoryStatus(t *testing.T) {
 		// nobody actually decided" is a materially different outcome from
 		// "a human said no," and must never be labeled/colored as the same.
 		{name: "expired overrides any verdict/remembered combination", entry: HistoryEntry{Verdict: Deny, Remembered: true, Expired: true}, wantText: "Expired", wantColor: tui.ColorWarning},
+		// AutoApproved takes priority over everything else too, for the
+		// same reason Expired does: a request an existing grant already
+		// covered never went through a human decision (or Queue.Add) at
+		// all, so it must read distinctly from both "Approved" (a one-off
+		// decision, just made) and "Approved (always)" (a new grant, just
+		// remembered) -- see followup issue in
+		// integration/agent-eval/followup/issues.md.
+		{name: "auto-approved overrides verdict/remembered", entry: HistoryEntry{Verdict: Allow, Remembered: true, AutoApproved: true}, wantText: "Auto-approved", wantColor: tui.ColorSuccess},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

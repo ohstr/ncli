@@ -1896,9 +1896,15 @@ func (t *HistoryTable) showEventDetail(h HistoryEntry) {
 // PendingTable's urgencyColor) -- green for approved, red for rejected,
 // yellow for expired unanswered (neither a yes nor a no), with
 // "(always)" distinguishing a remembered-grant decision from a one-off
-// Approve/Reject Once.
+// Approve/Reject Once. "Auto-approved" is its own case, ahead of all the
+// others: a request an existing grant already covered never went through
+// a human decision (or Queue.Add) at all, so neither "(always)" (nothing
+// new was remembered) nor a one-off "Approved" (nobody actually chose
+// anything, this time) quite fits.
 func historyStatus(h HistoryEntry) (text string, color tcell.Color) {
 	switch {
+	case h.AutoApproved:
+		return "Auto-approved", tui.ColorSuccess
 	case h.Expired:
 		return "Expired", tui.ColorWarning
 	case h.Verdict == Allow && h.Remembered:

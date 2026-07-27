@@ -129,6 +129,7 @@ func NewDaemon(cfg DaemonConfig) *Daemon {
 	cfg.Queue.OnResolved(d.recordHistory)
 	cfg.Queue.OnAdded(d.recordAdded)
 	d.handler.OnSigned = d.recordSignedEvent
+	d.handler.OnAutoApproved = d.recordAutoApproved
 	return d
 }
 
@@ -193,6 +194,13 @@ type HistoryEntry struct {
 	// grant (an "Always ..." choice), not just a one-off Approve/Reject
 	// Once -- see ResolvedEvent.Remembered.
 	Remembered bool `json:"remembered"`
+	// AutoApproved is true if this request was allowed instantly by an
+	// already-standing grant (or, for "connect", a pending GrantSpec) --
+	// never went through a human decision or Queue.Add at all. See
+	// ResolvedEvent.AutoApproved/recordAutoApproved. Always false, never
+	// true at the same time as Expired -- an auto-approved request is
+	// never in the queue to expire.
+	AutoApproved bool `json:"auto_approved,omitempty"`
 	// Expired is true if nobody answered in time and the queue's own TTL
 	// sweep auto-rejected it, rather than a human deciding.
 	Expired bool `json:"expired"`
@@ -234,15 +242,16 @@ func (d *Daemon) recordAdded(p Pending) {
 // on arrival -- that line alone never said how a request was decided.
 func (d *Daemon) recordHistory(ev ResolvedEvent) {
 	h := HistoryEntry{
-		ID:         ev.Pending.ID,
-		ClientKey:  ev.Pending.ClientKey,
-		Method:     ev.Pending.Method,
-		Kind:       ev.Pending.Kind,
-		CreatedAt:  ev.Pending.CreatedAt,
-		ResolvedAt: time.Now(),
-		Verdict:    ev.Verdict,
-		Remembered: ev.Remembered,
-		Expired:    ev.Expired,
+		ID:           ev.Pending.ID,
+		ClientKey:    ev.Pending.ClientKey,
+		Method:       ev.Pending.Method,
+		Kind:         ev.Pending.Kind,
+		CreatedAt:    ev.Pending.CreatedAt,
+		ResolvedAt:   time.Now(),
+		Verdict:      ev.Verdict,
+		Remembered:   ev.Remembered,
+		Expired:      ev.Expired,
+		AutoApproved: ev.AutoApproved,
 		// Unsigned for now (nil for anything but sign_event) -- see
 		// HistoryEntry.Event's own doc comment for why this is set here
 		// unconditionally rather than only for an eventual approval.
@@ -281,12 +290,28 @@ func (d *Daemon) recordHistory(ev ResolvedEvent) {
 
 	outcome := "rejected"
 	switch {
+	case h.AutoApproved:
+		outcome = "auto-approved (existing grant)"
 	case h.Expired:
 		outcome = "expired (no response)"
 	case h.Verdict == Allow:
 		outcome = "approved"
 	}
 	d.log("request resolved method=%s from=%s id=%s verdict=%s", h.Method, d.cfg.Store.Label(h.ClientKey), h.ID, outcome)
+}
+
+// recordAutoApproved is Handler's own OnAutoApproved hook (wired in
+// NewDaemon), for a request that was allowed instantly by an
+// already-standing grant (or, for "connect", a pending GrantSpec) and so
+// never touched Queue.Add/Queue.OnResolved at all -- without this,
+// Request History only ever showed requests that needed a human decision,
+// even though skills/ncli-bunker/SKILL.md's own "Trusted Apps > Last
+// Request" column is documented as derived from history (see followup
+// issue in integration/agent-eval/followup/issues.md). Delegates straight
+// to recordHistory so persistence/compaction/activity-log behavior stays
+// identical to every other resolution.
+func (d *Daemon) recordAutoApproved(p Pending) {
+	d.recordHistory(ResolvedEvent{Pending: p, Verdict: Allow, AutoApproved: true})
 }
 
 // recordSignedEvent is Handler's own OnSigned hook (wired in NewDaemon),

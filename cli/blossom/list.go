@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"text/tabwriter"
 	"time"
@@ -30,7 +32,7 @@ deduped by hash.
 identifier may be a vault label, nsec, npub, hex pubkey, nprofile, or
 nip-05 address, resolved to a hex pubkey; defaults to --identity's
 resolved pubkey when omitted.`,
-		Args: cobra.MaximumNArgs(1),
+		Args: common.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, cancel := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
 			defer cancel()
@@ -86,7 +88,7 @@ resolved pubkey when omitted.`,
 				descriptors, err = hc.List(ctx, servers[0], pubKeyHex, query, auth)
 			}
 			if err != nil {
-				return classifyHTTPError(cmd, pubKeyHex, err)
+				return classifyListError(cmd, pubKeyHex, err)
 			}
 
 			if jsonMode {
@@ -154,4 +156,41 @@ func listAllServers(ctx context.Context, hc *bclient.Client, servers []string, p
 		merged = merged[:query.Limit]
 	}
 	return merged, nil
+}
+
+// disabledCapabilityReasonKeywords are substrings (matched case-
+// insensitively) a server's X-Reason text uses to say a capability is
+// turned off entirely, as opposed to a genuine per-request "not found" --
+// e.g. hzrd149/blossom-server's own "List endpoint is disabled on this
+// server" for BUD-02 `list`. Best-effort and deliberately narrow: BUD-01
+// defines X-Reason as "a human readable diagnostic message only ... must
+// not [be parsed] for control flow" (nipB7.WriteError's own doc comment),
+// so there is no clean, spec-sanctioned signal to key off of here --
+// differently-worded servers still fall back to the shared not_found
+// classification below, same as before this existed.
+var disabledCapabilityReasonKeywords = []string{"disabled", "not enabled", "not supported", "unsupported"}
+
+// classifyListError is classifyHTTPError plus one extra case ahead of it:
+// a 404 whose X-Reason reads as "this capability is turned off entirely"
+// (see disabledCapabilityReasonKeywords) becomes common.UnsupportedError
+// instead of common.NotFoundError, so an agent can tell "list is disabled,
+// don't bother calling it again this session" apart from "this specific
+// lookup missed, but list itself still works" without string-matching the
+// message itself (see followup issue in
+// integration/agent-eval/followup/issues.md). Scoped to list.go alone,
+// not folded into the shared classifyHTTPError every other blossom
+// command also uses: "disabled" is a meaningful, common phrasing for a
+// whole-capability failure like list, but download/rm/upload/mirror's own
+// 404s are overwhelmingly genuine "this one blob isn't here" -- lumping
+// them in risks the rare coincidental mismatch for no benefit.
+func classifyListError(cmd *cobra.Command, input string, err error) error {
+	if httpErr, ok := errors.AsType[*bclient.HTTPError](err); ok && httpErr.StatusCode == http.StatusNotFound {
+		reason := strings.ToLower(httpErr.Reason)
+		for _, kw := range disabledCapabilityReasonKeywords {
+			if strings.Contains(reason, kw) {
+				return common.UnsupportedError(cmd, input, err)
+			}
+		}
+	}
+	return classifyHTTPError(cmd, input, err)
 }

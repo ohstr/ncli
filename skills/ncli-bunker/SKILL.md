@@ -190,14 +190,18 @@ permission), Trusted Apps also shows:
 ## Request History
 
 `ncli bunker history` (or the TUI's own Request History panel) lists
-recently resolved requests -- everything that was Approved, Rejected, or
-Expired, most recent first. It exists alongside Pending Requests rather
-than replacing it: Pending only ever shows what's still awaiting a
-decision, so a request disappears from there the moment it's decided and
-reappears here instead. Each entry's Method and Kind are their own
-columns (matching Pending's own shape), and Status distinguishes a
-one-off Approve/Reject Once from one that also created a remembered grant
-("Approved (always)"/"Rejected (always)"). Durably persisted to
+every request this session has actually resolved -- Approved, Rejected,
+Expired, or Auto-approved -- most recent first. It exists alongside
+Pending Requests rather than replacing it: Pending only ever shows what's
+still awaiting a decision, so a request disappears from there the moment
+it's decided and reappears here instead. Each entry's Method and Kind are
+their own columns (matching Pending's own shape), and Status distinguishes
+a one-off Approve/Reject Once, one that also created a remembered grant
+("Approved (always)"/"Rejected (always)"), and one that never needed a
+decision at all because an existing grant already covered it
+("Auto-approved" -- this includes every request made under a
+`--grants`-pre-authorized pairing, not just the pairing handshake itself).
+Durably persisted to
 `events.wal` (alongside `sessions.yaml`/`daemon.log`/`bunker.sock`, under
 ncli's shared bunker state directory), fsync'd on every write, and
 bounded to the most recent 200 entries -- a daemon restart (or a crash)

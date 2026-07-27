@@ -31,7 +31,7 @@ nip-05 address -- resolves and displays it, plus its vault status.
 from --label, and reads the vault password from NCLI_VAULT_PASSWORD.
 
 See "ncli id delegate" and "ncli id sign" for delegation tokens and signing.`,
-	Args: cobra.MaximumNArgs(1),
+	Args: common.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
 			return runIDGenerate(cmd)
@@ -43,7 +43,7 @@ See "ncli id delegate" and "ncli id sign" for delegation tokens and signing.`,
 var idListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List saved vault identities",
-	Args:  cobra.NoArgs,
+	Args:  common.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runIDList(cmd)
 	},
@@ -205,7 +205,12 @@ func saveIdentity(cmd *cobra.Command, jsonMode bool, id *client.Identity, label 
 	if !exists {
 		password, err := resolveNewVaultPassword(jsonMode)
 		if err != nil {
-			return nil, err
+			// A missing/unusable password is a bad/missing precondition
+			// for the requested operation -- AGENTS.md's own definition
+			// of "usage" -- not an internal failure (see followup issue
+			// #2: this used to fall through to common.RuntimeError's
+			// CodeInternal/exit 1 instead).
+			return nil, common.UsageError(cmd, err)
 		}
 		if !jsonMode {
 			log.Info().Msg("creating vault identity...")
@@ -219,13 +224,15 @@ func saveIdentity(cmd *cobra.Command, jsonMode bool, id *client.Identity, label 
 		}
 		vaultPrivKeyHex = privHex
 	} else {
+		// Same classification as runIDInspect/runIDList's identical calls
+		// to keyresolve.ResolveVaultPassword/client.UnlockVaultIdentity.
 		password, err := keyresolve.ResolveVaultPassword(jsonMode, "Vault password: ")
 		if err != nil {
-			return nil, err
+			return nil, common.UsageError(cmd, err)
 		}
 		vaultPrivKeyHex, err = client.UnlockVaultIdentity(password)
 		if err != nil {
-			return nil, fmt.Errorf("failed to unlock vault: %w", err)
+			return nil, common.AuthError(cmd, err)
 		}
 	}
 

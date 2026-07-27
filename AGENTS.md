@@ -78,6 +78,7 @@ stdout — a plain timestamped line by default, or `{"error", "code",
 | `conflict` | 5 | yes | collides with existing state (vault label taken, reindex already running) |
 | `network` | 6 | yes | a remote call failed (relay connection, admin HTTP request, nip-05 fetch) |
 | `auth` | 7 | no | wrong credentials or a rejected signature |
+| `unsupported` | 8 | no | the target server doesn't support the requested capability at all (currently only `blossom list` against a server with BUD-02 disabled), distinct from `not_found`'s "this one specific resource is missing" |
 | `internal` | 1 | no | anything else (fallback bucket) |
 
 `input`, when present, is the single specific value that caused the

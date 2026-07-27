@@ -47,6 +47,19 @@ type Handler struct {
 	// valid no-op (e.g. in tests that construct a Handler directly).
 	OnSigned func(requestID string, event *nip01.Event)
 
+	// OnAutoApproved, if set, fires from Handle right before execute(),
+	// for a request that was allowed instantly by an already-standing
+	// grant (or, for "connect", a pending GrantSpec) and so never touched
+	// Queue.Add -- Queue.OnResolved (what Request History is normally
+	// built from) never fires for these at all. daemon.go wires this to
+	// recordAutoApproved so these requests still get a HistoryEntry
+	// instead of being invisible to `ncli bunker history`. Fired before
+	// execute() runs, matching Queue.Resolve's own before-close(done)
+	// ordering, so a sign_event's HistoryEntry already exists by the time
+	// OnSigned tries to attach the signed event to it. Nil is a valid
+	// no-op (e.g. in tests that construct a Handler directly).
+	OnAutoApproved func(Pending)
+
 	mu                     sync.Mutex
 	pendingSecret          string    // see SetPendingSecret
 	pendingSecretExpiresAt time.Time // zero while pendingSecret == ""
@@ -176,6 +189,16 @@ func (h *Handler) Handle(req *nip46.RequestEvent, encryption string) *nip01.Even
 		// no human present to ever click it. An unscripted pairing (no
 		// spec staged) is untouched: it still asks, same as always.
 		if h.hasPendingGrantSpec() {
+			if h.OnAutoApproved != nil {
+				// Params deliberately omitted -- connect's own Params
+				// carry the pairing secret, and unlike the Ask-path below
+				// (where the same omission would be incidental, since
+				// HistoryEntry never has a Params field to begin with),
+				// leaving it out here is a deliberate belt-and-suspenders
+				// against ever persisting it if HistoryEntry's shape
+				// changes later.
+				h.OnAutoApproved(Pending{ID: req.RequestID, ClientKey: peer, Method: req.Method, CreatedAt: time.Now()})
+			}
 			return h.execute(req, peer, encryption, nil)
 		}
 	}
@@ -205,6 +228,10 @@ func (h *Handler) Handle(req *nip46.RequestEvent, encryption string) *nip01.Even
 		}
 		if verdict != Allow {
 			return h.errorResponse(peer, req.RequestID, "rejected", encryption)
+		}
+	case Allow:
+		if h.OnAutoApproved != nil {
+			h.OnAutoApproved(Pending{ID: req.RequestID, ClientKey: peer, Method: req.Method, Kind: kind, Params: req.Params, Event: signEvt, CreatedAt: time.Now()})
 		}
 	}
 

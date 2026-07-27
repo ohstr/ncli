@@ -34,7 +34,7 @@ server URL ending in a hash -- tries the configured servers in order
 
 Writes to --output, or "<hash>.<ext>" in the current directory if
 omitted, or streams to stdout with "-o -" (suppressing the summary line).`,
-		Args: cobra.ExactArgs(1),
+		Args: common.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, cancel := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
 			defer cancel()

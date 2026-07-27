@@ -90,19 +90,19 @@ func addMembershipAdminCommands(cmd *cobra.Command) {
 	})
 	membersCmd.AddCommand(&cobra.Command{
 		Use: "show <pubkey>", Short: "Show one member's record",
-		Args: cobra.ExactArgs(1), RunE: runMembersShow,
+		Args: common.ExactArgs(1), RunE: runMembersShow,
 	})
 	membersAddCmd := &cobra.Command{
 		Use: "add <pubkey>", Short: "Enroll a pubkey as a member",
 		Long: `Enroll a pubkey as a member directly -- bypasses the self-service
 invite-code join flow, no invite claim required.`,
-		Args: cobra.ExactArgs(1), RunE: runMembersAdd,
+		Args: common.ExactArgs(1), RunE: runMembersAdd,
 	}
 	membersAddCmd.Flags().StringArray("role", nil, "role id to assign (repeatable)")
 	membersCmd.AddCommand(membersAddCmd)
 	membersCmd.AddCommand(&cobra.Command{
 		Use: "remove <pubkey>", Short: "Remove a member",
-		Args: cobra.ExactArgs(1), RunE: runMembersRemove,
+		Args: common.ExactArgs(1), RunE: runMembersRemove,
 	})
 	cmd.AddCommand(membersCmd)
 
@@ -127,7 +127,7 @@ Discord invite flow) before the invitee has a working Nostr client.`,
 	})
 	invitesCmd.AddCommand(&cobra.Command{
 		Use: "revoke <code>", Short: "Revoke an invite code",
-		Args: cobra.ExactArgs(1), RunE: runInvitesRevoke,
+		Args: common.ExactArgs(1), RunE: runInvitesRevoke,
 	})
 	cmd.AddCommand(invitesCmd)
 
@@ -145,7 +145,7 @@ Discord invite flow) before the invitee has a working Nostr client.`,
 		Long: `NIP-43 defines no "delete" for a role -- once created, an id can only be
 superseded (re-run "create" with the same id and new label/description/
 color/order), never removed.`,
-		Args: cobra.ExactArgs(1), RunE: runRolesCreate,
+		Args: common.ExactArgs(1), RunE: runRolesCreate,
 	}
 	rolesCreateCmd.Flags().String("label", "", "human-readable role label")
 	rolesCreateCmd.Flags().String("description", "", "role description")

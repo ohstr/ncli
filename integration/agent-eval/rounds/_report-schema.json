@@ -1,0 +1,16 @@
+{
+  "round": "string, e.g. r1-identity -- must match this round's own id",
+  "outcome": "pass | partial | fail",
+  "summary": "1-3 sentences: what you did and how it went",
+  "steps": [
+    {
+      "action": "what you were trying to do",
+      "command": "the exact command you ran, if any",
+      "exit_code": 0,
+      "result": "what actually happened -- quote real output where it helps"
+    }
+  ],
+  "issues": [
+    "anything surprising, undocumented, or that required guessing beyond what AGENTS.md/the skills/--help actually told you"
+  ]
+}

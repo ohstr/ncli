@@ -80,6 +80,63 @@ func AuthError(cmd *cobra.Command, err error) error {
 	return wrapCLIError(CodeAuth, "", err)
 }
 
+// UnsupportedError marks err as failing because the target server doesn't
+// support the requested capability at all (e.g. a Blossom server with
+// BUD-02 `list` disabled entirely), as opposed to NotFoundError's "this one
+// specific resource doesn't exist" -- worth its own code specifically so an
+// agent can tell "don't ever call this again this session" apart from
+// "this one lookup missed, but the capability itself still works" without
+// string-matching the message. input, if non-empty, is the server/URL that
+// doesn't support it, per InvalidInputError's rules.
+func UnsupportedError(cmd *cobra.Command, input string, err error) error {
+	silence(cmd)
+	return wrapCLIError(CodeUnsupported, input, err)
+}
+
+// ExactArgs, MaximumNArgs, MinimumNArgs, and NoArgs mirror cobra's own
+// same-named Args validators (github.com/spf13/cobra), but route a wrong
+// arg count through UsageError instead of returning a bare error. cobra's
+// own versions run before RunE ever executes, and left unwrapped they
+// bypass UsageError entirely -- no CodeUsage classification, no
+// SilenceUsage/SilenceErrors -- so a wrong arg count comes back as the
+// CodeInternal fallback (exit 1) with cobra's own "Error: ..." plus its
+// full help dump printed on top, a contract violation even under --json
+// (see AGENTS.md's error table and followup issue #1). Use these in place
+// of the cobra.* equivalents on any command's Args field.
+func ExactArgs(n int) cobra.PositionalArgs {
+	return func(cmd *cobra.Command, args []string) error {
+		if len(args) != n {
+			return UsageError(cmd, fmt.Errorf("accepts %d arg(s), received %d", n, len(args)))
+		}
+		return nil
+	}
+}
+
+func MaximumNArgs(n int) cobra.PositionalArgs {
+	return func(cmd *cobra.Command, args []string) error {
+		if len(args) > n {
+			return UsageError(cmd, fmt.Errorf("accepts at most %d arg(s), received %d", n, len(args)))
+		}
+		return nil
+	}
+}
+
+func MinimumNArgs(n int) cobra.PositionalArgs {
+	return func(cmd *cobra.Command, args []string) error {
+		if len(args) < n {
+			return UsageError(cmd, fmt.Errorf("requires at least %d arg(s), only received %d", n, len(args)))
+		}
+		return nil
+	}
+}
+
+func NoArgs(cmd *cobra.Command, args []string) error {
+	if len(args) > 0 {
+		return UsageError(cmd, fmt.Errorf("unknown command %q for %q", args[0], cmd.CommandPath()))
+	}
+	return nil
+}
+
 // RequireSubcommand is the RunE of a group command whose entire job is
 // dispatching to children (e.g. "relay members", "prefs", "miner") -- it
 // has nothing to run itself. Left with no RunE at all, cobra falls back to

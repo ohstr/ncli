@@ -18,12 +18,13 @@ type ErrorCode string
 
 const (
 	CodeUsage        ErrorCode = "usage"         // bad flags/args -- cobra-level invocation mistake
-	CodeInvalidInput ErrorCode = "invalid_input"  // a supplied value failed validation/parsing
-	CodeNotFound     ErrorCode = "not_found"      // the referenced thing doesn't exist
-	CodeConflict     ErrorCode = "conflict"       // collides with existing state (already exists, already running)
-	CodeNetwork      ErrorCode = "network"        // a remote call (relay, HTTP, NIP-05 fetch) failed
-	CodeAuth         ErrorCode = "auth"           // wrong credentials / rejected signature
-	CodeInternal     ErrorCode = "internal"       // anything else -- the default/fallback bucket
+	CodeInvalidInput ErrorCode = "invalid_input" // a supplied value failed validation/parsing
+	CodeNotFound     ErrorCode = "not_found"     // the referenced thing doesn't exist
+	CodeConflict     ErrorCode = "conflict"      // collides with existing state (already exists, already running)
+	CodeNetwork      ErrorCode = "network"       // a remote call (relay, HTTP, NIP-05 fetch) failed
+	CodeAuth         ErrorCode = "auth"          // wrong credentials / rejected signature
+	CodeUnsupported  ErrorCode = "unsupported"   // the target server doesn't support this capability at all, distinct from a single missing resource
+	CodeInternal     ErrorCode = "internal"      // anything else -- the default/fallback bucket
 )
 
 // exitCodes assigns each code its own process exit status, so a script can
@@ -36,6 +37,7 @@ var exitCodes = map[ErrorCode]int{
 	CodeConflict:     5,
 	CodeNetwork:      6,
 	CodeAuth:         7,
+	CodeUnsupported:  8,
 	CodeInternal:     1,
 }
 

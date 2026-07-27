@@ -27,7 +27,7 @@ var prefsRelaysCmd = &cobra.Command{
 var prefsRelaysAddCmd = &cobra.Command{
 	Use:   "add <relay-url>",
 	Short: "Add a relay to the default list",
-	Args:  cobra.ExactArgs(1),
+	Args:  common.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		jsonMode, _ := cmd.Flags().GetBool("json")
 
@@ -68,7 +68,7 @@ var prefsRelaysAddCmd = &cobra.Command{
 var prefsRelaysRemoveCmd = &cobra.Command{
 	Use:   "remove <relay-url>",
 	Short: "Remove a relay from the default list",
-	Args:  cobra.ExactArgs(1),
+	Args:  common.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		jsonMode, _ := cmd.Flags().GetBool("json")
 
@@ -101,7 +101,7 @@ var prefsRelaysRemoveCmd = &cobra.Command{
 var prefsRelaysListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List the default relays",
-	Args:  cobra.NoArgs,
+	Args:  common.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		jsonMode, _ := cmd.Flags().GetBool("json")
 
@@ -133,7 +133,7 @@ var prefsRelaysListCmd = &cobra.Command{
 var prefsRelaysClearCmd = &cobra.Command{
 	Use:   "clear",
 	Short: "Remove all default relays",
-	Args:  cobra.NoArgs,
+	Args:  common.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := client.SavePrefs(&client.Prefs{}); err != nil {
 			return common.RuntimeError(cmd, err)
@@ -151,7 +151,7 @@ var prefsRelaysClearCmd = &cobra.Command{
 var prefsPathCmd = &cobra.Command{
 	Use:   "path",
 	Short: "Print the prefs.yaml file path",
-	Args:  cobra.NoArgs,
+	Args:  common.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		path := client.PrefsPath()
 		if jsonMode, _ := cmd.Flags().GetBool("json"); jsonMode {

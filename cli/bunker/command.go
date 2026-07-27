@@ -285,7 +285,7 @@ func newSessionsCommand() *cobra.Command {
 	cmd.AddCommand(&cobra.Command{
 		Use:   "revoke <pubkey>",
 		Short: "Revoke every remembered permission for one app",
-		Args:  cobra.ExactArgs(1),
+		Args:  common.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			jsonMode, _ := cmd.Flags().GetBool("json")
 
@@ -314,7 +314,7 @@ func newSessionsCommand() *cobra.Command {
 	cmd.AddCommand(&cobra.Command{
 		Use:   "rename <pubkey> <name>",
 		Short: "Set (or clear, with \"\") a trusted app's display name",
-		Args:  cobra.ExactArgs(2),
+		Args:  common.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			jsonMode, _ := cmd.Flags().GetBool("json")
 
@@ -343,7 +343,7 @@ func newSessionsCommand() *cobra.Command {
 	cmd.AddCommand(&cobra.Command{
 		Use:   "grants <pubkey>",
 		Short: "List one trusted app's remembered permissions individually",
-		Args:  cobra.ExactArgs(1),
+		Args:  common.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			jsonMode, _ := cmd.Flags().GetBool("json")
 
@@ -386,7 +386,7 @@ func newSessionsCommand() *cobra.Command {
 	revokeGrantCmd := &cobra.Command{
 		Use:   "revoke-grant <pubkey>",
 		Short: "Revoke one remembered permission for an app, leaving the rest",
-		Args:  cobra.ExactArgs(1),
+		Args:  common.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			jsonMode, _ := cmd.Flags().GetBool("json")
 			method, _ := cmd.Flags().GetString("method")
@@ -500,7 +500,7 @@ pairing instead, blocking until the client confirms or it times out.
 declared set of permissions (see examples/bunker/ for the YAML shape),
 instead of prompting interactively on first use. "ncli bunker sessions
 grants <pubkey>" shows what actually landed once paired.`,
-		Args: cobra.MaximumNArgs(1),
+		Args: common.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			jsonMode, _ := cmd.Flags().GetBool("json")
 

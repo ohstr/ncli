@@ -1,0 +1,60 @@
+# Isolated environment for the ncli agent-capability eval. Three services:
+#
+#   relay   - the PUBLISHED image (ghcr.io/ohstr/ncli:latest), not a local
+#             build -- this rig only ever exercises what's actually shipped.
+#   blossom - a reference Blossom media server (BUD-01/02/04/06/09/11) for
+#             the R7 upload/download/mirror round.
+#   agent   - the agent-under-test's machine (see agent/Dockerfile). Shares
+#             the relay's network namespace (network_mode: service:relay)
+#             because ncli's admin commands (relay stats/reindex/clear/
+#             members/invites/roles) hard-target http://localhost:<port> --
+#             they assume they're running on the same host as the relay
+#             they administer (confirmed against the real image; there is
+#             no --url/--host override). Sharing the netns also gives the
+#             agent the compose DNS for `blossom` for free.
+#
+# The agent container has no source checkout of this repo and no ncli
+# binary baked in -- see agent/Dockerfile's own header comment.
+
+services:
+  relay:
+    image: ghcr.io/ohstr/ncli:latest
+    command: ["relay", "--config", "/config/relay.yaml"]
+    volumes:
+      - ./relay/relay.yaml:/config/relay.yaml:ro
+      - relay-data:/data
+    restart: unless-stopped
+
+  blossom:
+    image: ghcr.io/hzrd149/blossom-server:latest
+    volumes:
+      - blossom-data:/app/data
+    restart: unless-stopped
+
+  agent:
+    build: ./agent
+    network_mode: "service:relay"
+    depends_on:
+      - relay
+      - blossom
+    environment:
+      # A missing vault password makes any `--json` vault op (id --save,
+      # bunker --identity <label>, ...) fail fast and cleanly rather than
+      # hang -- but a real unattended deployment would set this once at
+      # the environment level, not have the agent invent a password each
+      # session, so the harness does the same. Generated per run by
+      # bin/run.sh into ./.env (compose loads it automatically); never
+      # committed.
+      - NCLI_VAULT_PASSWORD=${NCLI_VAULT_PASSWORD}
+    volumes:
+      - ./relay/relay.yaml:/relay/relay.yaml:ro
+      - ./rounds:/rounds:ro
+      - ./fixtures:/fixtures:ro
+      - ./.creds-seed:/creds-seed:ro
+      - agent-work:/home/evaluser/work
+      - ./report:/report
+
+volumes:
+  relay-data:
+  blossom-data:
+  agent-work:

@@ -50,6 +50,18 @@ server.`,
 			// a form of upload (see nipB7's VerbUpload doc comment).
 			ttl, _ := cmd.Flags().GetDuration("auth-ttl")
 
+			// Scope the auth token to the source blob's own sha256 when
+			// sourceURL is hash-shaped (the Blossom convention, and the
+			// only case a server can even determine an expected hash for)
+			// -- some real servers (e.g. hzrd149/blossom-server) reject a
+			// PUT /mirror authorization that carries no "x" tag at all
+			// (followup issue #3). Falls back to an unscoped token, same
+			// as before, when the source isn't a recognizable Blossom URL.
+			var hashes []string
+			if hash, _, ok := nipB7.ExtractHashFromURL(sourceURL); ok {
+				hashes = []string{hash}
+			}
+
 			timeout, _ := cmd.Flags().GetDuration("timeout")
 			hc := newHTTPClient(timeout)
 
@@ -59,7 +71,7 @@ server.`,
 
 				// Signed fresh per server, not once for the whole batch --
 				// see the identical comment in upload.go.
-				auth, err := buildAuth(privKeyHex, pubKeyHex, nipB7.VerbUpload, nil, ttl)
+				auth, err := buildAuth(privKeyHex, pubKeyHex, nipB7.VerbUpload, hashes, ttl)
 				if err != nil {
 					res.Error = err.Error()
 					report.add(res)

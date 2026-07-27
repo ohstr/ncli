@@ -1,0 +1,20 @@
+# Relay-under-test for the agent-eval harness. Adapted from
+# examples/relay/membership.yaml (upstream ncli repo) -- membership admin
+# (relay members/invites/roles, round R3) needs nip11.privkey + enabled: true;
+# stats/reindex/clear (also R3) need nip11.privkey too. auth_required is left
+# off so R4 (publish/apply) doesn't need a cross-round enrollment step first --
+# membership admin is exercised on its own, not gating writes.
+nip11:
+  name: "ncli-agent-eval-relay"
+  privkey: "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+  contact: "admin@example.com"
+
+membership:
+  enabled: true
+  inviteTTL: "24h"
+  inviteMaxUses: 5
+  publishAddRemoveEvents: true
+
+logdir: "/data/logs"
+store: "/data/db/notes.db"
+port: 5500

@@ -28,7 +28,7 @@ marking the current one with "*". A context is what every relay command
 falls back to when --config is omitted and the working directory has no
 ncli.yaml/relay.yaml of its own. See "add", "remove", and "use" to manage
 contexts.`,
-		Args: cobra.NoArgs,
+		Args: common.NoArgs,
 		RunE: runContextList,
 	}
 
@@ -36,7 +36,7 @@ contexts.`,
 		Use:   "add <name> <config-path>",
 		Short: "Save a named relay context",
 		Long:  `Save name -> config-path in prefs.yaml. config-path must already exist.`,
-		Args:  cobra.ExactArgs(2),
+		Args:  common.ExactArgs(2),
 		RunE:  runContextAdd,
 	}
 	contextCmd.AddCommand(addCmd)
@@ -44,7 +44,7 @@ contexts.`,
 	removeCmd := &cobra.Command{
 		Use:   "remove <name>",
 		Short: "Remove a saved relay context",
-		Args:  cobra.ExactArgs(1),
+		Args:  common.ExactArgs(1),
 		RunE:  runContextRemove,
 	}
 	contextCmd.AddCommand(removeCmd)
@@ -55,7 +55,7 @@ contexts.`,
 		Long: `Set name as the current relay context -- every relay command falls
 back to its config file when --config is omitted and there's no
 ncli.yaml/relay.yaml in the working directory.`,
-		Args: cobra.ExactArgs(1),
+		Args: common.ExactArgs(1),
 		RunE: runContextUse,
 	}
 	contextCmd.AddCommand(useCmd)

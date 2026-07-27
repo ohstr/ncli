@@ -21,9 +21,9 @@
 *.bin
 *.out
 debug
-dist/
-bin/
-obj/
+/dist/
+/bin/
+/obj/
 
 # Project meta/tools
 .cache
@@ -35,6 +35,5 @@ vendor/
 # own ohstr/homebrew-ncli repo and removed from this workspace.
 /homebrew-ncli/
 
-
-# Claude Code
-.claude/
+# Claude Code agent worktrees (transient per-session checkouts)
+/.claude/worktrees/

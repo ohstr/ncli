@@ -215,7 +215,7 @@ func newServersListCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "list",
 		Short: "List the default servers",
-		Args:  cobra.NoArgs,
+		Args:  common.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			jsonMode, _ := cmd.Flags().GetBool("json")
 
@@ -266,7 +266,7 @@ declares.
 
 Unlike "servers add/remove/list", which manage your own default list,
 this looks up someone else's published servers.`,
-		Args: cobra.ExactArgs(1),
+		Args: common.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, cancel := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
 			defer cancel()

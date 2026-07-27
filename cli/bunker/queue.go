@@ -66,6 +66,14 @@ type ResolvedEvent struct {
 	// Expired is true if the queue's own TTL swept this away unanswered
 	// rather than a human deciding it.
 	Expired bool
+	// AutoApproved is true if this request never touched Queue.Add at all
+	// -- Store.Decide already resolved it to Allow via a standing grant
+	// (or, for "connect", a pending GrantSpec) -- see Handler.Handle and
+	// Handler.OnAutoApproved. Always false for anything delivered through
+	// Queue.Resolve/sweepExpired, which is what constructs every other
+	// ResolvedEvent; recordAutoApproved (daemon.go) is the only
+	// constructor that ever sets it.
+	AutoApproved bool
 }
 
 // entry's result is written once, then done is closed -- never the other

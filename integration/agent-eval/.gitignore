@@ -1,0 +1,4 @@
+.creds-seed/
+report/*
+!report/.gitkeep
+followup/

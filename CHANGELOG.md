@@ -1,5 +1,33 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- A new `unsupported` error code (exit 8) distinguishes "this server
+  doesn't support the requested capability at all" (e.g. `blossom list`
+  against a server with BUD-02 disabled) from `not_found`'s "this one
+  resource is missing". ([#27](https://github.com/ohstr/ncli/pull/27))
+
+### Fixed
+
+- Several commands' argument-count checks (missing/extra positional args)
+  reported `code: "internal"` instead of the documented `usage`, and
+  printed cobra's help dump even under `--json`.
+  ([#27](https://github.com/ohstr/ncli/pull/27))
+- `ncli id --save` with a missing or wrong `NCLI_VAULT_PASSWORD` reported
+  `code: "internal"` instead of `usage`/`auth`.
+  ([#27](https://github.com/ohstr/ncli/pull/27))
+- `ncli blossom mirror` always failed against servers that require a
+  BUD-11 auth token scoped to the source blob's hash.
+  ([#27](https://github.com/ohstr/ncli/pull/27))
+- `ncli bunker history` came back empty for requests a standing grant
+  auto-approved, instead of recording them.
+  ([#27](https://github.com/ohstr/ncli/pull/27))
+- `ncli relay`'s shutdown no longer leaks its verification-worker
+  goroutines, and no longer hangs indefinitely if shutdown gets stuck.
+  ([#27](https://github.com/ohstr/ncli/pull/27))
+
 ## [0.4.1]
 
 ### Changed

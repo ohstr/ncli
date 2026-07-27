@@ -6,28 +6,21 @@
 
 - Every bordered TUI panel now dims its border while it doesn't hold
   keyboard focus, and bunker's form dialogs support Left/Right button
-  navigation. (#23)
+  navigation. ([#23](https://github.com/ohstr/ncli/pull/23))
 - `ncli bunker`'s TUI now shows its splashscreen for the full duration of a
-  slow startup instead of skipping straight to an incomplete board. (#24)
+  slow startup instead of skipping straight to an incomplete board.
+  ([#24](https://github.com/ohstr/ncli/pull/24))
 - CLI help text and CHANGELOG.md entries are trimmed for conciseness, with
-  no change in behavior. (#22)
+  no change in behavior. ([#22](https://github.com/ohstr/ncli/pull/22))
 
 ## [0.4.0]
 
 ### Added
 
-- **`ncli blossom`** — a client for the Blossom protocol (BUD-01–12):
-  content-addressed blob storage authenticated with a Nostr identity instead
-  of a login.
-  - `upload` / `download` / `list` / `rm` / `mirror` / `report` cover direct
-    blob operations; `upload`/`rm`/`mirror` fan out across every configured
-    server, while `download` falls back through them in order.
-  - `servers add` / `remove` / `list` manage the default server list, with
-    `--publish` broadcasting it (BUD-03) and `servers discover <identifier>`
-    fetching another identity's published list.
-  - Accepts the same identity shapes as the rest of `ncli` (vault label,
-    nsec, npub, hex, nprofile, nip-05).
-  - Signing is local-key only for now — no `bunker`/NIP-46 backend. (#18)
+- **`ncli blossom`** — a client for the Blossom protocol: upload, download,
+  list, remove, mirror, and report blobs across your configured servers
+  (`servers add`/`remove`/`list`/`discover`), using the same identity
+  shapes as the rest of `ncli`. ([#18](https://github.com/ohstr/ncli/pull/18))
 
 ### Changed
 
@@ -40,28 +33,11 @@
 
 ### Added
 
-- **`ncli bunker`** — run `ncli` as a NIP-46 remote signer, approving or
-  rejecting `connect`/`sign_event`/other requests from a live TUI.
-  - Remembers per-app decisions (scope, duration, and use-budget) so you
-    aren't re-prompted every time; sensitive kinds (metadata/contacts/
-    deletion) can never be covered by a broad any-kind grant.
-  - Auto-advances through a client's pairing and first few requests, with a
-    "Decide Later" escape hatch that turns auto-advance off.
-  - Supports both `bunker://` and `nostrconnect://` pairing, with in-TUI URI
-    copy (OSC 52, falling back to a native clipboard tool).
-  - Trusted Apps shows each app's name, pairing/activity history, and
-    current grants, with per-grant revoke/extend (Manage Grants) and a
-    rename shortcut.
-  - Request History persists across restarts; a request still undecided
-    when the daemon last stopped shows up as Expired.
-  - Detach/reattach a running daemon on Linux/macOS (`ncli bunker attach`);
-    Windows runs the TUI in the foreground only.
-  - `ncli bunker status` / `stop` / `sessions list` / `sessions revoke` /
-    `sessions rename` / `connect` manage a daemon without opening the TUI
-    (`--json` supported).
-  - `ncli bunker connect --grants <file>` pre-authorizes an entire pairing
-    from a YAML spec, so a request completes with no human in the loop —
-    see `examples/bunker/` for ready-to-copy specs. (#15)
+- **`ncli bunker`** — run `ncli` as a NIP-46 remote signer: approve or
+  reject signing requests from a live TUI, with remembered per-app grants
+  and both `bunker://`/`nostrconnect://` pairing. `status`/`sessions`/
+  `connect` manage a running daemon without opening the TUI, for
+  scripting. ([#15](https://github.com/ohstr/ncli/pull/15))
 
 ## [0.2.0]
 

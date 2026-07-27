@@ -19,8 +19,9 @@ import (
 )
 
 type Service struct {
-	server *http.Server
-	store  *relay.EventStore
+	server             *http.Server
+	store              *relay.EventStore
+	verificationWorker *relay.ProfileVerificationWorker
 }
 
 func NewServer(store *relay.EventStore, searchService search.Service) *Service {
@@ -232,7 +233,8 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 	}))
 
 	s := &Service{
-		store: store,
+		store:              store,
+		verificationWorker: wsHandler.VerificationWorker,
 		server: &http.Server{
 			Handler: mux,
 			Addr:    fmt.Sprintf(":%d", config.Port),
@@ -252,15 +254,44 @@ func (s *Service) serve() {
 	}
 }
 
+// shutdownGracePeriod bounds how long Stop waits for server.Shutdown to
+// drain in-flight HTTP requests before moving on regardless -- previously
+// this was context.Background() (no deadline at all), so anything that
+// kept Shutdown from returning (a slow client, a stuck handler) hung the
+// whole process indefinitely with no recourse but an external SIGKILL,
+// which skips the store/verification-worker cleanup below entirely. Note
+// this does not cover live WebSocket sessions either way: net/http's own
+// Shutdown never waits on a hijacked connection, graceful or not.
+const shutdownGracePeriod = 10 * time.Second
+
 func (s *Service) Stop() {
 
 	log.Info().Msg("stopping server gracefully")
 
-	if err := s.server.Shutdown(context.Background()); err != nil {
-		log.Fatal().Err(err).Msg("server shutdown failed")
+	ctx, cancel := context.WithTimeout(context.Background(), shutdownGracePeriod)
+	defer cancel()
+	if err := s.server.Shutdown(ctx); err != nil {
+		// Shutdown itself never force-closes anything on timeout -- per its
+		// own doc comment, it just stops waiting and returns ctx's error,
+		// leaving any still-active connections as they were. Close() is
+		// what actually severs them, so the grace period means something
+		// (a bounded wait *and* a real hard stop after it), not just "stop
+		// waiting and hope". Logged, not log.Fatal (which os.Exits
+		// immediately) -- Fatal-ing here used to skip the verification-
+		// worker/store cleanup below entirely on exactly the failure path
+		// that most needs it to still run.
+		log.Warn().Err(err).Msg("server did not shut down within the grace period, forcing close")
+		if closeErr := s.server.Close(); closeErr != nil {
+			log.Warn().Err(closeErr).Msg("forced close also failed")
+		}
+	} else {
+		log.Info().Msg("server stopped")
 	}
 
-	log.Info().Msg("server stopped")
+	log.Info().Msg("stopping verification workers...")
+	s.verificationWorker.Stop()
+	log.Info().Msg("verification workers stopped")
+
 	log.Info().Msg("stopping events store...")
 	s.store.Close()
 	log.Info().Msg("events store stopped")

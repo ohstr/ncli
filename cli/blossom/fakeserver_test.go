@@ -50,6 +50,25 @@ type fakeServerHooks struct {
 	// download -- for testing that a failed download doesn't leave a
 	// partial file behind.
 	TruncateDownload bool
+
+	// RequireHashOnMirror, if true, makes handleMirror require the
+	// mirrored blob's sha256 (extracted from the request's source URL,
+	// the same way a real server would) as the BUD-11 auth token's "x"
+	// tag scope -- matching stricter real-world Blossom servers (e.g.
+	// hzrd149/blossom-server) that reject PUT /mirror requests whose
+	// authorization isn't scoped to the specific blob being mirrored.
+	// Defaults to false so every other mirror test, whose auth tokens are
+	// already unscoped, keeps passing unchanged.
+	RequireHashOnMirror bool
+
+	// ListDisabled, if true, makes handleList answer with a 404 and the
+	// same X-Reason text a real BUD-02-disabled server uses (e.g.
+	// hzrd149/blossom-server's "List endpoint is disabled on this
+	// server") -- distinct from the generic FailStatus hook (which uses a
+	// reason of "injected failure", not shaped like a real disabled-
+	// capability message) so a test can exercise classifyListError's own
+	// disabled-capability detection specifically.
+	ListDisabled bool
 }
 
 // fakeBlossomServer is a minimal, spec-correct Blossom server for tests:
@@ -206,21 +225,30 @@ func (s *fakeBlossomServer) handleMirror(w http.ResponseWriter, r *http.Request)
 		nipB7.WriteError(w, hooks.FailStatus, "injected failure")
 		return
 	}
-	auth, ok := s.requireAuth(w, r, nipB7.VerbUpload, "", false)
-	if !ok {
-		return
-	}
-	if hooks.PaymentRequired {
-		w.Header().Set(nipB7.HeaderCashu, "cashuAtest")
-		nipB7.WriteError(w, http.StatusPaymentRequired, "payment required")
-		return
-	}
 
 	var body struct {
 		URL string `json:"url"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		nipB7.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	// A server enforcing hash-scoped mirror tokens determines the
+	// expected hash from the source URL itself, the same way
+	// nipB7.ExtractHashFromURL (and "ncli blossom download") already do,
+	// before it ever checks auth -- ok is false (expectedHash "") for a
+	// source URL that isn't hash-shaped, in which case RequireHash's
+	// hash-scope check never triggers regardless of hooks.RequireHashOnMirror.
+	expectedHash, _, _ := nipB7.ExtractHashFromURL(body.URL)
+
+	auth, ok := s.requireAuth(w, r, nipB7.VerbUpload, expectedHash, hooks.RequireHashOnMirror)
+	if !ok {
+		return
+	}
+	if hooks.PaymentRequired {
+		w.Header().Set(nipB7.HeaderCashu, "cashuAtest")
+		nipB7.WriteError(w, http.StatusPaymentRequired, "payment required")
 		return
 	}
 
@@ -291,7 +319,12 @@ func (s *fakeBlossomServer) handleList(w http.ResponseWriter, r *http.Request) {
 		nipB7.WriteError(w, http.StatusMethodNotAllowed, "")
 		return
 	}
-	if hooks := s.Hooks(); hooks.FailStatus != 0 {
+	hooks := s.Hooks()
+	if hooks.ListDisabled {
+		nipB7.WriteError(w, http.StatusNotFound, "List endpoint is disabled on this server")
+		return
+	}
+	if hooks.FailStatus != 0 {
 		nipB7.WriteError(w, hooks.FailStatus, "injected failure")
 		return
 	}

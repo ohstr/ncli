@@ -681,10 +681,9 @@ ncli bunker stop
 
 ![`ncli bunker` pairing an app via nostrconnect://, approving one request with a remembered grant, rejecting another outside its scope](docs/vhs/bunker.gif)
 
-Approving a request offers a scoped, timed "Always" grant, not just a
-one-off approve/reject — revoke or extend any grant later from Trusted
-Apps. On Linux/macOS, closing the TUI (`b`) can detach into a background
-daemon instead of stopping it, so other apps stay connected.
+Approving a request can grant an "Always" permission instead of a one-off
+decision, and on Linux/macOS the TUI can detach into a background daemon
+so other apps stay connected.
 
 Pairing works both directions other bunker apps expect (`bunker://` and
 `nostrconnect://`), from inside the TUI (`c`) or scripted:
@@ -698,14 +697,14 @@ ncli bunker connect --grants examples/bunker/agent.yaml
 ```
 
 See [`skills/ncli-bunker/SKILL.md`](skills/ncli-bunker/SKILL.md) for the
-full walkthrough, including the Windows platform gap, the `kind: bunker`
-grants-spec format, and pairing an AI agent for unattended signing.
+full walkthrough, including the Windows platform gap, the grants-spec
+format, and pairing an AI agent for unattended signing.
 
 ## `blossom`: upload, fetch, and manage media
 
-A client for the [Blossom protocol](https://github.com/hzrd149/blossom)
-(BUD-01..12): content-addressed blob storage authenticated with your
-Nostr identity instead of a login.
+A client for the [Blossom protocol](https://github.com/hzrd149/blossom):
+content-addressed blob storage authenticated with your Nostr identity
+instead of a login.
 
 ```sh
 ncli blossom servers add https://blossom.example --identity mykey --publish
@@ -716,14 +715,10 @@ ncli blossom download <hash> -o photo.jpg
 ncli blossom rm <hash> --identity mykey --yes
 ```
 
-`upload`/`rm`/`mirror` fan out to every configured server (`--server`,
-repeatable, or the list managed by `servers add`/`remove`) and report a
-result per (item, server) pair — the same shape `ncli publish` reports
-for (event, relay); `download` instead tries the configured servers in
-order and stops at the first that answers. Any command taking a target
-identity (`list <identifier>`, `servers discover <identifier>`) accepts a
-vault label, nsec, npub, hex pubkey, nprofile, or nip-05 address, resolved
-the same way `--identity` is everywhere else in `ncli`:
+`upload`/`rm`/`mirror` fan out to every configured server and report a
+result per (item, server) pair; `download` tries them in order and stops
+at the first that answers. Any command taking a target identity also
+accepts someone else's, not just your own:
 
 ```sh
 # someone else's media, not just your own

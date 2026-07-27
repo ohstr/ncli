@@ -67,3 +67,52 @@ func TestIDSaveWithoutVaultPasswordErrorContract(t *testing.T) {
 		t.Errorf("code = %q, want %q per AGENTS.md's error table -- confirms followup issue #2", payload.Code, "usage")
 	}
 }
+
+// TestIDSaveWithDuplicateLabelErrorContract confirms a follow-up finding
+// from integration/agent-eval's r8-error-contract round: saving a second
+// vault identity under a --label that's already taken reported code
+// "internal", exit 1, instead of AGENTS.md's own worked example for
+// "conflict" ("vault label taken"), exit 5, retryable. saveIdentity's call
+// to client.AddVaultEntry propagated the "already exists" error through a
+// bare fmt.Errorf instead of common.ConflictError.
+func TestIDSaveWithDuplicateLabelErrorContract(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds and spawns the ncli binary; skipped in -short mode")
+	}
+	bin := buildTestBinary(t)
+	env := append(prefsTestEnv(t), "NCLI_VAULT_PASSWORD=test-password-123")
+
+	firstCmd := exec.Command(bin, "id", "--save", "--label", "dupe-label", "--json")
+	firstCmd.Env = env
+	if out, err := firstCmd.Output(); err != nil {
+		t.Fatalf("first save failed: %v\nstdout: %s\nstderr: %s", err, out, exitErrStderr(err))
+	}
+
+	secondCmd := exec.Command(bin, "id", "--save", "--label", "dupe-label", "--json")
+	secondCmd.Env = env
+	out, err := secondCmd.Output()
+
+	exitErr, ok := err.(*exec.ExitError)
+	if !ok {
+		t.Fatalf("expected a non-zero *exec.ExitError on the duplicate save, got %v (stdout=%q)", err, out)
+	}
+
+	if got := exitErr.ExitCode(); got != 5 {
+		t.Errorf("exit code = %d, want 5 (conflict) per AGENTS.md's error table", got)
+	}
+
+	var payload struct {
+		Error     string `json:"error"`
+		Code      string `json:"code"`
+		Retryable bool   `json:"retryable"`
+	}
+	if jsonErr := json.Unmarshal(exitErr.Stderr, &payload); jsonErr != nil {
+		t.Fatalf("stderr is not valid JSON: %v\nstderr: %s", jsonErr, exitErr.Stderr)
+	}
+	if payload.Code != "conflict" {
+		t.Errorf("code = %q, want %q per AGENTS.md's error table", payload.Code, "conflict")
+	}
+	if !payload.Retryable {
+		t.Errorf("retryable = false, want true per AGENTS.md's error table for conflict")
+	}
+}

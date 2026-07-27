@@ -62,14 +62,27 @@ else
 fi
 
 # --- cross-check the agent's own reported probes against the same table ---
+# Keys off the actual JSON error the agent captured (.parsed_error, or
+# .stderr parsed as JSON) rather than its free-text "result" narration --
+# an earlier version of this check searched .result for code names as bare
+# substrings, which false-positived on e.g. "...a genuine not_found case,
+# not an invalid_input parse failure": the substring "invalid_input" is
+# present, but only inside a negation, not a claim.
 BAD_CLAIMS="$(jq -c '
   [ (.steps // [])[]
     | select(.exit_code != null)
+    | . as $s
+    | ( $s.parsed_error // (try ($s.stderr | fromjson) catch null) ) as $err
+    | select($err != null and ($err.code // null) != null)
     | select(
-        ((.result // "" ) | test("usage"; "i")) and (.exit_code != 2) or
-        ((.result // "" ) | test("invalid_input"; "i")) and (.exit_code != 3) or
-        ((.result // "" ) | test("not_found"; "i")) and (.exit_code != 4) or
-        ((.result // "" ) | test("\"network\""; "i")) and (.exit_code != 6)
+        (($err.code == "usage") and ($s.exit_code != 2)) or
+        (($err.code == "invalid_input") and ($s.exit_code != 3)) or
+        (($err.code == "not_found") and ($s.exit_code != 4)) or
+        (($err.code == "conflict") and ($s.exit_code != 5)) or
+        (($err.code == "network") and ($s.exit_code != 6)) or
+        (($err.code == "auth") and ($s.exit_code != 7)) or
+        (($err.code == "unsupported") and ($s.exit_code != 8)) or
+        (($err.code == "internal") and ($s.exit_code != 1))
       )
   ]
 ' "${RUN_DIR}/${ROUND}.self-report.json" 2>/dev/null || echo '[]')"

@@ -241,6 +241,15 @@ func saveIdentity(cmd *cobra.Command, jsonMode bool, id *client.Identity, label 
 	}
 	entry, err := client.AddVaultEntry(vaultPrivKeyHex, label, id.PrivKeyHex)
 	if err != nil {
+		if errors.Is(err, client.ErrLabelExists) {
+			// Collides with existing state -- AGENTS.md's own conflict-code
+			// row names "vault label taken" as its worked example, but this
+			// used to fall through to the generic wrap below (CodeInternal,
+			// exit 1) instead (confirmed by integration/agent-eval's
+			// r8-error-contract round, reproduced twice with independent
+			// labels).
+			return nil, common.ConflictError(cmd, label, err)
+		}
 		return nil, fmt.Errorf("failed to save identity: %w", err)
 	}
 	return entry, nil

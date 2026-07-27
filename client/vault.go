@@ -21,6 +21,11 @@ import (
 
 const vaultFileName = "vault.yaml"
 
+// ErrLabelExists is wrapped into AddVaultEntry's error when label already
+// names a saved entry, so a caller can classify it (e.g. as a conflict)
+// with errors.Is instead of matching on message text.
+var ErrLabelExists = errors.New("vault label already exists")
+
 // VaultEntry is one identity saved in the local vault: label and npub are
 // plaintext (so listing/inspecting needs no password), but EncryptedNsec is
 // a NIP-44 payload only the unlocked vault identity can decrypt.
@@ -177,7 +182,7 @@ func AddVaultEntry(vaultPrivKeyHex, label, entryPrivKeyHex string) (*VaultEntry,
 	}
 	for _, e := range entries {
 		if strings.EqualFold(e.Label, label) {
-			return nil, fmt.Errorf("label %q already exists in vault", label)
+			return nil, fmt.Errorf("label %q already exists in vault: %w", label, ErrLabelExists)
 		}
 	}
 

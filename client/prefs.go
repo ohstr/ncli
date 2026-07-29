@@ -36,10 +36,10 @@ type Prefs struct {
 	RelayContexts map[string]string `json:"relay_contexts,omitempty" yaml:"relay_contexts,omitempty"`
 
 	// CurrentRelayContext is the RelayContexts key currently in effect,
-	// set via `ncli relay context use <name>`. common.LoadViperConfig's
-	// caller (ncli.InitConfig) falls back to this context's path whenever
-	// --config is omitted and the working directory has no ncli.yaml/
-	// relay.yaml of its own.
+	// set via `ncli relay context use <name>`. ncli.InitConfig's
+	// resolveConfigFile uses this context's path whenever --config is
+	// omitted, taking priority over any ncli.yaml/relay.yaml in the
+	// working directory.
 	CurrentRelayContext string `json:"current_relay_context,omitempty" yaml:"current_relay_context,omitempty"`
 }
 

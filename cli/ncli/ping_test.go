@@ -32,7 +32,7 @@ func TestPingArgs_NoArgsNoFlagsIsFine(t *testing.T) {
 
 func TestPingArgs_PositionalRelaysIsFine(t *testing.T) {
 	cmd := newTestPingCmd()
-	if err := pingCmd.Args(cmd, []string{"relay.primal.net", "wss://relay.damus.io"}); err != nil {
+	if err := pingCmd.Args(cmd, []string{"relay.primal.net", "wss://relay.ohstr.com"}); err != nil {
 		t.Fatalf("Args(positional relays) error = %v, want nil", err)
 	}
 }

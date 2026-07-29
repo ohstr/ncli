@@ -14,20 +14,19 @@ import (
 // addContextCommands adds "context" (and its "add"/"remove"/"use"
 // children) onto cmd -- the relay root command. A named context is just a
 // (name -> config file path) entry in prefs.yaml (see client.Prefs); the
-// one marked current is what every relay command falls back to when
-// --config is omitted and the working directory has no ncli.yaml/
-// relay.yaml of its own (see cli/ncli/root.go's resolveConfigFile). This
-// exists so operators juggling several relays don't have to retype
-// --config, or cd into a specific relay's directory, on every invocation.
+// one marked current is what every relay command uses when --config is
+// omitted, taking priority over any ncli.yaml/relay.yaml in the working
+// directory (see cli/ncli/root.go's resolveConfigFile). This exists so
+// operators juggling several relays don't have to retype --config, or cd
+// into a specific relay's directory, on every invocation.
 func addContextCommands(cmd *cobra.Command) {
 	contextCmd := &cobra.Command{
 		Use:   "context",
 		Short: "List or switch the current relay config context",
 		Long: `Bare invocation lists saved relay contexts (name -> config file path),
-marking the current one with "*". A context is what every relay command
-falls back to when --config is omitted and the working directory has no
-ncli.yaml/relay.yaml of its own. See "add", "remove", and "use" to manage
-contexts.`,
+marking the current one with "*". A context is what every relay command uses
+when --config is omitted, taking priority over any ncli.yaml/relay.yaml in
+the working directory. See "add", "remove", and "use" to manage contexts.`,
 		Args: common.NoArgs,
 		RunE: runContextList,
 	}
@@ -52,9 +51,9 @@ contexts.`,
 	useCmd := &cobra.Command{
 		Use:   "use <name>",
 		Short: "Switch the current relay context",
-		Long: `Set name as the current relay context -- every relay command falls
-back to its config file when --config is omitted and there's no
-ncli.yaml/relay.yaml in the working directory.`,
+		Long: `Set name as the current relay context -- every relay command uses its
+config file when --config is omitted, even if the working directory has
+its own ncli.yaml/relay.yaml.`,
 		Args: common.ExactArgs(1),
 		RunE: runContextUse,
 	}

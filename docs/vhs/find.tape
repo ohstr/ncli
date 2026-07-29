@@ -11,7 +11,7 @@ Set Padding 20
 Set Theme "Dracula"
 Set TypingSpeed 40ms
 
-Type "ncli find jack@primal.net -k 1 -l 2 -s relay.damus.io"
+Type "ncli find jack@primal.net -k 1 -l 2 -s relay.ohstr.com"
 Sleep 500ms
 Enter
 Sleep 5s

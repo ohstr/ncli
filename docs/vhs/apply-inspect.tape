@@ -1,6 +1,6 @@
 # Records the `ncli apply` TUI dashboard running the repo's own
 # examples/apply/inspect.yaml -- a read-only query across two remote
-# relays (wss://relay.damus.io, wss://relay.snort.social) plus a local
+# relays (wss://relay.primal.net, wss://relay.ohstr.com) plus a local
 # store (./data/db/notes.db, gitignored, created fresh). Run via
 # `just vhs apply-inspect`.
 #

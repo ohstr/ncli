@@ -97,7 +97,7 @@ func TestMultiRelaySync(t *testing.T) {
 	// consistently reliable public relays to minimize flakiness/live-data
 	// noise from less-maintained relays).
 	sources := []string{
-		"wss://relay.damus.io",
+		"wss://relay.primal.net",
 		"wss://nos.lol",
 	}
 

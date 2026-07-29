@@ -123,8 +123,8 @@ no re-mining needed.
 relays, waiting for each relay's `OK`:
 
 ```sh
-ncli publish -e signed.json -s wss://relay.damus.io
-ncli publish -e events.json -s relay.damus.io,relay.snort.social --json
+ncli publish -e signed.json -s wss://relay.primal.net
+ncli publish -e events.json -s relay.primal.net,relay.snort.social --json
 ```
 
 - `-e/--events <file>` -- a single event object or a JSON array (same
@@ -146,7 +146,7 @@ End-to-end, from a plain note to a published event:
 
 ```sh
 ncli miner mine --content "hello from ncli" --identity mykey -d 20 -o signed.json
-ncli publish -e signed.json -s wss://relay.damus.io
+ncli publish -e signed.json -s wss://relay.primal.net
 ```
 
 If the mined event came out unsigned (no `--identity`, or a pubkey-only
@@ -158,7 +158,7 @@ one), `ncli id sign` is the general-purpose sign step -- see
 ```sh
 ncli miner mine -e draft.json -o mined.json -d 20        # PoW only, no --identity
 ncli id sign --identity mykey -e mined.json -o signed.json
-ncli publish -e signed.json -s wss://relay.damus.io
+ncli publish -e signed.json -s wss://relay.primal.net
 ```
 
 ## Check
@@ -183,8 +183,8 @@ declare both `relays:` and `filters:`, or `--relays`/inline filter flags:
 ```sh
 ncli miner check --targets targets.yaml
 # or, with no file at all:
-ncli miner check --relays wss://relay.damus.io --kinds 1 --since 7d
-ncli miner check -s wss://relay.damus.io -k 1 --since 7d   # same, short forms (-s/-k = --relays/--kinds)
+ncli miner check --relays wss://relay.primal.net --kinds 1 --since 7d
+ncli miner check -s wss://relay.primal.net -k 1 --since 7d   # same, short forms (-s/-k = --relays/--kinds)
 # --targets/--relays both omitted: falls back to `ncli prefs relays add`
 ncli miner check --kinds 1 --since 7d
 ```
@@ -195,7 +195,7 @@ identity's own events -- e.g. auditing "does everything I've published
 clear my relay's minimum PoW difficulty":
 
 ```sh
-ncli miner check --relays wss://relay.damus.io --identity mykey --kinds 1 --json
+ncli miner check --relays wss://relay.primal.net --identity mykey --kinds 1 --json
 ```
 
 Live mode fetches from **every** target and merges/dedupes by event ID

@@ -24,7 +24,7 @@ spec:
   # and (for local paths) `ensure`.
   from:
     # Remote relay.
-    - relay: wss://relay.damus.io
+    - relay: wss://relay.ohstr.com
       trusted: true
     # Remote relay. Kept as a source, not a destination -- it enforces its
     # own PoW policy on writes and was rejecting some forwarded events with

@@ -1,6 +1,6 @@
 ---
-name: verify
-description: Build and drive the ncli CLI against a real relay to verify a change end-to-end.
+name: local-verify
+description: Build ncli from local source and drive it against a real relay to verify a change end-to-end.
 ---
 
 # Verifying ncli changes

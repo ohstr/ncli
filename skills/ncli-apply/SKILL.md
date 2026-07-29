@@ -68,7 +68,7 @@ A flow entry is either a bare string or an object:
 kind: stream
 spec:
   from:
-    - relay: "wss://relay.damus.io"
+    - relay: "wss://relay.ohstr.com"
       trusted: true
     - "wss://relay.snort.social"   # shorthand form
 
@@ -147,7 +147,7 @@ enforced at spec-load time, before anything runs.
 kind: inspect
 spec:
   targets:
-    - wss://relay.damus.io
+    - wss://relay.primal.net
     - relay: wss://relay.snort.social
       trusted: true
     - path: ./data/db/notes.db

@@ -30,14 +30,14 @@ func TestNegSync_Integration(t *testing.T) {
 	}
 
 	// Unbounded kind-0 reconciliation asks a relay to fingerprint every
-	// profile it has ever seen, which trips guards like damus's "blocked:
-	// too many query results" even with a Since window, since that check
-	// looks at the total match count up front. Scope to a single pubkey
-	// (fiatjaf's, verified via his NIP-05 well-known JSON) whose kind-0
-	// profile is confirmed identical (same event ID) on both relays below
-	// and doesn't churn, unlike PoW-vanity-mining bots that republish a new
-	// kind-0 every few seconds and would make the negotiated ID stale by
-	// the time we try to pull it.
+	// profile it has ever seen, which trips guards like "blocked: too many
+	// query results" on some relays even with a Since window, since that
+	// check looks at the total match count up front. Scope to a single
+	// pubkey (fiatjaf's, verified via his NIP-05 well-known JSON) whose
+	// kind-0 profile is confirmed identical (same event ID) on both relays
+	// below and doesn't churn, unlike PoW-vanity-mining bots that republish
+	// a new kind-0 every few seconds and would make the negotiated ID stale
+	// by the time we try to pull it.
 	stableProfile := "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"
 
 	tests := []struct {
@@ -49,8 +49,8 @@ func TestNegSync_Integration(t *testing.T) {
 		minEvents int // minimum events expected to be found
 	}{
 		{
-			name:  "kind 0 profiles from damus",
-			relay: "wss://relay.damus.io",
+			name:  "kind 0 profiles from ohstr",
+			relay: "wss://relay.ohstr.com",
 			filter: &nip01.SubscriptionFilter{
 				Kinds:   []int{0},
 				Authors: []string{stableProfile},

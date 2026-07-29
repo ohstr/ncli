@@ -358,13 +358,13 @@ A default relay list — `find`, `ping`, `dump`, `miner check`, and
 relays.
 
 ```sh
-ncli prefs relays add relay.damus.io
+ncli prefs relays add relay.primal.net
 ncli prefs relays list
 
 # no -s -- falls back to the prefs relay list above
 ncli find jack@primal.net -k 1 -l 2
 
-ncli prefs relays remove relay.damus.io
+ncli prefs relays remove relay.primal.net
 # remove all of them
 ncli prefs relays clear
 
@@ -396,7 +396,7 @@ ncli find npub1...
 ncli find <event-id> -t examples/targets.yaml
 
 # multiple relays, first match wins
-ncli find --kinds 1 --limit 5 -s relay.damus.io,relay.primal.net
+ncli find --kinds 1 --limit 5 -s relay.ohstr.com,relay.primal.net
 ```
 
 ![`ncli find` resolving a nip-05 address and its recent notes](docs/vhs/find.gif)
@@ -418,7 +418,7 @@ ncli find jack@primal.net -t examples/targets.yaml
 kind: targets
 spec:
   relays:
-    - wss://relay.damus.io
+    - wss://relay.ohstr.com
     - relay: wss://relay.snort.social
       trusted: true  # skip re-verifying this source's signatures (default false)
     - path: ./data/db/notes.db
@@ -444,7 +444,7 @@ without `--json`/`--quiet`, falling back to plain narration otherwise.
 
 ```sh
 # relays are plain arguments, no flag needed -- scheme optional too
-ncli ping relay.damus.io relay.snort.social
+ncli ping relay.primal.net relay.snort.social
 
 # relays from a file (same shape as find/dump's --targets)
 ncli ping -t examples/targets.yaml
@@ -453,10 +453,10 @@ ncli ping -t examples/targets.yaml
 ncli ping
 
 # structured report on stdout, for scripting
-ncli ping relay.damus.io --json
+ncli ping relay.primal.net --json
 
 # live interactive board instead of plain log lines
-ncli ping relay.damus.io relay.snort.social --tui
+ncli ping relay.primal.net relay.snort.social --tui
 ```
 
 ![`ncli ping` checking two relays' reachability](docs/vhs/ping.gif)
@@ -471,7 +471,7 @@ target instead of stopping at the first match.
 ncli dump -s relay.ohstr.com -o events.json
 
 # merge a relay + a local store
-ncli dump -s relay.damus.io,./data/db/notes.db -o out.json
+ncli dump -s relay.primal.net,./data/db/notes.db -o out.json
 
 # recent notes, every `ncli prefs` relay
 ncli dump -k 1 --since 24h -o recent.json
@@ -492,10 +492,10 @@ reports each one's `OK`.
 ```sh
 # mine + auto-sign, then publish
 ncli miner mine --content "hello from ncli" --identity mykey -d 24 -o signed.json
-ncli publish -e signed.json -s wss://relay.damus.io
+ncli publish -e signed.json -s wss://relay.ohstr.com
 
 # publish several events to several relays at once
-ncli publish -e events.json -s relay.damus.io,relay.snort.social --json
+ncli publish -e events.json -s relay.ohstr.com,relay.snort.social --json
 ```
 
 Exits non-zero if any (event, relay) pair fails — the same
@@ -525,7 +525,7 @@ sources and destinations, mixed relays/stores):
 kind: stream
 spec:
   from:
-    - relay: "wss://relay.damus.io"
+    - relay: "wss://relay.ohstr.com"
       trusted: true  # skip re-verifying this source's signatures (default false)
     - wss://relay.snort.social      # bare-string shorthand for a remote relay also works
   to:
@@ -566,7 +566,7 @@ relays/stores; never publishes or writes to a target:
 kind: inspect
 spec:
   targets:
-    - "wss://relay.damus.io"
+    - "wss://relay.primal.net"
     - "wss://relay.snort.social"
     - path: "./data/db/notes.db"
       ensure: create
@@ -669,7 +669,7 @@ or fetched live (same filters as above), optionally narrowed to one
 identity's own events — a one-liner PoW compliance audit:
 
 ```sh
-ncli miner check -s relay.damus.io --identity mykey --kinds 1 --since 7d --json
+ncli miner check -s relay.ohstr.com --identity mykey --kinds 1 --since 7d --json
 ```
 
 It exits non-zero the moment any checked event fails, so it composes

@@ -6,7 +6,7 @@
 kind: targets
 spec:
   relays:
-    - wss://relay.damus.io
+    - wss://relay.ohstr.com
     # trusted (optional, default false): skip re-verifying this source's
     # event signatures before use -- only safe for a relay/store you
     # already trust to hand you validly-signed events.

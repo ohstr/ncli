@@ -20,7 +20,7 @@ Type "mkdir -p /tmp/ncli-demo && cd /tmp/ncli-demo && clear"
 Enter
 Show
 
-Type "ncli dump -s relay.damus.io -k 1 --since 1h -o notes.json"
+Type "ncli dump -s relay.primal.net -k 1 --since 1h -o notes.json"
 Sleep 500ms
 Enter
 Sleep 3s

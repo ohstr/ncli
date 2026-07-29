@@ -67,7 +67,7 @@ func TestFindArgs_TargetsWithRelaysIsMutuallyExclusive(t *testing.T) {
 
 	cmd := newTestFindCmd()
 	mustSet(t, cmd, "targets", path)
-	mustSet(t, cmd, "relays", "wss://relay.damus.io")
+	mustSet(t, cmd, "relays", "wss://relay.primal.net")
 	if err := findCmd.Args(cmd, nil); err == nil {
 		t.Fatal("Args(--targets + --relays) error = nil, want a mutual-exclusion error")
 	}
@@ -129,8 +129,8 @@ func TestMergeFindIdentifier_Author_ANDsIntoExistingFilter(t *testing.T) {
 // TestMergeFindIdentifier_Author_NoFilters_DefaultsToProfile locks in that
 // a bare `ncli find <npub>` (no --kinds/--limit/--targets at all) fetches
 // just that author's profile (kind 0), not an unbounded dump of everything
-// they've ever published -- the behavior a live test against
-// wss://relay.damus.io showed returns 147 events of every kind before this
+// they've ever published -- the behavior a live test against a busy public
+// relay showed returns hundreds of events of every kind before this
 // default existed.
 func TestMergeFindIdentifier_Author_NoFilters_DefaultsToProfile(t *testing.T) {
 	idFilter, filters := mergeFindIdentifier(&client.FindIdentifier{Author: "deadbeef"}, nil)

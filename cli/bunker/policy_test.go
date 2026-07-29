@@ -279,7 +279,7 @@ func TestRevokeGrant_NoSuchGrantOrSession(t *testing.T) {
 
 func TestSetName(t *testing.T) {
 	s, _ := newTestStore(t)
-	if err := s.Pair("app1", "Damus", "https://damus.io"); err != nil {
+	if err := s.Pair("app1", "Primal", "https://primal.net"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -332,8 +332,8 @@ func TestLabelFor(t *testing.T) {
 		},
 		{
 			name: "self-reported name wins over pubkey",
-			s:    Session{Pubkey: "abc123def456", AppName: "Damus", AppURL: "https://damus.io"},
-			want: "Damus (https://damus.io)",
+			s:    Session{Pubkey: "abc123def456", AppName: "Primal", AppURL: "https://primal.net"},
+			want: "Primal (https://primal.net)",
 		},
 		{
 			name: "falls back to shortHex(pubkey) when neither is set",
@@ -352,11 +352,11 @@ func TestLabelFor(t *testing.T) {
 
 func TestStoreLabel(t *testing.T) {
 	s, _ := newTestStore(t)
-	if err := s.Pair("app1", "Damus", "https://damus.io"); err != nil {
+	if err := s.Pair("app1", "Primal", "https://primal.net"); err != nil {
 		t.Fatal(err)
 	}
 
-	if got, want := s.Label("app1"), "Damus (https://damus.io)"; got != want {
+	if got, want := s.Label("app1"), "Primal (https://primal.net)"; got != want {
 		t.Errorf("Label() before SetName = %q, want %q", got, want)
 	}
 
@@ -485,13 +485,13 @@ func TestPair_RegistersZeroGrantSession(t *testing.T) {
 // threads schema.Metadata.Name/Url straight through.
 func TestPair_CapturesAppNameAndURL(t *testing.T) {
 	s, _ := newTestStore(t)
-	if err := s.Pair("app1", "Damus", "https://damus.io"); err != nil {
+	if err := s.Pair("app1", "Primal", "https://primal.net"); err != nil {
 		t.Fatal(err)
 	}
 
 	sessions := s.List()
-	if len(sessions) != 1 || sessions[0].AppName != "Damus" || sessions[0].AppURL != "https://damus.io" {
-		t.Fatalf("List() = %+v, want AppName=Damus AppURL=https://damus.io", sessions)
+	if len(sessions) != 1 || sessions[0].AppName != "Primal" || sessions[0].AppURL != "https://primal.net" {
+		t.Fatalf("List() = %+v, want AppName=Primal AppURL=https://primal.net", sessions)
 	}
 }
 
@@ -505,7 +505,7 @@ func TestPair_DoesNotBackfillMetadataOnAlreadyKnownApp(t *testing.T) {
 	if err := s.Pair("app1", "", ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Pair("app1", "Damus", "https://damus.io"); err != nil {
+	if err := s.Pair("app1", "Primal", "https://primal.net"); err != nil {
 		t.Fatal(err)
 	}
 

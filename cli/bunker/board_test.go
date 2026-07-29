@@ -114,13 +114,13 @@ func TestFormatRelayStatuses(t *testing.T) {
 		},
 		{
 			name:     "one connected",
-			statuses: []RelayStatus{{URL: "wss://relay.damus.io", Connected: true}},
-			want:     fmt.Sprintf("[%s]●[-:-:-] wss://relay.damus.io", tui.ColorSuccess),
+			statuses: []RelayStatus{{URL: "wss://relay.ohstr.com", Connected: true}},
+			want:     fmt.Sprintf("[%s]●[-:-:-] wss://relay.ohstr.com", tui.ColorSuccess),
 		},
 		{
 			name:     "one disconnected",
-			statuses: []RelayStatus{{URL: "wss://relay.damus.io", Connected: false}},
-			want:     fmt.Sprintf("[%s]○[-:-:-] wss://relay.damus.io", tui.ColorDanger),
+			statuses: []RelayStatus{{URL: "wss://relay.primal.net", Connected: false}},
+			want:     fmt.Sprintf("[%s]○[-:-:-] wss://relay.primal.net", tui.ColorDanger),
 		},
 		{
 			name: "mixed",
@@ -132,8 +132,8 @@ func TestFormatRelayStatuses(t *testing.T) {
 		},
 		{
 			name:     "still trying its first connection -- yellow, not red",
-			statuses: []RelayStatus{{URL: "wss://relay.damus.io", Connecting: true}},
-			want:     fmt.Sprintf("[%s]◐[-:-:-] wss://relay.damus.io", tui.ColorWarning),
+			statuses: []RelayStatus{{URL: "wss://relay.ohstr.com", Connecting: true}},
+			want:     fmt.Sprintf("[%s]◐[-:-:-] wss://relay.ohstr.com", tui.ColorWarning),
 		},
 	}
 	for _, tt := range tests {
@@ -1238,8 +1238,8 @@ func TestSessionsTableRendersNewColumns(t *testing.T) {
 		sessions: []Session{
 			{
 				Pubkey:   "abc123",
-				AppName:  "Damus",
-				AppURL:   "https://damus.io",
+				AppName:  "Primal",
+				AppURL:   "https://primal.net",
 				Nickname: "My Wallet",
 				PairedAt: pairedAt,
 				Grants:   []Grant{{Method: nip46.MethodSignEvent, Verdict: Allow, Kind: &kind1}},
@@ -1330,7 +1330,7 @@ func TestSummarizeApp(t *testing.T) {
 	}{
 		{name: "no name at all", s: Session{}, want: "-"},
 		{name: "name only", s: Session{AppName: "Damus"}, want: "Damus"},
-		{name: "name and url", s: Session{AppName: "Damus", AppURL: "https://damus.io"}, want: "Damus (https://damus.io)"},
+		{name: "name and url", s: Session{AppName: "Primal", AppURL: "https://primal.net"}, want: "Primal (https://primal.net)"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

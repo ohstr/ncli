@@ -169,7 +169,7 @@ permission), Trusted Apps also shows:
 
 - **Name** -- the name you set yourself (`n`/`sessions rename`) if you
   have one, else the app's own self-reported name (and URL, in parens, if
-  it gave one), e.g. `Damus (https://damus.io)`, else `-`. Self-reported
+  it gave one), e.g. `Primal (https://primal.net)`, else `-`. Self-reported
   names are only ever populated for a `nostrconnect://` pairing (the
   client generated the URI itself, with a `metadata` field baked in) -- a
   `bunker://` pairing has no equivalent at the NIP-46 protocol level, so

@@ -23,7 +23,7 @@ bench:
 
 # Regenerate the README's demo GIFs from docs/vhs/*.tape (needs vhs, ttyd,
 # and ffmpeg on PATH -- https://github.com/charmbracelet/vhs). Hits a real
-# public relay (wss://relay.damus.io) for live data, so results aren't
+# public relay (wss://relay.primal.net) for live data, so results aren't
 # byte-for-byte reproducible between runs. Pass a name (e.g. `just vhs apply`)
 # to only regenerate docs/vhs/<name>.tape.
 vhs name="*": build

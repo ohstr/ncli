@@ -37,8 +37,8 @@ ping relay.primal.net` needs no flag at all), and no filter flags at all
 ## `dump`
 
 ```sh
-ncli dump -s wss://relay.damus.io -o out.json
-ncli dump -s wss://relay.damus.io,./data/db/notes.db -o out.json   # comma-separated: merge a relay + a local store
+ncli dump -s wss://relay.ohstr.com -o out.json
+ncli dump -s wss://relay.ohstr.com,./data/db/notes.db -o out.json   # comma-separated: merge a relay + a local store
 ncli dump -s ./data/db/notes.db -k 1 --since 7d -o out.json        # inline filters against a local store (-k = --kinds)
 ncli dump -t targets.yaml -o out.json                              # relays + filters from one file
 ncli dump -o out.json                                               # -s/-t omitted: every `ncli prefs` relay, merged
@@ -54,11 +54,11 @@ silent empty/missing output file.
 
 ```sh
 ncli find <event-id> -t targets.yaml
-ncli find <event-id> -s wss://relay.damus.io
-ncli find note1... -s wss://relay.damus.io                          # positional also decodes note1.../nevent1... NIP-19 strings
+ncli find <event-id> -s wss://relay.primal.net
+ncli find note1... -s wss://relay.primal.net                          # positional also decodes note1.../nevent1... NIP-19 strings
 ncli find npub1...                                                  # author-shaped positional: no other filters, so just their profile (kind 0); uses `ncli prefs` relays
-ncli find alice@example.com -k 1 -l 5 -s wss://relay.damus.io       # nip-05 too, widened past the kind-0 default and ANDed with -k/-l
-ncli find -k 1 -a alice@example.com -s wss://relay.damus.io         # --authors flag form still available (-a short form)
+ncli find alice@example.com -k 1 -l 5 -s wss://relay.primal.net       # nip-05 too, widened past the kind-0 default and ANDed with -k/-l
+ncli find -k 1 -a alice@example.com -s wss://relay.primal.net         # --authors flag form still available (-a short form)
 ncli find <event-id>                                                # -t/-s omitted: uses `ncli prefs` relays
 ```
 
@@ -76,8 +76,8 @@ to exactly one of:
   or a nip-05 `name@domain` address. **With no other filters at all**
   (`ncli find <npub>` alone), this defaults to `kinds: [0]` — just their
   profile — instead of an unbounded fetch of everything they've ever
-  published (`cli/ncli/find.go:mergeFindIdentifier`; a live test against
-  `wss://relay.damus.io` returned 147 events of every kind before this
+  published (`cli/ncli/find.go:mergeFindIdentifier`; a live test against a
+  busy public relay returned hundreds of events of every kind before this
   default existed). Pass `--kinds` explicitly to widen it.
 
 There's no `-i`/`--id` flag: `docker`/`kubectl`/`git` never offer a flag
@@ -124,12 +124,12 @@ yourself with a bogus host: `ncli find <id> -s relay.invalid.example
 ## `ping`
 
 ```sh
-ncli ping relay.damus.io                                     # no flag needed -- scheme optional too, tries wss:// then falls back to ws://
-ncli ping relay.damus.io relay.snort.social                  # space-separated, not comma -- each is its own positional argument
+ncli ping relay.ohstr.com                                     # no flag needed -- scheme optional too, tries wss:// then falls back to ws://
+ncli ping relay.ohstr.com relay.snort.social                  # space-separated, not comma -- each is its own positional argument
 ncli ping -t targets.yaml                                    # relays from a file (its filters, if any, are ignored)
 ncli ping                                                    # no relays, no --targets: every `ncli prefs` relay
-ncli ping relay.damus.io --json                              # structured report on stdout, no narration
-ncli ping relay.damus.io relay.snort.social --tui             # live interactive board instead of plain log lines
+ncli ping relay.ohstr.com --json                              # structured report on stdout, no narration
+ncli ping relay.ohstr.com relay.snort.social --tui             # live interactive board instead of plain log lines
 ```
 
 Connects to every target and issues a Limit-1, match-everything
@@ -197,7 +197,7 @@ One file for both "where to look" and "what to match" — used by `-t` on
 kind: targets
 spec:
   relays:
-    - wss://relay.damus.io
+    - wss://relay.primal.net
     - relay: wss://relay.snort.social
       trusted: true
     - path: ./data/db/notes.db
@@ -222,10 +222,10 @@ Full filter field list and the `since`/`until` sign table:
 ## `ncli prefs`
 
 ```sh
-ncli prefs relays add wss://relay.damus.io
+ncli prefs relays add wss://relay.ohstr.com
 ncli prefs relays add relay.primal.net     # scheme optional here too -- see -s/--relays above
 ncli prefs relays list
-ncli prefs relays remove wss://relay.damus.io
+ncli prefs relays remove wss://relay.ohstr.com
 ncli prefs relays clear
 ncli prefs path            # print prefs.yaml's location
 ```

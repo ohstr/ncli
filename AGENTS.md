@@ -129,4 +129,4 @@ or invoking a command in that area:
 
 These skills assume only the `ncli` binary is available — no access to this
 source tree. (Building/contributing to `ncli` itself is a different task —
-see CONTRIBUTING.md and `.claude/skills/verify`.)
+see CONTRIBUTING.md and `.claude/skills/local-verify`.)

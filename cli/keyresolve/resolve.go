@@ -59,6 +59,75 @@ func PromptPassword(prompt string) (string, error) {
 	return string(pw), nil
 }
 
+// UnlockOrCreateVault returns the vault's own decrypted private key --
+// unlocking the existing vault (NCLI_VAULT_PASSWORD, or an interactive
+// prompt), or creating a brand-new one first (set-and-confirm prompt, or
+// NCLI_VAULT_PASSWORD again) if none exists yet. Shared by every command
+// that saves a freshly generated identity into the vault as a step of its
+// own flow, rather than "id"'s top-level interactive save (id.go's
+// saveIdentity narrates around this same exists/unlock/create sequence
+// itself).
+func UnlockOrCreateVault(cmd *cobra.Command, jsonMode bool) (string, error) {
+	exists, err := client.VaultExists()
+	if err != nil {
+		return "", err
+	}
+	if !exists {
+		password, err := ResolveNewVaultPassword(jsonMode)
+		if err != nil {
+			return "", common.UsageError(cmd, err)
+		}
+		_, privHex, err := client.CreateVaultIdentity(password)
+		if err != nil {
+			return "", fmt.Errorf("failed to create vault: %w", err)
+		}
+		return privHex, nil
+	}
+
+	password, err := ResolveVaultPassword(jsonMode, "Vault password: ")
+	if err != nil {
+		return "", common.UsageError(cmd, err)
+	}
+	privHex, err := client.UnlockVaultIdentity(password)
+	if err != nil {
+		return "", common.AuthError(cmd, err)
+	}
+	return privHex, nil
+}
+
+// ResolveNewVaultPassword sources the password to protect a brand-new
+// vault identity. When it comes from NCLI_VAULT_PASSWORD, the
+// confirm-by-retyping step is skipped -- there's no risk of a mistyped
+// confirmation when the value came from one authoritative source rather
+// than two rounds of human typing.
+func ResolveNewVaultPassword(jsonMode bool) (string, error) {
+	if pw := viper.GetString("vault.password"); pw != "" {
+		return pw, nil
+	}
+	if jsonMode {
+		return "", errors.New("vault password required; set NCLI_VAULT_PASSWORD")
+	}
+	return promptNewPassword()
+}
+
+func promptNewPassword() (string, error) {
+	pw, err := PromptPassword("Set a vault password: ")
+	if err != nil {
+		return "", err
+	}
+	if pw == "" {
+		return "", errors.New("password must not be empty")
+	}
+	confirm, err := PromptPassword("Confirm vault password: ")
+	if err != nil {
+		return "", err
+	}
+	if pw != confirm {
+		return "", errors.New("passwords did not match")
+	}
+	return pw, nil
+}
+
 // ResolveSigningKey returns the private key behind resolved -- directly,
 // for an nsec identity (client.ResolveIdentifier already decoded it), or
 // via the vault, for a saved vault label (ResolveVaultPassword ->

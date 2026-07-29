@@ -15,7 +15,6 @@ import (
 	"github.com/ohstr/nmilat/nip19"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var idCmd = &cobra.Command{
@@ -172,13 +171,13 @@ func runIDGenerate(cmd *cobra.Command) error {
 	fmt.Println("This is the only time the nsec above will be shown in plaintext -- store it somewhere safe.")
 
 	stdin := bufio.NewReader(os.Stdin)
-	if !save && !promptYesNo(stdin, "Save this identity to your vault? [y/N] ") {
+	if !save && !common.PromptYesNo(stdin, "Save this identity to your vault? [y/N] ") {
 		return nil
 	}
 
 	label := labelFlag
 	if label == "" {
-		label, err = promptLine(stdin, "Label for this identity (optional, press Enter to use the npub): ")
+		label, err = common.PromptLine(stdin, "Label for this identity (optional, press Enter to use the npub): ")
 		if err != nil {
 			return common.RuntimeError(cmd, err)
 		}
@@ -200,40 +199,24 @@ func saveIdentity(cmd *cobra.Command, jsonMode bool, id *client.Identity, label 
 	if err != nil {
 		return nil, err
 	}
-
-	var vaultPrivKeyHex string
-	if !exists {
-		password, err := resolveNewVaultPassword(jsonMode)
-		if err != nil {
-			// A missing/unusable password is a bad/missing precondition
-			// for the requested operation -- AGENTS.md's own definition
-			// of "usage" -- not an internal failure (see followup issue
-			// #2: this used to fall through to common.RuntimeError's
-			// CodeInternal/exit 1 instead).
-			return nil, common.UsageError(cmd, err)
-		}
-		if !jsonMode {
+	if !jsonMode {
+		if exists {
+			log.Info().Msg("unlocking vault...")
+		} else {
 			log.Info().Msg("creating vault identity...")
 		}
-		vaultNpub, privHex, err := client.CreateVaultIdentity(password)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create vault: %w", err)
-		}
-		if !jsonMode {
-			log.Info().Str("npub", vaultNpub).Msg("vault identity created")
-		}
-		vaultPrivKeyHex = privHex
-	} else {
-		// Same classification as runIDInspect/runIDList's identical calls
-		// to keyresolve.ResolveVaultPassword/client.UnlockVaultIdentity.
-		password, err := keyresolve.ResolveVaultPassword(jsonMode, "Vault password: ")
-		if err != nil {
-			return nil, common.UsageError(cmd, err)
-		}
-		vaultPrivKeyHex, err = client.UnlockVaultIdentity(password)
-		if err != nil {
-			return nil, common.AuthError(cmd, err)
-		}
+	}
+
+	// A missing/unusable password is a bad/missing precondition for the
+	// requested operation -- AGENTS.md's own definition of "usage" -- not
+	// an internal failure (see followup issue #2: this used to fall
+	// through to common.RuntimeError's CodeInternal/exit 1 instead).
+	// keyresolve.UnlockOrCreateVault already classifies this and a wrong
+	// password (CodeAuth) the same way runIDInspect/runIDList's identical
+	// calls do.
+	vaultPrivKeyHex, err := keyresolve.UnlockOrCreateVault(cmd, jsonMode)
+	if err != nil {
+		return nil, err
 	}
 
 	if !jsonMode {
@@ -253,21 +236,6 @@ func saveIdentity(cmd *cobra.Command, jsonMode bool, id *client.Identity, label 
 		return nil, fmt.Errorf("failed to save identity: %w", err)
 	}
 	return entry, nil
-}
-
-// resolveNewVaultPassword sources the password to protect a brand-new
-// vault identity. When it comes from NCLI_VAULT_PASSWORD, the
-// confirm-by-retyping step is skipped -- there's no risk of a mistyped
-// confirmation when the value came from one authoritative source rather
-// than two rounds of human typing.
-func resolveNewVaultPassword(jsonMode bool) (string, error) {
-	if pw := viper.GetString("vault.password"); pw != "" {
-		return pw, nil
-	}
-	if jsonMode {
-		return "", errors.New("vault password required; set NCLI_VAULT_PASSWORD")
-	}
-	return promptNewPassword()
 }
 
 func runIDList(cmd *cobra.Command) error {
@@ -339,38 +307,4 @@ func runIDList(cmd *cobra.Command) error {
 	}
 	w.Flush()
 	return nil
-}
-
-func promptYesNo(r *bufio.Reader, prompt string) bool {
-	fmt.Print(prompt)
-	line, _ := r.ReadString('\n')
-	line = strings.ToLower(strings.TrimSpace(line))
-	return line == "y" || line == "yes"
-}
-
-func promptLine(r *bufio.Reader, prompt string) (string, error) {
-	fmt.Print(prompt)
-	line, err := r.ReadString('\n')
-	if err != nil && !errors.Is(err, os.ErrClosed) && line == "" {
-		return "", err
-	}
-	return strings.TrimRight(line, "\r\n"), nil
-}
-
-func promptNewPassword() (string, error) {
-	pw, err := keyresolve.PromptPassword("Set a vault password: ")
-	if err != nil {
-		return "", err
-	}
-	if pw == "" {
-		return "", errors.New("password must not be empty")
-	}
-	confirm, err := keyresolve.PromptPassword("Confirm vault password: ")
-	if err != nil {
-		return "", err
-	}
-	if pw != confirm {
-		return "", errors.New("passwords did not match")
-	}
-	return pw, nil
 }

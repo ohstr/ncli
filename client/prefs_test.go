@@ -44,7 +44,7 @@ func TestAddRemoveListRoundTrip(t *testing.T) {
 		t.Fatalf("LoadPrefs() error = %v", err)
 	}
 
-	added, err := prefs.AddRelay("wss://relay.damus.io")
+	added, err := prefs.AddRelay("wss://relay.primal.net")
 	if err != nil {
 		t.Fatalf("AddRelay() error = %v", err)
 	}
@@ -53,7 +53,7 @@ func TestAddRemoveListRoundTrip(t *testing.T) {
 	}
 
 	// Adding the same relay again is a no-op, not a duplicate entry.
-	added, err = prefs.AddRelay("wss://relay.damus.io")
+	added, err = prefs.AddRelay("wss://relay.primal.net")
 	if err != nil {
 		t.Fatalf("AddRelay() error = %v", err)
 	}
@@ -72,17 +72,17 @@ func TestAddRemoveListRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadPrefs() after save error = %v", err)
 	}
-	if len(reloaded.Relays) != 1 || reloaded.Relays[0] != "wss://relay.damus.io" {
-		t.Fatalf("reloaded Relays = %v, want [wss://relay.damus.io]", reloaded.Relays)
+	if len(reloaded.Relays) != 1 || reloaded.Relays[0] != "wss://relay.primal.net" {
+		t.Fatalf("reloaded Relays = %v, want [wss://relay.primal.net]", reloaded.Relays)
 	}
 
-	if !reloaded.RemoveRelay("wss://relay.damus.io") {
+	if !reloaded.RemoveRelay("wss://relay.primal.net") {
 		t.Fatalf("RemoveRelay() = false, want true")
 	}
 	if len(reloaded.Relays) != 0 {
 		t.Fatalf("Relays after remove = %v, want empty", reloaded.Relays)
 	}
-	if reloaded.RemoveRelay("wss://relay.damus.io") {
+	if reloaded.RemoveRelay("wss://relay.primal.net") {
 		t.Fatalf("RemoveRelay() on absent relay = true, want false")
 	}
 }
@@ -172,7 +172,7 @@ func TestTargetsFromPrefs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadPrefs() error = %v", err)
 	}
-	if _, err := prefs.AddRelay("wss://relay.damus.io"); err != nil {
+	if _, err := prefs.AddRelay("wss://relay.ohstr.com"); err != nil {
 		t.Fatalf("AddRelay() error = %v", err)
 	}
 	if err := SavePrefs(prefs); err != nil {
@@ -189,8 +189,8 @@ func TestTargetsFromPrefs(t *testing.T) {
 	if spec.Relays[0].Type != FlOW_REMOTE {
 		t.Fatalf("TargetsFromPrefs() Relays[0].Type = %v, want %v", spec.Relays[0].Type, FlOW_REMOTE)
 	}
-	if spec.Relays[0].relayURI == nil || spec.Relays[0].relayURI.Host != "relay.damus.io" {
-		t.Fatalf("TargetsFromPrefs() Relays[0].relayURI = %v, want host relay.damus.io", spec.Relays[0].relayURI)
+	if spec.Relays[0].relayURI == nil || spec.Relays[0].relayURI.Host != "relay.ohstr.com" {
+		t.Fatalf("TargetsFromPrefs() Relays[0].relayURI = %v, want host relay.ohstr.com", spec.Relays[0].relayURI)
 	}
 	if spec.Relays[0].relayFallbackURI != nil {
 		t.Fatalf("TargetsFromPrefs() Relays[0].relayFallbackURI = %v, want nil for an explicit wss:// scheme", spec.Relays[0].relayFallbackURI)
@@ -233,7 +233,7 @@ func TestTargetsFromRelayList(t *testing.T) {
 		t.Fatalf("failed to create notes.db fixture: %v", err)
 	}
 
-	spec, err := TargetsFromRelayList([]string{"wss://relay.damus.io", dbPath})
+	spec, err := TargetsFromRelayList([]string{"wss://relay.primal.net", dbPath})
 	if err != nil {
 		t.Fatalf("TargetsFromRelayList() error = %v", err)
 	}
@@ -249,7 +249,7 @@ func TestTargetsFromRelayList(t *testing.T) {
 }
 
 func TestTargetsFromRelayList_SchemelessHost(t *testing.T) {
-	spec, err := TargetsFromRelayList([]string{"wss://relay.damus.io", "relay.primal.net"})
+	spec, err := TargetsFromRelayList([]string{"wss://relay.ohstr.com", "relay.primal.net"})
 	if err != nil {
 		t.Fatalf("TargetsFromRelayList() error = %v", err)
 	}

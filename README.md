@@ -1,5 +1,6 @@
 # >_ ncli
 
+[![Release](https://img.shields.io/github/v/release/ohstr/ncli)](https://github.com/ohstr/ncli/releases/latest)
 [![CI](https://github.com/ohstr/ncli/actions/workflows/ci.yml/badge.svg)](https://github.com/ohstr/ncli/actions/workflows/ci.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/ohstr/ncli.svg)](https://pkg.go.dev/github.com/ohstr/ncli)
 [![License: Unlicense](https://img.shields.io/badge/license-Unlicense-blue.svg)](LICENSE)
@@ -11,7 +12,7 @@ events.**
 ## Features
 
 - [`ncli relay`](#relay-run-a-nostr-relay-server) — Run a fast, low-level Nostr relay server
-- [`ncli relay context`](#relay-context-stop-retyping---config) — Save and switch between named relay `--config` targets
+- [`ncli relay context`](#relay-context-save-switch-and-run-relays-by-name) — Save, switch, and run relays by name, auto-creating new ones
 - [`ncli relay members/invites/roles`](#relay-membersinvitesroles-nip-43-membership-admin) — Manage a running relay's NIP-43 membership over NIP-98 HTTP
 - [`ncli relay stats/reindex/clear`](#relay-statsreindexclear-operate-a-running-relay) — Manage a running relay over NIP-98 HTTP
 - [`ncli apply`](#apply-stream-sync-inspect) — Stream, sync, or inspect events, with a live TUI and hot-reloading config
@@ -110,9 +111,18 @@ docker run --rm ghcr.io/ohstr/ncli:latest --help
 
 </details>
 
-**Run a relay** — every field `RelayConfig` understands, at its default
-value (see [`examples/relay/full.yaml`](examples/relay/full.yaml) itself
-for the commented version explaining each one):
+**Quickest way to get one running**:
+
+```sh
+ncli relay -c bee_community
+```
+
+Generates a minimal config (shape: [`examples/relay/minimal.yaml`](examples/relay/minimal.yaml))
+with a fresh identity and starts serving — see
+[`relay context`](#relay-context-save-switch-and-run-relays-by-name).
+
+Want full control? Write your own config and pass it with `--config` —
+every field, at default, commented: [`examples/relay/full.yaml`](examples/relay/full.yaml)
 
 ```yaml
 # examples/relay/full.yaml
@@ -237,7 +247,7 @@ this actually enforced (`strict: true`). More presets (auth-required,
 membership, ephemeral, cache+search) live under
 [`examples/relay/`](examples/relay/).
 
-## `relay context`: stop retyping `--config`
+## `relay context`: save, switch, and run relays by name
 
 Managing more than one relay means retyping `--config path/to/relay.yaml`
 on every `stats`/`members`/`invites`/... call. Save each relay's config
@@ -248,9 +258,11 @@ ncli relay context add bee_community ~/relays/bee-community.yaml
 ncli relay context add outbox ~/relays/outbox.yaml
 ncli relay context use bee_community
 
-# targets bee_community, no --config needed
+# starts the relay server using bee_community's config
+ncli relay
+
+# targets bee_community too, no --config needed
 ncli relay stats
-# same
 ncli relay members list
 
 # list saved contexts, "*" marks the current one
@@ -258,9 +270,20 @@ ncli relay context
 ncli relay context remove outbox
 ```
 
-`--config`, if given, always wins. Otherwise a `ncli.yaml`/`relay.yaml` in
-the current directory still takes priority (unchanged from before contexts
-existed); the current context is consulted only when neither is present.
+`--config`, if given, always wins. Otherwise the current context, if one is
+set, wins over any `ncli.yaml`/`relay.yaml` in the current directory.
+
+### `-c`/`--context`: run a context directly, creating it if new
+
+`ncli relay -c <name>` runs a saved context without `context use` first.
+If `<name>` doesn't exist, it creates one: a minimal config and a fresh
+identity, saved to the vault under `<name>` (suffixed on a label
+collision), under `.ncli/relays/<name>/`. Registered, but not switched to
+as current.
+
+`-q`/`--json` skip the confirmation. `--identity <nsec-or-vault-label>`
+uses an existing identity instead of generating one. `--context` and
+`--config` are mutually exclusive.
 
 ## `relay members`/`invites`/`roles`: NIP-43 membership admin
 
@@ -336,13 +359,13 @@ A default relay list — `find`, `ping`, `dump`, `miner check`, and
 relays.
 
 ```sh
-ncli prefs relays add relay.damus.io
+ncli prefs relays add relay.primal.net
 ncli prefs relays list
 
 # no -s -- falls back to the prefs relay list above
 ncli find jack@primal.net -k 1 -l 2
 
-ncli prefs relays remove relay.damus.io
+ncli prefs relays remove relay.primal.net
 # remove all of them
 ncli prefs relays clear
 
@@ -374,7 +397,7 @@ ncli find npub1...
 ncli find <event-id> -t examples/targets.yaml
 
 # multiple relays, first match wins
-ncli find --kinds 1 --limit 5 -s relay.damus.io,relay.primal.net
+ncli find --kinds 1 --limit 5 -s relay.ohstr.com,relay.primal.net
 ```
 
 ![`ncli find` resolving a nip-05 address and its recent notes](docs/vhs/find.gif)
@@ -396,7 +419,7 @@ ncli find jack@primal.net -t examples/targets.yaml
 kind: targets
 spec:
   relays:
-    - wss://relay.damus.io
+    - wss://relay.ohstr.com
     - relay: wss://relay.snort.social
       trusted: true  # skip re-verifying this source's signatures (default false)
     - path: ./data/db/notes.db
@@ -422,7 +445,7 @@ without `--json`/`--quiet`, falling back to plain narration otherwise.
 
 ```sh
 # relays are plain arguments, no flag needed -- scheme optional too
-ncli ping relay.damus.io relay.snort.social
+ncli ping relay.primal.net relay.snort.social
 
 # relays from a file (same shape as find/dump's --targets)
 ncli ping -t examples/targets.yaml
@@ -431,10 +454,10 @@ ncli ping -t examples/targets.yaml
 ncli ping
 
 # structured report on stdout, for scripting
-ncli ping relay.damus.io --json
+ncli ping relay.primal.net --json
 
 # live interactive board instead of plain log lines
-ncli ping relay.damus.io relay.snort.social --tui
+ncli ping relay.primal.net relay.snort.social --tui
 ```
 
 ![`ncli ping` checking two relays' reachability](docs/vhs/ping.gif)
@@ -449,7 +472,7 @@ target instead of stopping at the first match.
 ncli dump -s relay.ohstr.com -o events.json
 
 # merge a relay + a local store
-ncli dump -s relay.damus.io,./data/db/notes.db -o out.json
+ncli dump -s relay.primal.net,./data/db/notes.db -o out.json
 
 # recent notes, every `ncli prefs` relay
 ncli dump -k 1 --since 24h -o recent.json
@@ -470,10 +493,10 @@ reports each one's `OK`.
 ```sh
 # mine + auto-sign, then publish
 ncli miner mine --content "hello from ncli" --identity mykey -d 24 -o signed.json
-ncli publish -e signed.json -s wss://relay.damus.io
+ncli publish -e signed.json -s wss://relay.ohstr.com
 
 # publish several events to several relays at once
-ncli publish -e events.json -s relay.damus.io,relay.snort.social --json
+ncli publish -e events.json -s relay.ohstr.com,relay.snort.social --json
 ```
 
 Exits non-zero if any (event, relay) pair fails — the same
@@ -503,7 +526,7 @@ sources and destinations, mixed relays/stores):
 kind: stream
 spec:
   from:
-    - relay: "wss://relay.damus.io"
+    - relay: "wss://relay.ohstr.com"
       trusted: true  # skip re-verifying this source's signatures (default false)
     - wss://relay.snort.social      # bare-string shorthand for a remote relay also works
   to:
@@ -544,7 +567,7 @@ relays/stores; never publishes or writes to a target:
 kind: inspect
 spec:
   targets:
-    - "wss://relay.damus.io"
+    - "wss://relay.primal.net"
     - "wss://relay.snort.social"
     - path: "./data/db/notes.db"
       ensure: create
@@ -647,7 +670,7 @@ or fetched live (same filters as above), optionally narrowed to one
 identity's own events — a one-liner PoW compliance audit:
 
 ```sh
-ncli miner check -s relay.damus.io --identity mykey --kinds 1 --since 7d --json
+ncli miner check -s relay.ohstr.com --identity mykey --kinds 1 --since 7d --json
 ```
 
 It exits non-zero the moment any checked event fails, so it composes
@@ -800,10 +823,10 @@ npx skills add ohstr/ncli --all -y
 
 Config is loaded via [viper](https://github.com/spf13/viper) from a YAML
 file or `NCLI_`-prefixed environment variables. Without `--config`, ncli
-looks for `ncli.yaml`/`relay.yaml` in the current directory, then the
-current [`relay context`](#relay-context-stop-retyping---config) (if any),
-then `$HOME`. Every YAML input `ncli` accepts has a documented sample
-under [`examples/`](examples/).
+uses the current [`relay context`](#relay-context-save-switch-and-run-relays-by-name)
+if one is set, otherwise it looks for `ncli.yaml`/`relay.yaml` in the
+current directory, then `$HOME`. Every YAML input `ncli` accepts has a
+documented sample under [`examples/`](examples/).
 
 ## Docker
 

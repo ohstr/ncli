@@ -117,7 +117,7 @@ by another tool, or a PoW-mined-but-unsigned draft (`miner mine` without
 ```sh
 ncli miner mine -e draft.json -o mined.json -d 20        # PoW only, stays unsigned
 ncli id sign --identity agent-key -e mined.json -o signed.json --json
-ncli publish -e signed.json -s wss://relay.damus.io
+ncli publish -e signed.json -s wss://relay.primal.net
 ```
 
 ## `ncli id delegate` — mint a NIP-26 token

@@ -106,11 +106,12 @@ port: 59999
 	}
 }
 
-// TestRelayContextYieldsToLocalConfigFile locks in the precedence choice
-// in cli/ncli/root.go's resolveConfigFile: a ncli.yaml/relay.yaml in the
-// working directory always wins over a saved relay context, unchanged
-// from the cwd-discovery behavior that existed before contexts did.
-func TestRelayContextYieldsToLocalConfigFile(t *testing.T) {
+// TestRelayContextWinsOverLocalConfigFile locks in the precedence choice
+// in cli/ncli/root.go's resolveConfigFile: a saved, current relay context
+// wins over any ncli.yaml/relay.yaml in the working directory -- an
+// explicitly selected context shouldn't be silently shadowed by whatever
+// directory a command happens to be run from.
+func TestRelayContextWinsOverLocalConfigFile(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds and spawns the ncli binary; skipped in -short mode")
 	}
@@ -128,7 +129,8 @@ port: 59999
 		t.Fatalf("failed to write context config fixture: %v", err)
 	}
 
-	// The cwd's own config uses a different, equally distinctive port.
+	// The cwd's own config uses a different, equally distinctive port --
+	// it must lose to the current context.
 	if err := os.WriteFile(filepath.Join(cwd, "relay.yaml"), []byte(`
 nip11:
   privkey: "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
@@ -167,8 +169,8 @@ port: 59998
 	if jsonErr := json.Unmarshal([]byte(lastLine), &payload); jsonErr != nil {
 		t.Fatalf("expected a structured JSON error as the last stderr line, got: %v\nraw: %s", jsonErr, exitErr.Stderr)
 	}
-	if !strings.Contains(payload.Input, "59998") {
-		t.Errorf("expected the cwd config's port (59998) to win over the context's (59999), got input=%q", payload.Input)
+	if !strings.Contains(payload.Input, "59999") {
+		t.Errorf("expected the context's port (59999) to win over the cwd config's (59998), got input=%q", payload.Input)
 	}
 }
 

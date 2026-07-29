@@ -3,7 +3,6 @@ package relay
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -164,7 +163,8 @@ color/order), never removed.`,
 // runs a command's own (non-persistent) PreRunE, and a PersistentPreRunE
 // here would shadow rootCmd's own (which does the actual config loading).
 func getAdminConfig() (string, int, string, error) {
-	if used := viper.ConfigFileUsed(); used != "" {
+	used := viper.ConfigFileUsed()
+	if used != "" {
 		ev := log.Info().Str("config", used)
 		if common.ActiveRelayContext != "" {
 			ev = ev.Str("relay_context", common.ActiveRelayContext)
@@ -179,7 +179,10 @@ func getAdminConfig() (string, int, string, error) {
 
 	privKey := viper.GetString("nip11.privkey")
 	if privKey == "" {
-		return "", 0, "", errors.New("nip11.privkey is required to sign these requests")
+		if used == "" {
+			return "", 0, "", errNoRelayConfig
+		}
+		return "", 0, "", fmt.Errorf("nip11.privkey is required to sign these requests (config: %s)", used)
 	}
 
 	pubKey := viper.GetString("nip11.pubkey")

@@ -1,7 +1,7 @@
 kind: targets
 spec:
   relays:
-    - wss://relay.damus.io
+    - wss://relay.ohstr.com
     - relay: wss://relay.snort.social
       trusted: true
     - path: ../testdata/notes.db
@@ -26,7 +26,7 @@ spec:
 kind: targets
 spec:
   relays:
-    - wss://relay.damus.io
+    - wss://relay.primal.net
     - null
     - wss://relay.snort.social
 
@@ -48,7 +48,7 @@ spec:
 kind: targets
 spec:
   relays:
-    - wss://relay.damus.io
+    - wss://relay.ohstr.com
   filters:
     - kinds: [1]
       authors:
@@ -60,7 +60,7 @@ spec:
 kind: targets
 spec:
   relays:
-    - wss://relay.damus.io
+    - wss://relay.primal.net
   filters:
     - kinds: [1]
     - null

@@ -19,7 +19,7 @@ Set Padding 20
 Set Theme "Dracula"
 Set TypingSpeed 40ms
 
-Type "ncli prefs relays add relay.damus.io"
+Type "ncli prefs relays add relay.primal.net"
 Sleep 500ms
 Enter
 Sleep 1s

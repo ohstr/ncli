@@ -105,7 +105,6 @@ wss://relay.beta.fogtype.com
 wss://relay.bitcoinpark.com
 wss://relay.cosmicbolt.net
 wss://relay.credenso.cafe
-wss://relay.damus.io
 wss://relay.geyser.fund
 wss://relay.guggero.org
 wss://relay.ingwie.me
@@ -134,6 +133,7 @@ wss://relay.nostrcheck.me
 wss://relay.nostromo.social
 wss://relay.nostrplebs.com
 wss://relay.notoshi.win
+wss://relay.ohstr.com
 wss://relay.orangepill.ovh
 wss://relay.pleb.to
 wss://relay.primal.net

@@ -3,12 +3,12 @@ package client
 import "testing"
 
 func TestResolveRelayURL_ExplicitWss(t *testing.T) {
-	primary, fallback, err := ResolveRelayURL("wss://relay.damus.io")
+	primary, fallback, err := ResolveRelayURL("wss://relay.ohstr.com")
 	if err != nil {
 		t.Fatalf("ResolveRelayURL() error = %v", err)
 	}
-	if primary.String() != "wss://relay.damus.io" {
-		t.Fatalf("primary = %q, want wss://relay.damus.io", primary.String())
+	if primary.String() != "wss://relay.ohstr.com" {
+		t.Fatalf("primary = %q, want wss://relay.ohstr.com", primary.String())
 	}
 	if fallback != nil {
 		t.Fatalf("fallback = %v, want nil for an explicit scheme", fallback)

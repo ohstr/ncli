@@ -7,8 +7,8 @@ license: Unlicense
 # ncli agent-capability eval
 
 `integration/agent-eval/` is a different integration test from
-`.claude/skills/verify`: instead of building `ncli` from local source to
-check a code change, it drives a **fresh** Claude Code agent -- in a
+`.claude/skills/local-verify`: instead of building `ncli` from local source
+to check a code change, it drives a **fresh** Claude Code agent -- in a
 container that has never seen this repo -- through the same path any
 real external user/agent would follow (`Fetch
 https://ohstr.github.io/ncli/PROMPT.md`), then independently re-checks

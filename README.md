@@ -1,5 +1,6 @@
 # >_ ncli
 
+[![Release](https://img.shields.io/github/v/release/ohstr/ncli)](https://github.com/ohstr/ncli/releases/latest)
 [![CI](https://github.com/ohstr/ncli/actions/workflows/ci.yml/badge.svg)](https://github.com/ohstr/ncli/actions/workflows/ci.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/ohstr/ncli.svg)](https://pkg.go.dev/github.com/ohstr/ncli)
 [![License: Unlicense](https://img.shields.io/badge/license-Unlicense-blue.svg)](LICENSE)

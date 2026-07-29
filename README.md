@@ -11,7 +11,7 @@ events.**
 ## Features
 
 - [`ncli relay`](#relay-run-a-nostr-relay-server) — Run a fast, low-level Nostr relay server
-- [`ncli relay context`](#relay-context-stop-retyping---config) — Save and switch between named relay `--config` targets
+- [`ncli relay context`](#relay-context-save-switch-and-run-relays-by-name) — Save, switch, and run relays by name, auto-creating new ones
 - [`ncli relay members/invites/roles`](#relay-membersinvitesroles-nip-43-membership-admin) — Manage a running relay's NIP-43 membership over NIP-98 HTTP
 - [`ncli relay stats/reindex/clear`](#relay-statsreindexclear-operate-a-running-relay) — Manage a running relay over NIP-98 HTTP
 - [`ncli apply`](#apply-stream-sync-inspect) — Stream, sync, or inspect events, with a live TUI and hot-reloading config
@@ -110,9 +110,18 @@ docker run --rm ghcr.io/ohstr/ncli:latest --help
 
 </details>
 
-**Run a relay** — every field `RelayConfig` understands, at its default
-value (see [`examples/relay/full.yaml`](examples/relay/full.yaml) itself
-for the commented version explaining each one):
+**Quickest way to get one running**:
+
+```sh
+ncli relay -c bee_community
+```
+
+Generates a minimal config (shape: [`examples/relay/minimal.yaml`](examples/relay/minimal.yaml))
+with a fresh identity and starts serving — see
+[`relay context`](#relay-context-save-switch-and-run-relays-by-name).
+
+Want full control? Write your own config and pass it with `--config` —
+every field, at default, commented: [`examples/relay/full.yaml`](examples/relay/full.yaml)
 
 ```yaml
 # examples/relay/full.yaml
@@ -237,7 +246,7 @@ this actually enforced (`strict: true`). More presets (auth-required,
 membership, ephemeral, cache+search) live under
 [`examples/relay/`](examples/relay/).
 
-## `relay context`: stop retyping `--config`
+## `relay context`: save, switch, and run relays by name
 
 Managing more than one relay means retyping `--config path/to/relay.yaml`
 on every `stats`/`members`/`invites`/... call. Save each relay's config
@@ -248,9 +257,11 @@ ncli relay context add bee_community ~/relays/bee-community.yaml
 ncli relay context add outbox ~/relays/outbox.yaml
 ncli relay context use bee_community
 
-# targets bee_community, no --config needed
+# starts the relay server using bee_community's config
+ncli relay
+
+# targets bee_community too, no --config needed
 ncli relay stats
-# same
 ncli relay members list
 
 # list saved contexts, "*" marks the current one
@@ -258,9 +269,20 @@ ncli relay context
 ncli relay context remove outbox
 ```
 
-`--config`, if given, always wins. Otherwise a `ncli.yaml`/`relay.yaml` in
-the current directory still takes priority (unchanged from before contexts
-existed); the current context is consulted only when neither is present.
+`--config`, if given, always wins. Otherwise the current context, if one is
+set, wins over any `ncli.yaml`/`relay.yaml` in the current directory.
+
+### `-c`/`--context`: run a context directly, creating it if new
+
+`ncli relay -c <name>` runs a saved context without `context use` first.
+If `<name>` doesn't exist, it creates one: a minimal config and a fresh
+identity, saved to the vault under `<name>` (suffixed on a label
+collision), under `.ncli/relays/<name>/`. Registered, but not switched to
+as current.
+
+`-q`/`--json` skip the confirmation. `--identity <nsec-or-vault-label>`
+uses an existing identity instead of generating one. `--context` and
+`--config` are mutually exclusive.
 
 ## `relay members`/`invites`/`roles`: NIP-43 membership admin
 
@@ -800,10 +822,10 @@ npx skills add ohstr/ncli --all -y
 
 Config is loaded via [viper](https://github.com/spf13/viper) from a YAML
 file or `NCLI_`-prefixed environment variables. Without `--config`, ncli
-looks for `ncli.yaml`/`relay.yaml` in the current directory, then the
-current [`relay context`](#relay-context-stop-retyping---config) (if any),
-then `$HOME`. Every YAML input `ncli` accepts has a documented sample
-under [`examples/`](examples/).
+uses the current [`relay context`](#relay-context-save-switch-and-run-relays-by-name)
+if one is set, otherwise it looks for `ncli.yaml`/`relay.yaml` in the
+current directory, then `$HOME`. Every YAML input `ncli` accepts has a
+documented sample under [`examples/`](examples/).
 
 ## Docker
 

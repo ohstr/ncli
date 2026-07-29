@@ -29,11 +29,7 @@ var (
 var localConfigNames = []string{"ncli.yaml", "relay.yaml"}
 
 // FindLocalConfigFile returns the path of the first of ncli.yaml/relay.yaml
-// that exists directly in dir, or "" if neither does. Exported so
-// ncli.InitConfig can check "does the working directory already have its
-// own config" before falling back to a saved `ncli relay context` -- a
-// directory's own config file keeps the same top priority it had before
-// contexts existed.
+// that exists directly in dir, or "" if neither does.
 func FindLocalConfigFile(dir string) string {
 	for _, name := range localConfigNames {
 		p := filepath.Join(dir, name)

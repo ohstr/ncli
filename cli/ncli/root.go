@@ -48,22 +48,19 @@ func init() {
 
 // resolveConfigFile returns the config file path to load, in priority
 // order: an explicit --config flag; a saved `ncli relay context` (see
-// client.Prefs), consulted only when the working directory has no
-// ncli.yaml/relay.yaml of its own -- a directory's own config keeps the
-// priority it had before contexts existed; or "" to let
-// common.LoadViperConfig fall back to its existing cwd/home search
-// unchanged. common.ActiveRelayContext is set as a side effect whenever a
-// context supplies the path, so downstream "using config file" log lines
-// can name it.
+// client.Prefs), consulted whenever one is current, regardless of whether
+// the working directory also has its own ncli.yaml/relay.yaml -- an
+// explicitly selected context is a deliberate choice and should not be
+// silently shadowed by whatever directory the command happens to be run
+// from; or "" to let common.LoadViperConfig fall back to its existing
+// cwd/home search unchanged, when no context is current.
+// common.ActiveRelayContext is set as a side effect whenever a context
+// supplies the path, so downstream "using config file" log lines can name
+// it.
 func resolveConfigFile() string {
 	common.ActiveRelayContext = ""
 	if cfgFile != "" {
 		return cfgFile
-	}
-
-	cwd, _ := os.Getwd()
-	if common.FindLocalConfigFile(cwd) != "" {
-		return ""
 	}
 
 	prefs, err := client.LoadPrefs()

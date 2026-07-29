@@ -225,8 +225,19 @@ func NewRelayCommand() *cobra.Command {
 		Short: "Run the relay server, or operate one that's already running",
 		Long: `Bare invocation runs the Nostr relay server: WebSocket protocol,
 NIP-11 metadata, and optional search. Its subcommands instead operate a
-relay that's already running, over NIP-98 authenticated HTTP.`,
+relay that's already running, over NIP-98 authenticated HTTP.
+
+-c/--context <name> runs directly against a named relay context (see
+"relay context"), creating it on the spot -- a minimal config, backed by a
+freshly generated identity under .../relays/<name>/ -- if that name isn't
+saved yet.`,
 		PreRunE: func(cmd *cobra.Command, args []string) error {
+			ctxName, _ := cmd.Flags().GetString("context")
+			if ctxName != "" {
+				if err := runOrCreateRelayContext(cmd, ctxName); err != nil {
+					return err
+				}
+			}
 			if err := initConfig(); err != nil {
 				return common.RuntimeError(cmd, err)
 			}
@@ -239,6 +250,9 @@ relay that's already running, over NIP-98 authenticated HTTP.`,
 			return nil
 		},
 	}
+
+	cmd.Flags().StringP("context", "c", "", `run directly against a named relay context, creating it (minimal config + new identity) if it doesn't exist yet -- mutually exclusive with --config`)
+	cmd.Flags().String("identity", "", `identity for a newly created context's relay key (vault label or nsec); a fresh one is generated and saved to the vault (labeled after the context) if omitted`)
 
 	addRemoteAdminCommands(cmd)
 	addContextCommands(cmd)

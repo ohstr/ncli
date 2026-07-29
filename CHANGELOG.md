@@ -1,5 +1,29 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- `ncli relay -c/--context <name>` runs a saved relay context directly,
+  skipping `context use` -- and creates one on the spot (a minimal config
+  backed by a freshly generated, vault-saved identity, or an existing
+  `--identity`) if that name isn't saved yet.
+  ([#30](https://github.com/ohstr/ncli/pull/30))
+
+### Changed
+
+- A saved `ncli relay context` now wins over a local `ncli.yaml`/
+  `relay.yaml` in the working directory, instead of silently losing to
+  it. ([#30](https://github.com/ohstr/ncli/pull/30))
+
+### Fixed
+
+- `ncli relay` and its admin subcommands (`stats`/`reindex`/`clear`/...)
+  with no config source at all -- no `--config`, no current context, no
+  local `ncli.yaml`/`relay.yaml` -- reported a confusing missing-field
+  error instead of saying plainly that no config resolved.
+  ([#30](https://github.com/ohstr/ncli/pull/30))
+
 ## [0.4.3]
 
 ### Fixed

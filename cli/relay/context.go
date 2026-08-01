@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// addContextCommands adds "context" (and its "add"/"remove"/"use"
+// addContextCommands adds "context" (and its "list"/"add"/"remove"/"use"
 // children) onto cmd -- the relay root command. A named context is just a
 // (name -> config file path) entry in prefs.yaml (see client.Prefs); the
 // one marked current is what every relay command uses when --config is
@@ -26,10 +26,20 @@ func addContextCommands(cmd *cobra.Command) {
 		Long: `Bare invocation lists saved relay contexts (name -> config file path),
 marking the current one with "*". A context is what every relay command uses
 when --config is omitted, taking priority over any ncli.yaml/relay.yaml in
-the working directory. See "add", "remove", and "use" to manage contexts.`,
+the working directory. See "list", "add", "remove", and "use" to manage
+contexts.`,
 		Args: common.NoArgs,
 		RunE: runContextList,
 	}
+
+	listCmd := &cobra.Command{
+		Use:   "list",
+		Short: "List saved relay contexts",
+		Long:  `Same as bare "context": lists saved relay contexts, marking the current one with "*".`,
+		Args:  common.NoArgs,
+		RunE:  runContextList,
+	}
+	contextCmd.AddCommand(listCmd)
 
 	addCmd := &cobra.Command{
 		Use:   "add <name> <config-path>",

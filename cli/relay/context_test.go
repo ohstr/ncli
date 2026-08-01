@@ -244,6 +244,22 @@ func TestRelayContextListAndRemove(t *testing.T) {
 		}
 	})
 
+	t.Run("explicit list subcommand matches bare invocation", func(t *testing.T) {
+		var list struct {
+			Contexts map[string]string `json:"contexts"`
+			Current  string            `json:"current"`
+		}
+		if err := json.Unmarshal(run("relay", "context", "list", "--json"), &list); err != nil {
+			t.Fatalf("invalid JSON: %v", err)
+		}
+		if list.Current != "staging" {
+			t.Errorf("current = %q, want staging", list.Current)
+		}
+		if _, ok := list.Contexts["staging"]; !ok {
+			t.Errorf("contexts = %v, want a staging entry", list.Contexts)
+		}
+	})
+
 	t.Run("remove clears current", func(t *testing.T) {
 		var removed struct {
 			Removed bool `json:"removed"`

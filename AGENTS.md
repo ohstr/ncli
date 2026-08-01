@@ -19,7 +19,7 @@ that priority order.
 | `ncli relay --config <relay.yaml>` | Run the relay server; `agent_auth` block enables NIP-AA (an agent key gains virtual membership from its owner's NIP-43 membership via a NIP-OA credential, no separate enrollment) |
 | `ncli relay stats/reindex/clear` | Administer a *running* relay over NIP-98 HTTP, incl. rebuilding search/zap indexes |
 | `ncli relay members/invites/roles` | Administer a *running* relay's NIP-43 membership over NIP-98 HTTP: enroll/remove members, issue/revoke invite codes, define roles |
-| `ncli relay context add/use/remove` | Save named relay `--config` shortcuts and switch the current one, so `relay` subcommands stop needing `--config` repeated on every call |
+| `ncli relay context list/add/use/remove` | Save named relay `--config` shortcuts and switch the current one, so `relay` subcommands stop needing `--config` repeated on every call |
 | `ncli relay -c/--context <name>` | Run directly against a saved context by name (bypassing "current"); if `<name>` doesn't exist yet, offers (or `-q`/`--json` auto-confirms) to create a minimal relay backed by a fresh vault identity under `<AppConfigDir>/relays/<name>/` |
 | `ncli bunker` | Run as a NIP-46 remote signer: approve/reject other clients' signing requests from a live TUI, remembering per-app decisions so you aren't re-prompted every time |
 | `ncli bunker attach/status/stop/sessions/connect` | Reattach to, query, stop, or pair a running bunker daemon without opening the TUI |

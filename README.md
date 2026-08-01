@@ -265,7 +265,7 @@ ncli relay
 ncli relay stats
 ncli relay members list
 
-# list saved contexts, "*" marks the current one
+# list saved contexts, "*" marks the current one (same as `relay context list`)
 ncli relay context
 ncli relay context remove outbox
 ```

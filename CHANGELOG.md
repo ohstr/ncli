@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- `ncli relay context list` explicitly lists saved relay contexts, same
+  as the pre-existing bare `ncli relay context` invocation.
+  ([#31](https://github.com/ohstr/ncli/pull/31))
+
 ## [0.4.4]
 
 ### Added

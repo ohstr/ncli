@@ -232,15 +232,14 @@ ncli find --search "jack" -k 1 -l 5 -s localhost:5500
 ```
 
 Require NIP-13 proof-of-work on published events with a `pow:` block —
-`min: 0` (the default) accepts everything, including an event whose `nonce`
-tag lies about its own difficulty; a non-zero `min` is advertised to clients
-via NIP-11 either way, and `strict: true` is what actually turns on
-rejecting events, both ones that fall short of `min` and ones whose `nonce`
-tag doesn't match reality regardless of `min`:
+`min: 0` (the default) accepts everything, even a lying `nonce` tag; a
+non-zero `min` is advertised via NIP-11 either way, and `strict: true` is
+what actually rejects events, both under-difficulty ones and ones whose
+`nonce` tag doesn't match reality:
 
 ```yaml
 pow:
-  strict: false # true rejects under-difficulty/self-contradictory nonce tags; false accepts either
+  strict: false # true rejects under-difficulty and self-contradictory nonce tags
   min: 20       # required leading-zero-bit difficulty; 0 = no requirement
 ```
 
@@ -520,11 +519,10 @@ true` field (both kinds support it) to reject it instead — the flag, when
 passed explicitly, overrides whatever the spec file says. A `trusted: true`
 flow is never subject to this check either way.
 
-This only governs ncli's own read-side judgment on events it pulls from a
-`from` flow — it has no effect on what a `to` relay independently decides
-once ncli forwards an event to it. A relay you don't control may still
-reject a bad-PoW event on its own terms regardless of `strictPow` here; see
-its own `pow:` config (above) if you also operate that relay.
+This only governs ncli's own read-side check — it has no effect on what a
+`to` relay decides once ncli forwards the event. A relay you don't control
+may still reject it on its own terms; see its `pow:` config above if you
+operate it.
 
 **`stream`** — tail events live, forwarding everything matching `filters`
 from every `from` flow to every `to` flow until interrupted (any number of

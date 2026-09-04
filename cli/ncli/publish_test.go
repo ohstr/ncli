@@ -63,7 +63,7 @@ func mockRelayServer(t *testing.T, accept bool) (wsURL string) {
 		if err != nil {
 			return
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 
 		for {
 			_, msg, err := conn.ReadMessage()
@@ -89,9 +89,9 @@ func mockRelayServer(t *testing.T, accept bool) (wsURL string) {
 			id := s[idStart:idEnd]
 
 			if accept {
-				conn.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf(`["OK", "%s", true, ""]`, id)))
+				_ = conn.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf(`["OK", "%s", true, ""]`, id)))
 			} else {
-				conn.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf(`["OK", "%s", false, "rejected"]`, id)))
+				_ = conn.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf(`["OK", "%s", false, "rejected"]`, id)))
 			}
 		}
 	}))

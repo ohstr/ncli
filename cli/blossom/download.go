@@ -71,7 +71,7 @@ omitted, or streams to stdout with "-o -" (suppressing the summary line).`,
 			if err != nil {
 				return classifyHTTPError(cmd, hash, err)
 			}
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 
 			outPath, _ := cmd.Flags().GetString("output")
 			toStdout := outPath == "-"
@@ -90,7 +90,7 @@ omitted, or streams to stdout with "-o -" (suppressing the summary line).`,
 				if err != nil {
 					return common.RuntimeError(cmd, err)
 				}
-				defer f.Close()
+				defer func() { _ = f.Close() }()
 				out = f
 				createdPath = outPath
 			}
@@ -100,7 +100,7 @@ omitted, or streams to stdout with "-o -" (suppressing the summary line).`,
 				if createdPath != "" {
 					// Best-effort cleanup: don't leave a truncated,
 					// corrupt-looking file behind after a failed transfer.
-					os.Remove(createdPath)
+					_ = os.Remove(createdPath)
 				}
 				return common.NetworkError(cmd, usedServer, err)
 			}

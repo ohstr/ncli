@@ -74,7 +74,7 @@ func TestPingPositionalRelaysToReport(t *testing.T) {
 		if err != nil {
 			return
 		}
-		conn.Close()
+		_ = conn.Close()
 	}))
 	defer server.Close()
 	wsURL := "ws" + server.URL[len("http"):]

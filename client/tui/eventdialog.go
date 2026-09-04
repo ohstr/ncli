@@ -61,7 +61,7 @@ func (a *App) ShowEvent(event *nip01.Event, onSave func()) {
 	// margin bug was, and was independently found (in cli/bunker, which
 	// shares this exact dialog pattern) to bleed the exact same way under
 	// a board's real concurrent redraw traffic.
-	fmt.Fprint(text, ColorizeEventJSON(event))
+	_, _ = fmt.Fprint(text, ColorizeEventJSON(event))
 	text.ScrollToBeginning()
 
 	form := tview.NewForm().

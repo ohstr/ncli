@@ -255,7 +255,7 @@ func adminRequestBody(method, path string, body interface{}) (map[string]interfa
 			Input: url,
 		}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
 		respBody, _ := io.ReadAll(resp.Body)
@@ -538,15 +538,15 @@ func runMembersList(cmd *cobra.Command, args []string) error {
 	}
 
 	tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(tw, "PUBKEY\tROLES\tJOINED")
+	_, _ = fmt.Fprintln(tw, "PUBKEY\tROLES\tJOINED")
 	for _, raw := range members {
 		m, ok := raw.(map[string]interface{})
 		if !ok {
 			continue
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\n", truncPubkey(strField(m, "pubkey")), joinOrDash(stringsField(m, "roles")), relativeTime(int64Field(m, "joined_at")))
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\n", truncPubkey(strField(m, "pubkey")), joinOrDash(stringsField(m, "roles")), relativeTime(int64Field(m, "joined_at")))
 	}
-	tw.Flush()
+	_ = tw.Flush()
 	return nil
 }
 
@@ -666,7 +666,7 @@ func runInvitesList(cmd *cobra.Command, args []string) error {
 	}
 
 	tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(tw, "CODE\tUSES\tEXPIRES\tROLES")
+	_, _ = fmt.Fprintln(tw, "CODE\tUSES\tEXPIRES\tROLES")
 	for _, raw := range invites {
 		m, ok := raw.(map[string]interface{})
 		if !ok {
@@ -677,9 +677,9 @@ func runInvitesList(cmd *cobra.Command, args []string) error {
 		if maxUses > 0 {
 			usesCol = fmt.Sprintf("%d/%d", int64Field(m, "uses"), maxUses)
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", truncCode(strField(m, "code")), usesCol, formatUnix(int64Field(m, "expires_at")), joinOrDash(stringsField(m, "roles")))
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", truncCode(strField(m, "code")), usesCol, formatUnix(int64Field(m, "expires_at")), joinOrDash(stringsField(m, "roles")))
 	}
-	tw.Flush()
+	_ = tw.Flush()
 	return nil
 }
 
@@ -722,7 +722,7 @@ func runRolesList(cmd *cobra.Command, args []string) error {
 	}
 
 	tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(tw, "ID\tLABEL\tDESCRIPTION\tCOLOR\tORDER")
+	_, _ = fmt.Fprintln(tw, "ID\tLABEL\tDESCRIPTION\tCOLOR\tORDER")
 	for _, raw := range roles {
 		m, ok := raw.(map[string]interface{})
 		if !ok {
@@ -735,9 +735,9 @@ func runRolesList(cmd *cobra.Command, args []string) error {
 		if v, ok := m["order"].(float64); ok {
 			order = fmt.Sprintf("%d", int(v))
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", strField(m, "id"), strField(m, "label"), strField(m, "description"), color, order)
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", strField(m, "id"), strField(m, "label"), strField(m, "description"), color, order)
 	}
-	tw.Flush()
+	_ = tw.Flush()
 	return nil
 }
 

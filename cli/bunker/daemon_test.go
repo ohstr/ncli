@@ -38,7 +38,7 @@ type connState struct {
 func (cs *connState) write(conn *websocket.Conn, msg []byte) {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
-	conn.WriteMessage(websocket.TextMessage, msg)
+	_ = conn.WriteMessage(websocket.TextMessage, msg)
 }
 
 // fakeRelay is a minimal single-process Nostr relay used only to exercise
@@ -65,7 +65,7 @@ func newFakeRelay(t *testing.T) *fakeRelay {
 		if err != nil {
 			return
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 		defer fr.forget(conn)
 
 		for {
@@ -109,7 +109,7 @@ func (fr *fakeRelay) handle(conn *websocket.Conn, data []byte) {
 		return
 	}
 	var kind string
-	json.Unmarshal(raw[0], &kind)
+	_ = json.Unmarshal(raw[0], &kind)
 
 	cs := fr.stateFor(conn)
 
@@ -119,7 +119,7 @@ func (fr *fakeRelay) handle(conn *websocket.Conn, data []byte) {
 			return
 		}
 		var subID string
-		json.Unmarshal(raw[1], &subID)
+		_ = json.Unmarshal(raw[1], &subID)
 
 		filters := nip01.NewSubscriptionFilterGroup()
 		for _, fraw := range raw[2:] {
@@ -164,7 +164,7 @@ func (fr *fakeRelay) handle(conn *websocket.Conn, data []byte) {
 			return
 		}
 		var subID string
-		json.Unmarshal(raw[1], &subID)
+		_ = json.Unmarshal(raw[1], &subID)
 		cs.mu.Lock()
 		delete(cs.subs, subID)
 		cs.mu.Unlock()
@@ -372,7 +372,7 @@ func TestDaemon_SignEventRoundTrip(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go daemon.Run(ctx)
+	go func() { _ = daemon.Run(ctx) }()
 
 	// A second connection to the same fake relay plays the "app" side:
 	// subscribe for responses addressed to it, then publish a sign_event
@@ -483,7 +483,7 @@ func TestDaemon_NostrconnectFlow(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go daemon.Run(ctx)
+	go func() { _ = daemon.Run(ctx) }()
 
 	// Client side: connect independently and listen for the daemon's own
 	// outgoing "connect" request, addressed to this pubkey.
@@ -631,7 +631,7 @@ func TestDaemon_EncryptionScenarios(t *testing.T) {
 
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			go daemon.Run(ctx)
+			go func() { _ = daemon.Run(ctx) }()
 
 			client := newTestNIP46Client(t, ctx, relay.url, testClientPriv)
 			reqID := client.send(signerPub, nip46.MethodPing, []string{}, tt.opts)
@@ -704,7 +704,7 @@ func TestDaemon_BunkerPairing_LandsInPendingQueue(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go daemon.Run(ctx)
+	go func() { _ = daemon.Run(ctx) }()
 
 	uri, err := daemon.NewBunkerPairing()
 	if err != nil {
@@ -779,7 +779,7 @@ func TestDaemon_BunkerPairing_ApprovedEndToEnd(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go daemon.Run(ctx)
+	go func() { _ = daemon.Run(ctx) }()
 
 	uri, err := daemon.NewBunkerPairing()
 	if err != nil {
@@ -858,7 +858,7 @@ func TestDaemon_BunkerPairing_WrongSecretThenRightSecret(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go daemon.Run(ctx)
+	go func() { _ = daemon.Run(ctx) }()
 
 	uri, err := daemon.NewBunkerPairing()
 	if err != nil {
@@ -932,7 +932,7 @@ func TestDaemon_BunkerPairing_SecretExpiresForReal(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go daemon.Run(ctx)
+	go func() { _ = daemon.Run(ctx) }()
 
 	uri, err := daemon.NewBunkerPairing()
 	if err != nil {
@@ -1002,7 +1002,7 @@ func TestDaemon_Revoke_BlocksSubsequentRequests(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go daemon.Run(ctx)
+	go func() { _ = daemon.Run(ctx) }()
 
 	client := newTestNIP46Client(t, ctx, relay.url, testClientPriv)
 
@@ -1080,7 +1080,7 @@ func TestDaemon_RelayStatuses(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go daemon.Run(ctx)
+	go func() { _ = daemon.Run(ctx) }()
 
 	// runRelay dials asynchronously -- poll briefly for the live relay's
 	// connection to register rather than assuming a fixed sleep is both
@@ -1344,13 +1344,13 @@ func TestDaemon_History_RecordsFromQueueResolution(t *testing.T) {
 		Queue:        queue,
 	})
 
-	go queue.Add(Pending{ID: "req-1", ClientKey: "app1", Method: "sign_event", Kind: 1})
+	go func() { _, _ = queue.Add(Pending{ID: "req-1", ClientKey: "app1", Method: "sign_event", Kind: 1}) }()
 	waitFor(t, func() bool { return len(queue.List()) == 1 })
 	if err := queue.Resolve("req-1", Allow, true); err != nil {
 		t.Fatal(err)
 	}
 
-	go queue.Add(Pending{ID: "req-2", ClientKey: "app2", Method: "ping"})
+	go func() { _, _ = queue.Add(Pending{ID: "req-2", ClientKey: "app2", Method: "ping"}) }()
 	waitFor(t, func() bool { return len(queue.List()) == 1 })
 	if err := queue.Resolve("req-2", Deny, false); err != nil {
 		t.Fatal(err)
@@ -1488,7 +1488,7 @@ func TestDaemon_EventLog_PersistsSignedEventAcrossRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer reloadedLog.Close()
+	defer func() { _ = reloadedLog.Close() }()
 
 	if len(reloadedHistory) != 1 {
 		t.Fatalf("reloaded history len = %d, want 1: %+v", len(reloadedHistory), reloadedHistory)
@@ -1567,7 +1567,7 @@ func TestDaemon_EventLog_InterruptedPendingSurfacesAsExpiredAfterRestart(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer reloadedLog.Close()
+	defer func() { _ = reloadedLog.Close() }()
 
 	if len(reloadedHistory) != 1 {
 		t.Fatalf("reloaded history len = %d, want 1: %+v", len(reloadedHistory), reloadedHistory)
@@ -1632,7 +1632,7 @@ func TestDaemon_EventLog_RuntimeCompactionBoundsTheFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer eventLog.Close()
+	defer func() { _ = eventLog.Close() }()
 
 	daemon := NewDaemon(DaemonConfig{
 		IdentityPriv: testSignerPriv,
@@ -1666,7 +1666,7 @@ func TestDaemon_EventLog_RuntimeCompactionBoundsTheFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadEventLog after runtime compaction: %v", err)
 	}
-	defer reloadedLog.Close()
+	defer func() { _ = reloadedLog.Close() }()
 	if len(reloadedHistory) != maxHistoryTail {
 		t.Errorf("reloaded history len = %d, want maxHistoryTail (%d)", len(reloadedHistory), maxHistoryTail)
 	}
@@ -1727,7 +1727,7 @@ func TestDaemon_EventLog_RuntimeCompactionUnderConcurrency(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadEventLog after concurrent compaction: %v", err)
 	}
-	defer reloadedLog.Close()
+	defer func() { _ = reloadedLog.Close() }()
 	if len(reloadedHistory) != maxHistoryTail {
 		t.Fatalf("reloaded history len = %d, want maxHistoryTail (%d)", len(reloadedHistory), maxHistoryTail)
 	}

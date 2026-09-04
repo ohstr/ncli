@@ -13,9 +13,9 @@ import (
 	"github.com/ohstr/nmilat/nip01"
 	"github.com/ohstr/nmilat/nip11"
 	"github.com/ohstr/nmilat/nip77"
-	"github.com/ohstr/nmilat/wire"
 	"github.com/ohstr/nmilat/relay"
 	relayclient "github.com/ohstr/nmilat/relay/client"
+	"github.com/ohstr/nmilat/wire"
 )
 
 // TestNegSync_Integration tests NIP-77 negentropy sync against real public
@@ -86,8 +86,8 @@ func TestNegSync_Integration(t *testing.T) {
 				t.Fatalf("failed to create temp file: %v", err)
 			}
 			tmpPath := tmpFile.Name()
-			tmpFile.Close()
-			defer os.Remove(tmpPath)
+			_ = tmpFile.Close()
+			defer func() { _ = os.Remove(tmpPath) }()
 
 			t.Logf("temp db: %s", tmpPath)
 

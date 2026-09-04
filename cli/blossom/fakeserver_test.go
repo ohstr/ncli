@@ -144,7 +144,7 @@ func newFakeBlossomServer() *fakeBlossomServer {
 	// same goroutine, which the Go memory model does guarantee orders
 	// correctly relative to the spawned goroutine.
 	s.Server = httptest.NewUnstartedServer(mux)
-	s.Server.Start()
+	s.Start()
 	return s
 }
 
@@ -261,7 +261,7 @@ func (s *fakeBlossomServer) handleMirror(w http.ResponseWriter, r *http.Request)
 		nipB7.WriteError(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		nipB7.WriteError(w, http.StatusBadGateway, err.Error())
@@ -277,7 +277,7 @@ func (s *fakeBlossomServer) handleMirror(w http.ResponseWriter, r *http.Request)
 
 func (s *fakeBlossomServer) writeDescriptor(w http.ResponseWriter, hash string, size int64, contentType string, hooks fakeServerHooks) {
 	if hooks.MalformedResponseBody {
-		w.Write([]byte("not json"))
+		_, _ = w.Write([]byte("not json"))
 		return
 	}
 	d := nipB7.BlobDescriptor{
@@ -290,7 +290,7 @@ func (s *fakeBlossomServer) writeDescriptor(w http.ResponseWriter, hash string, 
 	if hooks.InvalidDescriptor {
 		d.URL = "" // fails BlobDescriptor.Validate() despite a 2xx transfer
 	}
-	json.NewEncoder(w).Encode(d)
+	_ = json.NewEncoder(w).Encode(d)
 }
 
 func (s *fakeBlossomServer) handleReport(w http.ResponseWriter, r *http.Request) {
@@ -354,7 +354,7 @@ func (s *fakeBlossomServer) handleList(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 
 	nipB7.SortDescending(descriptors)
-	json.NewEncoder(w).Encode(descriptors)
+	_ = json.NewEncoder(w).Encode(descriptors)
 }
 
 func (s *fakeBlossomServer) handleBlob(w http.ResponseWriter, r *http.Request) {
@@ -393,7 +393,7 @@ func (s *fakeBlossomServer) handleBlob(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-		w.Write(b.data)
+		_, _ = w.Write(b.data)
 
 	case http.MethodDelete:
 		// BUD-11: delete tokens "should be scoped to exactly this hash" --

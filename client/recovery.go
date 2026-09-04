@@ -287,7 +287,7 @@ func (rm *RecoveryManager) collectPending(force bool) []*RetryMeta {
 	var result []*RetryMeta
 	now := time.Now()
 
-	rm.metaDB.View(func(tx *bolt.Tx) error {
+	if err := rm.metaDB.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket(BUCKET_RECOVERY)
 		c := b.Cursor()
 
@@ -302,7 +302,9 @@ func (rm *RecoveryManager) collectPending(force bool) []*RetryMeta {
 			}
 		}
 		return nil
-	})
+	}); err != nil {
+		log.Error().Err(err).Msg("failed to scan recovery bucket for pending retries")
+	}
 
 	return result
 }
@@ -373,7 +375,9 @@ func (rm *RecoveryManager) processBatch(ctx context.Context, destination string,
 		for _, meta := range metas {
 			// If invalid URL, delete
 			if _, urlErr := url.Parse(destination); urlErr != nil {
-				rm.deleteMeta(meta.EventID, meta.Destination)
+				if err := rm.deleteMeta(meta.EventID, meta.Destination); err != nil {
+					log.Error().Err(err).Str("id", meta.EventID).Msg("failed to delete recovery metadata for invalid-URL destination")
+				}
 				continue
 			}
 			rm.handleRetryFailure(meta, err)
@@ -395,7 +399,9 @@ func (rm *RecoveryManager) processBatch(ctx context.Context, destination string,
 		event, err := rm.findEvent(meta.EventID)
 		if err != nil {
 			log.Error().Err(err).Str("id", meta.EventID).Msg("failed to load event for retry, deleting metadata")
-			rm.deleteMeta(meta.EventID, meta.Destination)
+			if err := rm.deleteMeta(meta.EventID, meta.Destination); err != nil {
+				log.Error().Err(err).Str("id", meta.EventID).Msg("failed to delete recovery metadata")
+			}
 			continue
 		}
 
@@ -430,7 +436,9 @@ func (rm *RecoveryManager) processBatch(ctx context.Context, destination string,
 		} else {
 			// Success
 			log.Info().Str("id", event.ID).Str("dest", destination).Msg("successfully recovered event")
-			rm.deleteMeta(meta.EventID, meta.Destination)
+			if err := rm.deleteMeta(meta.EventID, meta.Destination); err != nil {
+				log.Error().Err(err).Str("id", meta.EventID).Msg("failed to delete recovery metadata for a successfully recovered event")
+			}
 		}
 	}
 }
@@ -442,11 +450,15 @@ func (rm *RecoveryManager) handleRetryFailure(meta *RetryMeta, err error) {
 
 	if meta.Attempts >= rm.maxRetries {
 		log.Warn().Str("id", meta.EventID).Msg("max retries reached, dropping event")
-		rm.deleteMeta(meta.EventID, meta.Destination)
+		if err := rm.deleteMeta(meta.EventID, meta.Destination); err != nil {
+			log.Error().Err(err).Str("id", meta.EventID).Msg("failed to delete recovery metadata for a dropped event")
+		}
 	} else {
 		// Backoff
 		meta.NextRetry = time.Now().Add(rm.retryInterval * time.Duration(meta.Attempts))
-		rm.saveMeta(meta)
+		if err := rm.saveMeta(meta); err != nil {
+			log.Error().Err(err).Str("id", meta.EventID).Msg("failed to save recovery metadata backoff")
+		}
 	}
 }
 

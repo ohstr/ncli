@@ -415,7 +415,7 @@ func (m model) View() string {
 			if _, ok := m.selectedKinds[i]; ok {
 				checked = "x"
 			}
-			kindList.WriteString(fmt.Sprintf("%s [%s] %s\n", cursor, checked, choice.name))
+			fmt.Fprintf(&kindList, "%s [%s] %s\n", cursor, checked, choice.name)
 		}
 		s = kindList.String()
 	case stateCustomKinds:

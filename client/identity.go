@@ -286,7 +286,7 @@ func fetchNip05PubKey(url, name, identifier string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("nip-05 lookup for %q failed: %w", identifier, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("nip-05 lookup for %q: server returned %s", identifier, resp.Status)

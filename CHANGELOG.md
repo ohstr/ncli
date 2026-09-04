@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- `apply stream`/`sync` no longer silently drop an event at the destination
+  relay just because its `nonce` tag overclaims its NIP-13 difficulty --
+  regardless of `strictPow`/`--strict-pow`, since that setting only ever
+  governed ncli's own read-side check, never the relay's. Bumps
+  `github.com/ohstr/nmilat` to v0.2.7, which fixes this on the relay side.
+
 ## [0.4.5]
 
 ### Added

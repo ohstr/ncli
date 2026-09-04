@@ -1,6 +1,6 @@
 module github.com/ohstr/ncli
 
-go 1.26.1
+go 1.26.8
 
 require (
 	github.com/btcsuite/btcd/btcec/v2 v2.3.4
@@ -69,7 +69,7 @@ require (
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
-	github.com/ohstr/nmilat v0.2.5
+	github.com/ohstr/nmilat v0.2.7
 	golang.org/x/sync v0.20.0
 	golang.org/x/sys v0.45.0
 	golang.org/x/term v0.43.0

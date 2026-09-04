@@ -510,19 +510,14 @@ composes-into-CI/scripts convention as `miner check`.
 [`examples/apply/`](examples/apply/) — the snippets below are trimmed to
 the essentials.
 
-`--strict-pow` is a flag on `apply` (default `false`) that applies to both
-`stream` and `sync`: since NIP-13 proof-of-work is optional per event, an
-untrusted event with a `nonce` tag that doesn't meet its declared
-difficulty is accepted by default, same as one with no `nonce` tag at all.
-Enable strict checking either via the flag or the spec's own `strictPow:
-true` field (both kinds support it) to reject it instead — the flag, when
-passed explicitly, overrides whatever the spec file says. A `trusted: true`
-flow is never subject to this check either way.
+`--strict-pow` (default `false`) makes `apply` reject an untrusted event
+whose `nonce` tag doesn't meet its declared PoW difficulty, instead of
+accepting it — settable via the flag or the spec's own `strictPow: true`
+field, flag wins when passed explicitly.
 
-This only governs ncli's own read-side check — it has no effect on what a
-`to` relay decides once ncli forwards the event. A relay you don't control
-may still reject it on its own terms; see its `pow:` config above if you
-operate it.
+See [`skills/ncli-apply/SKILL.md`](skills/ncli-apply/SKILL.md) for the full
+walkthrough, including `trusted: true` exemptions and why this doesn't
+govern what a `to` relay independently decides.
 
 **`stream`** — tail events live, forwarding everything matching `filters`
 from every `from` flow to every `to` flow until interrupted (any number of

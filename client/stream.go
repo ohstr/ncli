@@ -23,9 +23,9 @@ import (
 	"github.com/ohstr/nmilat/nip01"
 	"github.com/ohstr/nmilat/nip09"
 	"github.com/ohstr/nmilat/nip11"
-	"github.com/ohstr/nmilat/wire"
 	"github.com/ohstr/nmilat/relay"
 	relayclient "github.com/ohstr/nmilat/relay/client"
+	"github.com/ohstr/nmilat/wire"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/sync/errgroup"
 )

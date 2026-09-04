@@ -13,9 +13,9 @@ import (
 
 	meilisearch "github.com/meilisearch/meilisearch-go"
 	"github.com/ohstr/nmilat/config"
+	"github.com/ohstr/nmilat/nip19"
 	"github.com/ohstr/nmilat/search"
 	"github.com/ohstr/nmilat/search/ranking"
-	"github.com/ohstr/nmilat/nip19"
 )
 
 type MeiliClient struct {

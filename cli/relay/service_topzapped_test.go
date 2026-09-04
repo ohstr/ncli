@@ -88,7 +88,7 @@ func TestNewServer_TopZappedWindowFromYAML(t *testing.T) {
 		wsURL := "ws" + strings.TrimPrefix(ts.URL, "http") + "/"
 		conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 		require.NoError(t, err)
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 
 		require.NoError(t, conn.WriteMessage(websocket.TextMessage,
 			[]byte(`["REQ","sub1",{"cache":["top-zapped",{}]}]`)))

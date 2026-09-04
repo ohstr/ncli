@@ -166,7 +166,7 @@ func LoadEventLog(path string) (*EventLog, []HistoryEntry, error) {
 			Expired:    true,
 		}
 		if err := l.AppendResolved(h); err != nil {
-			f.Close()
+			_ = f.Close()
 			return nil, nil, err
 		}
 		order = append(order, h.ID)
@@ -180,7 +180,7 @@ func LoadEventLog(path string) (*EventLog, []HistoryEntry, error) {
 	if len(out) > maxHistoryTail {
 		out = out[len(out)-maxHistoryTail:]
 		if err := l.compact(out); err != nil {
-			f.Close()
+			_ = f.Close()
 			return nil, nil, err
 		}
 	}
@@ -299,23 +299,23 @@ func (l *EventLog) compact(entries []HistoryEntry) error {
 	for _, h := range entries {
 		data, err := json.Marshal(walEntry{Type: walResolved, History: &h})
 		if err != nil {
-			tmp.Close()
-			os.Remove(tmpPath)
+			_ = tmp.Close()
+			_ = os.Remove(tmpPath)
 			return err
 		}
 		if _, err := tmp.Write(append(data, '\n')); err != nil {
-			tmp.Close()
-			os.Remove(tmpPath)
+			_ = tmp.Close()
+			_ = os.Remove(tmpPath)
 			return err
 		}
 	}
 	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		os.Remove(tmpPath)
+		_ = tmp.Close()
+		_ = os.Remove(tmpPath)
 		return err
 	}
 	if err := tmp.Close(); err != nil {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 		return err
 	}
 
@@ -324,7 +324,7 @@ func (l *EventLog) compact(entries []HistoryEntry) error {
 	// against the now-compacted file so subsequent appends land in the
 	// right place.
 	if err := l.f.Close(); err != nil {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 		return err
 	}
 	if err := os.Rename(tmpPath, l.path); err != nil {

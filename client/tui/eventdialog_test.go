@@ -64,7 +64,7 @@ func TestColorizeEventJSONRendersCleanlyThroughTextView(t *testing.T) {
 	colored := ColorizeEventJSON(event)
 
 	tv := tview.NewTextView().SetDynamicColors(true)
-	fmt.Fprint(tv, colored)
+	_, _ = fmt.Fprint(tv, colored)
 	rendered := tv.GetText(true)
 
 	for _, want := range []string{

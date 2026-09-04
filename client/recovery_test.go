@@ -40,7 +40,7 @@ func TestRecoveryManager(t *testing.T) {
 		if err != nil {
 			return
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 
 		for {
 			_, _, err := conn.ReadMessage()
@@ -93,7 +93,7 @@ func TestRecoveryManager(t *testing.T) {
 			// Just send a hardcoded OK for the event ID we are testing
 			id := "4d6d9c5b65123456789012345678901234567890123456789012345678901234"
 			response := fmt.Sprintf(`["OK", "%s", true, "saved"]`, id)
-			conn.WriteMessage(websocket.TextMessage, []byte(response))
+			_ = conn.WriteMessage(websocket.TextMessage, []byte(response))
 		}
 	}))
 	defer server.Close()
@@ -169,7 +169,7 @@ func newMockRelay(t *testing.T, behavior mockRelayBehavior, received *atomic.Int
 		if err != nil {
 			return
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 
 		for {
 			_, msg, err := conn.ReadMessage()
@@ -204,9 +204,9 @@ func newMockRelay(t *testing.T, behavior mockRelayBehavior, received *atomic.Int
 			}
 
 			if behavior == mockRelayAccept {
-				conn.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf(`["OK", "%s", true, ""]`, id)))
+				_ = conn.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf(`["OK", "%s", true, ""]`, id)))
 			} else {
-				conn.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf(`["OK", "%s", false, "rejected"]`, id)))
+				_ = conn.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf(`["OK", "%s", false, "rejected"]`, id)))
 			}
 		}
 	}))

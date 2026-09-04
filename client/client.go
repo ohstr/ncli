@@ -33,7 +33,7 @@ func loadSpecFromYaml(yamlPath string) (*RootSpec, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	yamlBytes, err := io.ReadAll(f)
 	if err != nil {
@@ -294,7 +294,7 @@ func Process(parent context.Context, specFile string, options *ClientOptions) er
 	if err != nil {
 		return err
 	}
-	defer watcher.Close()
+	defer func() { _ = watcher.Close() }()
 
 	c := NewClient(specFile, options)
 	defer c.stop()
@@ -467,7 +467,9 @@ func (c *Client) run(ctx context.Context, completed chan<- interface{}) {
 				c.render(ctx)
 			}
 		}, func() {
-			c.save()
+			if err := c.save(); err != nil {
+				c.app.Error(fmt.Sprintf("Failed to save snapshot: %s", err.Error()))
+			}
 		})
 	}
 
@@ -484,7 +486,9 @@ func (c *Client) run(ctx context.Context, completed chan<- interface{}) {
 			<-ctx.Done()
 			c.app.Stop()
 		}()
-		c.app.Run()
+		if err := c.app.Run(); err != nil {
+			log.Error().Err(err).Msg("TUI exited with an error")
+		}
 	} else {
 		<-ctx.Done()
 	}

@@ -38,7 +38,7 @@ func spawnDaemon(privKeyHex, vaultLabel string, relays []string, logPath, socket
 	if err != nil {
 		return fmt.Errorf("open daemon log %s: %w", logPath, err)
 	}
-	defer logFile.Close()
+	defer func() { _ = logFile.Close() }()
 
 	pr, pw, err := os.Pipe()
 	if err != nil {
@@ -58,8 +58,8 @@ func spawnDaemon(privKeyHex, vaultLabel string, relays []string, logPath, socket
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 
 	if err := cmd.Start(); err != nil {
-		pr.Close()
-		pw.Close()
+		_ = pr.Close()
+		_ = pw.Close()
 		return fmt.Errorf("start daemon process: %w", err)
 	}
 
@@ -67,20 +67,20 @@ func spawnDaemon(privKeyHex, vaultLabel string, relays []string, logPath, socket
 	// ExtraFiles); this process's copy is redundant and must be closed so
 	// the child sees EOF once we finish writing, rather than hanging
 	// waiting for a write end it doesn't know is otherwise unreachable.
-	pr.Close()
+	_ = pr.Close()
 
 	// Detach entirely -- this process doesn't reap the daemon (Wait), it
 	// outlives this invocation by design.
 	if err := cmd.Process.Release(); err != nil {
-		pw.Close()
+		_ = pw.Close()
 		return fmt.Errorf("release daemon process: %w", err)
 	}
 
 	if _, err := io.WriteString(pw, privKeyHex+"\n"+vaultLabel+"\n"); err != nil {
-		pw.Close()
+		_ = pw.Close()
 		return fmt.Errorf("write identity key to daemon: %w", err)
 	}
-	pw.Close()
+	_ = pw.Close()
 
 	if err := waitForSocket(socketPath, readyTimeout); err != nil {
 		return fmt.Errorf("%w (check %s for daemon startup errors)", err, logPath)
@@ -108,7 +108,7 @@ func ReadIdentityKeyFromFD3() (privKeyHex, vaultLabel string, err error) {
 	if f == nil {
 		return "", "", errors.New("bunker: fd 3 not available -- __daemon must be started via spawnDaemon, not invoked directly")
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	data, err := io.ReadAll(f)
 	if err != nil {

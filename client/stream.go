@@ -668,7 +668,7 @@ func (s *Stream) addFlow(way *map[int]ClientSubscription, specs []*FlowSpec) err
 			if err != nil {
 				return fmt.Errorf("failed to open flow file %s: %w", spec.Path, err)
 			}
-			defer file.Close()
+			defer func() { _ = file.Close() }()
 
 			scanner := bufio.NewScanner(file)
 			firstLine := true

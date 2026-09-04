@@ -36,7 +36,7 @@ func waitForPort(t *testing.T, addr string, timeout time.Duration) {
 	for time.Now().Before(deadline) {
 		conn, err := net.DialTimeout("tcp", addr, 200*time.Millisecond)
 		if err == nil {
-			conn.Close()
+			_ = conn.Close()
 			return
 		}
 		time.Sleep(100 * time.Millisecond)
@@ -371,7 +371,7 @@ func waitPortFree(t *testing.T, addr string, timeout time.Duration) {
 		if err != nil {
 			return
 		}
-		conn.Close()
+		_ = conn.Close()
 		time.Sleep(100 * time.Millisecond)
 	}
 	t.Fatalf("%s was still accepting connections after %s", addr, timeout)

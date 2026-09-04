@@ -70,7 +70,7 @@ func (t *Table) Init(ctx context.Context) *Table {
 		SetBorder(true).
 		SetBorderPadding(0, 1, 1, 1)
 
-	WireFocusBorder(t.Table, t.Table.Box)
+	WireFocusBorder(t.Table, t.Box)
 
 	t.SetSelectedStyle(tcell.Style{}.
 		Background(ColorPrimary).

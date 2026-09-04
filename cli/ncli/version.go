@@ -29,7 +29,7 @@ scripts or an AI agent.`,
 		// InitConfig's side effects (mkdir, crash log path, lumberjack
 		// setup), which version intentionally skips. A missing/invalid
 		// config file is not this command's concern.
-		common.LoadViperConfig(cfgFile)
+		_ = common.LoadViperConfig(cfgFile)
 		logDir := viper.GetString("log_dir")
 		if logDir == "" {
 			logDir = filepath.Join(common.AppConfigDir(), defaultLogDirName)

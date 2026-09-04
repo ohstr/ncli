@@ -42,10 +42,16 @@ func TestTable(t *testing.T) {
 		app.Stop()
 	}()
 
-	app.Run()
+	_ = app.Run()
 
 }
 
+// _TestTableSort is intentionally not TestTableSort -- it has no app.Stop()
+// call anywhere, so running it under `go test` would hang forever. Kept
+// around underscore-prefixed as a manual visual check (like TestTable
+// above, run it directly and watch the TUI) rather than deleted outright.
+//
+//nolint:unused
 func _TestTableSort(t *testing.T) {
 
 	app := NewApp().Init()
@@ -67,6 +73,6 @@ func _TestTableSort(t *testing.T) {
 
 	app.Load(table)
 
-	app.Run()
+	_ = app.Run()
 
 }

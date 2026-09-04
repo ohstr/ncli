@@ -343,8 +343,8 @@ func (fs *FilterSpec) UnmarshalJSON(data []byte) error {
 	}
 
 	*fs = FilterSpec(subFilter)
-	fs.SubscriptionFilter.Since = since
-	fs.SubscriptionFilter.Until = until
+	fs.Since = since
+	fs.Until = until
 
 	return nil
 }
@@ -481,12 +481,13 @@ func (ss *SyncSpec) UnmarshalJSON(data []byte) error {
 	}
 
 	for _, f := range []*FlowSpec{temp.From, temp.To} {
-		if f.Type == FlOW_LOCAL {
+		switch f.Type {
+		case FlOW_LOCAL:
 			if temp.local != nil {
 				return errors.New("multiple local stores defined (only one allowed for sync)")
 			}
 			temp.local = f
-		} else if f.Type == FlOW_REMOTE {
+		case FlOW_REMOTE:
 			if temp.remote != nil {
 				return errors.New("multiple remote relays defined (only one allowed for sync)")
 			}

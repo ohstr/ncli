@@ -26,7 +26,7 @@ func silence(cmd *cobra.Command) {
 func UsageError(cmd *cobra.Command, err error) error {
 	silence(cmd)
 	if jsonMode, _ := cmd.Flags().GetBool("json"); !jsonMode {
-		cmd.Help()
+		_ = cmd.Help()
 	}
 	return wrapCLIError(CodeUsage, "", err)
 }

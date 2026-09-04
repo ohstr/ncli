@@ -21,12 +21,12 @@ func redirectStderr(f *os.File) (restore func(), err error) {
 	}
 
 	if err := unix.Dup2(int(f.Fd()), stderrFd); err != nil {
-		unix.Close(origStderr)
+		_ = unix.Close(origStderr)
 		return nil, err
 	}
 
 	return func() {
-		unix.Dup2(origStderr, stderrFd)
-		unix.Close(origStderr)
+		_ = unix.Dup2(origStderr, stderrFd)
+		_ = unix.Close(origStderr)
 	}, nil
 }

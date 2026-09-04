@@ -386,16 +386,16 @@ func init() {
 	minerCmd.AddCommand(minerCheckCmd)
 
 	minerMineCmd.Flags().StringP("event", "e", "", "Path to a structured, unsigned event file")
-	minerMineCmd.MarkFlagFilename("event", "yaml", "yml", "json")
+	_ = minerMineCmd.MarkFlagFilename("event", "yaml", "yml", "json")
 
 	minerMineCmd.Flags().String("content", "", "Note content to mine, authored inline (alternative to --event)")
 	minerMineCmd.Flags().String("content-file", "", "Path to a plain .txt file with the note content to mine (alternative to --event/--content)")
-	minerMineCmd.MarkFlagFilename("content-file", "txt")
+	_ = minerMineCmd.MarkFlagFilename("content-file", "txt")
 	minerMineCmd.Flags().Int("kind", 1, "Event kind (--content/--content-file mode only)")
 	minerMineCmd.Flags().StringArray("tag", nil, "Tag as key=value, repeatable (--content/--content-file mode only, e.g. --tag t=nostr)")
 
 	minerMineCmd.Flags().StringP("out", "o", "", "Output path for the mined event (.json/.jsonp/.yaml/.yml)")
-	minerMineCmd.MarkFlagFilename("out", "yaml", "yml", "json")
+	_ = minerMineCmd.MarkFlagFilename("out", "yaml", "yml", "json")
 	minerMineCmd.Flags().Bool("in-place", false, "Write the mined result back to --event")
 
 	minerMineCmd.Flags().IntP("difficulty", "d", 2, "Proof-of-work difficulty, in leading zero bits")
@@ -404,7 +404,7 @@ func init() {
 	minerMineCmd.Flags().String("identity", "", "Vault label/npub/hex/nsec/nprofile/nip-05 identity to fill the event's pubkey from -- also signs automatically if a private key is available (nsec, or a vault label)")
 
 	minerCheckCmd.Flags().StringP("events", "e", "", "File mode: path to a JSON array of already-mined events")
-	minerCheckCmd.MarkFlagFilename("events", "json", "jsonp")
+	_ = minerCheckCmd.MarkFlagFilename("events", "json", "jsonp")
 
 	registerQueryFlags(minerCheckCmd, "Live mode: ")
 

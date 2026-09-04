@@ -9,7 +9,6 @@ import (
 
 type Status struct {
 	*tview.TextView
-	text         string
 	showPanelNav bool
 }
 
@@ -29,11 +28,11 @@ func NewStatus(initText string, showPanelNav bool) *Status {
 func (s *Status) Update(text string) {
 	s.Clear()
 	if s.showPanelNav {
-		fmt.Fprintf(s, "[%s:-:b]<Tab> [%s:-:-]Next Panel   \t", ColorAccent, ColorMuted)
-		fmt.Fprintf(s, "[%s:-:b]<Shift+Tab> [%s:-:-]Prev Panel   \t", ColorAccent, ColorMuted)
+		_, _ = fmt.Fprintf(s, "[%s:-:b]<Tab> [%s:-:-]Next Panel   \t", ColorAccent, ColorMuted)
+		_, _ = fmt.Fprintf(s, "[%s:-:b]<Shift+Tab> [%s:-:-]Prev Panel   \t", ColorAccent, ColorMuted)
 	}
-	fmt.Fprintf(s, "[%s:-:b]<w> [%s:-:-]Toggle Wrap   \t", ColorAccent, ColorMuted)
-	fmt.Fprintf(s, "[%s:-:b]<s> [%s:-:-]Toggle AutoScroll", ColorAccent, ColorMuted)
+	_, _ = fmt.Fprintf(s, "[%s:-:b]<w> [%s:-:-]Toggle Wrap   \t", ColorAccent, ColorMuted)
+	_, _ = fmt.Fprintf(s, "[%s:-:b]<s> [%s:-:-]Toggle AutoScroll", ColorAccent, ColorMuted)
 }
 
 type Footer struct {
@@ -74,7 +73,7 @@ func NewFooterWithHints(hints string) *Footer {
 	status.SetDynamicColors(true).
 		SetTextAlign(tview.AlignLeft).
 		SetBorderPadding(0, 0, 1, 1)
-	fmt.Fprint(status, hints)
+	_, _ = fmt.Fprint(status, hints)
 
 	f := &Footer{Flex: tview.NewFlex(), status: status}
 	f.AddItem(f.status, 0, 1, false)
@@ -87,5 +86,5 @@ func NewFooterWithHints(hints string) *Footer {
 // every focus change rather than fixed once at Layout.Init.
 func (f *Footer) SetHints(text string) {
 	f.status.Clear()
-	fmt.Fprint(f.status, text)
+	_, _ = fmt.Fprint(f.status, text)
 }

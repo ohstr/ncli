@@ -10,6 +10,11 @@
   governed ncli's own read-side check, never the relay's. Bumps
   `github.com/ohstr/nmilat` to v0.2.7, which fixes this on the relay side.
   ([#33](https://github.com/ohstr/ncli/pull/33))
+- `ncli relay` never actually advertised NIP-57 (Zaps) or NIP-65 (Relay
+  List Metadata) support, or validated their event kinds -- the blank
+  imports pointed at the base `nip57`/`nip65` packages instead of their
+  `relayreg` subpackages, so the registration that declares them in
+  `supported_nips` never ran.
 
 ## [0.4.5]
 

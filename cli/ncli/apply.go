@@ -59,8 +59,8 @@ func init() {
 	RootCmd.AddCommand(applyCmd)
 
 	applyCmd.Flags().StringP("file", "f", "", "Path to the workflow config file (required)")
-	applyCmd.MarkFlagRequired("file")
-	applyCmd.MarkFlagFilename("file", "yaml", "yml")
+	_ = applyCmd.MarkFlagRequired("file")
+	_ = applyCmd.MarkFlagFilename("file", "yaml", "yml")
 
 	applyCmd.Flags().Bool("strict-pow", false, "Reject stream/sync events whose nonce tag doesn't meet its declared NIP-13 proof-of-work difficulty (default: accept them regardless, since PoW compliance is opt-in per NIP-13, not mandatory). Overrides the spec file's own strictPow field when passed explicitly")
 }

@@ -55,5 +55,5 @@ func writeOSC52(text string) {
 		seq = "\x1bPtmux;\x1b" + escaped + "\x1b\\"
 	}
 
-	os.Stdout.WriteString(seq)
+	_, _ = os.Stdout.WriteString(seq)
 }

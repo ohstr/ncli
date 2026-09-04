@@ -78,9 +78,9 @@ server: --server, or the first configured default.`,
 	}
 
 	cmd.Flags().String("type", "", `Report type (e.g. "nudity", "malware", "illegal", "spam") (required)`)
-	cmd.MarkFlagRequired("type")
+	_ = cmd.MarkFlagRequired("type")
 	cmd.Flags().String("reason", "", "Human-readable reason (required)")
-	cmd.MarkFlagRequired("reason")
+	_ = cmd.MarkFlagRequired("reason")
 
 	return cmd
 }

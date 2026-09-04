@@ -39,7 +39,7 @@ func (t *Logger) Init(ctx context.Context) *Logger {
 	t.SetBorder(true).
 		SetBorderPadding(0, 0, 1, 1)
 
-	WireFocusBorder(t.logs, t.Flex.Box)
+	WireFocusBorder(t.logs, t.Box)
 
 	t.actions.SetDynamicColors(true).
 		SetWrap(false).
@@ -97,7 +97,7 @@ func (t *Logger) UpdateActions() {
 
 	autoColor, autoText := StatusText(t.autoscroll)
 	wrapColor, wrapText := StatusText(t.wrap)
-	fmt.Fprintf(t.actions, "[%s::b]Autoscroll:[%s]%s \t [%s]Wrap:[%s]%s", ColorPrimary, autoColor, autoText, ColorPrimary, wrapColor, wrapText)
+	_, _ = fmt.Fprintf(t.actions, "[%s::b]Autoscroll:[%s]%s \t [%s]Wrap:[%s]%s", ColorPrimary, autoColor, autoText, ColorPrimary, wrapColor, wrapText)
 }
 
 func (t *Logger) Update() {
@@ -108,7 +108,7 @@ func (t *Logger) Update() {
 	logs := t.logger.GetLastLogs()
 
 	for _, columns := range logs {
-		fmt.Fprintln(t.logs, strings.Join(columns, " "))
+		_, _ = fmt.Fprintln(t.logs, strings.Join(columns, " "))
 	}
 
 	if len(logs) > 0 && t.autoscroll {

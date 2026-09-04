@@ -104,7 +104,7 @@ func Listen(path string) (net.Listener, error) {
 		return nil, err
 	}
 	if err := os.Chmod(path, 0600); err != nil {
-		l.Close()
+		_ = l.Close()
 		return nil, err
 	}
 	return l, nil
@@ -117,7 +117,7 @@ func socketIsLive(path string) bool {
 	if err != nil {
 		return false
 	}
-	conn.Close()
+	_ = conn.Close()
 	return true
 }
 
@@ -138,7 +138,7 @@ func NewServer(listener net.Listener, client BunkerClient) *Server {
 func (s *Server) Serve(ctx context.Context) {
 	go func() {
 		<-ctx.Done()
-		s.listener.Close()
+		_ = s.listener.Close()
 	}()
 
 	for {
@@ -151,13 +151,13 @@ func (s *Server) Serve(ctx context.Context) {
 }
 
 func (s *Server) serveConn(conn net.Conn) {
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	scanner := bufio.NewScanner(conn)
 	scanner.Buffer(make([]byte, 4096), maxIPCMessageSize)
 
 	for {
-		conn.SetReadDeadline(time.Now().Add(ipcIdleTimeout))
+		_ = conn.SetReadDeadline(time.Now().Add(ipcIdleTimeout))
 		if !scanner.Scan() {
 			return
 		}
@@ -257,7 +257,7 @@ func writeResponse(conn net.Conn, resp ipcResponse) error {
 	if err != nil {
 		return err
 	}
-	conn.SetWriteDeadline(time.Now().Add(ipcIdleTimeout))
+	_ = conn.SetWriteDeadline(time.Now().Add(ipcIdleTimeout))
 	_, err = conn.Write(append(data, '\n'))
 	return err
 }

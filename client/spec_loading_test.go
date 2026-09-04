@@ -42,7 +42,7 @@ func loadCases(t *testing.T, casesPath string) []string {
 		}
 
 		yamlFilesPath = append(yamlFilesPath, fcase.Name())
-		fcase.Close()
+		_ = fcase.Close()
 	}
 
 	return yamlFilesPath
@@ -314,12 +314,12 @@ func TestSpecFilter(t *testing.T) {
 				t.Fatal("error wanted")
 			}
 
-			if obj.SubscriptionFilter.Until < test.approxTimestamp-toleranceMilliseconds || obj.SubscriptionFilter.Until > test.approxTimestamp+toleranceMilliseconds {
-				t.Errorf("timestamp out of expected range, %d = %d ", obj.SubscriptionFilter.Until, test.approxTimestamp)
+			if obj.Until < test.approxTimestamp-toleranceMilliseconds || obj.Until > test.approxTimestamp+toleranceMilliseconds {
+				t.Errorf("timestamp out of expected range, %d = %d ", obj.Until, test.approxTimestamp)
 			}
 
 			t.Logf("obj.str.until=%v", obj.Until)
-			t.Logf("obj.timestamp.until=%v", obj.SubscriptionFilter.Until)
+			t.Logf("obj.timestamp.until=%v", obj.Until)
 
 		})
 	}
@@ -375,8 +375,8 @@ kinds: [1]
 		if err := yaml.Unmarshal([]byte(specYaml), &obj); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if got := obj.SubscriptionFilter.Tags["e"]; len(got) != 1 || got[0] != "abc123" {
-			t.Fatalf("expected Tags[e]=[abc123], got %v", obj.SubscriptionFilter.Tags)
+		if got := obj.Tags["e"]; len(got) != 1 || got[0] != "abc123" {
+			t.Fatalf("expected Tags[e]=[abc123], got %v", obj.Tags)
 		}
 	})
 
@@ -393,8 +393,8 @@ kinds: [1]
 		if err := yaml.Unmarshal([]byte(specYaml), &obj); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if len(obj.SubscriptionFilter.Tags) != 0 {
-			t.Fatalf("expected dot-prefixed key to be ignored, got Tags=%v", obj.SubscriptionFilter.Tags)
+		if len(obj.Tags) != 0 {
+			t.Fatalf("expected dot-prefixed key to be ignored, got Tags=%v", obj.Tags)
 		}
 	})
 
@@ -410,8 +410,8 @@ kinds: [1]
 		if err := yaml.Unmarshal([]byte(`since: "1w 2d"`), &obj); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if obj.SubscriptionFilter.Since >= uint64(now.Unix()) {
-			t.Fatalf("expected since to be in the past, got=%d now=%d", obj.SubscriptionFilter.Since, now.Unix())
+		if obj.Since >= uint64(now.Unix()) {
+			t.Fatalf("expected since to be in the past, got=%d now=%d", obj.Since, now.Unix())
 		}
 	})
 
@@ -421,8 +421,8 @@ kinds: [1]
 		if err := yaml.Unmarshal([]byte(`since: "-1w 2d"`), &obj); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if obj.SubscriptionFilter.Since <= uint64(now.Unix()) {
-			t.Fatalf("expected since to be in the future, got=%d now=%d", obj.SubscriptionFilter.Since, now.Unix())
+		if obj.Since <= uint64(now.Unix()) {
+			t.Fatalf("expected since to be in the future, got=%d now=%d", obj.Since, now.Unix())
 		}
 	})
 
@@ -436,7 +436,7 @@ ids:
 `
 		var obj *FilterSpec
 		if err := yaml.Unmarshal([]byte(specYaml), &obj); err == nil {
-			t.Fatalf("expected error unmarshalling unquoted numeric id, got none (ids=%v)", obj.SubscriptionFilter.IDs)
+			t.Fatalf("expected error unmarshalling unquoted numeric id, got none (ids=%v)", obj.IDs)
 		}
 	})
 
@@ -452,14 +452,14 @@ search: "lightning"
 		if err := yaml.Unmarshal([]byte(specYaml), &obj); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if obj.SubscriptionFilter.Limit != 50 {
-			t.Fatalf("unexpected limit: %d", obj.SubscriptionFilter.Limit)
+		if obj.Limit != 50 {
+			t.Fatalf("unexpected limit: %d", obj.Limit)
 		}
-		if obj.SubscriptionFilter.Search != "lightning" {
-			t.Fatalf("unexpected search: %q", obj.SubscriptionFilter.Search)
+		if obj.Search != "lightning" {
+			t.Fatalf("unexpected search: %q", obj.Search)
 		}
-		if got := obj.SubscriptionFilter.Tags["p"]; len(got) != 1 || got[0] != "deadbeef" {
-			t.Fatalf("unexpected tags: %v", obj.SubscriptionFilter.Tags)
+		if got := obj.Tags["p"]; len(got) != 1 || got[0] != "deadbeef" {
+			t.Fatalf("unexpected tags: %v", obj.Tags)
 		}
 	})
 }

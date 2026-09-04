@@ -95,8 +95,8 @@ func init() {
 	RootCmd.AddCommand(publishCmd)
 
 	publishCmd.Flags().StringP("events", "e", "", "Path to a single event object or a JSON array of events (required)")
-	publishCmd.MarkFlagRequired("events")
-	publishCmd.MarkFlagFilename("events", "json", "jsonp")
+	_ = publishCmd.MarkFlagRequired("events")
+	_ = publishCmd.MarkFlagFilename("events", "json", "jsonp")
 
 	publishCmd.Flags().StringP("relays", "s", "", "Comma-separated relay URLs to publish to (omit to use the relays configured via \"ncli prefs relays add\")")
 }

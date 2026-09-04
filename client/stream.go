@@ -23,9 +23,9 @@ import (
 	"github.com/ohstr/nmilat/nip01"
 	"github.com/ohstr/nmilat/nip09"
 	"github.com/ohstr/nmilat/nip11"
-	"github.com/ohstr/nmilat/wire"
 	"github.com/ohstr/nmilat/relay"
 	relayclient "github.com/ohstr/nmilat/relay/client"
+	"github.com/ohstr/nmilat/wire"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/sync/errgroup"
 )
@@ -668,7 +668,7 @@ func (s *Stream) addFlow(way *map[int]ClientSubscription, specs []*FlowSpec) err
 			if err != nil {
 				return fmt.Errorf("failed to open flow file %s: %w", spec.Path, err)
 			}
-			defer file.Close()
+			defer func() { _ = file.Close() }()
 
 			scanner := bufio.NewScanner(file)
 			firstLine := true

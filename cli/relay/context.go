@@ -106,9 +106,9 @@ func runContextList(cmd *cobra.Command, args []string) error {
 		if name == prefs.CurrentRelayContext {
 			marker = "*"
 		}
-		fmt.Fprintf(tw, "%s %s\t%s\n", marker, name, prefs.RelayContexts[name])
+		_, _ = fmt.Fprintf(tw, "%s %s\t%s\n", marker, name, prefs.RelayContexts[name])
 	}
-	tw.Flush()
+	_ = tw.Flush()
 	return nil
 }
 

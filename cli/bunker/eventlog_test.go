@@ -21,7 +21,7 @@ func TestLoadEventLog_MissingFileIsEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadEventLog() error = %v, want nil for a missing file", err)
 	}
-	defer log.Close()
+	defer func() { _ = log.Close() }()
 
 	if len(history) != 0 {
 		t.Errorf("history = %+v, want empty", history)
@@ -74,7 +74,7 @@ func TestEventLog_AppendAndReplayRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer reloaded.Close()
+	defer func() { _ = reloaded.Close() }()
 
 	if len(history) != 2 {
 		t.Fatalf("history len = %d, want 2: %+v", len(history), history)
@@ -116,7 +116,7 @@ func TestLoadEventLog_TornLastLineIsDropped(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadEventLog() error = %v, want the torn last line silently dropped, not a hard failure", err)
 	}
-	defer log.Close()
+	defer func() { _ = log.Close() }()
 
 	if len(history) != 1 || history[0].ID != "req-1" {
 		t.Errorf("history = %+v, want exactly the one entry before the torn line", history)
@@ -192,7 +192,7 @@ func TestLoadEventLog_SelfHealsInterruptedPending(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer log2.Close()
+	defer func() { _ = log2.Close() }()
 	if len(history2) != 1 || history2[0].ID != "req-1" {
 		t.Errorf("second load history = %+v, want the same single already-healed entry, not rediscovered again", history2)
 	}
@@ -233,7 +233,7 @@ func TestLoadEventLog_CompactsToMaxHistoryTail(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer log.Close()
+	defer func() { _ = log.Close() }()
 
 	if len(history) != maxHistoryTail {
 		t.Fatalf("history len = %d, want maxHistoryTail (%d)", len(history), maxHistoryTail)
@@ -256,7 +256,7 @@ func TestLoadEventLog_CompactsToMaxHistoryTail(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer log2.Close()
+	defer func() { _ = log2.Close() }()
 	if len(history2) != maxHistoryTail {
 		t.Errorf("second load history len = %d, want maxHistoryTail (%d)", len(history2), maxHistoryTail)
 	}
@@ -274,7 +274,7 @@ func TestEventLog_CompactDue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer log.Close()
+	defer func() { _ = log.Close() }()
 
 	var tail []HistoryEntry
 	for i := 0; i < maxHistoryTail-1; i++ {
@@ -311,7 +311,7 @@ func TestEventLog_CompactDue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer reloaded.Close()
+	defer func() { _ = reloaded.Close() }()
 	if len(history) != len(tail) {
 		t.Fatalf("reloaded history len = %d, want %d", len(history), len(tail))
 	}
@@ -337,7 +337,7 @@ func TestEventLog_CompactBeforeSignedEvent_StillPreservesIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer log.Close()
+	defer func() { _ = log.Close() }()
 
 	pending := HistoryEntry{ID: "sign-1", Method: "sign_event", Kind: 1, Verdict: Allow}
 	if err := log.AppendResolved(pending); err != nil {
@@ -365,7 +365,7 @@ func TestEventLog_CompactBeforeSignedEvent_StillPreservesIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer reloaded.Close()
+	defer func() { _ = reloaded.Close() }()
 
 	if len(history) != 1 {
 		t.Fatalf("history len = %d, want 1: %+v", len(history), history)
@@ -381,7 +381,7 @@ func countLines(t *testing.T, path string) int {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	n := 0
 	scanner := bufio.NewScanner(f)
@@ -406,7 +406,7 @@ func TestEventLog_ConcurrentAppendsAreRaceClean(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer log.Close()
+	defer func() { _ = log.Close() }()
 
 	const n = 50
 	var wg sync.WaitGroup

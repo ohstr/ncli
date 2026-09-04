@@ -98,7 +98,7 @@ func init() {
 	RootCmd.AddCommand(pingCmd)
 
 	pingCmd.Flags().StringP("targets", "t", "", "Path to a YAML targets file (only its relays are used)")
-	pingCmd.MarkFlagFilename("targets", "yaml", "yml")
+	_ = pingCmd.MarkFlagFilename("targets", "yaml", "yml")
 
 	pingCmd.Flags().Duration("timeout", 30*time.Second, "Max time to wait per relay before giving up on it (0 = wait forever)")
 	pingCmd.Flags().Bool("tui", false, "Render results as a live interactive board instead of plain log lines (requires a real terminal; ignored otherwise, or with --json/--quiet)")

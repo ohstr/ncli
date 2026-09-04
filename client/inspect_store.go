@@ -33,7 +33,7 @@ func NewInspectStore() (*InspectStore, error) {
 
 	store, err := relay.NewEventStore(filepath.Join(dir, "inspect.db"), &nip11.Limitation{})
 	if err != nil {
-		os.RemoveAll(dir)
+		_ = os.RemoveAll(dir)
 		return nil, fmt.Errorf("failed to open inspect temp store: %w", err)
 	}
 

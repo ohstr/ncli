@@ -25,7 +25,7 @@ func captureStdout(t *testing.T, fn func()) string {
 	}
 	os.Stdout = w
 	fn()
-	w.Close()
+	_ = w.Close()
 	os.Stdout = orig
 	out, err := io.ReadAll(r)
 	if err != nil {

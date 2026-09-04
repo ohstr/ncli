@@ -2,6 +2,14 @@
 
 ## [0.4.6]
 
+### Added
+
+- `ncli relay` now also declares and validates NIP-47 (Nostr Wallet
+  Connect), NIP-48 (Proxy tags), NIP-88 (Polls), NIP-90 (Data Vending
+  Machines), NIP-AZ (AltZap), NIP-B0 (Web bookmarks), and NIP-B7 (Blossom
+  server lists) -- nmilat ships a `relayreg` subpackage for each that
+  `ncli relay` simply never blank-imported before.
+
 ### Fixed
 
 - `apply stream`/`sync` no longer silently drop an event at the destination
@@ -15,6 +23,7 @@
   imports pointed at the base `nip57`/`nip65` packages instead of their
   `relayreg` subpackages, so the registration that declares them in
   `supported_nips` never ran.
+  ([#38](https://github.com/ohstr/ncli/pull/38))
 
 ## [0.4.5]
 

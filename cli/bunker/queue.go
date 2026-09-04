@@ -90,6 +90,18 @@ type entry struct {
 	pending Pending
 	done    chan struct{}
 	result  resolution
+	// resolved is set under q.mu the instant Resolve/sweepExpired decides
+	// this entry (before close(done) runs). The entry is deliberately kept
+	// in q.byID for one more sweep tick after that instead of being
+	// deleted immediately -- see Resolve's own comment for why deleting
+	// eagerly is a real bug, not just a theoretical one: a duplicate Add
+	// for the same ID that hasn't yet reached its own q.mu.Lock() by the
+	// time this one resolves would otherwise find nothing, treat the ID as
+	// brand new, and create a second entry nothing will ever resolve --
+	// blocking that caller (and, transitively, whatever's calling Add)
+	// forever. Get/List/Add's own capacity check all filter on resolved so
+	// a lingering entry never becomes externally visible as still pending.
+	resolved bool
 }
 
 // Queue holds requests waiting for a human decision. Safe for concurrent
@@ -157,7 +169,13 @@ func (q *Queue) Add(p Pending) (Decision, error) {
 		<-existing.done
 		return existing.result.verdict, nil
 	}
-	if len(q.byID) >= q.max {
+	pendingCount := 0
+	for _, e := range q.byID {
+		if !e.resolved {
+			pendingCount++
+		}
+	}
+	if pendingCount >= q.max {
 		q.mu.Unlock()
 		return Ask, ErrQueueFull
 	}
@@ -190,11 +208,11 @@ func (q *Queue) Add(p Pending) (Decision, error) {
 func (q *Queue) Resolve(id string, verdict Decision, remembered bool) error {
 	q.mu.Lock()
 	e, ok := q.byID[id]
-	if !ok {
+	if !ok || e.resolved {
 		q.mu.Unlock()
 		return ErrNotPending
 	}
-	delete(q.byID, id)
+	e.resolved = true
 	onResolved := q.onResolved
 	q.mu.Unlock()
 
@@ -224,7 +242,7 @@ func (q *Queue) Get(id string) (Pending, bool) {
 	defer q.mu.Unlock()
 
 	e, ok := q.byID[id]
-	if !ok {
+	if !ok || e.resolved {
 		return Pending{}, false
 	}
 	return e.pending, true
@@ -238,6 +256,9 @@ func (q *Queue) List() []Pending {
 
 	out := make([]Pending, 0, len(q.byID))
 	for _, e := range q.byID {
+		if e.resolved {
+			continue
+		}
 		out = append(out, e.pending)
 	}
 	return out
@@ -245,17 +266,29 @@ func (q *Queue) List() []Pending {
 
 // sweepExpired auto-rejects (Decision Deny) every pending request whose
 // ExpiresAt has passed, waking its Add call so the requesting client gets
-// a real error response instead of hanging forever.
+// a real error response instead of hanging forever. It also prunes any
+// entry Resolve/an earlier sweepExpired call already resolved -- one tick
+// late, deliberately (see entry.resolved's own comment): pruning an entry
+// in the very same pass that resolves it would reopen the exact race this
+// deferral exists to close.
 func (q *Queue) sweepExpired() {
 	now := q.now()
 
 	q.mu.Lock()
 	var expired []*entry
+	var toPrune []string
 	for id, e := range q.byID {
+		if e.resolved {
+			toPrune = append(toPrune, id)
+			continue
+		}
 		if !now.Before(e.pending.ExpiresAt) {
 			expired = append(expired, e)
-			delete(q.byID, id)
+			e.resolved = true
 		}
+	}
+	for _, id := range toPrune {
+		delete(q.byID, id)
 	}
 	onResolved := q.onResolved
 	q.mu.Unlock()

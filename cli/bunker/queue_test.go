@@ -189,6 +189,42 @@ func TestQueue_DuplicateRequestID_NoDoubleEnqueue(t *testing.T) {
 	}
 }
 
+// TestQueue_LateDuplicateAfterResolve_GetsCachedVerdict is the
+// deterministic edge case TestQueue_DuplicateRequestID_NoDoubleEnqueue
+// only catches probabilistically: an Add for an ID that already got
+// resolved -- not concurrently racing it, but strictly afterward -- must
+// still return the cached verdict immediately instead of creating a
+// second, orphaned entry nothing will ever resolve (the entry.resolved
+// field and its deferred pruning in sweepExpired exist specifically to
+// keep this from hanging forever).
+func TestQueue_LateDuplicateAfterResolve_GetsCachedVerdict(t *testing.T) {
+	q := NewQueue(0, 0)
+	go func() { _, _ = q.Add(Pending{ID: "req-late", ClientKey: "app1", Method: "ping"}) }()
+	waitFor(t, func() bool { return len(q.List()) == 1 })
+
+	if err := q.Resolve("req-late", Allow, false); err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan Decision, 1)
+	go func() {
+		v, err := q.Add(Pending{ID: "req-late", ClientKey: "app1", Method: "ping"})
+		if err != nil {
+			t.Errorf("Add() error = %v", err)
+		}
+		done <- v
+	}()
+
+	select {
+	case v := <-done:
+		if v != Allow {
+			t.Errorf("late duplicate Add() verdict = %v, want Allow", v)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("late-arriving duplicate Add() never returned -- it orphaned a second entry instead of finding the already-resolved one")
+	}
+}
+
 func TestQueue_ResolveUnknown(t *testing.T) {
 	q := NewQueue(0, 0)
 	if err := q.Resolve("nope", Allow, false); err != ErrNotPending {

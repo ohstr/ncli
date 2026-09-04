@@ -58,7 +58,7 @@ func TestMultiRelaySync(t *testing.T) {
 
 	// Create event store
 	limitation := &nip11.Limitation{
-		MaxLimit:        100000,
+		MaxLimit:         100000,
 		MaxSubscriptions: 100,
 	}
 	// relay.Session/EventStore default their Logger to zerolog.Nop(), which

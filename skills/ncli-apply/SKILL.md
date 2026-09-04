@@ -43,6 +43,11 @@ Failures counter); for `sync` it's silently dropped from the pulled batch
 `trusted: true` flow is never subject to this check, regardless of
 `strictPow` — same as it already skips signature verification.
 
+`strictPow` only governs `apply`'s own read-side check — it has no bearing
+on what a `to` relay decides once `apply` forwards the event. A relay you
+don't control can still reject it on its own terms, no matter what
+`strictPow` is set to here.
+
 | kind | what it does | writes anything? |
 |---|---|---|
 | `stream` | Tails live events matching `filters` from every `from` flow to every `to` flow, until interrupted | Yes, continuously |

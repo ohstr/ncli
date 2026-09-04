@@ -516,8 +516,8 @@ accepting it — settable via the flag or the spec's own `strictPow: true`
 field, flag wins when passed explicitly.
 
 See [`skills/ncli-apply/SKILL.md`](skills/ncli-apply/SKILL.md) for the full
-walkthrough, including `trusted: true` exemptions and why this doesn't
-govern what a `to` relay independently decides.
+walkthrough, including `trusted: true` exemptions and relay-side PoW
+enforcement.
 
 **`stream`** — tail events live, forwarding everything matching `filters`
 from every `from` flow to every `to` flow until interrupted (any number of

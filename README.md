@@ -232,13 +232,14 @@ ncli find --search "jack" -k 1 -l 5 -s localhost:5500
 ```
 
 Require NIP-13 proof-of-work on published events with a `pow:` block —
-`min: 0` (the default) accepts everything; a non-zero `min` is advertised to
-clients via NIP-11 either way, and `strict: true` is what actually turns on
-rejecting events that fall short:
+`min: 0` (the default) accepts everything, even a lying `nonce` tag; a
+non-zero `min` is advertised via NIP-11 either way, and `strict: true` is
+what actually rejects events, both under-difficulty ones and ones whose
+`nonce` tag doesn't match reality:
 
 ```yaml
 pow:
-  strict: false # true rejects under-difficulty events; false just advertises min
+  strict: false # true rejects under-difficulty and self-contradictory nonce tags
   min: 20       # required leading-zero-bit difficulty; 0 = no requirement
 ```
 
@@ -509,14 +510,14 @@ composes-into-CI/scripts convention as `miner check`.
 [`examples/apply/`](examples/apply/) — the snippets below are trimmed to
 the essentials.
 
-`--strict-pow` is a flag on `apply` (default `false`) that applies to both
-`stream` and `sync`: since NIP-13 proof-of-work is optional per event, an
-untrusted event with a `nonce` tag that doesn't meet its declared
-difficulty is accepted by default, same as one with no `nonce` tag at all.
-Enable strict checking either via the flag or the spec's own `strictPow:
-true` field (both kinds support it) to reject it instead — the flag, when
-passed explicitly, overrides whatever the spec file says. A `trusted: true`
-flow is never subject to this check either way.
+`--strict-pow` (default `false`) makes `apply` reject an untrusted event
+whose `nonce` tag doesn't meet its declared PoW difficulty, instead of
+accepting it — settable via the flag or the spec's own `strictPow: true`
+field, flag wins when passed explicitly.
+
+See [`skills/ncli-apply/SKILL.md`](skills/ncli-apply/SKILL.md) for the full
+walkthrough, including `trusted: true` exemptions and relay-side PoW
+enforcement.
 
 **`stream`** — tail events live, forwarding everything matching `filters`
 from every `from` flow to every `to` flow until interrupted (any number of

@@ -100,14 +100,21 @@ docker run --rm ghcr.io/ohstr/ncli:latest --help
 | [42](https://github.com/nostr-protocol/nips/blob/master/42.md) | Relay authentication |
 | [43](https://github.com/nostr-protocol/nips/blob/master/43.md) | Relay membership — off by default; see [`relay members`](#relay-membersinvitesroles-nip-43-membership-admin) |
 | [44](https://github.com/nostr-protocol/nips/blob/master/44.md) | Versioned encryption |
+| [47](https://github.com/nostr-protocol/nips/blob/master/47.md) | Nostr Wallet Connect |
+| [48](https://github.com/nostr-protocol/nips/blob/master/48.md) | Proxy tags |
 | [49](https://github.com/nostr-protocol/nips/blob/master/49.md) | Encrypted private key storage |
 | [50](https://github.com/nostr-protocol/nips/blob/master/50.md) | Search — people search, not note content; see below |
 | [57](https://github.com/nostr-protocol/nips/blob/master/57.md) | Lightning zaps |
 | [65](https://github.com/nostr-protocol/nips/blob/master/65.md) | Relay list metadata |
 | [77](https://github.com/nostr-protocol/nips/blob/master/77.md) | Negentropy sync |
+| [88](https://github.com/nostr-protocol/nips/blob/master/88.md) | Polls |
+| [90](https://github.com/nostr-protocol/nips/blob/master/90.md) | Data Vending Machines |
 | [98](https://github.com/nostr-protocol/nips/blob/master/98.md) | HTTP authentication |
-| [AA](https://github.com/block/buzz/blob/main/docs/nips/NIP-AA.md) | Agent auth — requires NIP-43 membership; see `agent_auth` below |
-| [OA](https://github.com/block/buzz/blob/main/docs/nips/NIP-OA.md) | Owner attestation — verified as part of NIP-AA |
+| [AA](https://github.com/block/buzz/blob/main/docs/nips/NIP-AA.md) | Agent auth — requires relay membership; see `agent_auth` below |
+| [AZ](https://github.com/ohstr/zapf-nips/blob/main/NIP-AZ.md) | AltZap — zaps for energy-backed coins |
+| [B0](https://github.com/nostr-protocol/nips/blob/master/B0.md) | Web bookmarks |
+| [B7](https://github.com/nostr-protocol/nips/blob/master/B7.md) | Blossom media server lists |
+| [OA](https://github.com/block/buzz/blob/main/docs/nips/NIP-OA.md) | Owner attestation — verified as part of agent auth |
 
 </details>
 

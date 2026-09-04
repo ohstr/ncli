@@ -67,10 +67,10 @@ func (h *Header) drawLogo() {
 	h.Logo.SetDynamicColors(true)
 
 	lines := strings.Split(LOGO, "\n")
-	fmt.Fprintf(h.Logo, "[%s]", ColorPrimary)
+	_, _ = fmt.Fprintf(h.Logo, "[%s]", ColorPrimary)
 	for i := 1; i < len(lines)-1; i++ {
-		fmt.Fprintf(h.Logo, "   [%s::b]%s", "", lines[i])
-		fmt.Fprintf(h.Logo, "\n")
+		_, _ = fmt.Fprintf(h.Logo, "   [%s::b]%s", "", lines[i])
+		_, _ = fmt.Fprintf(h.Logo, "\n")
 	}
 
 	h.AddItem(h.Logo, 0, 1, false)

@@ -52,11 +52,11 @@ func TestQueue_OnAdded_FiresOnceOnAdd(t *testing.T) {
 		got = append(got, p)
 	})
 
-	go q.Add(Pending{ID: "req-1", ClientKey: "app1", Method: "ping"})
+	go func() { _, _ = q.Add(Pending{ID: "req-1", ClientKey: "app1", Method: "ping"}) }()
 	waitFor(t, func() bool { return len(q.List()) == 1 })
 
 	// A duplicate Add for the same ID must not fire OnAdded again.
-	go q.Add(Pending{ID: "req-1", ClientKey: "app1", Method: "ping"})
+	go func() { _, _ = q.Add(Pending{ID: "req-1", ClientKey: "app1", Method: "ping"}) }()
 	time.Sleep(20 * time.Millisecond)
 
 	mu.Lock()
@@ -75,7 +75,7 @@ func TestQueue_OnResolved_FiresFromResolve(t *testing.T) {
 	var got *ResolvedEvent
 	q.OnResolved(func(ev ResolvedEvent) { got = &ev })
 
-	go q.Add(Pending{ID: "req-1", ClientKey: "app1", Method: "sign_event", Kind: 1})
+	go func() { _, _ = q.Add(Pending{ID: "req-1", ClientKey: "app1", Method: "sign_event", Kind: 1}) }()
 	waitFor(t, func() bool { return len(q.List()) == 1 })
 
 	if err := q.Resolve("req-1", Deny, true); err != nil {
@@ -110,7 +110,7 @@ func TestQueue_OnResolvedCompletesBeforeAddUnblocks(t *testing.T) {
 
 	sawOnResolvedByAddTime := make(chan bool, 1)
 	go func() {
-		q.Add(Pending{ID: "req-1", ClientKey: "app1", Method: "ping"})
+		_, _ = q.Add(Pending{ID: "req-1", ClientKey: "app1", Method: "ping"})
 		sawOnResolvedByAddTime <- onResolvedCalled.Load()
 	}()
 	waitFor(t, func() bool { return len(q.List()) == 1 })
@@ -141,7 +141,7 @@ func TestQueue_OnResolved_FiresFromExpirySweep(t *testing.T) {
 	var got *ResolvedEvent
 	q.OnResolved(func(ev ResolvedEvent) { got = &ev })
 
-	go q.Add(Pending{ID: "req-exp", ClientKey: "app1", Method: "ping"})
+	go func() { _, _ = q.Add(Pending{ID: "req-exp", ClientKey: "app1", Method: "ping"}) }()
 	waitFor(t, func() bool { return len(q.List()) == 1 })
 
 	fc.Advance(time.Hour)
@@ -198,7 +198,7 @@ func TestQueue_ResolveUnknown(t *testing.T) {
 
 func TestQueue_ResolveRace_ExactlyOnce(t *testing.T) {
 	q := NewQueue(0, 0)
-	go q.Add(Pending{ID: "req-race", ClientKey: "app1", Method: "ping"})
+	go func() { _, _ = q.Add(Pending{ID: "req-race", ClientKey: "app1", Method: "ping"}) }()
 	waitFor(t, func() bool { return len(q.List()) == 1 })
 
 	var wg sync.WaitGroup
@@ -227,8 +227,8 @@ func TestQueue_ResolveRace_ExactlyOnce(t *testing.T) {
 
 func TestQueue_Full(t *testing.T) {
 	q := NewQueue(2, 0)
-	go q.Add(Pending{ID: "r1", ClientKey: "app1", Method: "ping"})
-	go q.Add(Pending{ID: "r2", ClientKey: "app1", Method: "ping"})
+	go func() { _, _ = q.Add(Pending{ID: "r1", ClientKey: "app1", Method: "ping"}) }()
+	go func() { _, _ = q.Add(Pending{ID: "r2", ClientKey: "app1", Method: "ping"}) }()
 	waitFor(t, func() bool { return len(q.List()) == 2 })
 
 	if _, err := q.Add(Pending{ID: "r3", ClientKey: "app1", Method: "ping"}); err != ErrQueueFull {

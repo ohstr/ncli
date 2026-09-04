@@ -41,7 +41,7 @@ func TestRateLimitRecovery(t *testing.T) {
 		if err != nil {
 			return
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 
 		for {
 			_, msg, err := conn.ReadMessage()
@@ -84,12 +84,12 @@ func TestRateLimitRecovery(t *testing.T) {
 					if atomic.LoadInt32(&rateLimitActive) == 1 {
 						// REJECT
 						resp := fmt.Sprintf(`["OK", "%s", false, "rate-limited: calm down"]`, id)
-						conn.WriteMessage(websocket.TextMessage, []byte(resp))
+						_ = conn.WriteMessage(websocket.TextMessage, []byte(resp))
 					} else {
 						// ACCEPT
 						receivedEvents.Store(id, true)
 						resp := fmt.Sprintf(`["OK", "%s", true, ""]`, id)
-						conn.WriteMessage(websocket.TextMessage, []byte(resp))
+						_ = conn.WriteMessage(websocket.TextMessage, []byte(resp))
 					}
 				}
 			}

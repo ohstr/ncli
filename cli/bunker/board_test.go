@@ -563,7 +563,7 @@ func waitForAutoPromptFocus(t *testing.T, app *tui.App) (tview.Primitive, tcell.
 	screen.SetSize(80, 25)
 	app.SetScreen(screen)
 
-	go app.Run()
+	go func() { _ = app.Run() }()
 	t.Cleanup(app.Stop)
 
 	deadline := time.Now().Add(4 * time.Second)
@@ -714,7 +714,7 @@ func TestPendingTableAlwaysButtonOpensDurationDialog(t *testing.T) {
 	board := NewBunkerBoard(app, t.Context(), client, flowLogger, true)
 	app.Load(board)
 
-	go app.Run()
+	go func() { _ = app.Run() }()
 	defer app.Stop()
 
 	deadline := time.Now().Add(4 * time.Second)
@@ -1084,7 +1084,7 @@ func TestSessionsTableGrantsOverlayRevokeReturnsToRefreshedOverlay(t *testing.T)
 	screen := tcell.NewSimulationScreen("")
 	screen.SetSize(80, 25)
 	app.SetScreen(screen)
-	go app.Run()
+	go func() { _ = app.Run() }()
 	defer app.Stop()
 
 	st := NewSessionsTable(app, client)
@@ -1155,7 +1155,7 @@ func TestSessionsTableGrantsOverlayRevokeCancelReturnsUnchanged(t *testing.T) {
 	screen := tcell.NewSimulationScreen("")
 	screen.SetSize(80, 25)
 	app.SetScreen(screen)
-	go app.Run()
+	go func() { _ = app.Run() }()
 	defer app.Stop()
 
 	st := NewSessionsTable(app, client)
@@ -2028,7 +2028,7 @@ func TestBunkerBoardFooterHintsAreContextual(t *testing.T) {
 			if switchIdx == -1 || backgroundIdx == -1 || connectIdx == -1 || dynamicIdx == -1 {
 				t.Fatalf("FooterHints(%s) = %q, missing one of Switch Panel/Background/Connect/%s entirely", tt.name, hints, tt.firstDynamic)
 			}
-			if !(switchIdx < backgroundIdx && backgroundIdx < connectIdx && connectIdx < dynamicIdx) {
+			if switchIdx >= backgroundIdx || backgroundIdx >= connectIdx || connectIdx >= dynamicIdx {
 				t.Errorf("FooterHints(%s) = %q, want Switch Panel then Background then Connect then %s, got indices %d/%d/%d/%d",
 					tt.name, hints, tt.firstDynamic, switchIdx, backgroundIdx, connectIdx, dynamicIdx)
 			}
@@ -2181,7 +2181,7 @@ func TestBunkerTUIStartupShowsSplashWhileBoardLoads(t *testing.T) {
 	screen.SetSize(80, 25)
 	app.SetScreen(screen)
 
-	go app.Run()
+	go func() { _ = app.Run() }()
 	defer app.Stop()
 
 	// Mirrors runTUI's own ordering exactly: board construction happens in
@@ -2268,7 +2268,7 @@ func TestBunkerBoardOverlayDoesNotBleedThroughToPanelBorders(t *testing.T) {
 	board := NewBunkerBoard(app, t.Context(), client, flowLogger, true)
 	app.Load(board)
 
-	go app.Run()
+	go func() { _ = app.Run() }()
 	defer app.Stop()
 
 	time.Sleep(150 * time.Millisecond)
@@ -2355,7 +2355,7 @@ func TestBunkerBoardAutoPromptSurvivesPreLoadRace(t *testing.T) {
 	}
 
 	app.Load(board)
-	go app.Run()
+	go func() { _ = app.Run() }()
 	defer app.Stop()
 
 	deadline := time.Now().Add(4 * time.Second)
@@ -2415,7 +2415,7 @@ func TestPendingTableSignEventApprovalOverlayFillsFullScreenNoMargin(t *testing.
 	board := NewBunkerBoard(app, t.Context(), client, flowLogger, true)
 	app.Load(board)
 
-	go app.Run()
+	go func() { _ = app.Run() }()
 	defer app.Stop()
 
 	deadline := time.Now().Add(4 * time.Second)
@@ -2474,7 +2474,7 @@ func TestHistoryTableShowEventDetailBorderStaysConsistentUnderConcurrency(t *tes
 	board := NewBunkerBoard(app, t.Context(), client, flowLogger, true)
 	app.Load(board)
 
-	go app.Run()
+	go func() { _ = app.Run() }()
 	defer app.Stop()
 
 	time.Sleep(150 * time.Millisecond)
@@ -2556,7 +2556,7 @@ func TestPendingTableShowBunkerURIActsLikeARealModal(t *testing.T) {
 	board := NewBunkerBoard(app, t.Context(), client, flowLogger, true)
 	app.Load(board)
 
-	go app.Run()
+	go func() { _ = app.Run() }()
 	defer app.Stop()
 
 	time.Sleep(150 * time.Millisecond)
@@ -2686,7 +2686,7 @@ func TestPendingTableShowConnectingDoesNotClobberRacingApproveDialog(t *testing.
 	board := NewBunkerBoard(app, t.Context(), client, flowLogger, true)
 	app.Load(board)
 
-	go app.Run()
+	go func() { _ = app.Run() }()
 	defer app.Stop()
 
 	time.Sleep(150 * time.Millisecond)

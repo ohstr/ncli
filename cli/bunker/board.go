@@ -108,7 +108,7 @@ func (t *PendingTable) Init(ctx context.Context) *PendingTable {
 	t.table.SetFixed(1, 0).
 		SetSelectable(true, false)
 
-	tui.WireFocusBorder(t.table, t.Flex.Box)
+	tui.WireFocusBorder(t.table, t.Box)
 
 	t.table.SetSelectedStyle(tcell.Style{}.
 		Background(tui.ColorPrimary).
@@ -268,7 +268,7 @@ func (t *PendingTable) showBunkerURI() {
 	// Pending Requests. Polling for it here instead answers "did that just
 	// work, or do I need a new link?" without leaving the dialog.
 	waiting := tview.NewTextView().SetDynamicColors(true)
-	fmt.Fprint(waiting, formatWaitingStatus(deadline))
+	_, _ = fmt.Fprint(waiting, formatWaitingStatus(deadline))
 
 	status := tview.NewTextView().SetDynamicColors(true)
 
@@ -401,7 +401,7 @@ func (t *PendingTable) watchForPairing(ctx context.Context, stop <-chan struct{}
 			status := formatWaitingStatus(deadline)
 			t.app.QueueUpdateDraw(func() {
 				waiting.Clear()
-				fmt.Fprint(waiting, status)
+				_, _ = fmt.Fprint(waiting, status)
 			})
 			if time.Now().After(deadline) {
 				return
@@ -776,7 +776,7 @@ func (t *PendingTable) updateActionsBar() {
 
 	autoColor, autoText := tui.StatusText(auto)
 	t.actions.Clear()
-	fmt.Fprintf(t.actions, "[%s::b]Auto-Prompt:[%s]%s", tui.ColorPrimary, autoColor, autoText)
+	_, _ = fmt.Fprintf(t.actions, "[%s::b]Auto-Prompt:[%s]%s", tui.ColorPrimary, autoColor, autoText)
 }
 
 // appLabel resolves pubkey to labelFor(session) against the cache
@@ -1042,7 +1042,7 @@ func (t *PendingTable) openSignEventApprovalDialog(p Pending, title, text string
 		SetWordWrap(true).
 		SetScrollable(true)
 	jsonView.SetBorderPadding(0, 0, 0, 0)
-	fmt.Fprint(jsonView, tui.ColorizeEventJSON(p.Event))
+	_, _ = fmt.Fprint(jsonView, tui.ColorizeEventJSON(p.Event))
 	jsonView.ScrollToBeginning()
 
 	form := tview.NewForm().
@@ -1073,7 +1073,7 @@ func (t *PendingTable) openSignEventApprovalDialog(p Pending, title, text string
 	wireScrollCapture(form, jsonView)
 
 	header := tview.NewTextView().SetDynamicColors(true)
-	fmt.Fprintf(header, "[::b]%s[-:-:-]\n%s", tview.Escape(title), tview.Escape(text))
+	_, _ = fmt.Fprintf(header, "[::b]%s[-:-:-]\n%s", tview.Escape(title), tview.Escape(text))
 
 	view := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(header, 2, 0, false).
@@ -1208,7 +1208,7 @@ func (t *SessionsTable) Init(ctx context.Context) *SessionsTable {
 		SetBorder(true).
 		SetBorderPadding(0, 1, 1, 1)
 
-	tui.WireFocusBorder(t.Table, t.Table.Box)
+	tui.WireFocusBorder(t.Table, t.Box)
 
 	t.SetSelectedStyle(tcell.Style{}.
 		Background(tui.ColorPrimary).
@@ -1381,7 +1381,7 @@ func (t *SessionsTable) openGrantsOverlay(s Session) {
 	}
 
 	hint := tview.NewTextView().SetDynamicColors(true).SetTextAlign(tview.AlignCenter)
-	fmt.Fprint(hint, strings.Join([]string{
+	_, _ = fmt.Fprint(hint, strings.Join([]string{
 		hintTag("<x>", "Revoke"),
 		hintTag("<e>", "Extend"),
 		hintTag("<Esc>", "Close"),
@@ -1657,7 +1657,7 @@ func (t *HistoryTable) Init(ctx context.Context) *HistoryTable {
 		SetBorder(true).
 		SetBorderPadding(0, 1, 1, 1)
 
-	tui.WireFocusBorder(t.Table, t.Table.Box)
+	tui.WireFocusBorder(t.Table, t.Box)
 
 	t.SetSelectedStyle(tcell.Style{}.
 		Background(tui.ColorPrimary).
@@ -1837,7 +1837,7 @@ func (t *HistoryTable) showEventDetail(h HistoryEntry) {
 		SetWordWrap(true).
 		SetScrollable(true)
 	jsonView.SetBorderPadding(0, 0, 0, 0)
-	fmt.Fprint(jsonView, tui.ColorizeEventJSON(h.Event))
+	_, _ = fmt.Fprint(jsonView, tui.ColorizeEventJSON(h.Event))
 	jsonView.ScrollToBeginning()
 
 	form := tview.NewForm().
@@ -2208,8 +2208,8 @@ func (b *IdentityBar) Update() {
 		return
 	}
 	b.Clear()
-	fmt.Fprintf(b, " [%s::b]Signing as:[-:-:-] %s\n", tui.ColorPrimary, formatIdentity(st))
-	fmt.Fprintf(b, " [%s::b]Relays:[-:-:-] %s", tui.ColorPrimary, formatRelayStatuses(st.RelayStatuses))
+	_, _ = fmt.Fprintf(b, " [%s::b]Signing as:[-:-:-] %s\n", tui.ColorPrimary, formatIdentity(st))
+	_, _ = fmt.Fprintf(b, " [%s::b]Relays:[-:-:-] %s", tui.ColorPrimary, formatRelayStatuses(st.RelayStatuses))
 }
 
 func (b *IdentityBar) render(ctx context.Context) {
@@ -2346,7 +2346,7 @@ func (b *AlertBar) Update() {
 	active := !anyRelayConnected(st.RelayStatuses) && !anyRelayConnecting(st.RelayStatuses)
 	b.Clear()
 	if active {
-		fmt.Fprintf(b, "[%s::b] ⚠ No relay connected -- signer can't receive requests. Check your network or relay config.[-:-:-]", tui.ColorDanger)
+		_, _ = fmt.Fprintf(b, "[%s::b] ⚠ No relay connected -- signer can't receive requests. Check your network or relay config.[-:-:-]", tui.ColorDanger)
 	}
 	if b.onAlert != nil {
 		b.onAlert(active)
@@ -2653,7 +2653,7 @@ func NewBunkerBoard(app *tui.App, ctx context.Context, client BunkerClient, flow
 	// startup or afterward, no matter how many apps end up trusted over a
 	// long-running board.
 	b.sessions.onCountChange = func(n int) {
-		b.Flex.ResizeItem(b.sessions, sessionsHeightFor(n), 0)
+		b.ResizeItem(b.sessions, sessionsHeightFor(n), 0)
 	}
 	b.sessions.Init(ctx)
 
@@ -2668,7 +2668,7 @@ func NewBunkerBoard(app *tui.App, ctx context.Context, client BunkerClient, flow
 		if active {
 			height = alertBarHeight
 		}
-		b.Flex.ResizeItem(b.alert, height, 0)
+		b.ResizeItem(b.alert, height, 0)
 	}
 	b.alert.Init(ctx)
 

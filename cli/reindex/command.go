@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/ohstr/ncli/cli/common/meilisearch"
-	"github.com/ohstr/nmilat/search"
 	"github.com/ohstr/nmilat/nip01"
 	"github.com/ohstr/nmilat/relay"
+	"github.com/ohstr/nmilat/search"
 	"github.com/rs/zerolog/log"
 )
 

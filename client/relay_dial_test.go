@@ -26,7 +26,7 @@ func mockWSServer(t *testing.T) (wsURL *url.URL, hits *int32) {
 		if err != nil {
 			return
 		}
-		conn.Close()
+		_ = conn.Close()
 	}))
 	t.Cleanup(server.Close)
 

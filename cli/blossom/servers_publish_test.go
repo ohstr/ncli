@@ -43,7 +43,7 @@ func mockRelayServer(t *testing.T) (wsURL string) {
 		if err != nil {
 			return
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 
 		for {
 			_, msg, err := conn.ReadMessage()

@@ -32,9 +32,6 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 		MaxConcurrentStoreTasks: config.MaxConcurrentStoreTasks,
 	}
 
-	if _, err := time.ParseDuration(config.HandshakeTimeout); err == nil {
-		// Handshake timeout is usually handled by http server config, but session might use it
-	}
 	if d, err := time.ParseDuration(config.PingInterval); err == nil {
 		sessionConfig.PingInterval = d
 	}
@@ -127,7 +124,7 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 		if status["is_running"].(bool) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusConflict) // Or 200, Conflict shows it's busy
-			json.NewEncoder(w).Encode(status)
+			_ = json.NewEncoder(w).Encode(status)
 			return
 		}
 
@@ -150,7 +147,7 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusAccepted)
-		json.NewEncoder(w).Encode(map[string]string{"status": "started"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "started"})
 	}))
 
 	mux.HandleFunc("/admin/reindex/zaps", adminAuth(func(w http.ResponseWriter, r *http.Request) {
@@ -162,7 +159,7 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 		if status["is_running"].(bool) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusConflict)
-			json.NewEncoder(w).Encode(status)
+			_ = json.NewEncoder(w).Encode(status)
 			return
 		}
 
@@ -174,7 +171,7 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusAccepted)
-		json.NewEncoder(w).Encode(map[string]string{"status": "started"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "started"})
 	}))
 
 	mux.HandleFunc("/admin/worker/stats", adminAuth(func(w http.ResponseWriter, r *http.Request) {
@@ -191,7 +188,7 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(stats)
+		_ = json.NewEncoder(w).Encode(stats)
 	}))
 
 	mux.HandleFunc("/admin/search", adminAuth(func(w http.ResponseWriter, r *http.Request) {
@@ -213,7 +210,7 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"status": "deleted"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "deleted"})
 	}))
 
 	registerMembershipAdminRoutes(mux, wsHandler, store, adminAuth)
@@ -229,7 +226,7 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"status": "deleted"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "deleted"})
 	}))
 
 	s := &Service{

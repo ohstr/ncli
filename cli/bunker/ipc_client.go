@@ -47,12 +47,12 @@ func (c *ipcClient) call(req ipcRequest) (json.RawMessage, error) {
 	if err != nil {
 		return nil, err
 	}
-	c.conn.SetWriteDeadline(time.Now().Add(ipcIdleTimeout))
+	_ = c.conn.SetWriteDeadline(time.Now().Add(ipcIdleTimeout))
 	if _, err := c.conn.Write(append(data, '\n')); err != nil {
 		return nil, err
 	}
 
-	c.conn.SetReadDeadline(time.Now().Add(ipcIdleTimeout))
+	_ = c.conn.SetReadDeadline(time.Now().Add(ipcIdleTimeout))
 	if !c.scanner.Scan() {
 		if err := c.scanner.Err(); err != nil {
 			return nil, err

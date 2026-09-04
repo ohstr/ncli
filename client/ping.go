@@ -191,7 +191,9 @@ func Ping(ctx context.Context, targets *TargetsSpec, opts PingOptions) *PingRepo
 		app.Stop()
 	}()
 	go runChecks()
-	app.Run()
+	if err := app.Run(); err != nil {
+		log.Error().Err(err).Msg("TUI exited with an error")
+	}
 
 	return report
 }

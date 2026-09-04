@@ -104,11 +104,11 @@ resolved pubkey when omitted.`,
 				return nil
 			}
 			w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-			fmt.Fprintln(w, "HASH\tSIZE\tTYPE\tUPLOADED\tURL")
+			_, _ = fmt.Fprintln(w, "HASH\tSIZE\tTYPE\tUPLOADED\tURL")
 			for _, d := range descriptors {
-				fmt.Fprintf(w, "%s\t%d\t%s\t%s\t%s\n", d.Sha256, d.Size, d.Type, time.Unix(d.Uploaded, 0).Format(time.RFC3339), d.URL)
+				_, _ = fmt.Fprintf(w, "%s\t%d\t%s\t%s\t%s\n", d.Sha256, d.Size, d.Type, time.Unix(d.Uploaded, 0).Format(time.RFC3339), d.URL)
 			}
-			w.Flush()
+			_ = w.Flush()
 			return nil
 		},
 	}

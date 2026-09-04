@@ -137,7 +137,7 @@ func TestIPC_StatusRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	st, err := client.Status()
 	if err != nil {
@@ -156,7 +156,7 @@ func TestIPC_LogsRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	snap, err := client.Logs()
 	if err != nil {
@@ -182,7 +182,7 @@ func TestIPC_HistoryRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	got, err := client.History()
 	if err != nil {
@@ -201,7 +201,7 @@ func TestIPC_ApproveRejectRevokeConnect(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	if err := client.Approve("req-1", nil); err != nil {
 		t.Fatal(err)
@@ -266,7 +266,7 @@ func TestIPC_Stop(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	if err := client.Stop(); err != nil {
 		t.Fatal(err)
@@ -285,12 +285,12 @@ func TestIPC_MalformedRequest_DoesNotCrashServer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer raw.Close()
+	defer func() { _ = raw.Close() }()
 
-	raw.Write([]byte("not json at all\n"))
+	_, _ = raw.Write([]byte("not json at all\n"))
 
 	buf := make([]byte, 4096)
-	raw.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = raw.SetReadDeadline(time.Now().Add(2 * time.Second))
 	n, err := raw.Read(buf)
 	if err != nil {
 		t.Fatal(err)
@@ -308,7 +308,7 @@ func TestIPC_MalformedRequest_DoesNotCrashServer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("server appears to have crashed after a malformed request: %v", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 	if _, err := client.Status(); err != nil {
 		t.Fatalf("Status() after malformed request error = %v", err)
 	}
@@ -326,15 +326,15 @@ func TestIPC_OversizedRequest_DisconnectsWithoutCrashingServer(t *testing.T) {
 		huge[i] = 'a'
 	}
 	huge = append(huge, '\n')
-	raw.Write(huge)
-	raw.Close()
+	_, _ = raw.Write(huge)
+	_ = raw.Close()
 
 	// The server must still be alive for a fresh client afterward.
 	client, err := DialIPC(socketPath, time.Second)
 	if err != nil {
 		t.Fatalf("server appears to have crashed after an oversized request: %v", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 	if _, err := client.Status(); err != nil {
 		t.Fatalf("Status() after oversized request error = %v", err)
 	}
@@ -353,13 +353,13 @@ func TestIPC_StaleSocketIsReplaced(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	l.Close()
+	_ = l.Close()
 
 	l2, err := Listen(socketPath)
 	if err != nil {
 		t.Fatalf("Listen() on a stale socket error = %v, want it to detect staleness and rebind", err)
 	}
-	l2.Close()
+	_ = l2.Close()
 }
 
 func TestIPC_LiveSocketRefusesSecondListener(t *testing.T) {
@@ -384,7 +384,7 @@ func TestIPC_ConcurrentClients(t *testing.T) {
 				t.Error(err)
 				return
 			}
-			defer client.Close()
+			defer func() { _ = client.Close() }()
 			if _, err := client.Status(); err != nil {
 				t.Error(err)
 			}

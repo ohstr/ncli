@@ -189,7 +189,7 @@ func TestResolveIdentifier_Nip05(t *testing.T) {
 
 	id, _ := GenerateIdentity()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"names": map[string]string{"alice": id.PubKeyHex},
 		})
 	}))
@@ -206,7 +206,7 @@ func TestResolveIdentifier_Nip05(t *testing.T) {
 
 func TestFetchNip05PubKey_NameNotFound(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]any{"names": map[string]string{}})
+		_ = json.NewEncoder(w).Encode(map[string]any{"names": map[string]string{}})
 	}))
 	defer srv.Close()
 
@@ -228,7 +228,7 @@ func TestFetchNip05PubKey_NonOKStatus(t *testing.T) {
 
 func TestFetchNip05PubKey_InvalidJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, "not json")
+		_, _ = fmt.Fprint(w, "not json")
 	}))
 	defer srv.Close()
 
@@ -240,7 +240,7 @@ func TestFetchNip05PubKey_InvalidJSON(t *testing.T) {
 func TestFetchNip05PubKey_Timeout(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(50 * time.Millisecond)
-		json.NewEncoder(w).Encode(map[string]any{"names": map[string]string{}})
+		_ = json.NewEncoder(w).Encode(map[string]any{"names": map[string]string{}})
 	}))
 	defer srv.Close()
 

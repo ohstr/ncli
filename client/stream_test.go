@@ -31,7 +31,7 @@ func TestRelayLoad(t *testing.T) {
 	dbPath := t.TempDir() + "/load_test_relay.db"
 
 	limitation := &nip11.Limitation{
-		MaxLimit:        100000,
+		MaxLimit:         100000,
 		MaxSubscriptions: 500, // Increase max subs for load test
 	}
 	store, err := relay.NewEventStore(dbPath, limitation)
@@ -53,7 +53,7 @@ func TestRelayLoad(t *testing.T) {
 			t.Logf("server error: %v", err)
 		}
 	}()
-	defer server.Close()
+	defer func() { _ = server.Close() }()
 
 	// Wait for server to start
 	time.Sleep(200 * time.Millisecond)

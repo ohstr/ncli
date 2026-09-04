@@ -176,7 +176,7 @@ func TestLoggerWidget(t *testing.T) {
 		app.Stop()
 	}()
 
-	app.Run()
+	_ = app.Run()
 }
 
 // TestLoggerInputCaptureIsScopedToThisWidget guards against a regression

@@ -105,13 +105,13 @@ func RedirectStderrToCrashLog(path string) (restore func(), err error) {
 
 	restoreStderr, err := redirectStderr(crashFile)
 	if err != nil {
-		crashFile.Close()
+		_ = crashFile.Close()
 		return nil, err
 	}
 
 	return func() {
 		restoreStderr()
-		crashFile.Close()
+		_ = crashFile.Close()
 	}, nil
 }
 

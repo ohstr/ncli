@@ -106,7 +106,7 @@ itself -- fails if none is running (use "ncli bunker" for that).`,
 				}
 				return common.NotFoundError(cmd, "", errors.New("no bunker daemon is running; start one with `ncli bunker`"))
 			}
-			defer bunkerClient.Close()
+			defer func() { _ = bunkerClient.Close() }()
 
 			return runTUI(cmd, bunkerClient, nil)
 		},
@@ -129,7 +129,7 @@ func newStatusCommand() *cobra.Command {
 				fmt.Println("not running")
 				return nil
 			}
-			defer bunkerClient.Close()
+			defer func() { _ = bunkerClient.Close() }()
 
 			st, err := bunkerClient.Status()
 			if err != nil {
@@ -207,7 +207,7 @@ func newStopCommand() *cobra.Command {
 			if err != nil {
 				return common.NotFoundError(cmd, "", errors.New("no bunker daemon is running"))
 			}
-			defer bunkerClient.Close()
+			defer func() { _ = bunkerClient.Close() }()
 
 			// Fetched before Stop(), not after: Stop() tears down the very
 			// daemon Status() would otherwise need to answer, so there's no
@@ -261,7 +261,7 @@ func newSessionsCommand() *cobra.Command {
 			if err != nil {
 				return common.NotFoundError(cmd, "", errors.New("no bunker daemon is running"))
 			}
-			defer bunkerClient.Close()
+			defer func() { _ = bunkerClient.Close() }()
 
 			sessions, err := bunkerClient.ListSessions()
 			if err != nil {
@@ -293,7 +293,7 @@ func newSessionsCommand() *cobra.Command {
 			if err != nil {
 				return common.NotFoundError(cmd, "", errors.New("no bunker daemon is running"))
 			}
-			defer bunkerClient.Close()
+			defer func() { _ = bunkerClient.Close() }()
 
 			revoked, err := bunkerClient.Revoke(args[0])
 			if err != nil {
@@ -322,7 +322,7 @@ func newSessionsCommand() *cobra.Command {
 			if err != nil {
 				return common.NotFoundError(cmd, "", errors.New("no bunker daemon is running"))
 			}
-			defer bunkerClient.Close()
+			defer func() { _ = bunkerClient.Close() }()
 
 			updated, err := bunkerClient.SetName(args[0], args[1])
 			if err != nil {
@@ -351,7 +351,7 @@ func newSessionsCommand() *cobra.Command {
 			if err != nil {
 				return common.NotFoundError(cmd, "", errors.New("no bunker daemon is running"))
 			}
-			defer bunkerClient.Close()
+			defer func() { _ = bunkerClient.Close() }()
 
 			sessions, err := bunkerClient.ListSessions()
 			if err != nil {
@@ -404,7 +404,7 @@ func newSessionsCommand() *cobra.Command {
 			if err != nil {
 				return common.NotFoundError(cmd, "", errors.New("no bunker daemon is running"))
 			}
-			defer bunkerClient.Close()
+			defer func() { _ = bunkerClient.Close() }()
 
 			revoked, err := bunkerClient.RevokeGrant(args[0], method, kind)
 			if err != nil {
@@ -422,7 +422,7 @@ func newSessionsCommand() *cobra.Command {
 		},
 	}
 	revokeGrantCmd.Flags().String("method", "", "NIP-46 method the grant covers (e.g. sign_event, ping, connect)")
-	revokeGrantCmd.MarkFlagRequired("method")
+	_ = revokeGrantCmd.MarkFlagRequired("method")
 	revokeGrantCmd.Flags().Int("kind", 0, "Event kind, for a sign_event grant (omit for the any-kind grant)")
 	cmd.AddCommand(revokeGrantCmd)
 
@@ -443,7 +443,7 @@ func newHistoryCommand() *cobra.Command {
 			if err != nil {
 				return common.NotFoundError(cmd, "", errors.New("no bunker daemon is running"))
 			}
-			defer bunkerClient.Close()
+			defer func() { _ = bunkerClient.Close() }()
 
 			history, err := bunkerClient.History()
 			if err != nil {
@@ -517,7 +517,7 @@ grants <pubkey>" shows what actually landed once paired.`,
 			if err != nil {
 				return common.NotFoundError(cmd, "", errors.New("no bunker daemon is running; start one with `ncli bunker`"))
 			}
-			defer bunkerClient.Close()
+			defer func() { _ = bunkerClient.Close() }()
 
 			uri := ""
 			if len(args) > 0 {
@@ -536,7 +536,7 @@ grants <pubkey>" shows what actually landed once paired.`,
 		},
 	}
 	cmd.Flags().String("grants", "", `Path to a "kind: bunker" YAML spec declaring grants to apply automatically once this pairing completes (see examples/bunker/)`)
-	cmd.MarkFlagFilename("grants", "yaml", "yml")
+	_ = cmd.MarkFlagFilename("grants", "yaml", "yml")
 	return cmd
 }
 
@@ -555,7 +555,7 @@ func newHiddenDaemonCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringArrayVar(&relayFlags, "relay", nil, "")
-	cmd.Flags().MarkHidden("relay")
+	_ = cmd.Flags().MarkHidden("relay")
 	return cmd
 }
 
@@ -579,11 +579,11 @@ func runDaemonProcess(cmd *cobra.Command, privKeyHex, vaultLabel string, relays 
 	if err != nil {
 		return common.RuntimeError(cmd, err)
 	}
-	defer eventLog.Close()
+	defer func() { _ = eventLog.Close() }()
 
 	logPath := filepath.Join(common.AppConfigDir(), "bunker", "daemon.log")
 	logWriter := &lumberjack.Logger{Filename: logPath, MaxSize: 20, MaxBackups: 3, MaxAge: 28, Compress: true}
-	defer logWriter.Close()
+	defer func() { _ = logWriter.Close() }()
 
 	ctx, cancel := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
@@ -598,7 +598,7 @@ func runDaemonProcess(cmd *cobra.Command, privKeyHex, vaultLabel string, relays 
 		EventLog:       eventLog,
 		InitialHistory: initialHistory,
 		OnLog: func(format string, args ...any) {
-			fmt.Fprintf(logWriter, "%s "+format+"\n", append([]any{time.Now().Format(time.RFC3339)}, args...)...)
+			_, _ = fmt.Fprintf(logWriter, "%s "+format+"\n", append([]any{time.Now().Format(time.RFC3339)}, args...)...)
 		},
 	})
 
@@ -687,7 +687,11 @@ func runInProcess(pubKeyHex, privKeyHex, vaultLabel string, relays []string) (Bu
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())
-	go daemon.Run(ctx)
+	go func() {
+		if err := daemon.Run(ctx); err != nil {
+			daemon.log("daemon exited: %v", err)
+		}
+	}()
 
 	return newLocalClient(daemon, time.Now(), cancel), cancel, nil
 }

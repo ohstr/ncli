@@ -295,16 +295,16 @@ func runIDList(cmd *cobra.Command) error {
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
 	if reveal {
-		fmt.Fprintln(w, "LABEL\tNPUB\tCREATED\tPRIV_HEX\tNSEC")
+		_, _ = fmt.Fprintln(w, "LABEL\tNPUB\tCREATED\tPRIV_HEX\tNSEC")
 		for _, r := range rows {
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", r.Label, r.Npub, r.CreatedAt, r.PrivKeyHex, r.Nsec)
+			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", r.Label, r.Npub, r.CreatedAt, r.PrivKeyHex, r.Nsec)
 		}
 	} else {
-		fmt.Fprintln(w, "LABEL\tNPUB\tCREATED")
+		_, _ = fmt.Fprintln(w, "LABEL\tNPUB\tCREATED")
 		for _, r := range rows {
-			fmt.Fprintf(w, "%s\t%s\t%s\n", r.Label, r.Npub, r.CreatedAt)
+			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n", r.Label, r.Npub, r.CreatedAt)
 		}
 	}
-	w.Flush()
+	_ = w.Flush()
 	return nil
 }

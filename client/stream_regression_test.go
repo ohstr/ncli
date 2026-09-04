@@ -98,10 +98,7 @@ func TestStreamNoFalseUnexpectedUnderBacklog(t *testing.T) {
 
 			deadline := time.Now().Add(15 * time.Second)
 			for _, fc := range destFCs {
-				for {
-					if fc.stat.FlatRow()[1] >= numEvents {
-						break
-					}
+				for fc.stat.FlatRow()[1] < numEvents {
 					if time.Now().After(deadline) {
 						t.Fatalf("timed out waiting for destination %s to process all %d events (got %d)",
 							fc.stat.GetAttributes().Name, numEvents, fc.stat.FlatRow()[1])

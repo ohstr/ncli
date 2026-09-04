@@ -198,7 +198,7 @@ func TestBlossomMirror_SucceededTransferButInvalidResponse(t *testing.T) {
 		t.Run(hook, func(t *testing.T) {
 			r := newRunner(t)
 			source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-				w.Write([]byte("mirror source content"))
+				_, _ = w.Write([]byte("mirror source content"))
 			}))
 			defer source.Close()
 
@@ -234,7 +234,7 @@ func TestBlossomMirror_MultiServerFanOut(t *testing.T) {
 	}
 	r := newRunner(t)
 	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		w.Write([]byte("fan out mirror content"))
+		_, _ = w.Write([]byte("fan out mirror content"))
 	}))
 	defer source.Close()
 

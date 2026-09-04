@@ -2,7 +2,6 @@ package client
 
 import (
 	"context"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"sort"
@@ -14,9 +13,9 @@ import (
 	"github.com/ohstr/nmilat/nip11"
 	"github.com/ohstr/nmilat/nip13"
 	"github.com/ohstr/nmilat/nip77"
-	"github.com/ohstr/nmilat/wire"
 	"github.com/ohstr/nmilat/relay"
 	relayclient "github.com/ohstr/nmilat/relay/client"
+	"github.com/ohstr/nmilat/wire"
 	"github.com/rs/zerolog/log"
 )
 
@@ -469,11 +468,6 @@ func (s *SyncModule) Close() {
 	if s.store != nil {
 		s.store.Close()
 	}
-}
-
-// idBytesToHex converts raw ID bytes to hex. Unused placeholder removed.
-func idBytesToHex(idBytes []byte) string {
-	return hex.EncodeToString(idBytes)
 }
 
 var negModeNames = [...]string{"Skip", "Fingerprint", "IdList"}

@@ -23,7 +23,7 @@ func registerQueryFlags(cmd *cobra.Command, prefix string) {
 	}
 
 	cmd.Flags().StringP("targets", "t", "", targetsDesc)
-	cmd.MarkFlagFilename("targets", "yaml", "yml")
+	_ = cmd.MarkFlagFilename("targets", "yaml", "yml")
 
 	cmd.Flags().StringP("relays", "s", "", relaysDesc)
 

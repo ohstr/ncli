@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.4.6]
 
 ### Fixed
 
@@ -9,6 +9,7 @@
   regardless of `strictPow`/`--strict-pow`, since that setting only ever
   governed ncli's own read-side check, never the relay's. Bumps
   `github.com/ohstr/nmilat` to v0.2.7, which fixes this on the relay side.
+  ([#33](https://github.com/ohstr/ncli/pull/33))
 
 ## [0.4.5]
 

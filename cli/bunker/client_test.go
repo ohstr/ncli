@@ -62,7 +62,7 @@ func ipcClientFor(t *testing.T, daemon *Daemon) BunkerClient {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { client.Close() })
+	t.Cleanup(func() { _ = client.Close() })
 	return client
 }
 
@@ -646,7 +646,7 @@ func TestConnect_WithGrants_NostrconnectDirection(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go daemon.Run(ctx)
+	go func() { _ = daemon.Run(ctx) }()
 
 	clientConn, err := relayclient.Connect(ctx, relay.url)
 	if err != nil {

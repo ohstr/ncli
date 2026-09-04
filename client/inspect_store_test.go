@@ -26,7 +26,7 @@ func TestInspectStoreInsertRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewInspectStore: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	ctx := context.Background()
 	event := newInspectStoreTestEvent(1)
@@ -53,7 +53,7 @@ func TestInspectStoreInsertToleratesDuplicateEvent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewInspectStore: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	ctx := context.Background()
 	event := newInspectStoreTestEvent(1)
@@ -95,7 +95,7 @@ func TestInspectStoreConcurrentInsert(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewInspectStore: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	ctx := context.Background()
 	const numEvents = 200

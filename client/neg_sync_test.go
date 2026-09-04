@@ -86,8 +86,8 @@ func TestNegSync_Integration(t *testing.T) {
 				t.Fatalf("failed to create temp file: %v", err)
 			}
 			tmpPath := tmpFile.Name()
-			tmpFile.Close()
-			defer os.Remove(tmpPath)
+			_ = tmpFile.Close()
+			defer func() { _ = os.Remove(tmpPath) }()
 
 			t.Logf("temp db: %s", tmpPath)
 

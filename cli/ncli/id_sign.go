@@ -116,13 +116,13 @@ func init() {
 	idCmd.AddCommand(idSignCmd)
 
 	idSignCmd.Flags().String("identity", "", "Vault label/nsec identity to sign with (required; must resolve to a private key -- a pubkey-only npub/hex/nprofile/nip-05 is rejected)")
-	idSignCmd.MarkFlagRequired("identity")
+	_ = idSignCmd.MarkFlagRequired("identity")
 
 	idSignCmd.Flags().StringP("events", "e", "", "Path to a single unsigned event object or an array of them (required)")
-	idSignCmd.MarkFlagRequired("events")
-	idSignCmd.MarkFlagFilename("events", "json", "jsonp", "yaml", "yml")
+	_ = idSignCmd.MarkFlagRequired("events")
+	_ = idSignCmd.MarkFlagFilename("events", "json", "jsonp", "yaml", "yml")
 
 	idSignCmd.Flags().StringP("out", "o", "", "Output path for the signed event(s) (required)")
-	idSignCmd.MarkFlagRequired("out")
-	idSignCmd.MarkFlagFilename("out", "json", "jsonp", "yaml", "yml")
+	_ = idSignCmd.MarkFlagRequired("out")
+	_ = idSignCmd.MarkFlagFilename("out", "json", "jsonp", "yaml", "yml")
 }

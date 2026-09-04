@@ -53,7 +53,7 @@ func TestRelayLoad(t *testing.T) {
 			t.Logf("server error: %v", err)
 		}
 	}()
-	defer server.Close()
+	defer func() { _ = server.Close() }()
 
 	// Wait for server to start
 	time.Sleep(200 * time.Millisecond)

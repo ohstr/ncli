@@ -111,7 +111,7 @@ func init() {
 	registerQueryFlags(findCmd, "")
 
 	findCmd.Flags().StringP("out", "o", "", "Also save the result to this JSON file path")
-	findCmd.MarkFlagFilename("out", "json", "jsonp")
+	_ = findCmd.MarkFlagFilename("out", "json", "jsonp")
 
 	findCmd.Flags().Duration("timeout", 30*time.Second, "Max time to wait per target before giving up on it (0 = wait forever)")
 }

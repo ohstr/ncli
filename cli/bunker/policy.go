@@ -249,7 +249,10 @@ func (s *Store) resolveGrantLocked(sess *Session, idx int) Decision {
 		} else {
 			g.RemainingUses = &remaining
 		}
-		s.saveLocked()
+		// Best-effort: the in-memory grant above is already updated and
+		// authoritative for this process; a disk-sync failure here isn't
+		// fatal to the request this decision is for.
+		_ = s.saveLocked()
 	}
 
 	return verdict
@@ -292,7 +295,8 @@ func (s *Store) Prune() {
 		}
 	}
 	if changed {
-		s.saveLocked()
+		// Best-effort, same reasoning as resolveGrantLocked above.
+		_ = s.saveLocked()
 	}
 }
 

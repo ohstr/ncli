@@ -122,7 +122,7 @@ func uploadOne(ctx context.Context, hc *bclient.Client, server, path, contentTyp
 		res.Error = err.Error()
 		return res
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	info, err := f.Stat()
 	if err != nil {
@@ -161,7 +161,7 @@ func detectContentType(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	buf := make([]byte, 512)
 	n, err := f.Read(buf)

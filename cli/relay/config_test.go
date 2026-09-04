@@ -82,8 +82,8 @@ nip11:
 			tmpDir := t.TempDir()
 			// Change CWD to tmpDir to test local file discovery if no cfgFile passed
 			originalWd, _ := os.Getwd()
-			defer os.Chdir(originalWd)
-			os.Chdir(tmpDir)
+			defer func() { _ = os.Chdir(originalWd) }()
+			_ = os.Chdir(tmpDir)
 
 			tmpFile := filepath.Join(tmpDir, "relay.yaml")
 			err := os.WriteFile(tmpFile, []byte(tt.yamlContent), 0644)
@@ -150,7 +150,7 @@ func loadRelayConfigFromYAML(t *testing.T, yamlContent string) RelayConfig {
 	tmpDir := t.TempDir()
 	originalWd, err := os.Getwd()
 	require.NoError(t, err)
-	t.Cleanup(func() { os.Chdir(originalWd) })
+	t.Cleanup(func() { _ = os.Chdir(originalWd) })
 	require.NoError(t, os.Chdir(tmpDir))
 
 	tmpFile := filepath.Join(tmpDir, "relay.yaml")

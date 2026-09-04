@@ -77,8 +77,8 @@ func init() {
 	registerQueryFlags(dumpCmd, "")
 
 	dumpCmd.Flags().StringP("out", "o", "", "Output JSON file path")
-	dumpCmd.MarkFlagRequired("out")
-	dumpCmd.MarkFlagFilename("out", "json", "jsonp")
+	_ = dumpCmd.MarkFlagRequired("out")
+	_ = dumpCmd.MarkFlagFilename("out", "json", "jsonp")
 
 	dumpCmd.Flags().Duration("timeout", 30*time.Second, "Max time to wait per target before giving up on it (0 = wait forever)")
 }

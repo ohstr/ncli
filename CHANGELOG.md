@@ -1,5 +1,21 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- `ncli relay`'s live (continuous) scans on a filter matching more than one
+  kind could starve every other kind sharing that filter for as long as a
+  slow consumer took to drain a sustained burst on one busy kind, since
+  each cursor's collected batch flushed through the subscription's
+  buffered channel before the next cursor even ran. Bumps
+  `github.com/ohstr/nmilat` to v0.2.8, which fixes this on the relay side
+  by collecting all cursors into one recency-ordered queue before a single
+  end-of-pass flush; bounded (non-live) queries are unaffected. Also picks
+  up a fix to `nmilat`'s NWC client, which misparsed untagged NIP-44 v2
+  responses as legacy NIP-04 instead of falling back to the request's own
+  encryption scheme.
+
 ## [0.4.6]
 
 ### Added

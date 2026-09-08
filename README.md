@@ -11,21 +11,21 @@ events.**
 
 ## Features
 
-- [`ncli relay`](#relay-run-a-nostr-relay-server) — Run a fast, low-level Nostr relay server
-- [`ncli relay context`](#relay-context-save-switch-and-run-relays-by-name) — Save, switch, and run relays by name, auto-creating new ones
-- [`ncli relay members/invites/roles`](#relay-membersinvitesroles-nip-43-membership-admin) — Manage a running relay's NIP-43 membership over NIP-98 HTTP
-- [`ncli relay stats/reindex/clear`](#relay-statsreindexclear-operate-a-running-relay) — Manage a running relay over NIP-98 HTTP
-- [`ncli apply`](#apply-stream-sync-inspect) — Stream, sync, or inspect events, with a live TUI and hot-reloading config
-- [`ncli find`](#find-query-events) — Query events
-- [`ncli ping`](#ping-test-relay-connectivity) — Check if relays/targets are reachable
-- [`ncli dump`](#dump-export-events-to-json) — Export events to JSON
-- [`ncli publish`](#publish-send-events-to-relays) — Publish signed events to one or more relays
-- [`ncli prefs`](#prefs-default-relays-for-finddumpminerpublish) — Set default relays for `find`/`dump`/`miner check`/`publish`
-- [`ncli miner`](#miner-mine-and-verify-proof-of-work) — Mine NIP-13 proof-of-work into an event, or verify it on published events
-- [`ncli bunker`](#bunker-run-as-a-nip-46-remote-signer) — Run as a NIP-46 remote signer
-- [`ncli blossom`](#blossom-upload-fetch-and-manage-media) — Upload, fetch, and manage content on Blossom media servers
-- [`ncli id`](#id-generate-or-inspect-a-nostr-identity) — Generate or inspect a Nostr keypair
-- [`ncli decode`](#decode-decode-a-nip-19-entity) — Decode any NIP-19 bech32 entity (npub/nsec/note/nprofile/nevent/naddr)
+- [`ncli relay`](#relay) — Run a fast, low-level Nostr relay server
+- [`ncli relay context`](#relay-context) — Save, switch, and run relays by name, auto-creating new ones
+- [`ncli relay members/invites/roles`](#relay-membersinvitesroles) — Manage a running relay's NIP-43 membership over NIP-98 HTTP
+- [`ncli relay stats/reindex/clear`](#relay-statsreindexclear) — Manage a running relay over NIP-98 HTTP
+- [`ncli apply`](#apply) — Stream, sync, or inspect events, with a live TUI and hot-reloading config
+- [`ncli find`](#find) — Query events
+- [`ncli ping`](#ping) — Check if relays/targets are reachable
+- [`ncli dump`](#dump) — Export events to JSON
+- [`ncli publish`](#publish) — Publish signed events to one or more relays
+- [`ncli prefs`](#prefs) — Set default relays for `find`/`dump`/`miner check`/`publish`
+- [`ncli miner`](#miner) — Mine NIP-13 proof-of-work into an event, or verify it on published events
+- [`ncli bunker`](#bunker) — Run as a NIP-46 remote signer
+- [`ncli blossom`](#blossom) — Upload, fetch, and manage content on Blossom media servers
+- [`ncli id`](#id) — Generate or inspect a Nostr keypair
+- [`ncli decode`](#decode) — Decode any NIP-19 bech32 entity (npub/nsec/note/nprofile/nevent/naddr)
 
 `--json` and `-q/--quiet` are global flags for scripted/agent use — see
 [AGENTS.md](AGENTS.md) for the full output/error contract. Run
@@ -80,7 +80,9 @@ docker run --rm ghcr.io/ohstr/ncli:latest --help
 
 **From source** — see [Development](#development).
 
-## `relay`: run a Nostr relay server
+## `relay`
+
+Run a Nostr relay server.
 
 <details>
 <summary>Supported NIPs</summary>
@@ -98,7 +100,7 @@ docker run --rm ghcr.io/ohstr/ncli:latest --help
 | [33](https://github.com/nostr-protocol/nips/blob/master/33.md) | Parameterized replaceable events |
 | [40](https://github.com/nostr-protocol/nips/blob/master/40.md) | Event expiration |
 | [42](https://github.com/nostr-protocol/nips/blob/master/42.md) | Relay authentication |
-| [43](https://github.com/nostr-protocol/nips/blob/master/43.md) | Relay membership — off by default; see [`relay members`](#relay-membersinvitesroles-nip-43-membership-admin) |
+| [43](https://github.com/nostr-protocol/nips/blob/master/43.md) | Relay membership — off by default; see [`relay members`](#relay-membersinvitesroles) |
 | [44](https://github.com/nostr-protocol/nips/blob/master/44.md) | Versioned encryption |
 | [47](https://github.com/nostr-protocol/nips/blob/master/47.md) | Nostr Wallet Connect |
 | [48](https://github.com/nostr-protocol/nips/blob/master/48.md) | Proxy tags |
@@ -126,7 +128,7 @@ ncli relay -c bee_community
 
 Generates a minimal config (shape: [`examples/relay/minimal.yaml`](examples/relay/minimal.yaml))
 with a fresh identity and starts serving — see
-[`relay context`](#relay-context-save-switch-and-run-relays-by-name).
+[`relay context`](#relay-context).
 
 Want full control? Write your own config and pass it with `--config` —
 every field, at default, commented: [`examples/relay/full.yaml`](examples/relay/full.yaml)
@@ -222,7 +224,7 @@ ncli relay --config examples/relay/minimal.yaml
 ```
 
 Once it's running, operate it with NIP-98-signed admin commands — see
-[`relay stats`/`reindex`/`clear`](#relay-statsreindexclear-operate-a-running-relay)
+[`relay stats`/`reindex`/`clear`](#relay-statsreindexclear)
 below for the full set:
 
 ```sh
@@ -255,11 +257,10 @@ this actually enforced (`strict: true`). More presets (auth-required,
 membership, ephemeral, cache+search) live under
 [`examples/relay/`](examples/relay/).
 
-## `relay context`: save, switch, and run relays by name
+## `relay context`
 
-Managing more than one relay means retyping `--config path/to/relay.yaml`
-on every `stats`/`members`/`invites`/... call. Save each relay's config
-under a short name instead, and switch between them:
+Save, switch, and run relays by name, instead of retyping `--config
+path/to/relay.yaml` on every `stats`/`members`/`invites`/... call:
 
 ```sh
 ncli relay context add bee_community ~/relays/bee-community.yaml
@@ -293,11 +294,11 @@ as current.
 uses an existing identity instead of generating one. `--context` and
 `--config` are mutually exclusive.
 
-## `relay members`/`invites`/`roles`: NIP-43 membership admin
+## `relay members`/`invites`/`roles`
 
-Same NIP-98-signed mechanism as `relay stats`/`reindex`/`clear` below,
-gated on `membership.enabled: true`. Enroll members, hand out invite
-codes, and define roles on a running relay:
+NIP-43 membership admin. Same NIP-98-signed mechanism as `relay stats`/
+`reindex`/`clear` below, gated on `membership.enabled: true`. Enroll
+members, hand out invite codes, and define roles on a running relay:
 
 ```sh
 # enroll a pubkey directly -- no invite code needed
@@ -335,10 +336,10 @@ See the commented-out block in
 fully-documented one in
 [`examples/relay/full.yaml`](examples/relay/full.yaml).
 
-## `relay stats`/`reindex`/`clear`: operate a running relay
+## `relay stats`/`reindex`/`clear`
 
-NIP-98-signed HTTP requests to an already-running relay, using the same
-`--config` as the server:
+Operate a running relay: NIP-98-signed HTTP requests to an already-running
+relay, using the same `--config` as the server:
 
 ```sh
 # live reindexer + verification-worker metrics
@@ -360,11 +361,11 @@ ncli relay clear zaps --config examples/relay/full.yaml
 Every subcommand takes `--json`; requires `nip11.privkey` in `--config`.
 Poll `ncli relay stats` for `reindex` progress.
 
-## `prefs`: default relays for `find`/`ping`/`dump`/`miner`/`publish`
+## `prefs`
 
-A default relay list — `find`, `ping`, `dump`, `miner check`, and
-`publish` all use it automatically whenever you don't pass your own
-relays.
+Default relays for `find`/`ping`/`dump`/`miner`/`publish` — a default
+relay list that `find`, `ping`, `dump`, `miner check`, and `publish` all
+use automatically whenever you don't pass your own relays.
 
 ```sh
 ncli prefs relays add relay.primal.net
@@ -383,13 +384,13 @@ ncli prefs path
 
 ![`ncli prefs relays add`, then `ncli find` with no -s at all](docs/vhs/prefs.gif)
 
-## `find`: query events
+## `find`
 
-Looks up an event by ID and/or filter, stopping at the **first** matching
-target (`dump` merges across every target instead). The identifier can be
-an event (hex ID, `note1...`/`nevent1...`) or an author (`npub1...`,
-`nprofile1...`, nip-05 `name@domain`) — author-only defaults to their
-profile (kind 0).
+Query events: looks up an event by ID and/or filter, stopping at the
+**first** matching target (`dump` merges across every target instead).
+The identifier can be an event (hex ID, `note1...`/`nevent1...`) or an
+author (`npub1...`, `nprofile1...`, nip-05 `name@domain`) — author-only
+defaults to their profile (kind 0).
 
 ```sh
 # nip-05 address -> their profile (kind 0)
@@ -441,11 +442,11 @@ spec:
       limit: 5
 ```
 
-## `ping`: test relay connectivity
+## `ping`
 
-Confirms a relay actually speaks the protocol, not just accepts a
-connection. Fetches no events, and exits non-zero if any relay is
-unreachable.
+Test relay connectivity: confirms a relay actually speaks the protocol,
+not just accepts a connection. Fetches no events, and exits non-zero if
+any relay is unreachable.
 
 Results narrate as plain log lines by default. Pass `--tui` for a live
 interactive board instead -- only takes effect in a real terminal and
@@ -470,10 +471,10 @@ ncli ping relay.primal.net relay.snort.social --tui
 
 ![`ncli ping` checking two relays' reachability](docs/vhs/ping.gif)
 
-## `dump`: export events to JSON
+## `dump`
 
-Same targets/filters as `find`, but merges results across **every**
-target instead of stopping at the first match.
+Export events to JSON: same targets/filters as `find`, but merges results
+across **every** target instead of stopping at the first match.
 
 ```sh
 # export a relay's events to JSON
@@ -493,10 +494,10 @@ ncli dump -t examples/targets.yaml -o out.json
 
 `-o/--out` is required (`.json` or `.jsonp`).
 
-## `publish`: send events to relays
+## `publish`
 
-The write-side counterpart to `dump`: sends signed events to relays and
-reports each one's `OK`.
+Send events to relays: the write-side counterpart to `dump`, sends signed
+events to relays and reports each one's `OK`.
 
 ```sh
 # mine + auto-sign, then publish
@@ -510,10 +511,10 @@ ncli publish -e events.json -s relay.ohstr.com,relay.snort.social --json
 Exits non-zero if any (event, relay) pair fails — the same
 composes-into-CI/scripts convention as `miner check`.
 
-## `apply`: stream, sync, inspect
+## `apply`
 
-`ncli apply -f <file>` runs one of three workflows, chosen by the file's
-`kind`. Fully annotated versions of each live under
+Stream, sync, inspect: `ncli apply -f <file>` runs one of three workflows,
+chosen by the file's `kind`. Fully annotated versions of each live under
 [`examples/apply/`](examples/apply/) — the snippets below are trimmed to
 the essentials.
 
@@ -623,10 +624,11 @@ useful when piping output or running under a process supervisor.
 
 ![`ncli apply` inspecting matched events across relays and a local store](docs/vhs/apply-inspect.gif)
 
-## `miner`: mine and verify proof-of-work
+## `miner`
 
-`ncli miner mine` finds a NIP-13 proof-of-work nonce for an event, searching
-across every CPU core by default. Author the note inline with
+Mine and verify proof-of-work: `ncli miner mine` finds a NIP-13
+proof-of-work nonce for an event, searching across every CPU core by
+default. Author the note inline with
 `--content`/`--content-file` (fills in `created_at`/`kind` for you) plus
 `--identity` for the pubkey — no hand-written event file needed:
 
@@ -688,10 +690,10 @@ directly into CI/cron:
 ncli miner check -e events.json || alert-oncall "PoW compliance regression"
 ```
 
-## `bunker`: run as a NIP-46 remote signer
+## `bunker`
 
-Turns `ncli` into a NIP-46 remote signer: your private key never leaves
-this process. Other Nostr apps send it encrypted signing requests over a
+Run as a NIP-46 remote signer: your private key never leaves this
+process. Other Nostr apps send it encrypted signing requests over a
 relay; you approve or reject each one from a live TUI, or a remembered
 grant handles it automatically.
 
@@ -731,11 +733,11 @@ See [`skills/ncli-bunker/SKILL.md`](skills/ncli-bunker/SKILL.md) for the
 full walkthrough, including the Windows platform gap, the grants-spec
 format, and pairing an AI agent for unattended signing.
 
-## `blossom`: upload, fetch, and manage media
+## `blossom`
 
-A client for the [Blossom protocol](https://github.com/hzrd149/blossom):
-content-addressed blob storage authenticated with your Nostr identity
-instead of a login.
+Upload, fetch, and manage media: a client for the
+[Blossom protocol](https://github.com/hzrd149/blossom), content-addressed
+blob storage authenticated with your Nostr identity instead of a login.
 
 ```sh
 ncli blossom servers add https://blossom.example --identity mykey --publish
@@ -762,10 +764,10 @@ See [`skills/ncli-blossom/SKILL.md`](skills/ncli-blossom/SKILL.md) for the
 full walkthrough, including the multi-server fan-out/fallback model and
 BUD-03 server-list publishing/discovery.
 
-## `id`: generate or inspect a Nostr identity
+## `id`
 
-No argument generates a new keypair (hex, nsec, npub); an argument
-resolves/inspects an existing one.
+Generate or inspect a Nostr identity: no argument generates a new keypair
+(hex, nsec, npub); an argument resolves/inspects an existing one.
 
 ```sh
 # generate an identity, save it to the local vault
@@ -796,7 +798,9 @@ delegation token from one.
 
 ![`ncli id` generating a keypair, then inspecting a nip-05 address](docs/vhs/id.gif)
 
-## `decode`: decode a NIP-19 entity
+## `decode`
+
+Decode a NIP-19 entity.
 
 ```sh
 # npub/nsec/note/nprofile/nevent/naddr -> hex fields
@@ -831,7 +835,7 @@ npx skills add ohstr/ncli --all -y
 
 Config is loaded via [viper](https://github.com/spf13/viper) from a YAML
 file or `NCLI_`-prefixed environment variables. Without `--config`, ncli
-uses the current [`relay context`](#relay-context-save-switch-and-run-relays-by-name)
+uses the current [`relay context`](#relay-context)
 if one is set, otherwise it looks for `ncli.yaml`/`relay.yaml` in the
 current directory, then `$HOME`. Every YAML input `ncli` accepts has a
 documented sample under [`examples/`](examples/).

@@ -82,3 +82,15 @@ _dev-up:
 # Stop the local dev stack
 _dev-down:
     docker compose -f build/relay/docker-compose.dev.yaml down
+
+# Run the docs site locally with hot reload -- README.md, AGENTS.md, and
+# CHANGELOG.md changes sync automatically. http://localhost:4321/
+#
+# The docs site app itself lives in ohstr/docs-kit, shared across ohstr
+# projects (see that repo's README) rather than vendored here -- this just
+# clones/updates a local cache of it under .docs-kit/ (gitignored) and runs
+# it against this repo's own content.
+docs-dev:
+    [ -d .docs-kit/.git ] && git -C .docs-kit pull --quiet || git clone --quiet https://github.com/ohstr/docs-kit .docs-kit
+    cd .docs-kit && [ -d node_modules ] || npm install
+    cd .docs-kit && DOCS_CONTENT_DIR="{{justfile_directory()}}" DOCS_TITLE=ncli DOCS_ACCENT_HUE=262 DOCS_FAVICON_GLYPH='>_' npm run dev

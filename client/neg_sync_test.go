@@ -49,22 +49,12 @@ func TestNegSync_Integration(t *testing.T) {
 		minEvents int // minimum events expected to be found
 	}{
 		{
+			// relay.primal.net and nos.lol both have negentropy disabled
+			// entirely (confirmed via probe: NEG-OPEN gets `NOTICE ERROR:
+			// bad msg: negentropy disabled`), leaving our own relay.ohstr.com
+			// as the only confirmed negentropy-capable relay for this test.
 			name:  "kind 0 profiles from ohstr",
 			relay: "wss://relay.ohstr.com",
-			filter: &nip01.SubscriptionFilter{
-				Kinds:   []int{0},
-				Authors: []string{stableProfile},
-			},
-			direction: SyncDirectionDown,
-			maxRounds: 500,
-			minEvents: 1,
-		},
-		{
-			// relay.primal.net has negentropy disabled entirely (confirmed via
-			// probe: NEG-OPEN gets `NOTICE ERROR: bad msg: negentropy disabled`),
-			// so nos.lol stands in as the second negentropy-capable relay here.
-			name:  "kind 0 profiles from nos.lol",
-			relay: "wss://nos.lol",
 			filter: &nip01.SubscriptionFilter{
 				Kinds:   []int{0},
 				Authors: []string{stableProfile},

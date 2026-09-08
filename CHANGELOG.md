@@ -1,16 +1,18 @@
 # Changelog
 
-## [Unreleased]
+## [0.4.7]
 
 ### Fixed
 
 - `ncli relay`'s live scans on a multi-kind filter could starve other
   kinds during a burst on one busy kind. Bumps `github.com/ohstr/nmilat`
   to v0.2.8, which fixes this relay-side; bounded queries are unaffected.
-  ([nmilat#15](https://github.com/ohstr/nmilat/pull/15))
+  ([nmilat#15](https://github.com/ohstr/nmilat/pull/15),
+  [#41](https://github.com/ohstr/ncli/pull/41))
 - Also picks up a `nmilat` NWC client fix for untagged NIP-44 v2
   responses misparsed as NIP-04.
-  ([nmilat#14](https://github.com/ohstr/nmilat/pull/14))
+  ([nmilat#14](https://github.com/ohstr/nmilat/pull/14),
+  [#41](https://github.com/ohstr/ncli/pull/41))
 
 ## [0.4.6]
 

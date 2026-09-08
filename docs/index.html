@@ -8,19 +8,35 @@
   <meta name="color-scheme" content="light dark" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2270%22 font-family=%22ui-monospace,SFMono-Regular,Menlo,Consolas,monospace%22 font-weight=%22700%22>%26gt;_</text></svg>" />
 
-  <link rel="stylesheet" media="(prefers-color-scheme: dark)"
-        href="https://cdn.jsdelivr.net/npm/docsify@4/lib/themes/dark.css" />
   <link rel="stylesheet" media="(prefers-color-scheme: light)"
-        href="https://cdn.jsdelivr.net/npm/docsify@4/lib/themes/vue.css" />
+        href="https://cdn.jsdelivr.net/npm/docsify-themeable@0/dist/css/theme-simple.css" />
+  <link rel="stylesheet" media="(prefers-color-scheme: dark)"
+        href="https://cdn.jsdelivr.net/npm/docsify-themeable@0/dist/css/theme-simple-dark.css" />
   <style>
-    :root { --base-font-size: 16px; }
+    /* A violet accent instead of docsify-themeable's default blue -- ncli
+       is a Nostr toolkit, and this hue nods at the ecosystem's usual
+       branding without committing to any single project's exact color. */
+    :root {
+      --base-font-size: 16px;
+      --theme-hue: 262;
+      --theme-saturation: 60%;
+      --theme-lightness: 53%;
+      --content-max-width: 54em;
+    }
+    @media (prefers-color-scheme: dark) {
+      /* Same hue, lifted lightness so links/accents stay readable against
+         theme-simple-dark's near-black background. */
+      :root { --theme-lightness: 68%; }
+    }
     .app-name-link img { height: 28px; }
     .markdown-section img[src*="vhs"] {
       max-width: 100%;
-      border-radius: 6px;
-      border: 1px solid rgba(128, 128, 128, 0.3);
+      border-radius: 8px;
+      border: 1px solid var(--mono-tint2, rgba(128, 128, 128, 0.3));
     }
-    .cover-main { text-shadow: none !important; }
+    .markdown-section code {
+      border-radius: var(--border-radius-s, 3px);
+    }
   </style>
 </head>
 <body>

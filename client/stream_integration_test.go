@@ -11,28 +11,28 @@ import (
 
 // See integration/stream/README.md for what this stack is and why the
 // client under test runs in-process here rather than as a compose service.
-// Shared docker-lifecycle/publish/fetch helpers used below (runDockerCompose,
-// newDockerHarnessEvent, publishEventToRelay, waitForEventsAtRelay, etc.)
-// live in client/dockerharness_test.go, alongside this package's other
-// docker-based e2e tests.
+// Shared docker-lifecycle/publish/fetch helpers used below (runCompose,
+// newIntegrationEvent, publishEventToRelay, waitForEventsAtRelay, etc.)
+// live in client/integrationharness_test.go, alongside this package's
+// other hermetic integration tests.
 const (
-	streamDockerComposeFile = "../integration/stream/compose.yaml"
-	streamDockerSpecFile    = "../integration/stream/stream.yaml"
+	streamIntegrationComposeFile = "../integration/stream/compose.yaml"
+	streamIntegrationSpecFile    = "../integration/stream/stream.yaml"
 )
 
-var streamDockerSourceURLs = []string{
+var streamIntegrationSourceURLs = []string{
 	"ws://localhost:45501",
 	"ws://localhost:45502",
 	"ws://localhost:45503",
 }
 
-const streamDockerDestURL = "ws://localhost:45500"
+const streamIntegrationDestURL = "ws://localhost:45500"
 
-// TestStreamDocker brings up integration/stream/compose.yaml's real
+// TestStreamIntegration brings up integration/stream/compose.yaml's real
 // destination + source `ncli relay` containers once, then runs each
 // scenario as a subtest against that shared stack -- needs Docker, hits no
 // production relay. See `just test-integration-stream`.
-func TestStreamDocker(t *testing.T) {
+func TestStreamIntegration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping docker-based stream integration test in short mode")
 	}
@@ -40,15 +40,15 @@ func TestStreamDocker(t *testing.T) {
 		t.Skip("docker not found on PATH, skipping stream integration test")
 	}
 
-	runDockerCompose(t, streamDockerComposeFile, "up", "-d", "--build")
+	runCompose(t, streamIntegrationComposeFile, "up", "-d", "--build")
 	t.Cleanup(func() {
-		cmd := exec.Command("docker", "compose", "-f", streamDockerComposeFile, "down", "-v")
+		cmd := exec.Command("docker", "compose", "-f", streamIntegrationComposeFile, "down", "-v")
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Logf("docker compose down failed: %v\n%s", err, out)
 		}
 	})
 
-	for _, raw := range append([]string{streamDockerDestURL}, streamDockerSourceURLs...) {
+	for _, raw := range append([]string{streamIntegrationDestURL}, streamIntegrationSourceURLs...) {
 		waitForRelayReady(t, raw, 60*time.Second)
 	}
 
@@ -80,8 +80,8 @@ func testDestinationReconnectDoesNotDropEvents(t *testing.T) {
 	if len(upStats) != 1 {
 		t.Fatalf("expected exactly 1 destination, got %d", len(upStats))
 	}
-	if len(downStats) != len(streamDockerSourceURLs) {
-		t.Fatalf("expected %d sources, got %d", len(streamDockerSourceURLs), len(downStats))
+	if len(downStats) != len(streamIntegrationSourceURLs) {
+		t.Fatalf("expected %d sources, got %d", len(streamIntegrationSourceURLs), len(downStats))
 	}
 
 	// Let the initial connections establish before doing anything else.
@@ -91,17 +91,17 @@ func testDestinationReconnectDoesNotDropEvents(t *testing.T) {
 
 	var published []string
 	publishAndTrack := func(sourceURL, marker string) {
-		ev := newDockerHarnessEvent(t, marker)
+		ev := newIntegrationEvent(t, marker)
 		publishEventToRelay(t, sourceURL, ev)
 		published = append(published, ev.ID)
 	}
 
 	// Baseline: normal delivery works before any forced reconnect.
-	publishAndTrack(streamDockerSourceURLs[0], "baseline")
+	publishAndTrack(streamIntegrationSourceURLs[0], "baseline")
 
 	const cycles = 3
 	for i := 0; i < cycles; i++ {
-		runDockerCompose(t, streamDockerComposeFile, "restart", "destination")
+		runCompose(t, streamIntegrationComposeFile, "restart", "destination")
 		waitUntilDestinationPaused(t, destFC, 15*time.Second)
 
 		// Still observed paused right now -- this is the exact window
@@ -110,7 +110,7 @@ func testDestinationReconnectDoesNotDropEvents(t *testing.T) {
 		if !isPaused(destFC) {
 			t.Fatalf("cycle %d: destination un-paused before the race-window publish could happen -- window too short to test reliably", i)
 		}
-		sourceURL := streamDockerSourceURLs[i%len(streamDockerSourceURLs)]
+		sourceURL := streamIntegrationSourceURLs[i%len(streamIntegrationSourceURLs)]
 		publishAndTrack(sourceURL, fmt.Sprintf("race-window-%d", i))
 
 		time.Sleep(1 * time.Second)
@@ -120,7 +120,7 @@ func testDestinationReconnectDoesNotDropEvents(t *testing.T) {
 	// few ticks to retry anything it queued during the windows above.
 	time.Sleep(8 * time.Second)
 
-	missing := waitForEventsAtRelay(t, streamDockerDestURL, published, 10*time.Second)
+	missing := waitForEventsAtRelay(t, streamIntegrationDestURL, published, 10*time.Second)
 	if len(missing) > 0 {
 		t.Errorf("published %d events, but %d never reached the destination (permanently dropped): %v", len(published), len(missing), missing)
 	}
@@ -148,23 +148,23 @@ func testSourceReconnectDoesNotHang(t *testing.T) {
 	stream.Sync(ctx)
 	time.Sleep(1 * time.Second)
 
-	before := newDockerHarnessEvent(t, "source-reconnect-before")
-	publishEventToRelay(t, streamDockerSourceURLs[0], before)
+	before := newIntegrationEvent(t, "source-reconnect-before")
+	publishEventToRelay(t, streamIntegrationSourceURLs[0], before)
 
-	runDockerCompose(t, streamDockerComposeFile, "restart", "source1")
+	runCompose(t, streamIntegrationComposeFile, "restart", "source1")
 
 	// Not required for correctness, just makes sure the next publish
 	// genuinely lands after the restart has taken effect rather than
 	// racing one that hasn't started yet.
 	time.Sleep(2 * time.Second)
 
-	after := newDockerHarnessEvent(t, "source-reconnect-after")
+	after := newIntegrationEvent(t, "source-reconnect-after")
 	// source1 may still be mid-restart, so retry the publish itself --
 	// what's under test is the stream client's own Read-side reconnect,
 	// not this helper publish's timing.
-	publishEventWithRetry(t, streamDockerSourceURLs[0], after, 30*time.Second)
+	publishEventWithRetry(t, streamIntegrationSourceURLs[0], after, 30*time.Second)
 
-	missing := waitForEventsAtRelay(t, streamDockerDestURL, []string{before.ID, after.ID}, 20*time.Second)
+	missing := waitForEventsAtRelay(t, streamIntegrationDestURL, []string{before.ID, after.ID}, 20*time.Second)
 	if len(missing) > 0 {
 		t.Errorf("source reconnect: %d/2 events never reached the destination: %v", len(missing), missing)
 	}
@@ -178,13 +178,13 @@ func testSourceReconnectDoesNotHang(t *testing.T) {
 // test gets a chance to observe it recovered.
 func loadTestStreamSpec(t *testing.T) *StreamSpec {
 	t.Helper()
-	rs, err := loadSpecFromYaml(streamDockerSpecFile)
+	rs, err := loadSpecFromYaml(streamIntegrationSpecFile)
 	if err != nil {
-		t.Fatalf("failed to load %s: %v", streamDockerSpecFile, err)
+		t.Fatalf("failed to load %s: %v", streamIntegrationSpecFile, err)
 	}
 	spec, ok := rs.Spec.(*StreamSpec)
 	if !ok {
-		t.Fatalf("%s is not a `kind: stream` spec", streamDockerSpecFile)
+		t.Fatalf("%s is not a `kind: stream` spec", streamIntegrationSpecFile)
 	}
 	spec.Recovery = &RecoverySpec{
 		StorePath:     filepath.Join(t.TempDir(), "recovery.db"),

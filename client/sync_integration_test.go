@@ -16,17 +16,17 @@ import (
 )
 
 // See integration/sync/README.md for what this stack is. Shared
-// docker-lifecycle/publish/fetch helpers used below (runDockerCompose,
-// newDockerHarnessEvent, publishEventToRelay, waitForRelayReady, etc.) live
-// in client/dockerharness_test.go, alongside client/stream_docker_test.go
-// and client/inspect_docker_test.go.
+// docker-lifecycle/publish/fetch helpers used below (runCompose,
+// newIntegrationEvent, publishEventToRelay, waitForRelayReady, etc.) live
+// in client/integrationharness_test.go, alongside
+// client/stream_integration_test.go and client/inspect_integration_test.go.
 const (
-	syncDockerComposeFile = "../integration/sync/compose.yaml"
-	syncDockerSpecFile    = "../integration/sync/sync.yaml"
-	syncDockerRemoteURL   = "ws://localhost:45520"
+	syncIntegrationComposeFile = "../integration/sync/compose.yaml"
+	syncIntegrationSpecFile    = "../integration/sync/sync.yaml"
+	syncIntegrationRemoteURL   = "ws://localhost:45520"
 )
 
-// TestSyncDocker brings up integration/sync/compose.yaml's single real
+// TestSyncIntegration brings up integration/sync/compose.yaml's single real
 // `ncli relay` container once, then runs each scenario as a subtest
 // against it -- needs Docker, hits no production relay. Replaces this
 // package's only prior sync coverage, TestNegSync_Integration
@@ -36,7 +36,7 @@ const (
 // this actually interop with a real-world deployed relay" smoke test, just
 // not one this package can gate a regression on with any determinism). See
 // `just test-integration-sync`.
-func TestSyncDocker(t *testing.T) {
+func TestSyncIntegration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping docker-based sync integration test in short mode")
 	}
@@ -44,15 +44,15 @@ func TestSyncDocker(t *testing.T) {
 		t.Skip("docker not found on PATH, skipping sync integration test")
 	}
 
-	runDockerCompose(t, syncDockerComposeFile, "up", "-d", "--build")
+	runCompose(t, syncIntegrationComposeFile, "up", "-d", "--build")
 	t.Cleanup(func() {
-		cmd := exec.Command("docker", "compose", "-f", syncDockerComposeFile, "down", "-v")
+		cmd := exec.Command("docker", "compose", "-f", syncIntegrationComposeFile, "down", "-v")
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Logf("docker compose down failed: %v\n%s", err, out)
 		}
 	})
 
-	waitForRelayReady(t, syncDockerRemoteURL, 60*time.Second)
+	waitForRelayReady(t, syncIntegrationRemoteURL, 60*time.Second)
 
 	t.Run("BothDirectionsReconcile", testSyncBothDirectionsReconcile)
 }
@@ -73,15 +73,15 @@ func testSyncBothDirectionsReconcile(t *testing.T) {
 
 	var remoteOnly []string
 	for i := 0; i < 3; i++ {
-		ev := newDockerHarnessEvent(t, fmt.Sprintf("sync-remote-only-%d", i))
-		publishEventToRelay(t, syncDockerRemoteURL, ev)
+		ev := newIntegrationEvent(t, fmt.Sprintf("sync-remote-only-%d", i))
+		publishEventToRelay(t, syncIntegrationRemoteURL, ev)
 		remoteOnly = append(remoteOnly, ev.ID)
 	}
 
 	var localOnly []string
 	localEvents := make([]*nip01.Event, 0, 3)
 	for i := 0; i < 3; i++ {
-		ev := newDockerHarnessEvent(t, fmt.Sprintf("sync-local-only-%d", i))
+		ev := newIntegrationEvent(t, fmt.Sprintf("sync-local-only-%d", i))
 		localOnly = append(localOnly, ev.ID)
 		localEvents = append(localEvents, ev)
 	}
@@ -107,7 +107,7 @@ func testSyncBothDirectionsReconcile(t *testing.T) {
 	// file may still be held.
 	time.Sleep(200 * time.Millisecond)
 
-	missingRemote := waitForEventsAtRelay(t, syncDockerRemoteURL, localOnly, 10*time.Second)
+	missingRemote := waitForEventsAtRelay(t, syncIntegrationRemoteURL, localOnly, 10*time.Second)
 	if len(missingRemote) > 0 {
 		t.Errorf("push: %d local-only event(s) never reached the remote relay: %v", len(missingRemote), missingRemote)
 	}
@@ -122,13 +122,13 @@ func testSyncBothDirectionsReconcile(t *testing.T) {
 // apply` itself would (loadSpecFromYaml).
 func loadTestSyncSpec(t *testing.T) *SyncSpec {
 	t.Helper()
-	rs, err := loadSpecFromYaml(syncDockerSpecFile)
+	rs, err := loadSpecFromYaml(syncIntegrationSpecFile)
 	if err != nil {
-		t.Fatalf("failed to load %s: %v", syncDockerSpecFile, err)
+		t.Fatalf("failed to load %s: %v", syncIntegrationSpecFile, err)
 	}
 	spec, ok := rs.Spec.(*SyncSpec)
 	if !ok {
-		t.Fatalf("%s is not a `kind: sync` spec", syncDockerSpecFile)
+		t.Fatalf("%s is not a `kind: sync` spec", syncIntegrationSpecFile)
 	}
 	return spec
 }

@@ -30,13 +30,13 @@ problems and shouldn't be conflated:
    gets white-box access to internal state (e.g. `FlowContext.paused()`)
    for deterministic scenario injection instead of guessing from timing.
    Needs Docker; runs automatically in CI on every push/PR
-   (`.github/workflows/ci.yml`'s `integration-docker` job) as its own
+   (`.github/workflows/ci.yml`'s `integrations` job) as its own
    job, separate from `check`'s fast unit-test run -- unlike `just
    test-integration` (deliberately excluded from CI: it hits real public
    relays and isn't deterministic), these are fully hermetic, so there's
    no reason not to gate merges on them. Each stack also has its own `just
    test-integration-<feature>` recipe for running just that one locally,
-   plus `just test-integration-docker` to run all three exactly as CI
+   plus `just test-integrations` to run all three exactly as CI
    does. See "Conventions" below for the pattern every stack here
    follows.
 
@@ -109,28 +109,28 @@ should be followed by anything added next:
   client itself reports (e.g. `Lost() == 0`). This is what closes the
   literal gap that motivated this whole layer: "the client believes it
   delivered N events" vs. "the relay actually has them."
-- **Shared harness, not copy-paste**: `client/dockerharness_test.go` holds
+- **Shared harness, not copy-paste**: `client/integrationharness_test.go` holds
   every docker-lifecycle/publish/fetch helper generic across features
-  (`runDockerCompose`, `newDockerHarnessEvent`, `publishEventToRelay`,
+  (`runCompose`, `newIntegrationEvent`, `publishEventToRelay`,
   `publishEventWithRetry`, `fetchEventIDsFromRelay`, `waitForEventsAtRelay`,
-  `waitForRelayReady`). Each feature's own `*_docker_test.go` only holds
+  `waitForRelayReady`). Each feature's own `*_integration_test.go` only holds
   what's actually specific to it (spec-loading, feature-specific
   assertions/polling like `waitForEventsInInspectStore`/
   `waitForSyncComplete`). Add to the shared file, don't fork it, unless a
   new need is genuinely feature-specific.
 - **Skip-gating**: `if testing.Short() { t.Skip(...) }` + a `docker` PATH
-  check at the top of the outer `Test<Feature>Docker` function. This keeps
+  check at the top of the outer `Test<Feature>Integration` function. This keeps
   every stack out of the `check` job's `go test -short -race ./...` (which
   has no Docker step) with zero extra build-tag machinery, matching
   `client/multi_relay_test.go`/`client/neg_sync_test.go`'s pre-existing
-  convention -- CI instead runs them via the separate `integration-docker`
-  job's plain (non-`-short`) `go test -run '...Docker'`. Note
+  convention -- CI instead runs them via the separate `integrations`
+  job's plain (non-`-short`) `go test -run '...Integration'`. Note
   `cli/bunker/daemon_integration_test.go` uses a *different* convention
   (`//go:build integration`, run via `-tags integration`) -- worth
   reconciling onto one convention if/when bunker gets a docker-based stack
   (see backlog), rather than adding a third.
 - **Fixed test-only keys**: a single hardcoded private key
-  (`dockerHarnessPrivKey` in `client/dockerharness_test.go`) signs every
+  (`integrationPrivKey` in `client/integrationharness_test.go`) signs every
   synthetic event across every stack; each `relay.yaml` hardcodes the same
   relay identity key. Nothing in this layer relies on distinct identities,
   so there's no reason to generate fresh ones per run.
@@ -139,15 +139,15 @@ should be followed by anything added next:
 
 1. `integration/<feature>/{compose.yaml,relay.yaml,<feature>.yaml,README.md}`
    -- copy an existing stack as a starting point, pick an unused port range.
-2. `client/<feature>_docker_test.go` -- `Test<Feature>Docker`, reusing
-   `client/dockerharness_test.go`'s helpers; add new ones there only if
+2. `client/<feature>_integration_test.go` -- `Test<Feature>Integration`, reusing
+   `client/integrationharness_test.go`'s helpers; add new ones there only if
    genuinely generic.
 3. `justfile` -- a `test-integration-<feature>` recipe (mirrors the
-   existing three), add `Test<Feature>Docker` to `test-integration-docker`'s
+   existing three), add `Test<Feature>Integration` to `test-integrations`'s
    `-run` regex, and a `<feature> cmd="up" *args` recipe for manual poking
    (mirrors `stream`/`inspect`/`sync`).
-4. `.github/workflows/ci.yml`'s `integration-docker` job -- add
-   `Test<Feature>Docker` to that step's `-run` regex too, so the new stack
+4. `.github/workflows/ci.yml`'s `integrations` job -- add
+   `Test<Feature>Integration` to that step's `-run` regex too, so the new stack
    actually fires on every push/PR instead of only running locally.
 5. If a manual run writes local state outside `t.TempDir()` (a recovery
    store, a local sync/inspect DB), gitignore it (see `.gitignore`'s
@@ -188,8 +188,8 @@ or `kind: sync` headlessly at all: without a real tty, `ncli apply -f
 inspect.yaml`/`sync.yaml` fails immediately with "this workflow's kind
 requires an interactive terminal ... use a stream workflow (with raw:
 true) for unattended/agent use". Only `stream` supports `raw: true`. This
-is why `client/inspect_docker_test.go` and `client/sync_docker_test.go`
-(like `client/stream_docker_test.go` before them) construct their module
+is why `client/inspect_integration_test.go` and `client/sync_integration_test.go`
+(like `client/stream_integration_test.go` before them) construct their module
 under test directly rather than going through `Client`/`ncli apply` --
 there is currently no other way to run either headlessly at all, for a
 test, a script, an agent, or CI.

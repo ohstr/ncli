@@ -5,7 +5,7 @@
 # (relay.ohstr.com, which client/neg_sync_test.go's live TestNegSync_Integration
 # depends on today).
 #
-# Driven by client/sync_docker_test.go (TestSyncDocker), which manages this
+# Driven by client/sync_integration_test.go (TestSyncIntegration), which manages this
 # stack's lifecycle itself; or run by hand via `just sync up`/`down` to
 # poke at it directly -- see this directory's README.
 #

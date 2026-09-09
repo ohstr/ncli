@@ -45,19 +45,22 @@ service specifically so the test can observe `FlowContext.paused()`
 directly and inject events into the exact reconnect-drop window
 deterministically, instead of guessing from timing or log output.
 
-Five scenarios:
+Four top-level scenarios, table-driven where a scenario has more than one
+natural case:
 
-- **`DestinationReconnectDoesNotDropEvents`** -- the original regression
-  test: forces several real destination reconnects (`docker compose
-  restart`) and confirms events published into the observed `paused()`
-  window are never silently lost.
+- **`DestinationDisruptionDoesNotDropEvents`** -- table-driven across the
+  two ways a destination can become unavailable mid-stream:
+  - `/Restart` -- the original regression test: forces several real
+    destination reconnects (`docker compose restart`) and confirms events
+    published into the observed `paused()` window are never silently
+    lost.
+  - `/Stall` -- `docker compose pause` freezes the destination process
+    without touching its TCP connection, a *silent* stall distinct from
+    `restart`'s abrupt teardown. Confirms `stream.yaml`'s configured
+    ping/pong timeouts actually detect it (a previously-untested code
+    path) instead of hanging forever.
 - **`SourceReconnectDoesNotHang`** -- restarting a source mid-stream must
   not hang or drop the stream.
-- **`DestinationStallTriggersTimeoutNotHang`** -- `docker compose pause`
-  freezes the destination process without touching its TCP connection, a
-  *silent* stall distinct from `restart`'s abrupt teardown. Confirms
-  `stream.yaml`'s configured ping/pong timeouts actually detect it (a
-  previously-untested code path) instead of hanging forever.
 - **`HighVolumeBurstAcrossAllSourcesIsNotLost`** -- hundreds of events
   across all 3 sources at once, the e2e regression coverage
   [PR #45](https://github.com/ohstr/ncli/pull/45)'s write-concurrency-cap

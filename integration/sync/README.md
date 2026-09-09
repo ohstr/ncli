@@ -41,20 +41,22 @@ automatically in CI on every push/PR via its own `integrations` job
 (`.github/workflows/ci.yml`) -- it needs Docker, which that job's
 `ubuntu-latest` runner already has.
 
-Four scenarios:
+Three top-level scenarios, table-driven where a scenario has more than one
+natural case:
 
-- **`BothDirectionsReconcile`** -- seeds each side with events the other
-  side doesn't have (three published straight to the remote relay, three
-  inserted straight into a fresh local store) and asserts a single
+- **`ReconcileCompleteness`** -- table-driven across data volume: seeds
+  each side with events the other side doesn't have and asserts a single
   `direction: both` sync run carries every one of them the right way: the
   local-only events get pushed up and are independently confirmed present
   on the remote relay by querying it directly over the wire; the
   remote-only events get pulled down and are independently confirmed
   present in the local store by reopening it fresh once the sync run
   reports completion.
-- **`LargeDivergentSetReconciles`** -- the "high input" case: 150 events on
-  each side instead of a handful, forcing `sync.yaml`'s `pullBatchSize`
-  (100) into multiple pull batches against a real relay.
+  - `/Small` -- three events on each side (three published straight to the
+    remote relay, three inserted straight into a fresh local store).
+  - `/Large` -- the "high input" case: 150 events on each side, forcing
+    `sync.yaml`'s `pullBatchSize` (100) into multiple pull batches against
+    a real relay.
 - **`MaxReconcileRoundsTooLowSurfacesCleanly`** -- forces
   `spec.MaxReconcileRounds` down to 1 against a large divergent set,
   covering `client/neg_sync.go`'s round-cap branch (logs a warning, syncs

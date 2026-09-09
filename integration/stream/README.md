@@ -31,9 +31,12 @@ just test-integration-stream
 This runs `TestStreamDocker` (`client/stream_docker_test.go`), which brings
 the stack up itself, drives `client.NewStream`/`(*Stream).Sync` **in
 process** (the same call `ncli apply` itself makes) against the compose
-stack's published ports, and tears the stack down when done. Not run by
-`just test`/`test-integration` or in CI (skipped under `-short`, same
-convention as `client/multi_relay_test.go`) -- it needs Docker.
+stack's published ports, and tears the stack down when done. Not part of
+`just test`/`test-integration` (skipped under `-short`, same convention as
+`client/multi_relay_test.go`), but runs automatically in CI on every
+push/PR via its own `integration-docker` job
+(`.github/workflows/ci.yml`) -- it needs Docker, which that job's
+`ubuntu-latest` runner already has.
 
 The client runs in-process rather than as a `ncli apply` subprocess/compose
 service specifically so the test can observe `FlowContext.paused()`

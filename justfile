@@ -19,19 +19,32 @@ test-integration:
 
 # Run the stream e2e integration test (needs Docker; brings up/tears down its
 # own local relay containers -- see integration/stream/README.md -- and hits
-# no real production relay). Not run in CI or by `just test`/`test-integration`.
+# no real production relay). Run automatically in CI (see .github/workflows/ci.yml's
+# integration-docker job); not part of `just test`/`test-integration`.
 test-integration-stream:
     go test ./client/... -run 'TestStreamDocker' -v -count=1 -timeout 10m
 
 # Run the inspect e2e integration test (needs Docker; see
-# integration/inspect/README.md). Not run in CI or by `just test`/`test-integration`.
+# integration/inspect/README.md). Run automatically in CI; not part of
+# `just test`/`test-integration`.
 test-integration-inspect:
     go test ./client/... -run 'TestInspectDocker' -v -count=1 -timeout 10m
 
 # Run the sync e2e integration test (needs Docker; see
-# integration/sync/README.md). Not run in CI or by `just test`/`test-integration`.
+# integration/sync/README.md). Run automatically in CI; not part of
+# `just test`/`test-integration`.
 test-integration-sync:
     go test ./client/... -run 'TestSyncDocker' -v -count=1 -timeout 10m
+
+# Run every hermetic Docker-based e2e test together (stream + inspect +
+# sync -- needs Docker). This is what .github/workflows/ci.yml's
+# integration-docker job actually runs, so `just test-integration-docker`
+# reproduces a CI failure locally exactly. Each Test<Feature>Docker brings
+# up/tears down its own compose stack (see each integration/<feature>/README.md),
+# so running them together here is just one `go test` invocation, not a
+# shared stack.
+test-integration-docker:
+    go test ./client/... -run 'TestStreamDocker|TestInspectDocker|TestSyncDocker' -v -count=1 -timeout 20m
 
 # Run the client package's benchmarks (stream pipeline hot paths)
 bench:

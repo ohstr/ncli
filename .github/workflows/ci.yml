@@ -45,6 +45,25 @@ jobs:
       - name: Test
         run: go test -short -race ./...
 
+  integration-docker:
+    # Hermetic Docker-Compose e2e tests (client/{stream,inspect,sync}_docker_test.go
+    # -- see integration/README.md): real `ncli relay` containers, no
+    # external network/live-relay dependency, so unlike `just
+    # test-integration` (deliberately excluded from CI -- hits real public
+    # relays) these are deterministic enough to gate merges on. Runs on the
+    # same triggers as `check`; ubuntu-latest ships Docker + Compose
+    # already, no extra setup needed.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Docker e2e tests (stream, inspect, sync)
+        run: go test ./client/... -run 'TestStreamDocker|TestInspectDocker|TestSyncDocker' -v -count=1 -timeout 20m
+
   lint:
     runs-on: ubuntu-latest
     steps:

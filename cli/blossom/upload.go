@@ -74,8 +74,6 @@ PUT /media) instead of a byte-for-byte store.`,
 
 			report := &fanoutReport{}
 			for _, path := range args {
-				// Sniffed once per file, not once per (file, server) pair
-				// -- it doesn't depend on which server it's headed to.
 				contentType, err := detectContentType(path)
 				if err != nil {
 					for _, server := range servers {

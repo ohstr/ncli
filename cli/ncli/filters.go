@@ -13,17 +13,18 @@ import (
 
 // inlineFilterFlagNames lists every flag registerInlineFilterFlags adds --
 // shared by inlineFilterFlagsChanged (mutual-exclusion check against
-// --filters) and buildInlineFilterSpec (assembly).
+// --targets) and buildInlineFilterSpec (assembly).
 var inlineFilterFlagNames = []string{"kinds", "authors", "ids", "since", "until", "limit", "search", "tag"}
 
-// registerInlineFilterFlags adds a single-filter alternative to
-// --filters <file.yaml>: every flag set here describes one filter (all
-// fields ANDed together, per SubscriptionFilter's own semantics) -- unlike a
-// filters file, there is no OR-across-multiple-filters concept here. Callers
-// must reject combining these with --filters (see inlineFilterFlagsChanged)
-// rather than merging them: FilterSpec's model already fixes two composition
-// rules (OR across a file's filters, AND across one filter's fields), and
-// neither matches "file plus some extra flags" cleanly enough to guess at.
+// registerInlineFilterFlags adds a single-filter alternative to a
+// --targets <file.yaml>'s own embedded filters: every flag set here
+// describes one filter (all fields ANDed together, per SubscriptionFilter's
+// own semantics) -- unlike a targets file, there is no OR-across-multiple-
+// filters concept here. Callers must reject combining these with --targets
+// (see inlineFilterFlagsChanged) rather than merging them: FilterSpec's
+// model already fixes two composition rules (OR across a file's filters,
+// AND across one filter's fields), and neither matches "file plus some
+// extra flags" cleanly enough to guess at.
 func registerInlineFilterFlags(cmd *cobra.Command) {
 	cmd.Flags().StringP("kinds", "k", "", `Comma-separated event kinds, e.g. "1,7"`)
 	cmd.Flags().StringP("authors", "a", "", "Comma-separated author pubkeys (hex, prefix, or nip-05)")

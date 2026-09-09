@@ -75,7 +75,6 @@ func (s *SyncModule) Run(ctx context.Context) (*tui.FlowLogger, error) {
 
 func (s *SyncModule) execute(ctx context.Context) {
 
-	// 1. Open local store
 	local := s.spec.GetLocal()
 	s.logger.Info(fmt.Sprintf("Opening local store: %s", local.Path), syncAttr)
 
@@ -93,7 +92,6 @@ func (s *SyncModule) execute(ctx context.Context) {
 	s.store = store
 	defer store.Close()
 
-	// 2. Load local items via QueryNip77Items
 	s.logger.Info("Loading local items...", syncAttr)
 
 	var allItems []nip77.Item
@@ -115,7 +113,6 @@ func (s *SyncModule) execute(ctx context.Context) {
 
 	s.logger.Info(fmt.Sprintf("Loaded %d local items", len(allItems)), syncAttr)
 
-	// 3. Build client-side Negentropy
 	neg := nip77.New(allItems)
 	initMsg := neg.Initiate()
 	s.logger.Trace("Encoding initial message", syncAttr)
@@ -126,7 +123,6 @@ func (s *SyncModule) execute(ctx context.Context) {
 	}
 	s.logger.Debug(fmt.Sprintf("Initial message encoded (%d bytes)", len(initHex)/2), syncAttr)
 
-	// 4. Connect to relay
 	remote := s.spec.GetRemote()
 	s.logger.Info(fmt.Sprintf("Connecting to %s", remote.Relay), syncAttr)
 
@@ -145,7 +141,6 @@ func (s *SyncModule) execute(ctx context.Context) {
 
 	s.logger.Success("Connected", syncAttr)
 
-	// 5. NEG-OPEN
 	subID := uuid.NewString()
 
 	// Use the first filter for NEG-OPEN (NIP-77 uses a single filter)
@@ -169,9 +164,8 @@ func (s *SyncModule) execute(ctx context.Context) {
 
 	s.logger.Info("NEG-OPEN sent, starting reconciliation", syncAttr)
 
-	// 6. Reconciliation loop
-	var haveIDs []string // IDs we have that they need
-	var needIDs []string // IDs we need that they have
+	var haveIDs []string
+	var needIDs []string
 
 	for round := 0; round < s.spec.MaxReconcileRounds; round++ {
 		var resp wire.SubscriptionResponse
@@ -193,7 +187,6 @@ func (s *SyncModule) execute(ctx context.Context) {
 				return
 			}
 
-			// Debug: log each incoming range
 			if s.logger.Enabled(tui.LogLevelTrace) {
 				for i, rng := range theirMsg.Ranges {
 					s.logger.Trace(fmt.Sprintf("  relay range[%d]: mode=%s payload=%d bytes ts=%d prefix=%d",
@@ -208,7 +201,6 @@ func (s *SyncModule) execute(ctx context.Context) {
 				return
 			}
 
-			// Debug: log each outgoing range
 			if s.logger.Enabled(tui.LogLevelTrace) {
 				for i, rng := range responseMsg.Ranges {
 					s.logger.Trace(fmt.Sprintf("  client range[%d]: mode=%s payload=%d bytes",
@@ -278,7 +270,6 @@ func (s *SyncModule) execute(ctx context.Context) {
 
 reconcileDone:
 
-	// 7. Close negentropy session
 	select {
 	case conn.Outgoing() <- &wire.NegClosePacket{SubscriptionID: subID}:
 	case <-ctx.Done():
@@ -287,12 +278,10 @@ reconcileDone:
 
 	s.logger.Info(fmt.Sprintf("Summary: %d to pull, %d to push", len(needIDs), len(haveIDs)), syncAttr)
 
-	// 8. Pull phase (direction=down or both)
 	if s.spec.Direction == SyncDirectionDown || s.spec.Direction == SyncDirectionBoth {
 		s.pullEvents(ctx, conn, store, needIDs)
 	}
 
-	// 9. Push phase (direction=up or both)
 	if s.spec.Direction == SyncDirectionUp || s.spec.Direction == SyncDirectionBoth {
 		s.pushEvents(ctx, conn, store, haveIDs)
 	}
@@ -332,7 +321,6 @@ func (s *SyncModule) pullEvents(ctx context.Context, conn *relayclient.Connectio
 
 		var batchEvents []*nip01.Event
 
-		// Read events until EOSE
 	batchLoop:
 		for {
 			select {
@@ -359,7 +347,6 @@ func (s *SyncModule) pullEvents(ctx context.Context, conn *relayclient.Connectio
 
 		conn.CloseSubscription(reqSubID)
 
-		// Batch insert
 		if len(batchEvents) > 0 {
 			s.logger.Trace(fmt.Sprintf("Inserting %d events into local store", len(batchEvents)), syncAttr)
 			if err := store.InsertEvents(ctx, batchEvents); err != nil {
@@ -389,7 +376,6 @@ func (s *SyncModule) pushEvents(ctx context.Context, conn *relayclient.Connectio
 
 	pushed := 0
 
-	// Batch lookup by IDs and publish
 	for i := 0; i < len(haveIDs); i += s.spec.PullBatchSize {
 		end := i + s.spec.PullBatchSize
 		if end > len(haveIDs) {
@@ -423,7 +409,6 @@ func (s *SyncModule) pushEvents(ctx context.Context, conn *relayclient.Connectio
 	s.logger.Success(fmt.Sprintf("Pushed %d events", pushed), syncAttr)
 }
 
-// readEventsFromStoreByIDs reads events from the store matching the given filter group.
 func readEventsFromStoreByIDs(ctx context.Context, store *relay.EventStore, fg *nip01.SubscriptionFilterGroup) ([]*nip01.Event, error) {
 	query, err := relay.NewStoreQuery(store, fg)
 	if err != nil {

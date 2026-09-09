@@ -82,12 +82,24 @@ type FlowSpec struct {
 	Ensure  EnsurePolicy `json:"ensure,omitempty"`
 	Trusted bool         `json:"trusted,omitempty"`
 
-	// WriteConcurrency overrides how many concurrent workers a FlOW_LOCAL
-	// destination's LocalSubscription.Write runs (see localWriteConcurrency
-	// in client/stream.go). Zero/unset means "use the default" -- applied at
-	// NewLocalSubscription rather than here, since the bare-string shorthand
-	// branch of UnmarshalJSON below never goes through a default-filling
-	// step of its own.
+	// WriteConcurrency's meaning depends on the destination's Type:
+	//
+	//   - FlOW_LOCAL: concurrent workers LocalSubscription.Write runs
+	//     against the local store (see localWriteConcurrency in
+	//     client/stream.go). Zero/unset uses the default.
+	//   - FlOW_REMOTE: how many sent-but-unacked events this destination may
+	//     have outstanding at once (see FlowContext.publishConcurrency).
+	//     Zero/unset is unbounded -- kept as the default for backward
+	//     compatibility, but an unpaced burst can overwhelm a destination
+	//     relay's own concurrency guard (see issue.md). Recommended value
+	//     when the destination's ceiling is unknown: 200-500 (comfortably
+	//     under a stock relay's default 2048, with margin for other
+	//     sessions). If the ceiling is known, keep this at or below ~50%
+	//     of it.
+	//
+	// Applied at NewLocalSubscription/NewRemoteSubscription, not here --
+	// the bare-string shorthand branch of UnmarshalJSON below skips any
+	// default-filling step of its own.
 	WriteConcurrency int `json:"writeConcurrency,omitempty" yaml:"writeConcurrency,omitempty"`
 
 	relayURI *url.URL

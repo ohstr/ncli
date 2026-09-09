@@ -34,13 +34,10 @@ func NewMeiliClient(host, apiKey, indexName string) *MeiliClient {
 }
 
 func (m *MeiliClient) Initialize(ctx context.Context) error {
-	// Initialize client using the public New method which returns a ServiceManager
 	m.client = meilisearch.New(m.host, meilisearch.WithAPIKey(m.apiKey))
 
-	// Ensure index exists
 	_, err := m.client.GetIndex(m.indexName)
 	if err != nil {
-		// Create index if it doesn't exist
 		_, err = m.client.CreateIndex(&meilisearch.IndexConfig{
 			Uid:        m.indexName,
 			PrimaryKey: "id",
@@ -49,8 +46,8 @@ func (m *MeiliClient) Initialize(ctx context.Context) error {
 			return err
 		}
 
-		// Wait for task to complete?
-		// For simplicity in R1, we proceed. Meilisearch handles subsequent updates queueing.
+		// Index creation is async; we don't wait for the task to finish.
+		// Meilisearch queues subsequent document/settings updates behind it.
 	}
 
 	// Manual settings update to avoid SDK sending deprecated fields (disableOnNumbers)
@@ -153,13 +150,6 @@ func (m *MeiliClient) IndexProfileWithMetrics(ctx context.Context, doc *search.P
 }
 
 func (m *MeiliClient) IndexProfile(ctx context.Context, doc *search.ProfileDocument) error {
-	// This method is part of the search.Indexer interface, but the service layer
-	// is designed to call BulkIndex. For now, this can be a no-op or
-	// call BulkIndex with a single document.
-	// Given the instruction to rewrite, and the presence of BulkIndex,
-	// we'll assume the service layer will use BulkIndex.
-	// If this method is still called, it should probably be implemented.
-	// For now, let's make it call BulkIndex for consistency.
 	return m.BulkIndex([]*search.ProfileDocument{doc})
 }
 
@@ -180,11 +170,11 @@ func (m *MeiliClient) FindProfiles(ctx context.Context, query string, limit int)
 
 	searchQuery := query
 
-	// 1. Strict Hex Pubkey Check
+	// Raw hex pubkey: search only the id field for an exact match.
 	if len(query) == 64 && nip19.CheckPublicKey(query) == nil {
 		searchReq.AttributesToSearchOn = []string{"id"}
 	} else if strings.HasPrefix(query, "npub1") {
-		// 2. Strict Npub Check
+		// npub: decode to hex and search only the id field.
 		_, dec, err := nip19.Decode(query)
 		if err == nil {
 			if hexStr, ok := dec.(string); ok && len(hexStr) == 64 {
@@ -193,14 +183,14 @@ func (m *MeiliClient) FindProfiles(ctx context.Context, query string, limit int)
 			}
 		}
 	} else if strings.HasPrefix(query, "nprofile1") {
-		// 3. Strict Nprofile Check
+		// nprofile: decode to hex and search only the id field.
 		hexStr, err := nip19.DecodeNprofile(query)
 		if err == nil && len(hexStr) == 64 {
 			searchReq.AttributesToSearchOn = []string{"id"}
 			searchQuery = hexStr
 		}
 	} else if strings.Contains(query, "@") && (ranking.IsValidNip05Format(query) || ranking.IsValidLud16Format(query)) {
-		// 4. Strict NIP-05 / LUD-16 check
+		// nip-05 or lud16 address: search only those fields.
 		searchReq.AttributesToSearchOn = []string{"nip05", "lud16"}
 	}
 
@@ -211,8 +201,7 @@ func (m *MeiliClient) FindProfiles(ctx context.Context, query string, limit int)
 
 	pubkeys := make([]string, 0, len(resp.Hits))
 	for _, hit := range resp.Hits {
-		// hits are type meilisearch.Hit which is map[string]interface{}
-		// We use a robust extraction
+		// hits are type meilisearch.Hit, i.e. map[string]interface{}.
 		var id string
 
 		// Convert to JSON and back to map for maximum compatibility with SDK types

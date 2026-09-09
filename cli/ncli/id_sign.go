@@ -99,9 +99,8 @@ Fails if an event already declares a pubkey that conflicts with
 			return nil
 		}
 
-		// The signed result is this command's output, not narration -- same
-		// stdout-only-holds-the-result convention as miner mine/check and
-		// publish's text mode.
+		// Same stdout-only-holds-the-result convention as "miner mine" (see
+		// cli/ncli/miner.go).
 		for _, id := range ids {
 			fmt.Println("id:    ", id)
 		}

@@ -175,7 +175,7 @@ func resolveDelegationKey(cmd *cobra.Command, jsonMode bool, keyOrIdentity strin
 	return privKeyHex, resolved.PubKeyHex, nil
 }
 
-// Model for the wizard
+// state is the wizard's current step.
 type state int
 
 const (

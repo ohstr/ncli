@@ -113,7 +113,9 @@ func NewInspector(ctx context.Context, spec *InspectSpec, events *tui.EventTable
 			subscription = NewLocalSubscription(se, target.Trusted, target.WriteConcurrency)
 
 		case FlOW_REMOTE:
-			subscription = NewRemoteSubscription(target.relayURI, target.relayFallbackURI, target.Trusted, nil)
+			// 0 (unbounded): inspect targets are always sources, never a
+			// destination, so this cap never applies -- see the comment below.
+			subscription = NewRemoteSubscription(target.relayURI, target.relayFallbackURI, target.Trusted, nil, 0)
 		}
 
 		i.subscriptions[subID] = subscription

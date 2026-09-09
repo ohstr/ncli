@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	MaxLogEntries = 10000 // Maximum log entries to keep in memory
+	MaxLogEntries = 10000
 )
 
 type LogLevel int
@@ -251,7 +251,7 @@ type FlowMetrics struct {
 	id        int
 	name      string      `header:"Name" sortDefault:"" sortDir:"asc" sortKey:"N"`
 	events    int         `header:"Events" sortKey:"E"`
-	pubkeys   int         `header:"Pubkeys" sortKey:"P"` // Changed to simple counter to prevent unbounded growth
+	pubkeys   int         `header:"Pubkeys" sortKey:"P"` // running count of unique pubkeys seen, not the pubkeys themselves, so this field stays bounded
 	kinds     map[int]int `header:"Kinds" sortKey:"K"`
 	failures  int         `header:"Failures" sortKey:"F"`
 	synced    int         `header:"Synced" sortKey:"S"`

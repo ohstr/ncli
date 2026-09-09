@@ -45,7 +45,7 @@ type BunkerClient interface {
 	// Approve/Reject resolve one pending request by ID. remember, if
 	// non-nil, is also persisted to the policy Store against that
 	// request's client app -- nil means "decide this one request only,
-	// never persisted" (the plan's "Approve/Reject Once").
+	// never persisted" (board.go's "Approve/Reject Once" buttons).
 	Approve(id string, remember *Grant) error
 	Reject(id string, remember *Grant) error
 	// ListSessions/Revoke/SetName manage remembered per-app permissions.

@@ -308,9 +308,9 @@ func (q *Queue) sweepExpired() {
 }
 
 // Run drives the periodic sweep (expired pending requests, then
-// policy.Store grant pruning -- one ticker, two sweeps, per the plan) until
-// ctx is cancelled. Call once, in its own goroutine, for the lifetime of
-// the daemon.
+// policy.Store grant pruning -- one ticker, two sweeps) until ctx is
+// cancelled. Call once, in its own goroutine, for the lifetime of the
+// daemon.
 func (q *Queue) Run(ctx context.Context, interval time.Duration, store *Store) {
 	if interval <= 0 {
 		interval = 30 * time.Second

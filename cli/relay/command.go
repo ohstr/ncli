@@ -379,7 +379,6 @@ func initConfig() error {
 		config.VerificationWorkers = defaultVerificationWorkers
 	}
 
-	// Set default NIP-11 metadata if missing
 	if config.Nip11.Name == "" {
 		config.Nip11.Name = "ncli Relay"
 	}

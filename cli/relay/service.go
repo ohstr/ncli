@@ -123,7 +123,7 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 		status := reindex.SearchState.GetStatus()
 		if status["is_running"].(bool) {
 			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusConflict) // Or 200, Conflict shows it's busy
+			w.WriteHeader(http.StatusConflict) // already reindexing
 			_ = json.NewEncoder(w).Encode(status)
 			return
 		}

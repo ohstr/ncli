@@ -92,13 +92,11 @@ func InitConfig() {
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.AutomaticEnv()
 
-	// Logging setup
 	logDir := viper.GetString("log_dir")
 	if logDir == "" {
 		logDir = filepath.Join(common.AppConfigDir(), defaultLogDirName)
 	}
 
-	// Ensure log directory exists
 	if err := os.MkdirAll(logDir, 0755); err != nil {
 		log.Error().Err(err).Msg("failed to create log directory")
 		return

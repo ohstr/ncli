@@ -61,8 +61,6 @@ func NewRecoveryManager(path string, maxRetries int, retryInterval time.Duration
 		return nil, fmt.Errorf("failed to create directory for recovery store: %w", err)
 	}
 
-	// reuse relay.EventStore for the heavy lifting of event storage
-	// We use a lenient limitation for the local recovery store
 	store, err := relay.NewEventStore(path, &nip11.Limitation{
 		MaxLimit:         100000,
 		MaxIndexableTags: 100,
@@ -82,7 +80,6 @@ func NewRecoveryManager(path string, maxRetries int, retryInterval time.Duration
 		conns:         make(map[string]*relayclient.Connection),
 	}
 
-	// Initialize meta bucket
 	err = rm.metaDB.Update(func(tx *bolt.Tx) error {
 		_, err := tx.CreateBucketIfNotExists(BUCKET_RECOVERY)
 		return err
@@ -141,7 +138,6 @@ func (rm *RecoveryManager) flushPending(ctx context.Context) {
 }
 
 func (rm *RecoveryManager) SaveFailedEvent(event *nip01.Event, destination string, reason error) error {
-	// Queue the save request asynchronously (non-blocking)
 	select {
 	case rm.saveQueue <- &saveRequest{
 		event:       event,
@@ -150,7 +146,6 @@ func (rm *RecoveryManager) SaveFailedEvent(event *nip01.Event, destination strin
 	}:
 		return nil
 	default:
-		// Queue is full, log but don't block
 		log.Warn().
 			Str("event_id", event.ID).
 			Str("destination", destination).
@@ -159,14 +154,12 @@ func (rm *RecoveryManager) SaveFailedEvent(event *nip01.Event, destination strin
 	}
 }
 
-// saveWorker processes save requests asynchronously
 func (rm *RecoveryManager) saveWorker() {
 	defer rm.wg.Done()
 
 	for {
 		select {
 		case <-rm.ctx.Done():
-			// Drain remaining requests before exiting
 			rm.drainSaveQueue()
 			return
 
@@ -204,12 +197,9 @@ func (rm *RecoveryManager) drainSaveQueue() {
 	}
 }
 
-// saveEventSync is the synchronous version of save (used by worker)
 func (rm *RecoveryManager) saveEventSync(ctx context.Context, event *nip01.Event, destination string, reason error) error {
-	// 1. Save event to EventStore
 	insertTask := relay.NewEventInsertTask([]*nip01.Event{event})
 
-	// Use parent context with longer timeout
 	execCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
@@ -217,7 +207,6 @@ func (rm *RecoveryManager) saveEventSync(ctx context.Context, event *nip01.Event
 
 	select {
 	case <-insertTask.Completed():
-		// success
 	case err := <-insertTask.Errors():
 		if err != relay.ErrEventDuplicated {
 			return fmt.Errorf("failed to save event to recovery store: %w", err)
@@ -227,7 +216,6 @@ func (rm *RecoveryManager) saveEventSync(ctx context.Context, event *nip01.Event
 		return execCtx.Err()
 	}
 
-	// 2. Save Metadata
 	meta := &RetryMeta{
 		EventID:     event.ID,
 		Destination: destination,
@@ -243,9 +231,9 @@ func (rm *RecoveryManager) saveEventSync(ctx context.Context, event *nip01.Event
 func (rm *RecoveryManager) saveMeta(meta *RetryMeta) error {
 	return rm.metaDB.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket(BUCKET_RECOVERY)
-		key := []byte(fmt.Sprintf("%s:%s", meta.EventID, meta.Destination)) // Composite key? Or just random ID?
-		// Actually, we might fail sending same event to multiple relays.
-		// So key should probably include destination.
+		// The destination is part of the key because the same event can be
+		// queued for retry against multiple destinations at once.
+		key := []byte(fmt.Sprintf("%s:%s", meta.EventID, meta.Destination))
 
 		data, err := json.Marshal(meta)
 		if err != nil {
@@ -356,11 +344,10 @@ func (rm *RecoveryManager) getConnection(ctx context.Context, destination string
 		return nil, err
 	}
 
-	// Consume messages to keep connection alive and handle pings
-	// REMOVED: Background reader would steal messages from PublishEvent.
-	// We rely on PublishEvent to read. If connection is idle, Pings might pile up
-	// until we publish again. Ideally we needs a better connection abstraction
-	// but for now this prevents the race.
+	// No background reader: PublishEvent is this connection's only reader, so
+	// a second concurrent reader here would race it for messages. Pings may
+	// pile up while the connection is otherwise idle, but get drained the
+	// next time PublishEvent runs.
 
 	rm.connsMu.Lock()
 	rm.conns[destination] = conn
@@ -385,7 +372,6 @@ func (rm *RecoveryManager) processBatch(ctx context.Context, destination string,
 		return
 	}
 
-	// 2. Iterate and send
 	for _, meta := range metas {
 		if ctx.Err() != nil {
 			// Interrupted (e.g. the exit-time flush's deadline passed) —
@@ -395,7 +381,6 @@ func (rm *RecoveryManager) processBatch(ctx context.Context, destination string,
 			return
 		}
 
-		// Load event
 		event, err := rm.findEvent(meta.EventID)
 		if err != nil {
 			log.Error().Err(err).Str("id", meta.EventID).Msg("failed to load event for retry, deleting metadata")
@@ -405,7 +390,6 @@ func (rm *RecoveryManager) processBatch(ctx context.Context, destination string,
 			continue
 		}
 
-		// Use short timeout for individual publish
 		pubCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		err = PublishEvent(pubCtx, conn, event)
 		cancel()
@@ -419,9 +403,10 @@ func (rm *RecoveryManager) processBatch(ctx context.Context, destination string,
 
 			rm.handleRetryFailure(meta, err)
 
-			// If connection is closed/broken, we should close it and maybe stop batch
+			// Force-close a closed/broken connection so the next batch dials a
+			// fresh one; the rest of this batch fails against the dead
+			// connection and gets retried on the next loop.
 			if errors.Is(err, relayclient.ErrConnectionClosed) || strings.Contains(err.Error(), "connection closed") || strings.Contains(err.Error(), "broken pipe") {
-				// Close connection to force reconnect next time
 				conn.Close()
 
 				rm.connsMu.Lock()
@@ -429,9 +414,6 @@ func (rm *RecoveryManager) processBatch(ctx context.Context, destination string,
 					delete(rm.conns, destination)
 				}
 				rm.connsMu.Unlock()
-
-				// The rest of batch will fail or we can try to reconnect immediately?
-				// For now let them fail/retry next loop
 			}
 		} else {
 			// Success

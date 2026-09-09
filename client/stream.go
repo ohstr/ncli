@@ -31,11 +31,11 @@ import (
 )
 
 const (
-	streamFlowBufferSize = 10240 // 10240
+	streamFlowBufferSize = 10240
 
 	workerFailureThreshold = 2
-	workerCoolDownTime     = time.Second * 10 // 10
-	workerDelayTime        = time.Second * 5  // 5
+	workerCoolDownTime     = time.Second * 10
+	workerDelayTime        = time.Second * 5
 
 	// maxEventHistorySize bounds each destination's pending-ack map. It's a
 	// defensive cap, not a load-bearing one: entries are removed as soon as
@@ -76,13 +76,27 @@ type FlowContext struct {
 	incomingEvents chan *nip01.Event
 	errors         chan error
 
-	// pauseMu guards pauseCh/pauser: open() recreates both on every
-	// (re)connect cycle, from the flow's own goroutine, while other flows'
-	// broadcastEvents goroutines read the current pauseCh concurrently via
-	// paused() -- a plain field read/write here would race.
+	// pauseMu guards pauseCh/pauser/inFlight: open() recreates all three each
+	// (re)connect cycle from the flow's own goroutine, while broadcastEvents
+	// and RemoteSubscription.Write read the current generation concurrently
+	// -- a plain field read/write here would race.
 	pauseMu sync.RWMutex
 	pauseCh chan interface{}
 	pauser  sync.Once
+
+	// publishConcurrency bounds how many events a remote destination may have
+	// sent but not yet acked (0 = unbounded, the default -- see
+	// FlowSpec.WriteConcurrency). Set once by Stream.Sync before this
+	// FlowContext's goroutines start, never mutated after -- safe to read
+	// without pauseMu. LocalSubscription leaves it 0: its own worker pool
+	// already bounds concurrency against the local store.
+	publishConcurrency int
+
+	// inFlight is the current cycle's publish semaphore (nil when
+	// publishConcurrency is 0). Recreated fresh on every open(), not reused
+	// -- a connection that dies with unacked sends can't leak slots into the
+	// next cycle. See inFlightSlots/releaseSlot.
+	inFlight chan struct{}
 
 	closeCh chan interface{}
 	closer  sync.Once
@@ -134,6 +148,13 @@ func (fc *FlowContext) open() {
 	defer fc.pauseMu.Unlock()
 	fc.pauseCh = make(chan interface{})
 	fc.pauser = sync.Once{}
+
+	// Fresh each cycle -- see inFlight's doc comment.
+	if fc.publishConcurrency > 0 {
+		fc.inFlight = make(chan struct{}, fc.publishConcurrency)
+	} else {
+		fc.inFlight = nil
+	}
 }
 
 // paused returns the current generation's pause signal channel, safe to call
@@ -142,6 +163,24 @@ func (fc *FlowContext) paused() <-chan interface{} {
 	fc.pauseMu.RLock()
 	defer fc.pauseMu.RUnlock()
 	return fc.pauseCh
+}
+
+// inFlightSlots returns the current cycle's publish semaphore, or nil if
+// unbounded. Safe to call concurrently with open(). Acquire as one arm of
+// the caller's own select (never a bare blocking send); release only via
+// releaseSlot, which guards against releasing an unmatched ack.
+func (fc *FlowContext) inFlightSlots() chan struct{} {
+	fc.pauseMu.RLock()
+	defer fc.pauseMu.RUnlock()
+	return fc.inFlight
+}
+
+// releaseSlot returns one slot, if bounded. Only call for an ack that
+// genuinely correlates to a pending-tracked send -- see inFlightSlots.
+func (fc *FlowContext) releaseSlot() {
+	if sem := fc.inFlightSlots(); sem != nil {
+		<-sem
+	}
 }
 
 func (fc *FlowContext) close() {
@@ -181,6 +220,14 @@ func (fc *FlowContext) sendError(ctx context.Context, err error) {
 
 func (fc *FlowContext) setWorker(worker *StreamWorker) {
 	fc.worker = worker
+}
+
+// setPublishConcurrency sets the in-flight-publish cap. Must be called
+// synchronously by Stream.Sync before this FlowContext's goroutines start
+// and before addSubscriber -- publishConcurrency is read without
+// synchronization elsewhere, assuming it's set once before any concurrency.
+func (fc *FlowContext) setPublishConcurrency(n int) {
+	fc.publishConcurrency = n
 }
 
 // StreamEventHistory is an O(1) LRU: a map for lookup plus a doubly-linked
@@ -400,7 +447,9 @@ func (sc *StreamChannel) handleEvent(ctx context.Context, fc *FlowContext, event
 	}
 
 	fc.stat.AddEvent(event.Kind, event.PubKey)
-	fc.lastUpdate = uint64(time.Now().Unix()) // event.CreatedAt
+	// Wall-clock receive time, not event.CreatedAt -- this is the watermark
+	// reload() passes to ResetSince on reconnect.
+	fc.lastUpdate = uint64(time.Now().Unix())
 
 }
 
@@ -421,6 +470,16 @@ func (sc *StreamChannel) handleFlow(ctx context.Context, fc *FlowContext) {
 				sc.handleEvent(ctx, fc, o.Event)
 
 			case *wire.OkSubscriptionResponse:
+				// Hoisted so every branch shares one get/delete, and
+				// releaseSlot only fires when found -- an unconditional
+				// release per branch would free a slot for a stale/unmatched
+				// ack too. See releaseSlot's doc comment.
+				event, found := fc.pending.get(o.EventID)
+				fc.pending.delete(o.EventID)
+				if found {
+					fc.releaseSlot()
+				}
+
 				if !o.Accepted {
 					// Failures counts every rejection, whether or not it
 					// ends up permanently lost -- most get absorbed by
@@ -432,9 +491,6 @@ func (sc *StreamChannel) handleFlow(ctx context.Context, fc *FlowContext) {
 					sc.logger.Error(fmt.Errorf("%s: %s", o.Message, o.EventID), fc.stat.GetAttributes())
 					fc.stat.IncreaseFailures()
 
-					event, found := fc.pending.get(o.EventID)
-					fc.pending.delete(o.EventID)
-
 					if fc.recovery != nil && found {
 						if err := fc.recovery.SaveFailedEvent(event, fc.stat.GetAttributes().Name, errors.New(o.Message)); err != nil {
 							sc.logger.Error(fmt.Errorf("failed to save rejected event to recovery: %w", err), fc.stat.GetAttributes())
@@ -445,11 +501,9 @@ func (sc *StreamChannel) handleFlow(ctx context.Context, fc *FlowContext) {
 					}
 
 				} else if isDuplicatedEvent(o.Message) {
-					fc.pending.delete(o.EventID)
 					fc.stat.IncSynced()
 
-				} else if event, ok := fc.pending.get(o.EventID); ok {
-					fc.pending.delete(o.EventID)
+				} else if found {
 					sc.logger.LogEvent(o.EventID, fc.stat.GetAttributes())
 					fc.stat.AddEvent(event.Kind, event.PubKey)
 
@@ -534,11 +588,11 @@ type Stream struct {
 	// FlowContext.strictPow.
 	strictPow bool
 
-	// getConnectionConfig helper to convert TimeoutSpec to relayclient.ConnectionConfig
 	cancel context.CancelFunc
 }
 
-// getConnectionConfig helper to convert TimeoutSpec to relayclient.ConnectionConfig
+// getConnectionConfig converts sc.timeouts into a relayclient.ConnectionConfig,
+// falling back to relayclient's own defaults for any timeout left unset.
 func (sc *StreamChannel) getConnectionConfig() *relayclient.ConnectionConfig {
 	cfg := relayclient.DefaultConnectionConfig()
 	if sc.timeouts == nil {
@@ -661,7 +715,7 @@ func (s *Stream) addFlow(way *map[int]ClientSubscription, specs []*FlowSpec) err
 			(*way)[nextIndex] = NewLocalSubscription(store, spec.Trusted, spec.WriteConcurrency)
 
 		case FlOW_REMOTE:
-			(*way)[nextIndex] = NewRemoteSubscription(spec.relayURI, spec.relayFallbackURI, spec.Trusted, s.recovery)
+			(*way)[nextIndex] = NewRemoteSubscription(spec.relayURI, spec.relayFallbackURI, spec.Trusted, s.recovery, spec.WriteConcurrency)
 
 		case FLOW_FILE:
 			file, err := os.Open(spec.Path)
@@ -686,7 +740,7 @@ func (s *Stream) addFlow(way *map[int]ClientSubscription, specs []*FlowSpec) err
 				if fs, err := flowSpecFromString(line); err == nil {
 					switch fs.Type {
 					case FlOW_REMOTE:
-						(*way)[nextIndex] = NewRemoteSubscription(fs.relayURI, fs.relayFallbackURI, spec.Trusted, s.recovery)
+						(*way)[nextIndex] = NewRemoteSubscription(fs.relayURI, fs.relayFallbackURI, spec.Trusted, s.recovery, spec.WriteConcurrency)
 					case FlOW_LOCAL:
 						store, err := relay.NewEventStore(fs.Path, &nip11.Limitation{})
 						if err != nil {
@@ -751,6 +805,9 @@ func (s *Stream) Sync(parent context.Context) (tui.FlowMetricsSlice, tui.FlowMet
 
 		fc := NewFlowContext(s.filters, stat, flow.IsTrusted(), s.recovery)
 		fc.strictPow = s.strictPow
+		// Before Run's goroutine starts and addSubscriber makes fc visible --
+		// see setPublishConcurrency.
+		fc.setPublishConcurrency(flow.PublishConcurrency())
 		go func() {
 			flow.Run(ctx, flow.Write, s.sc, fc)
 		}()
@@ -840,6 +897,11 @@ type ClientSubscription interface {
 	Close()
 	Run(context.Context, func(context.Context), *StreamChannel, *FlowContext)
 	Stat() tui.FlowStat
+
+	// PublishConcurrency reports the in-flight-publish cap for this
+	// destination (0 = unbounded). LocalSubscription always returns 0 -- its
+	// own worker pool already bounds concurrency against the local store.
+	PublishConcurrency() int
 }
 
 type ClientSubscriptionContext struct {
@@ -1130,6 +1192,11 @@ func (ls *LocalSubscription) Close() {
 	ls.store.Close()
 }
 
+// PublishConcurrency: see ClientSubscription.PublishConcurrency.
+func (ls *LocalSubscription) PublishConcurrency() int {
+	return 0
+}
+
 //////////
 
 type RemoteSubscription struct {
@@ -1137,16 +1204,21 @@ type RemoteSubscription struct {
 	relayFallback *url.URL
 	*ClientSubscriptionContext
 	recovery *RecoveryManager
+
+	// publishConcurrency: 0 = unbounded (default). See
+	// FlowSpec.WriteConcurrency / FlowContext.inFlight.
+	publishConcurrency int
 }
 
 // NewRemoteSubscription connects to url, retrying against fallback (may be
 // nil) if url fails to connect -- see connectRelayWithFallback.
-func NewRemoteSubscription(url *url.URL, fallback *url.URL, trusted bool, recovery *RecoveryManager) *RemoteSubscription {
+func NewRemoteSubscription(url *url.URL, fallback *url.URL, trusted bool, recovery *RecoveryManager, publishConcurrency int) *RemoteSubscription {
 
 	return &RemoteSubscription{
-		relay:         url,
-		relayFallback: fallback,
-		recovery:      recovery,
+		relay:              url,
+		relayFallback:      fallback,
+		recovery:           recovery,
+		publishConcurrency: publishConcurrency,
 		ClientSubscriptionContext: &ClientSubscriptionContext{
 			worker:  NewStreamWorker(),
 			trusted: trusted,
@@ -1238,7 +1310,6 @@ func (rs *RemoteSubscription) Write(parent context.Context) {
 	}
 	defer conn.Close()
 
-	// Create a channel to signal connection death to the main loop
 	connDead := make(chan struct{})
 
 	go func() {
@@ -1268,6 +1339,22 @@ func (rs *RemoteSubscription) Write(parent context.Context) {
 	for {
 		select {
 		case ev := <-rs.fc.readEvent():
+			// Acquire a slot before sending (nil sem = unbounded, case never
+			// selectable). One arm of this same select, not a bare blocking
+			// acquire, so a dead/closing connection unblocks it too instead
+			// of hanging here forever.
+			if sem := rs.fc.inFlightSlots(); sem != nil {
+				select {
+				case sem <- struct{}{}:
+				case <-connDead:
+					return
+				case <-rs.fc.closed():
+					return
+				case <-ctx.Done():
+					return
+				}
+			}
+
 			// Counted on ack, not here -- see the OkSubscriptionResponse
 			// handling in handleFlow. Counting at send time too would
 			// double-count every successfully acked event (once optimistically
@@ -1275,6 +1362,9 @@ func (rs *RemoteSubscription) Write(parent context.Context) {
 			// Write avoids by only ever counting through the synthetic ack it
 			// sends itself.
 			if ok := conn.Send(ev); !ok {
+				// No explicit release: Write returns right below, and this
+				// connection's whole semaphore is discarded next cycle
+				// anyway (see inFlight) -- nothing left to starve.
 				log.Warn().
 					Str("relay", rs.relay.String()).
 					Str("event_id", ev.ID).
@@ -1311,6 +1401,11 @@ func (rs *RemoteSubscription) Write(parent context.Context) {
 
 func (rs *RemoteSubscription) Name() string {
 	return rs.relay.String()
+}
+
+// PublishConcurrency reports the configured cap (0 = unbounded).
+func (rs *RemoteSubscription) PublishConcurrency() int {
+	return rs.publishConcurrency
 }
 
 func (rs *RemoteSubscription) Close() {

@@ -115,13 +115,11 @@ func ExecuteSearchReindex(cfg *Config, store *relay.EventStore) error {
 			}
 		}
 
-		// Wait for verification jobs to finish if we want precise scores in the index immediately.
-		// However, VerificationWorker updates the search backend asynchronously anyway via searchService.UpdateScore.
-		// For a clean reindex, we might want to wait a bit or just let it finish in background.
+		// Verification results land asynchronously via searchService.UpdateScore,
+		// not through this function's own return -- the deferred vWorker.Stop()
+		// above blocks until its job queue actually drains, so this just logs
+		// that wait rather than tracking remaining jobs itself.
 		log.Info().Msg("waiting for verification worker to finish remaining jobs...")
-		// We can't easily wait for a specific number of jobs without extending the worker,
-		// but since we called Stop() in defer, it will wait for the channel to empty.
-		// So we just log.
 
 		log.Info().Int("total", count).Str("duration", time.Since(start).String()).Msg("search reindexing complete")
 	}()
@@ -151,7 +149,7 @@ func ExecuteZapReindex(store *relay.EventStore) error {
 	log.Info().Msg("starting zap reindexing...")
 	start := time.Now()
 	zapCount, err := store.ReindexZaps(context.Background(), func(c int) {
-		ZapsState.AddProgress(0) // Logic actually relies on internal Zaps processing count anyway.
+		ZapsState.AddProgress(0) // no-op; TotalProcessed below is set directly from c, not accumulated here
 		if c%1000 == 0 {
 			ZapsState.mu.Lock()
 			ZapsState.TotalProcessed = c // Overwrite total accurately

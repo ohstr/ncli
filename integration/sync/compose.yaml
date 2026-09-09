@@ -1,0 +1,33 @@
+# Local sync e2e test stack: one real `ncli relay` instance, built from
+# this repo's own source (build/relay/Dockerfile), so the sync client under
+# test negentropy-reconciles against a real relay server process over a
+# real websocket connection -- not a mock -- without touching production
+# (relay.ohstr.com, which client/neg_sync_test.go's live TestNegSync_Integration
+# depends on today).
+#
+# Driven by client/sync_docker_test.go (TestSyncDocker), which manages this
+# stack's lifecycle itself; or run by hand via `just sync up`/`down` to
+# poke at it directly -- see this directory's README.
+#
+# `name:` pins the Compose project name regardless of the caller's working
+# directory, so this stack's container/volume/network never collide with
+# build/relay/docker-compose.dev.yaml's, integration/stream/'s, or
+# integration/inspect/'s (distinct host port too: 45520).
+name: ncli-sync-itest
+
+services:
+  remote:
+    build:
+      context: ../..
+      dockerfile: build/relay/Dockerfile
+    image: ncli:sync-itest
+    command: ["relay", "--config", "/config/relay.yaml"]
+    ports:
+      - "45520:5500"
+    volumes:
+      - ./relay.yaml:/config/relay.yaml:ro
+      - remote-data:/app/ncli/data
+    restart: unless-stopped
+
+volumes:
+  remote-data:

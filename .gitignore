@@ -9,6 +9,10 @@
 # run against `just stream up` (the automated Go test uses its own temp dir instead)
 /integration/stream/.recovery/
 
+# Local store written by a manual `ncli apply -f integration/sync/sync.yaml`
+# run against `just sync up` (the automated Go test uses its own temp dir instead)
+/integration/sync/.data/
+
 # Docker Compose env files (hold secrets like MEILI_MASTER_KEY) - keep the
 # .example template tracked, never the real file
 .env

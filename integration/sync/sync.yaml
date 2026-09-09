@@ -1,0 +1,43 @@
+# Spec fixture for the local sync e2e test stack (see compose.yaml and this
+# directory's README). Same schema as examples/apply/sync.yaml, pointed at
+# this stack's fixed localhost port instead of a real public relay.
+#
+# client/sync_docker_test.go loads this file the same way `ncli apply`
+# itself would (loadSpecFromYaml) rather than constructing a *SyncSpec by
+# hand, so it exercises the real on-disk schema -- it only overrides the
+# `to` flow's local path afterward, to a fresh temp file per test run.
+kind: sync
+spec:
+  from:
+    relay: ws://localhost:45520
+    trusted: true
+
+  to:
+    type: local
+    # Overridden by the Go test to a fresh t.TempDir() path per run; this
+    # placeholder is only what a manual `ncli apply` run against
+    # `just sync up` would use.
+    path: ./integration/sync/.data/sync.db
+    ensure: create
+
+  # direction: both -- exercises push and pull in the same run (see this
+  # directory's README for exactly what the automated test seeds on each
+  # side).
+  direction: both
+
+  # since: 0, not a rolling window like production's default -- this test
+  # wants every event it publishes/seeds to be in-window regardless of
+  # wall-clock skew between the test run and whatever it just published.
+  filters:
+    - since: 0
+
+  maxReconcileRounds: 50
+  pullBatchSize: 100
+
+  timeouts:
+    handshake: "5s"
+    ping: "10s"
+    pong: "20s"
+    write: "20s"
+
+  strictPow: false

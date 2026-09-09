@@ -1,0 +1,18 @@
+# Shared relay config for every service in compose.yaml -- all three
+# sources use this exact file. Safe because each service gets its own named
+# volume mounted at /app/ncli/data (see compose.yaml), so the identical
+# relative store/logdir paths below never collide across containers, and
+# the port is only ever the container-internal port: each service's
+# *host*-side port differs (see compose.yaml's port mappings), which is all
+# a test connecting from outside the containers ever sees.
+port: 5500
+
+nip11:
+  name: ncli-inspect-itest-relay
+  # Arbitrary, fixed test-only key (privkey auto-derives pubkey) -- every
+  # service shares this same identity, which is fine here: nothing in this
+  # harness relies on the relays having distinct identities.
+  privkey: 0acd12cbf0fb87cd13b17bc9b57dffd11b3870b407984cec5a4ce2a69b90268c
+
+store: ./data/db/notes.db
+logdir: ./data/logs

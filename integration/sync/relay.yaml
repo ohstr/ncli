@@ -1,0 +1,13 @@
+# Config for compose.yaml's single `remote` service. Same conventions as
+# integration/stream/relay.yaml and integration/inspect/relay.yaml (see
+# either for the rationale) -- only one service here, so there's no
+# multi-service collision to worry about, but the fixed test-only key is
+# kept for consistency with the other two stacks.
+port: 5500
+
+nip11:
+  name: ncli-sync-itest-relay
+  privkey: 0acd12cbf0fb87cd13b17bc9b57dffd11b3870b407984cec5a4ce2a69b90268c
+
+store: ./data/db/notes.db
+logdir: ./data/logs

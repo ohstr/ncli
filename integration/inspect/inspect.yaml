@@ -3,7 +3,7 @@
 # pointed at this stack's fixed localhost ports instead of real public
 # relays.
 #
-# client/inspect_docker_test.go loads this file the same way `ncli apply`
+# client/inspect_integration_test.go loads this file the same way `ncli apply`
 # itself would (loadSpecFromYaml) rather than constructing an *InspectSpec
 # by hand, so it exercises the real on-disk schema.
 #

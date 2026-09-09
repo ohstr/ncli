@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"sync"
 	"testing"
 	"time"
 
@@ -56,6 +57,9 @@ func TestInspectIntegration(t *testing.T) {
 
 	t.Run("CollectsFromAllTargets", testInspectCollectsFromAllTargets)
 	t.Run("TargetReconnectDoesNotMissEvents", testInspectTargetReconnectDoesNotMissEvents)
+	t.Run("HighVolumeAcrossManyTargetsAllLand", testInspectHighVolumeAcrossManyTargetsAllLand)
+	t.Run("DuplicateEventAcrossOverlappingTargetsIsNotDoubleStored", testInspectDuplicateEventAcrossOverlappingTargetsIsNotDoubleStored)
+	t.Run("TargetStallDoesNotHangSession", testInspectTargetStallDoesNotHangSession)
 }
 
 // testInspectCollectsFromAllTargets is the direct analog, for inspect's
@@ -121,6 +125,128 @@ func testInspectTargetReconnectDoesNotMissEvents(t *testing.T) {
 	missing := waitForEventsInInspectStore(t, insp, []string{before.ID, after.ID}, 20*time.Second)
 	if len(missing) > 0 {
 		t.Errorf("target reconnect: %d/2 events never reached the inspect session's local store: %v", len(missing), missing)
+	}
+}
+
+// testInspectHighVolumeAcrossManyTargetsAllLand is the "high input" case
+// for inspect's fan-in: hundreds of events landing across all three
+// targets at once, exercising the same real batching/concurrency behavior
+// CollectsFromAllTargets checks with only a handful of events, under
+// enough real traffic to matter.
+func testInspectHighVolumeAcrossManyTargetsAllLand(t *testing.T) {
+	spec := loadTestInspectSpec(t)
+
+	const perTarget = 100
+	var wg sync.WaitGroup
+	idsByTarget := make([][]string, len(inspectIntegrationTargetURLs))
+	for i, target := range inspectIntegrationTargetURLs {
+		wg.Add(1)
+		go func(i int, target string) {
+			defer wg.Done()
+			idsByTarget[i] = publishManyEvents(t, target, perTarget, fmt.Sprintf("volume-t%d", i))
+		}(i, target)
+	}
+	wg.Wait()
+
+	var published []string
+	for _, ids := range idsByTarget {
+		published = append(published, ids...)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	insp := newTestInspector(t, ctx, spec)
+
+	missing := waitForEventsInInspectStore(t, insp, published, 30*time.Second)
+	if len(missing) > 0 {
+		t.Errorf("published %d events across %d targets, but %d never landed in the inspect session's local store: %v",
+			len(published), len(inspectIntegrationTargetURLs), len(missing), missing)
+	}
+}
+
+// testInspectDuplicateEventAcrossOverlappingTargetsIsNotDoubleStored covers
+// a real scenario client/inspect_store_test.go's TestInspectStoreInsertToleratesDuplicateEvent
+// only ever exercises with two sequential same-goroutine Insert calls: an
+// inspect session commonly points at overlapping relays that both carry
+// the exact same event, so InspectStore.Insert must actually be safe
+// against two *live, concurrent* deliveries of the same ID racing each
+// other from two different targets' own goroutines -- not just tolerant of
+// being called twice in a row. Publishes one signed event to two targets,
+// then asserts the local store ends up with exactly one row for it, not
+// two.
+func testInspectDuplicateEventAcrossOverlappingTargetsIsNotDoubleStored(t *testing.T) {
+	spec := loadTestInspectSpec(t)
+
+	shared := newIntegrationEvent(t, "duplicate-across-targets")
+	publishEventToRelay(t, inspectIntegrationTargetURLs[0], shared)
+	publishEventToRelay(t, inspectIntegrationTargetURLs[1], shared)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	insp := newTestInspector(t, ctx, spec)
+
+	if missing := waitForEventsInInspectStore(t, insp, []string{shared.ID}, 15*time.Second); len(missing) > 0 {
+		t.Fatalf("event published to 2 overlapping targets never landed in the inspect session's local store: %v", missing)
+	}
+
+	// waitForEventsInInspectStore only proves presence, not count -- query
+	// directly to confirm inserting the same ID from two targets didn't
+	// leave two rows behind.
+	events, err := insp.store.store.FindEvents(context.Background(), &nip01.SubscriptionFilter{IDs: []string{shared.ID}})
+	if err != nil {
+		t.Fatalf("failed to query inspect session store: %v", err)
+	}
+	if len(events) != 1 {
+		t.Errorf("expected exactly 1 stored row for an event delivered by 2 overlapping targets, got %d", len(events))
+	}
+}
+
+// testInspectTargetStallDoesNotHangSession is inspect's analog of
+// client/stream_integration_test.go's DestinationStallTriggersTimeoutNotHang:
+// a *silent* stall (docker compose pause -- process frozen, TCP connection
+// still technically open), as opposed to TargetReconnectDoesNotMissEvents'
+// abrupt restart-based disconnect. Unlike stream, InspectSpec has no
+// `timeouts:` block at all (client/inspect.go's NewInspector builds every
+// target's StreamChannel with `NewStreamChannel(0, nil)`), so this relies
+// on relayclient's hardcoded default PongTimeout (60s as of this writing)
+// rather than a short configured one -- meaning this subtest is
+// necessarily slow. That gap (inspect can't configure connection timeouts
+// at all) is worth fixing in ncli itself; see integration/README.md's
+// backlog.
+func testInspectTargetStallDoesNotHangSession(t *testing.T) {
+	spec := loadTestInspectSpec(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	insp := newTestInspector(t, ctx, spec)
+
+	before := newIntegrationEvent(t, "inspect-stall-before")
+	publishEventToRelay(t, inspectIntegrationTargetURLs[2], before)
+
+	runCompose(t, inspectIntegrationComposeFile, "pause", "target3")
+	t.Cleanup(func() {
+		_ = exec.Command("docker", "compose", "-f", inspectIntegrationComposeFile, "unpause", "target3").Run()
+	})
+
+	// No configurable timeout to shorten (see doc comment above) -- must
+	// outlast relayclient's default PongTimeout for the stall to actually
+	// be detected, not just survived because we unpaused before it fired.
+	time.Sleep(70 * time.Second)
+
+	runCompose(t, inspectIntegrationComposeFile, "unpause", "target3")
+
+	after := newIntegrationEvent(t, "inspect-stall-after")
+	// target3 may still be mid-reconnect, so retry the publish itself --
+	// what's under test is the inspect session's own reconnect, not this
+	// helper publish's timing.
+	publishEventWithRetry(t, inspectIntegrationTargetURLs[2], after, 30*time.Second)
+
+	missing := waitForEventsInInspectStore(t, insp, []string{before.ID, after.ID}, 20*time.Second)
+	if len(missing) > 0 {
+		t.Errorf("target stall: %d/2 events never reached the inspect session's local store: %v", len(missing), missing)
 	}
 }
 

@@ -625,34 +625,10 @@ type Stream struct {
 	cancel context.CancelFunc
 }
 
-// getConnectionConfig converts sc.timeouts into a relayclient.ConnectionConfig,
-// falling back to relayclient's own defaults for any timeout left unset.
+// getConnectionConfig converts sc.timeouts into a relayclient.ConnectionConfig
+// -- see TimeoutSpec.ConnectionConfig for the actual conversion.
 func (sc *StreamChannel) getConnectionConfig() *relayclient.ConnectionConfig {
-	cfg := relayclient.DefaultConnectionConfig()
-	if sc.timeouts == nil {
-		return cfg
-	}
-	if sc.timeouts.Handshake != nil {
-		if d, err := time.ParseDuration(*sc.timeouts.Handshake); err == nil {
-			cfg.HandshakeTimeout = d
-		}
-	}
-	if sc.timeouts.Ping != nil {
-		if d, err := time.ParseDuration(*sc.timeouts.Ping); err == nil {
-			cfg.PingInterval = d
-		}
-	}
-	if sc.timeouts.Pong != nil {
-		if d, err := time.ParseDuration(*sc.timeouts.Pong); err == nil {
-			cfg.PongTimeout = d
-		}
-	}
-	if sc.timeouts.Write != nil {
-		if d, err := time.ParseDuration(*sc.timeouts.Write); err == nil {
-			cfg.WriteTimeout = d
-		}
-	}
-	return cfg
+	return sc.timeouts.ConnectionConfig()
 }
 
 // defaultRecoveryStorePath derives a stable recovery-store location under the

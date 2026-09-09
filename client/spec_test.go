@@ -1,6 +1,11 @@
 package client
 
-import "testing"
+import (
+	"testing"
+	"time"
+
+	relayclient "github.com/ohstr/nmilat/relay/client"
+)
 
 func TestResolveRelayURL_ExplicitWss(t *testing.T) {
 	primary, fallback, err := ResolveRelayURL("wss://relay.ohstr.com")
@@ -111,4 +116,61 @@ func TestLooksLikeRelayHost(t *testing.T) {
 			t.Errorf("looksLikeRelayHost(%q) = %v, want %v", c.in, got, c.want)
 		}
 	}
+}
+
+// TestTimeoutSpecConnectionConfig is a regression guard for a real bug this
+// caught: SyncModule.execute (client/neg_sync.go) used to build a
+// *relayclient.ConnectionConfig by hand as `&relayclient.ConnectionConfig{}`
+// whenever spec.Timeouts was non-nil -- an all-zero struct, silently
+// discarding every configured handshake/ping/pong/write value, since
+// relayclient.NewConnection backfills any zero field with its own
+// defaults regardless of whether the whole config is nil or just
+// zero-valued. A `sync.yaml` with an explicit `timeouts:` block therefore
+// had no effect at all. Fixed by giving TimeoutSpec a single
+// ConnectionConfig method (this test) that both StreamChannel's and
+// SyncModule's connection setup now share, instead of each hand-rolling
+// (or, in sync's case, failing to hand-roll) the string-to-duration
+// conversion.
+func TestTimeoutSpecConnectionConfig(t *testing.T) {
+	defaults := relayclient.DefaultConnectionConfig()
+
+	t.Run("nil TimeoutSpec uses relayclient's own defaults", func(t *testing.T) {
+		var ts *TimeoutSpec
+		got := ts.ConnectionConfig()
+		if *got != *defaults {
+			t.Errorf("ConnectionConfig() = %+v, want relayclient defaults %+v", got, defaults)
+		}
+	})
+
+	t.Run("empty TimeoutSpec (no fields set) uses relayclient's own defaults", func(t *testing.T) {
+		got := (&TimeoutSpec{}).ConnectionConfig()
+		if *got != *defaults {
+			t.Errorf("ConnectionConfig() = %+v, want relayclient defaults %+v", got, defaults)
+		}
+	})
+
+	t.Run("every configured value actually takes effect", func(t *testing.T) {
+		handshake, ping, pong, write := "3s", "7s", "11s", "13s"
+		ts := &TimeoutSpec{Handshake: &handshake, Ping: &ping, Pong: &pong, Write: &write}
+
+		got := ts.ConnectionConfig()
+
+		want := relayclient.ConnectionConfig{
+			HandshakeTimeout: 3 * time.Second,
+			PingInterval:     7 * time.Second,
+			PongTimeout:      11 * time.Second,
+			WriteTimeout:     13 * time.Second,
+		}
+		if *got != want {
+			t.Errorf("ConnectionConfig() = %+v, want %+v -- a configured `timeouts:` block must actually change the connection config, not silently fall back to defaults", got, want)
+		}
+	})
+
+	t.Run("an unparseable duration string falls back to that field's default, not zero", func(t *testing.T) {
+		bogus := "not-a-duration"
+		got := (&TimeoutSpec{Pong: &bogus}).ConnectionConfig()
+		if got.PongTimeout != defaults.PongTimeout {
+			t.Errorf("PongTimeout = %v for an unparseable value, want the default %v (never a zero/immediate timeout)", got.PongTimeout, defaults.PongTimeout)
+		}
+	})
 }

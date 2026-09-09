@@ -41,7 +41,7 @@ push/PR via its own `integrations` job
 (`.github/workflows/ci.yml`) -- it needs Docker, which that job's
 `ubuntu-latest` runner already has.
 
-Two scenarios:
+Five scenarios:
 
 - **`CollectsFromAllTargets`** -- the "all relays as source" case: each of
   the three targets holds events none of the others do, and a single
@@ -54,6 +54,22 @@ Two scenarios:
   `client/inspect.go`'s `NewInspector`), so this is the same mechanism
   `client/stream_integration_test.go`'s `SourceReconnectDoesNotHang` covers,
   exercised on inspect's own code path instead of assumed to carry over.
+- **`HighVolumeAcrossManyTargetsAllLand`** -- hundreds of events across all
+  3 targets at once, the "high input" analog of `CollectsFromAllTargets`.
+- **`DuplicateEventAcrossOverlappingTargetsIsNotDoubleStored`** -- publishes
+  one signed event to two targets and confirms the local store ends up
+  with exactly one row for it: overlapping relays serving the same event
+  is a routine occurrence for a real inspect session, and this exercises
+  two *live, concurrent* deliveries of the same ID racing each other, not
+  just two sequential same-goroutine `Insert` calls (which
+  `client/inspect_store_test.go`'s `TestInspectStoreInsertToleratesDuplicateEvent`
+  already covers at the store level alone).
+- **`TargetStallDoesNotHangSession`** -- `docker compose pause`, a silent
+  stall distinct from `TargetReconnectDoesNotMissEvents`'s abrupt restart.
+  Necessarily slow (~70s): unlike stream, `InspectSpec` has no `timeouts:`
+  block at all (see "Known ncli limitation" below), so this relies on
+  `relayclient`'s hardcoded 60s default `PongTimeout` with no way to
+  configure a shorter one.
 
 Unlike stream, inspect has no destination, so the specific bug
 `integration/stream/`'s harness was built for (a *destination* silently
@@ -62,18 +78,27 @@ counterpart -- there's nothing downstream of inspect to pause. What both
 stacks actually share is the fan-in shape and the need for a real relay to
 observe reconnect behavior honestly.
 
-## Known ncli limitation surfaced while building this
+## Known ncli limitations surfaced while building this
 
-`client.Client.init()` (`client/client.go`) currently refuses to run
-`kind: inspect` (and `kind: sync`) headlessly at all: `ncli apply -f
-inspect.yaml` from a script/CI/agent with no tty fails immediately with
-"this workflow's kind requires an interactive terminal ... use a stream
-workflow (with raw: true) for unattended/agent use". Only `stream` supports
-`raw: true`. That's why this test (like `client/stream_integration_test.go`)
-constructs `*Inspector` directly instead of going through `Client`/`ncli
-apply` -- there is currently no other way to exercise inspect
-non-interactively at all. See `integration/README.md`'s backlog for the
-suggested fix (extend `raw: true` support to `inspect`/`sync`).
+- `client.Client.init()` (`client/client.go`) currently refuses to run
+  `kind: inspect` (and `kind: sync`) headlessly at all: `ncli apply -f
+  inspect.yaml` from a script/CI/agent with no tty fails immediately with
+  "this workflow's kind requires an interactive terminal ... use a stream
+  workflow (with raw: true) for unattended/agent use". Only `stream`
+  supports `raw: true`. That's why this test (like
+  `client/stream_integration_test.go`) constructs `*Inspector` directly
+  instead of going through `Client`/`ncli apply` -- there is currently no
+  other way to exercise inspect non-interactively at all. See
+  `integration/README.md`'s backlog for the suggested fix (extend `raw:
+  true` support to `inspect`/`sync`).
+- `InspectSpec` has no `timeouts:` block at all (`client/inspect.go`'s
+  `NewInspector` hardcodes `NewStreamChannel(0, nil)`), so every inspect
+  target always uses `relayclient`'s hardcoded defaults (30s ping / 60s
+  pong / ...) with no way to configure them -- unlike `stream`/`sync`,
+  which both support a `timeouts:` block (see
+  `client/spec.go`'s `TimeoutSpec`). This is why
+  `TargetStallDoesNotHangSession` above has to wait out the full 60s
+  default rather than a short configured one.
 
 ## Manual: poke at it with the real CLI
 

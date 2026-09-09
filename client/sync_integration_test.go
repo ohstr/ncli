@@ -55,6 +55,9 @@ func TestSyncIntegration(t *testing.T) {
 	waitForRelayReady(t, syncIntegrationRemoteURL, 60*time.Second)
 
 	t.Run("BothDirectionsReconcile", testSyncBothDirectionsReconcile)
+	t.Run("LargeDivergentSetReconciles", testSyncLargeDivergentSetReconciles)
+	t.Run("MaxReconcileRoundsTooLowSurfacesCleanly", testSyncMaxReconcileRoundsTooLowSurfacesCleanly)
+	t.Run("RemoteStallTriggersTimeoutNotHang", testSyncRemoteStallTriggersTimeoutNotHang)
 }
 
 // testSyncBothDirectionsReconcile seeds each side of a `direction: both`
@@ -115,6 +118,192 @@ func testSyncBothDirectionsReconcile(t *testing.T) {
 	missingLocal := waitForEventsInLocalStore(t, localPath, remoteOnly, 10*time.Second)
 	if len(missingLocal) > 0 {
 		t.Errorf("pull: %d remote-only event(s) never landed in the local store: %v", len(missingLocal), missingLocal)
+	}
+}
+
+// testSyncLargeDivergentSetReconciles is the "high input" case for sync:
+// hundreds of events on each side instead of BothDirectionsReconcile's
+// handful, forcing sync.yaml's pullBatchSize (100) into multiple pull
+// batches and giving negentropy a genuinely large diff to reconcile
+// against a real relay, not a mock that can't reject/rate-limit anything.
+func testSyncLargeDivergentSetReconciles(t *testing.T) {
+	spec := loadTestSyncSpec(t)
+
+	localPath := filepath.Join(t.TempDir(), "sync.db")
+	spec.GetLocal().Path = localPath
+
+	const n = 150
+	remoteOnly := publishManyEvents(t, syncIntegrationRemoteURL, n, "sync-large-remote")
+
+	localOnly := make([]string, n)
+	localEvents := make([]*nip01.Event, n)
+	for i := 0; i < n; i++ {
+		ev := newIntegrationEvent(t, fmt.Sprintf("sync-large-local-%d", i))
+		localOnly[i] = ev.ID
+		localEvents[i] = ev
+	}
+	seedLocalSyncStore(t, localPath, localEvents)
+
+	sm, err := NewSyncModule(spec, nil, false)
+	if err != nil {
+		t.Fatalf("NewSyncModule failed: %v", err)
+	}
+	t.Cleanup(sm.Close)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	logger, err := sm.Run(ctx)
+	if err != nil {
+		t.Fatalf("sm.Run failed: %v", err)
+	}
+	waitForSyncComplete(t, logger, 90*time.Second)
+	time.Sleep(200 * time.Millisecond) // let execute()'s deferred store.Close() run
+
+	missingRemote := waitForEventsAtRelay(t, syncIntegrationRemoteURL, localOnly, 20*time.Second)
+	if len(missingRemote) > 0 {
+		t.Errorf("push: %d/%d local-only events never reached the remote relay: %v", len(missingRemote), n, missingRemote)
+	}
+	missingLocal := waitForEventsInLocalStore(t, localPath, remoteOnly, 20*time.Second)
+	if len(missingLocal) > 0 {
+		t.Errorf("pull: %d/%d remote-only events never landed in the local store: %v", len(missingLocal), n, missingLocal)
+	}
+}
+
+// testSyncMaxReconcileRoundsTooLowSurfacesCleanly covers the round-cap
+// branch client/neg_sync.go's reconcile loop falls into when
+// nip77.IsComplete never returns true within spec.MaxReconcileRounds --
+// previously reachable only in theory, never actually exercised end to
+// end. With the cap forced down to 1 against a large divergent set, the
+// invariant under test is that this degrades gracefully (logs a warning,
+// syncs whatever partial have/need sets it collected, and still finishes)
+// rather than hanging or crashing -- not a specific round count, since
+// negentropy's actual convergence speed for a given dataset size isn't
+// this test's concern and asserting an exact number would just make it
+// flaky against protocol/library changes.
+func testSyncMaxReconcileRoundsTooLowSurfacesCleanly(t *testing.T) {
+	spec := loadTestSyncSpec(t)
+	spec.MaxReconcileRounds = 1
+
+	localPath := filepath.Join(t.TempDir(), "sync.db")
+	spec.GetLocal().Path = localPath
+
+	const n = 300
+	publishManyEvents(t, syncIntegrationRemoteURL, n, "sync-toofew-remote")
+
+	localEvents := make([]*nip01.Event, n)
+	for i := 0; i < n; i++ {
+		localEvents[i] = newIntegrationEvent(t, fmt.Sprintf("sync-toofew-local-%d", i))
+	}
+	seedLocalSyncStore(t, localPath, localEvents)
+
+	sm, err := NewSyncModule(spec, nil, false)
+	if err != nil {
+		t.Fatalf("NewSyncModule failed: %v", err)
+	}
+	t.Cleanup(sm.Close)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	logger, err := sm.Run(ctx)
+	if err != nil {
+		t.Fatalf("sm.Run failed: %v", err)
+	}
+
+	var sawMaxRoundsWarning bool
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		done := false
+		for _, row := range logger.GetLastLogs() {
+			for _, cell := range row {
+				if strings.Contains(cell, "Max reconciliation rounds reached") {
+					sawMaxRoundsWarning = true
+				}
+				if strings.Contains(cell, "Sync complete") {
+					done = true
+				}
+			}
+		}
+		if done {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("sync with an artificially low maxReconcileRounds did not complete within the timeout -- it must degrade gracefully, never hang")
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	if !sawMaxRoundsWarning {
+		t.Logf("note: %d fully-divergent items on each side converged within maxReconcileRounds=1 -- negentropy resolved this faster than expected, so this run never actually exercised the round-cap path itself; the important invariant (no hang, clean completion) still held", n)
+	}
+}
+
+// testSyncRemoteStallTriggersTimeoutNotHang is sync's analog of
+// client/stream_integration_test.go's DestinationStallTriggersTimeoutNotHang:
+// `docker compose pause` freezes the remote relay's process without
+// touching the already-established TCP connection, simulating a silent
+// stall distinct from an explicit disconnect. This is only meaningful
+// because of the ConnectionConfig fix (client/spec.go's
+// TimeoutSpec.ConnectionConfig, see that commit) -- before it, sync's
+// `timeouts:` block had no effect at all, so a short configured Pong here
+// would have silently used relayclient's 60s default instead, making this
+// test either much slower or unable to reliably distinguish "detected the
+// stall" from "happened to finish first."
+//
+// Unlike stream, sync has no reconnect/retry loop of its own: a stalled
+// connection is simply a failed run that must surface an error and return,
+// not hang -- confirmed here via the "connection error" log line
+// SyncModule.execute logs on exactly this path (client/neg_sync.go's
+// `case err := <-conn.Errors()`), not by expecting "Sync complete" (which
+// this run, by design, never reaches).
+func testSyncRemoteStallTriggersTimeoutNotHang(t *testing.T) {
+	spec := loadTestSyncSpec(t)
+	shortPong := "3s"
+	spec.Timeouts = &TimeoutSpec{Pong: &shortPong}
+
+	localPath := filepath.Join(t.TempDir(), "sync.db")
+	spec.GetLocal().Path = localPath
+
+	sm, err := NewSyncModule(spec, nil, false)
+	if err != nil {
+		t.Fatalf("NewSyncModule failed: %v", err)
+	}
+	t.Cleanup(sm.Close)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	logger, err := sm.Run(ctx)
+	if err != nil {
+		t.Fatalf("sm.Run failed: %v", err)
+	}
+
+	// Let the connection actually establish (handshake + NEG-OPEN) before
+	// stalling it -- what's under test is a silent stall on an established
+	// connection, not a handshake timeout.
+	time.Sleep(1 * time.Second)
+
+	runCompose(t, syncIntegrationComposeFile, "pause", "remote")
+	t.Cleanup(func() {
+		_ = exec.Command("docker", "compose", "-f", syncIntegrationComposeFile, "unpause", "remote").Run()
+	})
+
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		for _, row := range logger.GetLastLogs() {
+			for _, cell := range row {
+				if strings.Contains(cell, "connection error") {
+					runCompose(t, syncIntegrationComposeFile, "unpause", "remote")
+					return // stall was detected and surfaced cleanly -- test passes
+				}
+			}
+		}
+		if time.Now().After(deadline) {
+			runCompose(t, syncIntegrationComposeFile, "unpause", "remote")
+			t.Fatal("a stalled remote with a 3s configured pong timeout never surfaced a connection error within 15s -- sync appears to hang on a silent stall instead of timing out")
+		}
+		time.Sleep(200 * time.Millisecond)
 	}
 }
 

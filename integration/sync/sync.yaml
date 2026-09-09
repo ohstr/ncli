@@ -2,7 +2,7 @@
 # directory's README). Same schema as examples/apply/sync.yaml, pointed at
 # this stack's fixed localhost port instead of a real public relay.
 #
-# client/sync_docker_test.go loads this file the same way `ncli apply`
+# client/sync_integration_test.go loads this file the same way `ncli apply`
 # itself would (loadSpecFromYaml) rather than constructing a *SyncSpec by
 # hand, so it exercises the real on-disk schema -- it only overrides the
 # `to` flow's local path afterward, to a fresh temp file per test run.

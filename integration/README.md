@@ -84,6 +84,35 @@ should be followed by anything added next:
   fixture (`<feature>.yaml`, same schema `ncli apply` itself reads), and a
   `README.md` explaining what the stack is, port map, and manual vs.
   automated usage.
+- **Table-driven where a scenario has more than one natural case**: when
+  two (or more) `Test<Feature>Integration` scenarios differ only in a few
+  parameters -- which disruption mechanism (`restart` vs. `pause`), how
+  much data, which config value -- write one function with a `cases :=
+  []struct{...}` table and `t.Run(tc.name, func(t *testing.T) {...})` per
+  row, not N near-duplicate top-level functions. `testDestinationDisruptionDoesNotDropEvents`
+  (`client/stream_integration_test.go`, `/Restart` and `/Stall` rows) and
+  `testInspectCollectsFromAllTargets` (`/Small` and `/Large` rows) are the
+  reference examples. Two things to get right when a table row's setup
+  needs its own teardown (e.g. a `pause` row needing an `unpause`):
+  - Give each row a strict `resolve func(t *testing.T)` called exactly
+    once in the main flow, and -- only if `resolve` isn't a no-op -- a
+    separate best-effort `cleanupIfUnresolved func()` (ignores errors, no
+    `t`) registered via `t.Cleanup`, guarded by a local `resolved` bool so
+    it only fires if the test failed/panicked *before* the main flow's own
+    `resolve` call. Reusing the strict `resolve` itself as the `t.Cleanup`
+    body double-runs it on the success path (e.g. a second `docker compose
+    unpause` on an already-unpaused container), which fails an otherwise-
+    passing test on nothing but that redundant call -- caught and fixed
+    once already in this layer's own history, worth not repeating.
+  - Don't force a table where the cases don't actually share a body --
+    `testSyncMaxReconcileRoundsTooLowSurfacesCleanly`'s round-cap
+    assertions and `testSyncRemoteStallTriggersTimeoutNotHang`'s
+    connection-error check are different enough in what they set up and
+    assert that folding them into `testSyncReconcileCompleteness`'s table
+    would need a per-row assertion closure just to avoid a shared body
+    that doesn't fit -- a "kitchen sink struct" is worse than two short
+    functions. Table-drive real duplication, not every function that
+    happens to touch the same feature.
 - **Compose project naming**: `name: ncli-<feature>-itest` in each
   `compose.yaml`, and a distinct host port range per stack (`stream`:
   `45500-45503`, `inspect`: `45510-45512`, `sync`: `45520`) -- so every

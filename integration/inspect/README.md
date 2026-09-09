@@ -41,21 +41,30 @@ push/PR via its own `integrations` job
 (`.github/workflows/ci.yml`) -- it needs Docker, which that job's
 `ubuntu-latest` runner already has.
 
-Five scenarios:
+Three top-level scenarios, table-driven where a scenario has more than one
+natural case:
 
-- **`CollectsFromAllTargets`** -- the "all relays as source" case: each of
-  the three targets holds events none of the others do, and a single
-  inspect session pointed at all three must end up with every one of them
-  in its local session store, not just some.
-- **`TargetReconnectDoesNotMissEvents`** -- restarting a target mid-session
-  must not hang the session or cause events published around the restart to
-  be missed. Inspect's targets run through the exact same
+- **`CollectsFromAllTargets`** -- table-driven across data volume, the
+  "all relays as source" case: each of the three targets holds events none
+  of the others do, and a single inspect session pointed at all three must
+  end up with every one of them in its local session store, not just some.
+  - `/Small` -- a handful of events per target.
+  - `/Large` -- the "high input" case: hundreds of events per target at
+    once.
+- **`TargetDisruptionDoesNotMissEvents`** -- table-driven across the same
+  two disruption mechanisms as stream's
+  `DestinationDisruptionDoesNotDropEvents`: the disruption must not hang
+  the session, and an event published to that target once it's back must
+  still be picked up. Inspect's targets run through the exact same
   `ClientSubscriptionContext.Run`/retry machinery stream's sources do (see
-  `client/inspect.go`'s `NewInspector`), so this is the same mechanism
-  `client/stream_integration_test.go`'s `SourceReconnectDoesNotHang` covers,
-  exercised on inspect's own code path instead of assumed to carry over.
-- **`HighVolumeAcrossManyTargetsAllLand`** -- hundreds of events across all
-  3 targets at once, the "high input" analog of `CollectsFromAllTargets`.
+  `client/inspect.go`'s `NewInspector`), so this exercises the same
+  mechanism on inspect's own code path instead of assuming it carries over.
+  - `/Restart` -- an explicit disconnect (`docker compose restart`).
+  - `/Stall` -- `docker compose pause`, a *silent* stall distinct from
+    `/Restart`'s abrupt teardown. Necessarily slow (~70s): unlike stream,
+    `InspectSpec` has no `timeouts:` block at all (see "Known ncli
+    limitations" below), so this relies on `relayclient`'s hardcoded 60s
+    default `PongTimeout` with no way to configure a shorter one.
 - **`DuplicateEventAcrossOverlappingTargetsIsNotDoubleStored`** -- publishes
   one signed event to two targets and confirms the local store ends up
   with exactly one row for it: overlapping relays serving the same event
@@ -64,12 +73,6 @@ Five scenarios:
   just two sequential same-goroutine `Insert` calls (which
   `client/inspect_store_test.go`'s `TestInspectStoreInsertToleratesDuplicateEvent`
   already covers at the store level alone).
-- **`TargetStallDoesNotHangSession`** -- `docker compose pause`, a silent
-  stall distinct from `TargetReconnectDoesNotMissEvents`'s abrupt restart.
-  Necessarily slow (~70s): unlike stream, `InspectSpec` has no `timeouts:`
-  block at all (see "Known ncli limitation" below), so this relies on
-  `relayclient`'s hardcoded 60s default `PongTimeout` with no way to
-  configure a shorter one.
 
 Unlike stream, inspect has no destination, so the specific bug
 `integration/stream/`'s harness was built for (a *destination* silently

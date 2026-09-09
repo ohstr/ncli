@@ -76,29 +76,26 @@ type FlowContext struct {
 	incomingEvents chan *nip01.Event
 	errors         chan error
 
-	// pauseMu guards pauseCh/pauser/inFlight: open() recreates all three on
-	// every (re)connect cycle, from the flow's own goroutine, while other
-	// goroutines read the current generation concurrently -- broadcastEvents
-	// via paused(), RemoteSubscription.Write via inFlightSlots()/releaseSlot()
+	// pauseMu guards pauseCh/pauser/inFlight: open() recreates all three each
+	// (re)connect cycle from the flow's own goroutine, while broadcastEvents
+	// and RemoteSubscription.Write read the current generation concurrently
 	// -- a plain field read/write here would race.
 	pauseMu sync.RWMutex
 	pauseCh chan interface{}
 	pauser  sync.Once
 
 	// publishConcurrency bounds how many events a remote destination may have
-	// sent but not yet acked, when > 0 (0 = unbounded, the default -- see
-	// FlowSpec.WriteConcurrency). Written once, synchronously, by Stream.Sync
-	// before this FlowContext's goroutines start, and never mutated after --
-	// safe to read from any goroutine without pauseMu. LocalSubscription
-	// never sets it: its own writeConcurrency worker pool already bounds
-	// concurrency directly against the local store.
+	// sent but not yet acked (0 = unbounded, the default -- see
+	// FlowSpec.WriteConcurrency). Set once by Stream.Sync before this
+	// FlowContext's goroutines start, never mutated after -- safe to read
+	// without pauseMu. LocalSubscription leaves it 0: its own worker pool
+	// already bounds concurrency against the local store.
 	publishConcurrency int
 
-	// inFlight is the current (re)connect cycle's publish semaphore, sized to
-	// publishConcurrency by open(); nil when publishConcurrency is 0. A fresh
-	// channel is created (not reused) on every open() so a connection that
-	// dies with unacked sends can't leak its slots into the next cycle -- see
-	// inFlightSlots/releaseSlot.
+	// inFlight is the current cycle's publish semaphore (nil when
+	// publishConcurrency is 0). Recreated fresh on every open(), not reused
+	// -- a connection that dies with unacked sends can't leak slots into the
+	// next cycle. See inFlightSlots/releaseSlot.
 	inFlight chan struct{}
 
 	closeCh chan interface{}
@@ -152,11 +149,7 @@ func (fc *FlowContext) open() {
 	fc.pauseCh = make(chan interface{})
 	fc.pauser = sync.Once{}
 
-	// A fresh semaphore every cycle, not a reused one: a connection that
-	// dies with sends still unacked would otherwise leak those slots
-	// forever, since nothing will ever ack them on the old connection to
-	// release them. Discarding the old channel drops those phantom holds
-	// along with it instead of letting them starve the next connection.
+	// Fresh each cycle -- see inFlight's doc comment.
 	if fc.publishConcurrency > 0 {
 		fc.inFlight = make(chan struct{}, fc.publishConcurrency)
 	} else {
@@ -172,24 +165,18 @@ func (fc *FlowContext) paused() <-chan interface{} {
 	return fc.pauseCh
 }
 
-// inFlightSlots returns the current generation's publish semaphore, or nil
-// if publishing isn't bounded (publishConcurrency == 0, the default). Safe
-// to call concurrently with open(). A caller must acquire a slot (as one
-// case of its own select, alongside its shutdown signals) before sending,
-// and release it via releaseSlot once the send is acked/rejected/duplicate
-// -- never by a bare unconditional <-sem, since a stale/unmatched ack has no
-// corresponding acquire and would block the releaser forever on an empty
-// channel.
+// inFlightSlots returns the current cycle's publish semaphore, or nil if
+// unbounded. Safe to call concurrently with open(). Acquire as one arm of
+// the caller's own select (never a bare blocking send); release only via
+// releaseSlot, which guards against releasing an unmatched ack.
 func (fc *FlowContext) inFlightSlots() chan struct{} {
 	fc.pauseMu.RLock()
 	defer fc.pauseMu.RUnlock()
 	return fc.inFlight
 }
 
-// releaseSlot returns one slot to the current generation's publish
-// semaphore, if bounded. Only call this for an ack that genuinely
-// correlates to a pending-tracked send (i.e. fc.pending.get found it) --
-// see inFlightSlots' doc comment for why an unconditional release is unsafe.
+// releaseSlot returns one slot, if bounded. Only call for an ack that
+// genuinely correlates to a pending-tracked send -- see inFlightSlots.
 func (fc *FlowContext) releaseSlot() {
 	if sem := fc.inFlightSlots(); sem != nil {
 		<-sem
@@ -235,12 +222,10 @@ func (fc *FlowContext) setWorker(worker *StreamWorker) {
 	fc.worker = worker
 }
 
-// setPublishConcurrency configures this destination's in-flight-publish cap
-// (see the publishConcurrency/inFlight doc comments). Must be called
-// synchronously by Stream.Sync, before this FlowContext's goroutines start
-// and before it's registered via addSubscriber -- publishConcurrency is read
-// without synchronization everywhere else, on the assumption it's set once
-// before concurrent access begins and never mutated after.
+// setPublishConcurrency sets the in-flight-publish cap. Must be called
+// synchronously by Stream.Sync before this FlowContext's goroutines start
+// and before addSubscriber -- publishConcurrency is read without
+// synchronization elsewhere, assuming it's set once before any concurrency.
 func (fc *FlowContext) setPublishConcurrency(n int) {
 	fc.publishConcurrency = n
 }
@@ -483,19 +468,10 @@ func (sc *StreamChannel) handleFlow(ctx context.Context, fc *FlowContext) {
 				sc.handleEvent(ctx, fc, o.Event)
 
 			case *wire.OkSubscriptionResponse:
-				// Hoisted above the accepted/rejected branching below (was
-				// previously three separate get/delete call sites, one per
-				// branch that needed it) so releaseSlot has one place to gate
-				// on found: a bare unconditional release per branch would
-				// release for a stale/unmatched ack too (e.g. a relay
-				// re-sending an old OK), which has no corresponding acquire
-				// and would block the next release on an empty channel
-				// forever. found means this ack genuinely correlates to a
-				// send we tracked -- for a remote destination, the only way
-				// into fc.pending is deliverToSubscriber, and the only way an
-				// entry survives to this point is if RemoteSubscription.Write
-				// actually acquired a slot for it before sending -- so found
-				// is exactly the right, and only safe, release condition.
+				// Hoisted so every branch shares one get/delete, and
+				// releaseSlot only fires when found -- an unconditional
+				// release per branch would free a slot for a stale/unmatched
+				// ack too. See releaseSlot's doc comment.
 				event, found := fc.pending.get(o.EventID)
 				fc.pending.delete(o.EventID)
 				if found {
@@ -827,9 +803,8 @@ func (s *Stream) Sync(parent context.Context) (tui.FlowMetricsSlice, tui.FlowMet
 
 		fc := NewFlowContext(s.filters, stat, flow.IsTrusted(), s.recovery)
 		fc.strictPow = s.strictPow
-		// Must be set before Run's goroutine starts and before addSubscriber
-		// makes fc visible to broadcastEvents -- see setPublishConcurrency's
-		// doc comment.
+		// Before Run's goroutine starts and addSubscriber makes fc visible --
+		// see setPublishConcurrency.
 		fc.setPublishConcurrency(flow.PublishConcurrency())
 		go func() {
 			flow.Run(ctx, flow.Write, s.sc, fc)
@@ -921,11 +896,9 @@ type ClientSubscription interface {
 	Run(context.Context, func(context.Context), *StreamChannel, *FlowContext)
 	Stat() tui.FlowStat
 
-	// PublishConcurrency reports how many sent-but-unacked events this flow
-	// may have outstanding as a destination, when > 0 (0 = unbounded).
-	// LocalSubscription always returns 0: its own writeConcurrency worker
-	// pool already bounds concurrency directly against the local store, so
-	// FlowContext's separate in-flight cap would just be redundant.
+	// PublishConcurrency reports the in-flight-publish cap for this
+	// destination (0 = unbounded). LocalSubscription always returns 0 -- its
+	// own worker pool already bounds concurrency against the local store.
 	PublishConcurrency() int
 }
 
@@ -1217,9 +1190,7 @@ func (ls *LocalSubscription) Close() {
 	ls.store.Close()
 }
 
-// PublishConcurrency always reports 0 (unbounded): LocalSubscription.Write
-// already bounds concurrency itself via its own writeConcurrency worker
-// pool, direct against the local store.
+// PublishConcurrency: see ClientSubscription.PublishConcurrency.
 func (ls *LocalSubscription) PublishConcurrency() int {
 	return 0
 }
@@ -1232,9 +1203,8 @@ type RemoteSubscription struct {
 	*ClientSubscriptionContext
 	recovery *RecoveryManager
 
-	// publishConcurrency bounds how many sent-but-unacked events this
-	// destination may have outstanding at once (0 = unbounded, the
-	// default). See FlowSpec.WriteConcurrency and FlowContext.inFlight.
+	// publishConcurrency: 0 = unbounded (default). See
+	// FlowSpec.WriteConcurrency / FlowContext.inFlight.
 	publishConcurrency int
 }
 
@@ -1368,15 +1338,10 @@ func (rs *RemoteSubscription) Write(parent context.Context) {
 	for {
 		select {
 		case ev := <-rs.fc.readEvent():
-			// Bound how many sends this destination may have outstanding
-			// (sent but not yet acked) before blocking for more -- nil when
-			// publishConcurrency is 0 (unbounded, the default), so this is a
-			// no-op case that's never selectable then. Acquiring here, as
-			// one arm of the same select as the shutdown signals below,
-			// means a dead/closing connection unblocks this wait the same
-			// way it unblocks everything else in this loop -- a bare
-			// blocking acquire outside the select would risk hanging here
-			// forever if the connection died with no slots ever coming free.
+			// Acquire a slot before sending (nil sem = unbounded, case never
+			// selectable). One arm of this same select, not a bare blocking
+			// acquire, so a dead/closing connection unblocks it too instead
+			// of hanging here forever.
 			if sem := rs.fc.inFlightSlots(); sem != nil {
 				select {
 				case sem <- struct{}{}:
@@ -1396,12 +1361,9 @@ func (rs *RemoteSubscription) Write(parent context.Context) {
 			// Write avoids by only ever counting through the synthetic ack it
 			// sends itself.
 			if ok := conn.Send(ev); !ok {
-				// No explicit slot release here: a failed Send means this
-				// connection is dead and Write returns immediately below, so
-				// the whole inFlight semaphore this slot belongs to is about
-				// to be discarded (open() builds a fresh one next cycle, see
-				// its doc comment) rather than reused -- there is no "next
-				// send on this connection" for an unreleased slot to starve.
+				// No explicit release: Write returns right below, and this
+				// connection's whole semaphore is discarded next cycle
+				// anyway (see inFlight) -- nothing left to starve.
 				log.Warn().
 					Str("relay", rs.relay.String()).
 					Str("event_id", ev.ID).
@@ -1440,8 +1402,7 @@ func (rs *RemoteSubscription) Name() string {
 	return rs.relay.String()
 }
 
-// PublishConcurrency reports the configured in-flight-publish cap (0 =
-// unbounded, the default) -- see FlowContext.publishConcurrency.
+// PublishConcurrency reports the configured cap (0 = unbounded).
 func (rs *RemoteSubscription) PublishConcurrency() int {
 	return rs.publishConcurrency
 }

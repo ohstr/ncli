@@ -45,8 +45,8 @@ jobs:
       - name: Test
         run: go test -short -race ./...
 
-  integration-docker:
-    # Hermetic Docker-Compose e2e tests (client/{stream,inspect,sync}_docker_test.go
+  integrations:
+    # Hermetic integration tests (client/{stream,inspect,sync}_integration_test.go
     # -- see integration/README.md): real `ncli relay` containers, no
     # external network/live-relay dependency, so unlike `just
     # test-integration` (deliberately excluded from CI -- hits real public
@@ -61,8 +61,8 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Docker e2e tests (stream, inspect, sync)
-        run: go test ./client/... -run 'TestStreamDocker|TestInspectDocker|TestSyncDocker' -v -count=1 -timeout 20m
+      - name: Integration tests (stream, inspect, sync)
+        run: go test ./client/... -run 'TestStreamIntegration|TestInspectIntegration|TestSyncIntegration' -v -count=1 -timeout 30m
 
   lint:
     runs-on: ubuntu-latest

@@ -1,17 +1,19 @@
 package client
 
-// Shared helpers for this package's Docker-Compose-based hermetic e2e
-// tests (client/stream_docker_test.go, client/inspect_docker_test.go,
-// client/sync_docker_test.go, ...): each brings up real `ncli relay`
-// containers (built from this repo's own build/relay/Dockerfile) and drives
-// the client module under test in-process against their published ports,
-// closing the "client says accepted, but did the relay actually get it?"
-// gap by always checking a real relay's own wire protocol independently of
-// whatever the client under test believes happened. See
-// integration/<feature>/README.md for what each individual stack is.
+// Shared helpers for this package's Docker-Compose-based hermetic
+// integration tests (client/stream_integration_test.go,
+// client/inspect_integration_test.go, client/sync_integration_test.go,
+// ...): each brings up real `ncli relay` containers (built from this
+// repo's own build/relay/Dockerfile) and drives the client module under
+// test in-process against their published ports, closing the "client says
+// accepted, but did the relay actually get it?" gap by always checking a
+// real relay's own wire protocol independently of whatever the client
+// under test believes happened. See integration/<feature>/README.md for
+// what each individual stack is.
 //
-// None of this is wired into `just test`/CI (needs Docker); see each
-// feature's own `just test-integration-<feature>` recipe.
+// Not part of `just test` (needs Docker), but runs automatically in CI as
+// its own job -- see `just test-integrations` and each feature's own
+// `just test-integration-<feature>` recipe.
 
 import (
 	"context"
@@ -26,20 +28,20 @@ import (
 	relayclient "github.com/ohstr/nmilat/relay/client"
 )
 
-// dockerHarnessPrivKey is an arbitrary, fixed test-only private key, shared
+// integrationPrivKey is an arbitrary, fixed test-only private key, shared
 // by every docker-based e2e test in this package, used only to produce
 // validly-signed synthetic events. Unlike the plain in-memory tests in
 // *_regression_test.go, these events cross a real ncli relay server, which
 // verifies every event's ID/signature unconditionally -- a flow's own
 // `trusted` setting only ever governs what THIS client's read side skips
 // checking, never what a relay server accepts on write.
-const dockerHarnessPrivKey = "0acd12cbf0fb87cd13b17bc9b57dffd11b3870b407984cec5a4ce2a69b90268c"
+const integrationPrivKey = "0acd12cbf0fb87cd13b17bc9b57dffd11b3870b407984cec5a4ce2a69b90268c"
 
-// runDockerCompose runs `docker compose -f composeFile <args...>`, failing
+// runCompose runs `docker compose -f composeFile <args...>`, failing
 // the test immediately (t.Fatalf) on error. Cleanup teardown steps that
 // must not mask an earlier test failure run their own exec.Command instead
-// (see TestStreamDocker's t.Cleanup) and log rather than fail.
-func runDockerCompose(t *testing.T, composeFile string, args ...string) {
+// (see TestStreamIntegration's t.Cleanup) and log rather than fail.
+func runCompose(t *testing.T, composeFile string, args ...string) {
 	t.Helper()
 	cmdArgs := append([]string{"compose", "-f", composeFile}, args...)
 	cmd := exec.Command("docker", cmdArgs...)
@@ -49,13 +51,13 @@ func runDockerCompose(t *testing.T, composeFile string, args ...string) {
 	}
 }
 
-// newDockerHarnessEvent signs a small, uniquely-content-tagged kind:1 event
+// newIntegrationEvent signs a small, uniquely-content-tagged kind:1 event
 // -- marker only needs to make this call's content distinct from every
 // other call's, which is all that's needed for a distinct event ID.
-func newDockerHarnessEvent(t *testing.T, marker string) *nip01.Event {
+func newIntegrationEvent(t *testing.T, marker string) *nip01.Event {
 	t.Helper()
 	ev := nip01.NewEvent(1, fmt.Sprintf("ncli itest %s", marker))
-	if err := ev.Sign(dockerHarnessPrivKey); err != nil {
+	if err := ev.Sign(integrationPrivKey); err != nil {
 		t.Fatalf("failed to sign synthetic test event: %v", err)
 	}
 	return ev

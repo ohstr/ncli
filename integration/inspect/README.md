@@ -31,13 +31,13 @@ targets fan into one local session store.
 just test-integration-inspect
 ```
 
-This runs `TestInspectDocker` (`client/inspect_docker_test.go`), which
+This runs `TestInspectIntegration` (`client/inspect_integration_test.go`), which
 brings the stack up itself, drives `client.NewInspector` **in process**
 against the compose stack's published ports, and tears the stack down when
 done. Not part of `just test`/`test-integration` (skipped under `-short`,
 same convention as `client/multi_relay_test.go` and
-`client/stream_docker_test.go`), but runs automatically in CI on every
-push/PR via its own `integration-docker` job
+`client/stream_integration_test.go`), but runs automatically in CI on every
+push/PR via its own `integrations` job
 (`.github/workflows/ci.yml`) -- it needs Docker, which that job's
 `ubuntu-latest` runner already has.
 
@@ -52,7 +52,7 @@ Two scenarios:
   be missed. Inspect's targets run through the exact same
   `ClientSubscriptionContext.Run`/retry machinery stream's sources do (see
   `client/inspect.go`'s `NewInspector`), so this is the same mechanism
-  `client/stream_docker_test.go`'s `SourceReconnectDoesNotHang` covers,
+  `client/stream_integration_test.go`'s `SourceReconnectDoesNotHang` covers,
   exercised on inspect's own code path instead of assumed to carry over.
 
 Unlike stream, inspect has no destination, so the specific bug
@@ -69,7 +69,7 @@ observe reconnect behavior honestly.
 inspect.yaml` from a script/CI/agent with no tty fails immediately with
 "this workflow's kind requires an interactive terminal ... use a stream
 workflow (with raw: true) for unattended/agent use". Only `stream` supports
-`raw: true`. That's why this test (like `client/stream_docker_test.go`)
+`raw: true`. That's why this test (like `client/stream_integration_test.go`)
 constructs `*Inspector` directly instead of going through `Client`/`ncli
 apply` -- there is currently no other way to exercise inspect
 non-interactively at all. See `integration/README.md`'s backlog for the

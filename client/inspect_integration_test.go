@@ -12,28 +12,29 @@ import (
 )
 
 // See integration/inspect/README.md for what this stack is. Shared
-// docker-lifecycle/publish/fetch helpers used below (runDockerCompose,
-// newDockerHarnessEvent, publishEventToRelay, waitForRelayReady, etc.) live
-// in client/dockerharness_test.go, alongside client/stream_docker_test.go.
+// docker-lifecycle/publish/fetch helpers used below (runCompose,
+// newIntegrationEvent, publishEventToRelay, waitForRelayReady, etc.) live
+// in client/integrationharness_test.go, alongside
+// client/stream_integration_test.go.
 const (
-	inspectDockerComposeFile = "../integration/inspect/compose.yaml"
-	inspectDockerSpecFile    = "../integration/inspect/inspect.yaml"
+	inspectIntegrationComposeFile = "../integration/inspect/compose.yaml"
+	inspectIntegrationSpecFile    = "../integration/inspect/inspect.yaml"
 )
 
-var inspectDockerTargetURLs = []string{
+var inspectIntegrationTargetURLs = []string{
 	"ws://localhost:45510",
 	"ws://localhost:45511",
 	"ws://localhost:45512",
 }
 
-// TestInspectDocker brings up integration/inspect/compose.yaml's three real
+// TestInspectIntegration brings up integration/inspect/compose.yaml's three real
 // `ncli relay` containers once, then runs each scenario as a subtest
 // against that shared stack -- needs Docker, hits no production relay.
 // `apply -f inspect.yaml` has no `client` package coverage against a real
 // relay at all before this (client/inspect_store_test.go only exercises
 // the local store in isolation); this closes that gap. See
 // `just test-integration-inspect`.
-func TestInspectDocker(t *testing.T) {
+func TestInspectIntegration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping docker-based inspect integration test in short mode")
 	}
@@ -41,15 +42,15 @@ func TestInspectDocker(t *testing.T) {
 		t.Skip("docker not found on PATH, skipping inspect integration test")
 	}
 
-	runDockerCompose(t, inspectDockerComposeFile, "up", "-d", "--build")
+	runCompose(t, inspectIntegrationComposeFile, "up", "-d", "--build")
 	t.Cleanup(func() {
-		cmd := exec.Command("docker", "compose", "-f", inspectDockerComposeFile, "down", "-v")
+		cmd := exec.Command("docker", "compose", "-f", inspectIntegrationComposeFile, "down", "-v")
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Logf("docker compose down failed: %v\n%s", err, out)
 		}
 	})
 
-	for _, raw := range inspectDockerTargetURLs {
+	for _, raw := range inspectIntegrationTargetURLs {
 		waitForRelayReady(t, raw, 60*time.Second)
 	}
 
@@ -67,9 +68,9 @@ func testInspectCollectsFromAllTargets(t *testing.T) {
 	spec := loadTestInspectSpec(t)
 
 	var published []string
-	for i, target := range inspectDockerTargetURLs {
+	for i, target := range inspectIntegrationTargetURLs {
 		for j := 0; j < 2; j++ {
-			ev := newDockerHarnessEvent(t, fmt.Sprintf("collect-t%d-e%d", i, j))
+			ev := newIntegrationEvent(t, fmt.Sprintf("collect-t%d-e%d", i, j))
 			publishEventToRelay(t, target, ev)
 			published = append(published, ev.ID)
 		}
@@ -83,7 +84,7 @@ func testInspectCollectsFromAllTargets(t *testing.T) {
 	missing := waitForEventsInInspectStore(t, insp, published, 15*time.Second)
 	if len(missing) > 0 {
 		t.Errorf("published %d events across %d targets, but %d never landed in the inspect session's local store: %v",
-			len(published), len(inspectDockerTargetURLs), len(missing), missing)
+			len(published), len(inspectIntegrationTargetURLs), len(missing), missing)
 	}
 }
 
@@ -100,10 +101,10 @@ func testInspectTargetReconnectDoesNotMissEvents(t *testing.T) {
 
 	insp := newTestInspector(t, ctx, spec)
 
-	before := newDockerHarnessEvent(t, "inspect-reconnect-before")
-	publishEventToRelay(t, inspectDockerTargetURLs[0], before)
+	before := newIntegrationEvent(t, "inspect-reconnect-before")
+	publishEventToRelay(t, inspectIntegrationTargetURLs[0], before)
 
-	runDockerCompose(t, inspectDockerComposeFile, "restart", "target1")
+	runCompose(t, inspectIntegrationComposeFile, "restart", "target1")
 
 	// Not required for correctness, just makes sure the next publish
 	// genuinely lands after the restart has taken effect rather than
@@ -111,11 +112,11 @@ func testInspectTargetReconnectDoesNotMissEvents(t *testing.T) {
 	// testSourceReconnectDoesNotHang's identical use of a plain sleep here.
 	time.Sleep(2 * time.Second)
 
-	after := newDockerHarnessEvent(t, "inspect-reconnect-after")
+	after := newIntegrationEvent(t, "inspect-reconnect-after")
 	// target1 may still be mid-restart, so retry the publish itself --
 	// what's under test is the inspect session's own reconnect, not this
 	// helper publish's timing.
-	publishEventWithRetry(t, inspectDockerTargetURLs[0], after, 30*time.Second)
+	publishEventWithRetry(t, inspectIntegrationTargetURLs[0], after, 30*time.Second)
 
 	missing := waitForEventsInInspectStore(t, insp, []string{before.ID, after.ID}, 20*time.Second)
 	if len(missing) > 0 {
@@ -130,13 +131,13 @@ func testInspectTargetReconnectDoesNotMissEvents(t *testing.T) {
 // itself.
 func loadTestInspectSpec(t *testing.T) *InspectSpec {
 	t.Helper()
-	rs, err := loadSpecFromYaml(inspectDockerSpecFile)
+	rs, err := loadSpecFromYaml(inspectIntegrationSpecFile)
 	if err != nil {
-		t.Fatalf("failed to load %s: %v", inspectDockerSpecFile, err)
+		t.Fatalf("failed to load %s: %v", inspectIntegrationSpecFile, err)
 	}
 	spec, ok := rs.Spec.(*InspectSpec)
 	if !ok {
-		t.Fatalf("%s is not a `kind: inspect` spec", inspectDockerSpecFile)
+		t.Fatalf("%s is not a `kind: inspect` spec", inspectIntegrationSpecFile)
 	}
 	return spec
 }

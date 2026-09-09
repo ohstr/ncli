@@ -40,6 +40,13 @@ test-integration-stream-stress:
 test-integration-inspect:
     go test ./client/... -run 'TestInspectIntegration' -v -count=1 -timeout 10m
 
+# Run the inspect *stress* test (needs Docker; 15 real target containers
+# instead of test-integration-inspect's 3 -- see integration/inspect/README.md's
+# "Stress stack" section). Heavier/slower, not run automatically in CI --
+# run explicitly before a release or when touching inspect's fan-in path.
+test-integration-inspect-stress:
+    go test ./client/... -run 'TestInspectStress' -v -count=1 -timeout 15m
+
 # Run the sync integration test (needs Docker; see
 # integration/sync/README.md). Runs automatically in CI; not part of
 # `just test`/`test-integration`.
@@ -160,6 +167,19 @@ inspect cmd="up" *args:
     "up") docker compose -f integration/inspect/compose.yaml up -d --build {{args}} ;;
     "down") docker compose -f integration/inspect/compose.yaml down -v {{args}} ;;
     *) echo "unknown inspect subcommand: {{cmd}} (expected up|down)" >&2 && exit 1 ;;
+    esac
+
+# Local inspect *stress* stack (15 real target ncli relay containers -- see
+# integration/inspect/README.md's "Stress stack" section): [up|down]. The
+# Go test behind `just test-integration-inspect-stress` manages its own
+# compose lifecycle, so this is for poking at the stack by hand.
+inspect-stress cmd="up" *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{cmd}}" in
+    "up") docker compose -f integration/inspect/stress-compose.yaml up -d --build {{args}} ;;
+    "down") docker compose -f integration/inspect/stress-compose.yaml down -v {{args}} ;;
+    *) echo "unknown inspect-stress subcommand: {{cmd}} (expected up|down)" >&2 && exit 1 ;;
     esac
 
 # Local sync e2e test stack (one real ncli relay container -- see

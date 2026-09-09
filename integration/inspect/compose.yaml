@@ -3,7 +3,7 @@
 # inspect client under test reads from real relay server processes over
 # real websocket connections -- not mocks -- without touching production.
 #
-# Driven by client/inspect_docker_test.go (TestInspectDocker), which
+# Driven by client/inspect_integration_test.go (TestInspectIntegration), which
 # manages this stack's lifecycle itself; or run by hand via
 # `just inspect up`/`down` to poke at it directly (e.g. publish events to
 # one of the three ports below, then query all three with

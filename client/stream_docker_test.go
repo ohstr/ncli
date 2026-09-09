@@ -3,31 +3,21 @@ package client
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
-
-	"github.com/ohstr/nmilat/nip01"
-	relayclient "github.com/ohstr/nmilat/relay/client"
 )
 
 // See integration/stream/README.md for what this stack is and why the
 // client under test runs in-process here rather than as a compose service.
+// Shared docker-lifecycle/publish/fetch helpers used below (runDockerCompose,
+// newDockerHarnessEvent, publishEventToRelay, waitForEventsAtRelay, etc.)
+// live in client/dockerharness_test.go, alongside this package's other
+// docker-based e2e tests.
 const (
 	streamDockerComposeFile = "../integration/stream/compose.yaml"
 	streamDockerSpecFile    = "../integration/stream/stream.yaml"
-
-	// streamTestPrivKey is an arbitrary, fixed test-only private key, used
-	// only to produce validly-signed synthetic events. Unlike the plain
-	// in-memory tests in stream_regression_test.go, the events here cross a
-	// real ncli relay server (this stack's containers), which verifies
-	// every event's ID/signature unconditionally -- a flow's own `trusted`
-	// setting only ever governs what THIS client's read side skips
-	// checking, never what a relay server accepts on write.
-	streamTestPrivKey = "0acd12cbf0fb87cd13b17bc9b57dffd11b3870b407984cec5a4ce2a69b90268c"
 )
 
 var streamDockerSourceURLs = []string{
@@ -50,7 +40,7 @@ func TestStreamDocker(t *testing.T) {
 		t.Skip("docker not found on PATH, skipping stream integration test")
 	}
 
-	runDockerCompose(t, "up", "-d", "--build")
+	runDockerCompose(t, streamDockerComposeFile, "up", "-d", "--build")
 	t.Cleanup(func() {
 		cmd := exec.Command("docker", "compose", "-f", streamDockerComposeFile, "down", "-v")
 		if out, err := cmd.CombinedOutput(); err != nil {
@@ -101,8 +91,8 @@ func testDestinationReconnectDoesNotDropEvents(t *testing.T) {
 
 	var published []string
 	publishAndTrack := func(sourceURL, marker string) {
-		ev := newStreamDockerEvent(t, marker)
-		publishStreamDockerEvent(t, sourceURL, ev)
+		ev := newDockerHarnessEvent(t, marker)
+		publishEventToRelay(t, sourceURL, ev)
 		published = append(published, ev.ID)
 	}
 
@@ -111,7 +101,7 @@ func testDestinationReconnectDoesNotDropEvents(t *testing.T) {
 
 	const cycles = 3
 	for i := 0; i < cycles; i++ {
-		runDockerCompose(t, "restart", "destination")
+		runDockerCompose(t, streamDockerComposeFile, "restart", "destination")
 		waitUntilDestinationPaused(t, destFC, 15*time.Second)
 
 		// Still observed paused right now -- this is the exact window
@@ -130,7 +120,7 @@ func testDestinationReconnectDoesNotDropEvents(t *testing.T) {
 	// few ticks to retry anything it queued during the windows above.
 	time.Sleep(8 * time.Second)
 
-	missing := waitForEventsAtDestination(t, published, 10*time.Second)
+	missing := waitForEventsAtRelay(t, streamDockerDestURL, published, 10*time.Second)
 	if len(missing) > 0 {
 		t.Errorf("published %d events, but %d never reached the destination (permanently dropped): %v", len(published), len(missing), missing)
 	}
@@ -158,23 +148,23 @@ func testSourceReconnectDoesNotHang(t *testing.T) {
 	stream.Sync(ctx)
 	time.Sleep(1 * time.Second)
 
-	before := newStreamDockerEvent(t, "source-reconnect-before")
-	publishStreamDockerEvent(t, streamDockerSourceURLs[0], before)
+	before := newDockerHarnessEvent(t, "source-reconnect-before")
+	publishEventToRelay(t, streamDockerSourceURLs[0], before)
 
-	runDockerCompose(t, "restart", "source1")
+	runDockerCompose(t, streamDockerComposeFile, "restart", "source1")
 
 	// Not required for correctness, just makes sure the next publish
 	// genuinely lands after the restart has taken effect rather than
 	// racing one that hasn't started yet.
 	time.Sleep(2 * time.Second)
 
-	after := newStreamDockerEvent(t, "source-reconnect-after")
+	after := newDockerHarnessEvent(t, "source-reconnect-after")
 	// source1 may still be mid-restart, so retry the publish itself --
 	// what's under test is the stream client's own Read-side reconnect,
 	// not this helper publish's timing.
-	publishWithRetry(t, streamDockerSourceURLs[0], after, 30*time.Second)
+	publishEventWithRetry(t, streamDockerSourceURLs[0], after, 30*time.Second)
 
-	missing := waitForEventsAtDestination(t, []string{before.ID, after.ID}, 20*time.Second)
+	missing := waitForEventsAtRelay(t, streamDockerDestURL, []string{before.ID, after.ID}, 20*time.Second)
 	if len(missing) > 0 {
 		t.Errorf("source reconnect: %d/2 events never reached the destination: %v", len(missing), missing)
 	}
@@ -202,111 +192,6 @@ func loadTestStreamSpec(t *testing.T) *StreamSpec {
 		RetryInterval: "500ms",
 	}
 	return spec
-}
-
-// newStreamDockerEvent signs a small, uniquely-content-tagged kind:1 event
-// -- marker only needs to make this call's content distinct from every
-// other call's, which is all that's needed for a distinct event ID.
-func newStreamDockerEvent(t *testing.T, marker string) *nip01.Event {
-	t.Helper()
-	ev := nip01.NewEvent(1, fmt.Sprintf("ncli stream-itest %s", marker))
-	if err := ev.Sign(streamTestPrivKey); err != nil {
-		t.Fatalf("failed to sign synthetic test event: %v", err)
-	}
-	return ev
-}
-
-func publishStreamDockerEvent(t *testing.T, relayURL string, ev *nip01.Event) {
-	t.Helper()
-	u, err := url.Parse(relayURL)
-	if err != nil {
-		t.Fatalf("invalid relay URL %q: %v", relayURL, err)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	resp, err := relayclient.PublishEventToRelay(ctx, u, ev)
-	if err != nil {
-		t.Fatalf("failed to publish event %s to %s: %v", ev.ID, relayURL, err)
-	}
-	if !resp.Accepted {
-		t.Fatalf("relay %s rejected event %s: %s", relayURL, ev.ID, resp.Message)
-	}
-}
-
-// publishWithRetry is publishStreamDockerEvent's tolerant sibling, for the
-// one case where the target relay is expected to be briefly unreachable
-// (right after a forced container restart).
-func publishWithRetry(t *testing.T, relayURL string, ev *nip01.Event, timeout time.Duration) {
-	t.Helper()
-	u, err := url.Parse(relayURL)
-	if err != nil {
-		t.Fatalf("invalid relay URL %q: %v", relayURL, err)
-	}
-	deadline := time.Now().Add(timeout)
-	var lastErr error
-	for time.Now().Before(deadline) {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		resp, err := relayclient.PublishEventToRelay(ctx, u, ev)
-		cancel()
-		if err == nil && resp.Accepted {
-			return
-		}
-		if err != nil {
-			lastErr = err
-		} else {
-			lastErr = fmt.Errorf("rejected: %s", resp.Message)
-		}
-		time.Sleep(300 * time.Millisecond)
-	}
-	t.Fatalf("failed to publish event %s to %s within %s: %v", ev.ID, relayURL, timeout, lastErr)
-}
-
-// fetchEventIDsFromRelay queries relayURL directly over the wire for the
-// given event IDs, independent of anything the stream client itself
-// believes -- this is what closes the gap between "client says accepted"
-// and "relay actually has it."
-func fetchEventIDsFromRelay(t *testing.T, relayURL string, ids []string) map[string]bool {
-	t.Helper()
-	u, err := url.Parse(relayURL)
-	if err != nil {
-		t.Fatalf("invalid relay URL %q: %v", relayURL, err)
-	}
-	filters := nip01.NewSubscriptionFilterGroup()
-	filters.Add(&nip01.SubscriptionFilter{IDs: ids})
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	events, err := relayclient.ReadEventsFromRelay(ctx, u, filters)
-	if err != nil {
-		t.Fatalf("failed to query %s for %d event IDs: %v", relayURL, len(ids), err)
-	}
-	found := make(map[string]bool, len(events))
-	for _, ev := range events {
-		found[ev.ID] = true
-	}
-	return found
-}
-
-// waitForEventsAtDestination polls the destination relay until every ID in
-// ids is retrievable or timeout elapses, returning whatever's still
-// missing at that point (empty on full success).
-func waitForEventsAtDestination(t *testing.T, ids []string, timeout time.Duration) []string {
-	t.Helper()
-	deadline := time.Now().Add(timeout)
-	var missing []string
-	for {
-		found := fetchEventIDsFromRelay(t, streamDockerDestURL, ids)
-		missing = nil
-		for _, id := range ids {
-			if !found[id] {
-				missing = append(missing, id)
-			}
-		}
-		if len(missing) == 0 || time.Now().After(deadline) {
-			return missing
-		}
-		time.Sleep(300 * time.Millisecond)
-	}
 }
 
 // destinationFlowContext returns the (sole) destination's FlowContext.
@@ -345,41 +230,4 @@ func waitUntilDestinationPaused(t *testing.T, fc *FlowContext, timeout time.Dura
 		time.Sleep(50 * time.Millisecond)
 	}
 	t.Fatal("destination never entered its paused (reconnecting) state within the timeout")
-}
-
-// waitForRelayReady retries a no-op query against relayURL until it
-// succeeds (proving the relay is up and speaking the protocol) or timeout
-// elapses -- covers both the container's own startup time and the initial
-// image build.
-func waitForRelayReady(t *testing.T, relayURL string, timeout time.Duration) {
-	t.Helper()
-	u, err := url.Parse(relayURL)
-	if err != nil {
-		t.Fatalf("invalid relay URL %q: %v", relayURL, err)
-	}
-	filters := nip01.NewSubscriptionFilterGroup()
-	filters.Add(&nip01.SubscriptionFilter{})
-
-	deadline := time.Now().Add(timeout)
-	var lastErr error
-	for time.Now().Before(deadline) {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		_, lastErr = relayclient.ReadEventsFromRelay(ctx, u, filters)
-		cancel()
-		if lastErr == nil {
-			return
-		}
-		time.Sleep(300 * time.Millisecond)
-	}
-	t.Fatalf("relay at %s never became ready within %s: %v", relayURL, timeout, lastErr)
-}
-
-func runDockerCompose(t *testing.T, args ...string) {
-	t.Helper()
-	cmdArgs := append([]string{"compose", "-f", streamDockerComposeFile}, args...)
-	cmd := exec.Command("docker", cmdArgs...)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("docker %s failed: %v\n%s", strings.Join(cmdArgs, " "), err, out)
-	}
 }

@@ -23,6 +23,16 @@ test-integration:
 test-integration-stream:
     go test ./client/... -run 'TestStreamDocker' -v -count=1 -timeout 10m
 
+# Run the inspect e2e integration test (needs Docker; see
+# integration/inspect/README.md). Not run in CI or by `just test`/`test-integration`.
+test-integration-inspect:
+    go test ./client/... -run 'TestInspectDocker' -v -count=1 -timeout 10m
+
+# Run the sync e2e integration test (needs Docker; see
+# integration/sync/README.md). Not run in CI or by `just test`/`test-integration`.
+test-integration-sync:
+    go test ./client/... -run 'TestSyncDocker' -v -count=1 -timeout 10m
+
 # Run the client package's benchmarks (stream pipeline hot paths)
 bench:
     go test ./client/... -run '^$' -bench . -benchmem
@@ -101,6 +111,32 @@ stream cmd="up" *args:
     "up") docker compose -f integration/stream/compose.yaml up -d --build {{args}} ;;
     "down") docker compose -f integration/stream/compose.yaml down -v {{args}} ;;
     *) echo "unknown stream subcommand: {{cmd}} (expected up|down)" >&2 && exit 1 ;;
+    esac
+
+# Local inspect e2e test stack (three real ncli relay containers -- see
+# integration/inspect/README.md): [up|down]. The Go test behind
+# `just test-integration-inspect` manages its own compose lifecycle, so
+# this is for poking at the stack by hand.
+inspect cmd="up" *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{cmd}}" in
+    "up") docker compose -f integration/inspect/compose.yaml up -d --build {{args}} ;;
+    "down") docker compose -f integration/inspect/compose.yaml down -v {{args}} ;;
+    *) echo "unknown inspect subcommand: {{cmd}} (expected up|down)" >&2 && exit 1 ;;
+    esac
+
+# Local sync e2e test stack (one real ncli relay container -- see
+# integration/sync/README.md): [up|down]. The Go test behind
+# `just test-integration-sync` manages its own compose lifecycle, so this
+# is for poking at the stack by hand.
+sync cmd="up" *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{cmd}}" in
+    "up") docker compose -f integration/sync/compose.yaml up -d --build {{args}} ;;
+    "down") docker compose -f integration/sync/compose.yaml down -v {{args}} ;;
+    *) echo "unknown sync subcommand: {{cmd}} (expected up|down)" >&2 && exit 1 ;;
     esac
 
 # Run the docs site locally with hot reload -- README.md, AGENTS.md, and

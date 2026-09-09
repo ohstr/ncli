@@ -1,0 +1,63 @@
+# Local inspect e2e test stack: three real `ncli relay` instances, all
+# built from this repo's own source (build/relay/Dockerfile), so the
+# inspect client under test reads from real relay server processes over
+# real websocket connections -- not mocks -- without touching production.
+#
+# Driven by client/inspect_docker_test.go (TestInspectDocker), which
+# manages this stack's lifecycle itself; or run by hand via
+# `just inspect up`/`down` to poke at it directly (e.g. publish events to
+# one of the three ports below, then query all three with
+# `ncli apply -f integration/inspect/inspect.yaml` -- see this directory's
+# README).
+#
+# `name:` pins the Compose project name regardless of the caller's working
+# directory, so this stack's containers/volumes/network never collide with
+# build/relay/docker-compose.dev.yaml's or integration/stream/'s (distinct
+# host ports too: 45510-45512, vs. stream's 45500-45503) even if all three
+# happen to be up at once.
+name: ncli-inspect-itest
+
+services:
+  target1:
+    build:
+      context: ../..
+      dockerfile: build/relay/Dockerfile
+    image: ncli:inspect-itest
+    command: ["relay", "--config", "/config/relay.yaml"]
+    ports:
+      - "45510:5500"
+    volumes:
+      - ./relay.yaml:/config/relay.yaml:ro
+      - target1-data:/app/ncli/data
+    restart: unless-stopped
+
+  target2:
+    build:
+      context: ../..
+      dockerfile: build/relay/Dockerfile
+    image: ncli:inspect-itest
+    command: ["relay", "--config", "/config/relay.yaml"]
+    ports:
+      - "45511:5500"
+    volumes:
+      - ./relay.yaml:/config/relay.yaml:ro
+      - target2-data:/app/ncli/data
+    restart: unless-stopped
+
+  target3:
+    build:
+      context: ../..
+      dockerfile: build/relay/Dockerfile
+    image: ncli:inspect-itest
+    command: ["relay", "--config", "/config/relay.yaml"]
+    ports:
+      - "45512:5500"
+    volumes:
+      - ./relay.yaml:/config/relay.yaml:ro
+      - target3-data:/app/ncli/data
+    restart: unless-stopped
+
+volumes:
+  target1-data:
+  target2-data:
+  target3-data:

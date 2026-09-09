@@ -3,7 +3,7 @@
 # production's own stream.yaml, pointed at this stack's fixed localhost
 # ports instead of real public relays.
 #
-# client/stream_docker_test.go loads this file the same way `ncli apply`
+# client/stream_integration_test.go loads this file the same way `ncli apply`
 # itself does (loadSpecFromYaml) rather than constructing a *StreamSpec by
 # hand, so it exercises the real on-disk schema -- it only overrides the
 # `recovery` block's store_path/max_retries/retry_interval afterward, to

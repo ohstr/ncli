@@ -4,7 +4,7 @@
 # real websocket connections -- not mocks -- without touching production
 # (relay.ohstr.com).
 #
-# Driven by client/stream_docker_test.go (TestStreamDocker), which manages
+# Driven by client/stream_integration_test.go (TestStreamIntegration), which manages
 # this stack's lifecycle itself; or run by hand via `just stream up`/`down`
 # to poke at it directly (e.g. `ncli apply -f integration/stream/stream.yaml`
 # against it -- see stream.yaml's own header and this directory's README).
@@ -27,6 +27,23 @@ services:
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - destination-data:/app/ncli/data
+    restart: unless-stopped
+
+  # Only used by TestStreamIntegration's MultipleDestinationsBothReceiveEvents
+  # subtest (every other subtest sticks to stream.yaml's single checked-in
+  # destination) -- exercises real fan-out to more than one destination,
+  # which no other scenario here does.
+  destination2:
+    build:
+      context: ../..
+      dockerfile: build/relay/Dockerfile
+    image: ncli:stream-itest
+    command: ["relay", "--config", "/config/relay.yaml"]
+    ports:
+      - "45505:5500"
+    volumes:
+      - ./relay.yaml:/config/relay.yaml:ro
+      - destination2-data:/app/ncli/data
     restart: unless-stopped
 
   source1:
@@ -70,6 +87,7 @@ services:
 
 volumes:
   destination-data:
+  destination2-data:
   source1-data:
   source2-data:
   source3-data:

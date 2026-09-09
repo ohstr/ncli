@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
@@ -27,6 +28,10 @@ var streamIntegrationSourceURLs = []string{
 }
 
 const streamIntegrationDestURL = "ws://localhost:45500"
+
+// streamIntegrationDest2URL is only used by MultipleDestinationsBothReceiveEvents
+// -- see compose.yaml's destination2 service.
+const streamIntegrationDest2URL = "ws://localhost:45505"
 
 // TestStreamIntegration brings up integration/stream/compose.yaml's real
 // destination + source `ncli relay` containers once, then runs each
@@ -54,6 +59,9 @@ func TestStreamIntegration(t *testing.T) {
 
 	t.Run("DestinationReconnectDoesNotDropEvents", testDestinationReconnectDoesNotDropEvents)
 	t.Run("SourceReconnectDoesNotHang", testSourceReconnectDoesNotHang)
+	t.Run("DestinationStallTriggersTimeoutNotHang", testDestinationStallTriggersTimeoutNotHang)
+	t.Run("HighVolumeBurstAcrossAllSourcesIsNotLost", testHighVolumeBurstAcrossAllSourcesIsNotLost)
+	t.Run("MultipleDestinationsBothReceiveEvents", testMultipleDestinationsBothReceiveEvents)
 }
 
 // testDestinationReconnectDoesNotDropEvents is the regression test for the
@@ -167,6 +175,158 @@ func testSourceReconnectDoesNotHang(t *testing.T) {
 	missing := waitForEventsAtRelay(t, streamIntegrationDestURL, []string{before.ID, after.ID}, 20*time.Second)
 	if len(missing) > 0 {
 		t.Errorf("source reconnect: %d/2 events never reached the destination: %v", len(missing), missing)
+	}
+}
+
+// testDestinationStallTriggersTimeoutNotHang covers a failure mode
+// DestinationReconnectDoesNotDropEvents can't: a *silent* stall (the
+// destination process frozen, TCP connection still technically open) with
+// no close/reset at all, as opposed to `docker compose restart`'s abrupt
+// connection teardown. Detecting this relies entirely on
+// stream.yaml's configured ping/pong timeouts (getConnectionConfig,
+// client/stream.go) actually firing -- a real, previously-untested code
+// path distinct from the explicit-disconnect path the restart-based tests
+// exercise. `docker compose pause` freezes the container's processes via
+// the kernel's cgroup freezer without touching the network stack, so the
+// TCP connection itself stays established while the frozen relay can't
+// read, process, or answer a websocket ping -- exactly the "silent stall"
+// this needs.
+func testDestinationStallTriggersTimeoutNotHang(t *testing.T) {
+	spec := loadTestStreamSpec(t)
+	stream, err := NewStream(spec, false)
+	if err != nil {
+		t.Fatalf("NewStream failed: %v", err)
+	}
+	t.Cleanup(stream.Close)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	upStats, _ := stream.Sync(ctx)
+	time.Sleep(1 * time.Second)
+
+	destFC := destinationFlowContext(t, stream)
+
+	runCompose(t, streamIntegrationComposeFile, "pause", "destination")
+	t.Cleanup(func() {
+		// Best-effort: later cleanup steps (stream.Close, then `docker
+		// compose down`) must not themselves get stuck waiting on a
+		// destination this subtest left paused, if it fails before
+		// reaching the unpause below.
+		_ = exec.Command("docker", "compose", "-f", streamIntegrationComposeFile, "unpause", "destination").Run()
+	})
+
+	// stream.yaml configures pong: "4s" -- this must observe paused()
+	// actually flip, not just sleep ~4s and hope, since that's the whole
+	// point of the test (proving the timeout path fires at all).
+	waitUntilDestinationPaused(t, destFC, 15*time.Second)
+
+	stalled := newIntegrationEvent(t, "destination-stall")
+	publishEventToRelay(t, streamIntegrationSourceURLs[0], stalled)
+
+	runCompose(t, streamIntegrationComposeFile, "unpause", "destination")
+
+	// Give the now-unfrozen destination time to finish reconnecting and the
+	// recovery loop a few ticks to retry anything queued during the stall.
+	time.Sleep(8 * time.Second)
+
+	missing := waitForEventsAtRelay(t, streamIntegrationDestURL, []string{stalled.ID}, 10*time.Second)
+	if len(missing) > 0 {
+		t.Errorf("event published during the stall never reached the destination: %v", missing)
+	}
+	if lost := upStats[0].Lost(); lost != 0 {
+		t.Errorf("expected Lost=0 (event either delivered or handed to recovery), got %d", lost)
+	}
+}
+
+// testHighVolumeBurstAcrossAllSourcesIsNotLost is the e2e regression test
+// PR #45 (fix/apply-stream-publish-concurrency-cap) never got: an unpaced
+// burst from a large `from` pool overwhelming a destination's own
+// concurrency guard, previously fixed only at the unit level (see
+// client/stream_regression_test.go). stream.yaml's destination already
+// sets `writeConcurrency: 8`; this drives real traffic well past that cap
+// (hundreds of events across all 3 sources at once) against a real relay
+// enforcing its own real limits, rather than a mock that can't reject
+// anything.
+func testHighVolumeBurstAcrossAllSourcesIsNotLost(t *testing.T) {
+	spec := loadTestStreamSpec(t)
+	stream, err := NewStream(spec, false)
+	if err != nil {
+		t.Fatalf("NewStream failed: %v", err)
+	}
+	t.Cleanup(stream.Close)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	upStats, _ := stream.Sync(ctx)
+	time.Sleep(1 * time.Second)
+
+	const perSource = 100
+	var wg sync.WaitGroup
+	idsBySource := make([][]string, len(streamIntegrationSourceURLs))
+	for i, sourceURL := range streamIntegrationSourceURLs {
+		wg.Add(1)
+		go func(i int, sourceURL string) {
+			defer wg.Done()
+			idsBySource[i] = publishManyEvents(t, sourceURL, perSource, fmt.Sprintf("burst-src%d", i))
+		}(i, sourceURL)
+	}
+	wg.Wait()
+
+	var published []string
+	for _, ids := range idsBySource {
+		published = append(published, ids...)
+	}
+
+	missing := waitForEventsAtRelay(t, streamIntegrationDestURL, published, 30*time.Second)
+	if len(missing) > 0 {
+		t.Errorf("published %d events across %d sources, but %d never reached the destination: %v",
+			len(published), len(streamIntegrationSourceURLs), len(missing), missing)
+	}
+	if lost := upStats[0].Lost(); lost != 0 {
+		t.Errorf("expected Lost=0 under a large burst (writeConcurrency should pace delivery, never drop it), got %d", lost)
+	}
+}
+
+// testMultipleDestinationsBothReceiveEvents covers real fan-out to more
+// than one destination -- every other scenario in this file sticks to
+// stream.yaml's single checked-in destination, so broadcastEvents'
+// multi-subscriber path (client/stream.go) has otherwise never run against
+// a real relay on each end.
+func testMultipleDestinationsBothReceiveEvents(t *testing.T) {
+	waitForRelayReady(t, streamIntegrationDest2URL, 60*time.Second)
+
+	spec := loadTestStreamSpec(t)
+	spec.To = append(spec.To, newRemoteFlowSpec(t, streamIntegrationDest2URL, true, 8))
+
+	stream, err := NewStream(spec, false)
+	if err != nil {
+		t.Fatalf("NewStream failed: %v", err)
+	}
+	t.Cleanup(stream.Close)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	upStats, _ := stream.Sync(ctx)
+	if len(upStats) != 2 {
+		t.Fatalf("expected exactly 2 destinations, got %d", len(upStats))
+	}
+	time.Sleep(1 * time.Second)
+
+	published := publishManyEvents(t, streamIntegrationSourceURLs[0], 10, "fanout")
+
+	for _, destURL := range []string{streamIntegrationDestURL, streamIntegrationDest2URL} {
+		missing := waitForEventsAtRelay(t, destURL, published, 15*time.Second)
+		if len(missing) > 0 {
+			t.Errorf("destination %s: %d/%d events never arrived: %v", destURL, len(missing), len(published), missing)
+		}
+	}
+	for i, stat := range upStats {
+		if lost := stat.Lost(); lost != 0 {
+			t.Errorf("destination %d: expected Lost=0, got %d", i, lost)
+		}
 	}
 }
 

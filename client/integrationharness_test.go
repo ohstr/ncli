@@ -21,6 +21,7 @@ import (
 	"net/url"
 	"os/exec"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -51,35 +52,129 @@ func runCompose(t *testing.T, composeFile string, args ...string) {
 	}
 }
 
+// newIntegrationEventUnchecked is newIntegrationEvent's error-returning
+// core -- signing a fixed, valid hex private key cannot actually fail, so
+// this only exists to give publishManyEvents an error to check without
+// calling t.Fatalf from a worker goroutine (see its own doc comment for
+// why that matters).
+func newIntegrationEventUnchecked(marker string) *nip01.Event {
+	ev := nip01.NewEvent(1, fmt.Sprintf("ncli itest %s", marker))
+	if err := ev.Sign(integrationPrivKey); err != nil {
+		// Unreachable in practice (integrationPrivKey is a fixed, valid
+		// key), but panic rather than silently return an unsigned event if
+		// it ever somehow did fail.
+		panic(fmt.Sprintf("failed to sign synthetic test event: %v", err))
+	}
+	return ev
+}
+
 // newIntegrationEvent signs a small, uniquely-content-tagged kind:1 event
 // -- marker only needs to make this call's content distinct from every
 // other call's, which is all that's needed for a distinct event ID.
 func newIntegrationEvent(t *testing.T, marker string) *nip01.Event {
 	t.Helper()
-	ev := nip01.NewEvent(1, fmt.Sprintf("ncli itest %s", marker))
-	if err := ev.Sign(integrationPrivKey); err != nil {
-		t.Fatalf("failed to sign synthetic test event: %v", err)
+	return newIntegrationEventUnchecked(marker)
+}
+
+// publishEventToRelayErr is publishEventToRelay's error-returning core,
+// used directly by publishManyEvents' worker goroutines (which must not
+// call t.Fatalf themselves -- see that function's doc comment).
+func publishEventToRelayErr(relayURL string, ev *nip01.Event) error {
+	u, err := url.Parse(relayURL)
+	if err != nil {
+		return fmt.Errorf("invalid relay URL %q: %w", relayURL, err)
 	}
-	return ev
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	resp, err := relayclient.PublishEventToRelay(ctx, u, ev)
+	if err != nil {
+		return fmt.Errorf("failed to publish event %s to %s: %w", ev.ID, relayURL, err)
+	}
+	if !resp.Accepted {
+		return fmt.Errorf("relay %s rejected event %s: %s", relayURL, ev.ID, resp.Message)
+	}
+	return nil
 }
 
 // publishEventToRelay publishes ev to relayURL and fails the test if the
 // relay doesn't accept it outright.
 func publishEventToRelay(t *testing.T, relayURL string, ev *nip01.Event) {
 	t.Helper()
-	u, err := url.Parse(relayURL)
+	if err := publishEventToRelayErr(relayURL, ev); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// newRemoteFlowSpec builds a valid remote *FlowSpec without going through
+// YAML unmarshalling -- for tests that need to add a flow to a spec
+// already loaded from its fixture (e.g. a second stream destination).
+// Mirrors exactly what FlowSpec.UnmarshalJSON's FlOW_REMOTE case does:
+// relayURI/relayFallbackURI must be resolved via ResolveRelayURL and set
+// directly, or code that reads them (connectRelayWithFallback) would
+// silently treat the flow as having no address at all.
+func newRemoteFlowSpec(t *testing.T, relayURL string, trusted bool, writeConcurrency int) *FlowSpec {
+	t.Helper()
+	u, fallback, err := ResolveRelayURL(relayURL)
 	if err != nil {
-		t.Fatalf("invalid relay URL %q: %v", relayURL, err)
+		t.Fatalf("ResolveRelayURL(%q): %v", relayURL, err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	resp, err := relayclient.PublishEventToRelay(ctx, u, ev)
-	if err != nil {
-		t.Fatalf("failed to publish event %s to %s: %v", ev.ID, relayURL, err)
+	return &FlowSpec{
+		Type:             FlOW_REMOTE,
+		Relay:            relayURL,
+		Trusted:          trusted,
+		WriteConcurrency: writeConcurrency,
+		relayURI:         u,
+		relayFallbackURI: fallback,
 	}
-	if !resp.Accepted {
-		t.Fatalf("relay %s rejected event %s: %s", relayURL, ev.ID, resp.Message)
+}
+
+// publishManyEventsConcurrency bounds how many simultaneous publish
+// connections publishManyEvents opens against one relay -- high enough to
+// make a few hundred events fast, low enough not to itself become the kind
+// of unpaced burst client/stream.go's own write-concurrency cap (PR #45,
+// see client/stream_regression_test.go and this file's high-volume tests)
+// exists to guard against.
+const publishManyEventsConcurrency = 16
+
+// publishManyEvents signs and publishes n distinct kind:1 events to
+// relayURL, using markerPrefix plus each event's index to keep every one
+// content-distinct (see newIntegrationEvent), and returns their IDs in
+// index order. Used by this package's high-volume-input scenarios to
+// stress a relay/flow with real traffic instead of a handful of events.
+//
+// Publishes concurrently but never calls t.Fatalf/t.Errorf from the worker
+// goroutines themselves -- t's Fail-family methods must only be called
+// from the goroutine running the test (see testing.T's docs), so every
+// worker reports its outcome back over a channel and only the calling
+// goroutine ever fails the test.
+func publishManyEvents(t *testing.T, relayURL string, n int, markerPrefix string) []string {
+	t.Helper()
+	ids := make([]string, n)
+	errs := make(chan error, n)
+
+	sem := make(chan struct{}, publishManyEventsConcurrency)
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		ev := newIntegrationEventUnchecked(fmt.Sprintf("%s-%d", markerPrefix, i))
+		ids[i] = ev.ID
+
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(ev *nip01.Event) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			errs <- publishEventToRelayErr(relayURL, ev)
+		}(ev)
 	}
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("publishManyEvents(%q, n=%d, %q): %v", relayURL, n, markerPrefix, err)
+		}
+	}
+	return ids
 }
 
 // publishEventWithRetry is publishEventToRelay's tolerant sibling, for the

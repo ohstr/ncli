@@ -4,22 +4,15 @@
 
 ### Fixed
 
-- `apply stream` fanned out to every source relay at once with no pacing,
-  and forwarded to remote destinations over an unpaced connection --
-  against a `from` pool of any real size, the initial burst reliably
-  exceeded the destination relay's own concurrency guard and got
-  rejected. `FlowSpec.WriteConcurrency` now also bounds remote
-  destinations (previously local-only), capping how many sent-but-unacked
-  events one may have outstanding at once; default stays unbounded, so
-  existing configs are unaffected unless the new field is set.
+- `apply stream` could overwhelm a destination relay on initial sync --
+  an unpaced burst from a large `from` pool exceeded its concurrency
+  guard and got rejected. `FlowSpec.WriteConcurrency` now also bounds
+  remote destinations (previously local-only).
   ([#45](https://github.com/ohstr/ncli/pull/45))
-- Bumps `github.com/ohstr/nmilat` to v0.2.9, which bounds a previously-
-  unbounded outgoing write on the relay side (closing the most likely
-  cause of occasional multi-second delivery stalls to an already-open
-  subscription under concurrent load) and fixes a use-after-transaction-
-  scope bug that could serve corrupted event JSON under backlog.
-  ([nmilat#19](https://github.com/ohstr/nmilat/pull/19),
-  [#45](https://github.com/ohstr/ncli/pull/45))
+- Bumps `github.com/ohstr/nmilat` to v0.2.9: bounds a previously-unbounded
+  write that could stall subscription delivery, and fixes a
+  use-after-transaction-scope bug causing corrupted event JSON under load.
+  ([nmilat#19](https://github.com/ohstr/nmilat/pull/19))
 
 ## [0.4.7]
 

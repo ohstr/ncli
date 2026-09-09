@@ -68,6 +68,34 @@ natural case:
   a configured `timeouts:` block now -- see "Bug found and fixed" below.
   Sync has no reconnect loop of its own, so this confirms a stalled
   connection surfaces a clean error and returns instead of hanging.
+- **`FilterCorrectness`** -- proves sync only reconciles events matching
+  its filter, in both directions, using a *single* filter object with
+  multiple `kinds` (1 and 7) scoped to one author. Deliberately not
+  multiple filter objects -- see "Confirmed gap" below for why that
+  wouldn't test what it looks like it tests.
+
+## Confirmed gap: multiple filter objects don't behave like NIP-01 OR-across-filters for sync
+
+`client/neg_sync.go`'s `execute()` builds its **local** negentropy item set
+from *every* configured filter, OR'd together
+(`for i, f := range s.spec.Filters { items, _ := store.QueryNip77Items(ctx, &f.SubscriptionFilter) ... }`),
+but sends only `s.spec.Filters[0]` to the remote in the NEG-OPEN packet
+("Use the first filter for NEG-OPEN (NIP-77 uses a single filter)", per
+that line's own comment). With exactly one filter (this stack's
+`sync.yaml` and `FilterCorrectness`'s override) both sides agree and
+everything above holds. With **two or more** filter objects, the two sides
+would build their negentropy trees over different item sets whenever
+anything matches a later filter but not the first -- local's tree includes
+it, remote's never does, since remote never even received that filter.
+Not turned into a test here: the exact observable failure shape (whether
+negentropy still converges to a wrong-but-plausible result, an outright
+protocol error, or something else) needs live verification this
+environment couldn't give with confidence (see `integration/README.md`'s
+"Verifying these stacks"). Worth a real ncli issue and, ideally, a fix
+(either honor all filters symmetrically on both sides, or reject/warn on
+`len(Filters) > 1` for `kind: sync` instead of silently accepting
+configuration NIP-77 can't actually honor) before building a test that
+asserts one particular failure mode.
 
 ## Bug found and fixed while building this
 

@@ -55,6 +55,7 @@ func TestSyncIntegration(t *testing.T) {
 	waitForRelayReady(t, syncIntegrationRemoteURL, 60*time.Second)
 
 	t.Run("ReconcileCompleteness", testSyncReconcileCompleteness)
+	t.Run("FilterCorrectness", testSyncFilterCorrectness)
 	t.Run("MaxReconcileRoundsTooLowSurfacesCleanly", testSyncMaxReconcileRoundsTooLowSurfacesCleanly)
 	t.Run("RemoteStallTriggersTimeoutNotHang", testSyncRemoteStallTriggersTimeoutNotHang)
 }
@@ -132,6 +133,100 @@ func testSyncReconcileCompleteness(t *testing.T) {
 				t.Errorf("pull: %d/%d remote-only event(s) never landed in the local store: %v", len(missingLocal), tc.n, missingLocal)
 			}
 		})
+	}
+}
+
+// testSyncFilterCorrectness proves sync only reconciles events matching
+// its configured filter, in both directions -- deliberately a *single*
+// filter object with multiple `kinds` (1 and 7) scoped to one author,
+// rather than multiple filter objects the way stream/inspect's
+// FilterCorrectnessUnderLoad tests do. That's not a simplification for its
+// own sake: client/neg_sync.go's execute() builds its local negentropy
+// tree from *every* configured filter OR'd together
+// (`for i, f := range s.spec.Filters { ... }`), but sends only
+// `s.spec.Filters[0]` to the remote in NEG-OPEN ("NIP-77 uses a single
+// filter", per that line's own comment) -- so with 2+ filter objects, the
+// two sides would build their negentropy trees over different item sets
+// whenever anything matches a later filter but not the first. That's a
+// real, confirmed gap (documented in integration/sync/README.md), not
+// exercised here since its exact failure shape needs live verification
+// this environment can't give with confidence -- what *is* fully
+// supported and tested here is a single filter matching multiple kinds
+// for one author, which both the local query loop and the remote NEG-OPEN
+// agree on identically.
+func testSyncFilterCorrectness(t *testing.T) {
+	spec := loadTestSyncSpec(t)
+	spec.Filters = []*FilterSpec{
+		NewFilterSpec(&nip01.SubscriptionFilter{
+			Kinds:   []int{1, 7},
+			Authors: []string{integrationPubKey},
+		}),
+	}
+
+	localPath := filepath.Join(t.TempDir(), "sync.db")
+	spec.GetLocal().Path = localPath
+
+	// Remote-only mix: matching (kind 1 and kind 7, primary author) and
+	// non-matching (kind 7 wrong author; kind 3 -- not in `kinds` at all).
+	matchRemote1 := newIntegrationEventOfKind(t, 1, "filter-remote-match-k1")
+	matchRemote2 := newIntegrationEventOfKind(t, 7, "filter-remote-match-k7")
+	noMatchRemoteAuthor := newIntegrationEventFromAltAuthor(t, 7, "filter-remote-nomatch-author")
+	noMatchRemoteKind := newIntegrationEventOfKind(t, 3, "filter-remote-nomatch-kind")
+	for _, ev := range []*nip01.Event{matchRemote1, matchRemote2, noMatchRemoteAuthor, noMatchRemoteKind} {
+		publishEventToRelay(t, syncIntegrationRemoteURL, ev)
+	}
+
+	// Local-only mix: the same shape.
+	matchLocal1 := newIntegrationEventOfKind(t, 1, "filter-local-match-k1")
+	matchLocal2 := newIntegrationEventOfKind(t, 7, "filter-local-match-k7")
+	noMatchLocalAuthor := newIntegrationEventFromAltAuthor(t, 7, "filter-local-nomatch-author")
+	noMatchLocalKind := newIntegrationEventOfKind(t, 3, "filter-local-nomatch-kind")
+	seedLocalSyncStore(t, localPath, []*nip01.Event{matchLocal1, matchLocal2, noMatchLocalAuthor, noMatchLocalKind})
+
+	sm, err := NewSyncModule(spec, nil, false)
+	if err != nil {
+		t.Fatalf("NewSyncModule failed: %v", err)
+	}
+	t.Cleanup(sm.Close)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	logger, err := sm.Run(ctx)
+	if err != nil {
+		t.Fatalf("sm.Run failed: %v", err)
+	}
+	waitForSyncComplete(t, logger, 30*time.Second)
+	time.Sleep(200 * time.Millisecond) // let execute()'s deferred store.Close() run
+
+	missingRemote := waitForEventsAtRelay(t, syncIntegrationRemoteURL, []string{matchLocal1.ID, matchLocal2.ID}, 10*time.Second)
+	if len(missingRemote) > 0 {
+		t.Errorf("push: %d filter-matching local-only event(s) never reached the remote relay: %v", len(missingRemote), missingRemote)
+	}
+	missingLocal := waitForEventsInLocalStore(t, localPath, []string{matchRemote1.ID, matchRemote2.ID}, 10*time.Second)
+	if len(missingLocal) > 0 {
+		t.Errorf("pull: %d filter-matching remote-only event(s) never landed in the local store: %v", len(missingLocal), missingLocal)
+	}
+
+	// Non-matching local-only events must never leak to the remote --
+	// checking exclusion, not just inclusion, which
+	// testSyncReconcileCompleteness never does (everything it seeds
+	// matches its filter by construction).
+	leakedToRemote := fetchEventIDsFromRelay(t, syncIntegrationRemoteURL, []string{noMatchLocalAuthor.ID, noMatchLocalKind.ID})
+	if len(leakedToRemote) > 0 {
+		t.Errorf("%d non-matching local-only event(s) reached the remote relay anyway: %v", len(leakedToRemote), leakedToRemote)
+	}
+
+	// Non-matching remote-only events must never leak into the local
+	// store. Timeout 0: the sync run has already completed (waitForSyncComplete
+	// above), so this is a single snapshot check, not a poll -- and
+	// waitForEventsInLocalStore's return value here means the opposite of
+	// its usual "still missing" sense: every ID passed in is expected to
+	// still be absent, so a non-empty result actually means success, and
+	// anything short of the full set means something leaked.
+	stillAbsent := waitForEventsInLocalStore(t, localPath, []string{noMatchRemoteAuthor.ID, noMatchRemoteKind.ID}, 0)
+	if len(stillAbsent) != 2 {
+		t.Errorf("expected both non-matching remote-only events to stay out of the local store, but %d leaked in", 2-len(stillAbsent))
 	}
 }
 

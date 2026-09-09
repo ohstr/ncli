@@ -1,0 +1,162 @@
+# Heavier, separate inspect stress stack: 15 real target `ncli relay`
+# containers (vs. compose.yaml's 3), for scenarios that need genuine
+# "many relays as source" scale rather than correctness-only coverage.
+# Kept out of compose.yaml/the fast test-integration-inspect path entirely
+# -- these containers are only brought up by client/inspect_stress_test.go
+# (`just test-integration-inspect-stress`), which is heavier/slower and
+# not run in CI by default. See integration/inspect/README.md.
+#
+# `name:` pins the Compose project name so this stack's containers/
+# volumes/network never collide with compose.yaml's (`ncli-inspect-itest`)
+# even if both happen to be up at once; distinct host port range too
+# (45590-45604 vs. compose.yaml's 45510-45512).
+name: ncli-inspect-stress-itest
+
+# Reusable service template -- see integration/stream/stress-compose.yaml's
+# identical convention for why (Compose's `x-` prefix is reserved for
+# extension fields it never interprets as a service itself).
+x-relay: &relay
+  build:
+    context: ../..
+    dockerfile: build/relay/Dockerfile
+  image: ncli:inspect-stress-itest
+  command: ["relay", "--config", "/config/relay.yaml"]
+  restart: unless-stopped
+
+services:
+  target1:
+    <<: *relay
+    ports:
+      - "45590:5500"
+    volumes:
+      - ./relay.yaml:/config/relay.yaml:ro
+      - target1-data:/app/ncli/data
+
+  target2:
+    <<: *relay
+    ports:
+      - "45591:5500"
+    volumes:
+      - ./relay.yaml:/config/relay.yaml:ro
+      - target2-data:/app/ncli/data
+
+  target3:
+    <<: *relay
+    ports:
+      - "45592:5500"
+    volumes:
+      - ./relay.yaml:/config/relay.yaml:ro
+      - target3-data:/app/ncli/data
+
+  target4:
+    <<: *relay
+    ports:
+      - "45593:5500"
+    volumes:
+      - ./relay.yaml:/config/relay.yaml:ro
+      - target4-data:/app/ncli/data
+
+  target5:
+    <<: *relay
+    ports:
+      - "45594:5500"
+    volumes:
+      - ./relay.yaml:/config/relay.yaml:ro
+      - target5-data:/app/ncli/data
+
+  target6:
+    <<: *relay
+    ports:
+      - "45595:5500"
+    volumes:
+      - ./relay.yaml:/config/relay.yaml:ro
+      - target6-data:/app/ncli/data
+
+  target7:
+    <<: *relay
+    ports:
+      - "45596:5500"
+    volumes:
+      - ./relay.yaml:/config/relay.yaml:ro
+      - target7-data:/app/ncli/data
+
+  target8:
+    <<: *relay
+    ports:
+      - "45597:5500"
+    volumes:
+      - ./relay.yaml:/config/relay.yaml:ro
+      - target8-data:/app/ncli/data
+
+  target9:
+    <<: *relay
+    ports:
+      - "45598:5500"
+    volumes:
+      - ./relay.yaml:/config/relay.yaml:ro
+      - target9-data:/app/ncli/data
+
+  target10:
+    <<: *relay
+    ports:
+      - "45599:5500"
+    volumes:
+      - ./relay.yaml:/config/relay.yaml:ro
+      - target10-data:/app/ncli/data
+
+  target11:
+    <<: *relay
+    ports:
+      - "45600:5500"
+    volumes:
+      - ./relay.yaml:/config/relay.yaml:ro
+      - target11-data:/app/ncli/data
+
+  target12:
+    <<: *relay
+    ports:
+      - "45601:5500"
+    volumes:
+      - ./relay.yaml:/config/relay.yaml:ro
+      - target12-data:/app/ncli/data
+
+  target13:
+    <<: *relay
+    ports:
+      - "45602:5500"
+    volumes:
+      - ./relay.yaml:/config/relay.yaml:ro
+      - target13-data:/app/ncli/data
+
+  target14:
+    <<: *relay
+    ports:
+      - "45603:5500"
+    volumes:
+      - ./relay.yaml:/config/relay.yaml:ro
+      - target14-data:/app/ncli/data
+
+  target15:
+    <<: *relay
+    ports:
+      - "45604:5500"
+    volumes:
+      - ./relay.yaml:/config/relay.yaml:ro
+      - target15-data:/app/ncli/data
+
+volumes:
+  target1-data:
+  target2-data:
+  target3-data:
+  target4-data:
+  target5-data:
+  target6-data:
+  target7-data:
+  target8-data:
+  target9-data:
+  target10-data:
+  target11-data:
+  target12-data:
+  target13-data:
+  target14-data:
+  target15-data:

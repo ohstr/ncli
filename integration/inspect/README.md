@@ -100,8 +100,8 @@ observe reconnect behavior honestly.
   pong / ...) with no way to configure them -- unlike `stream`/`sync`,
   which both support a `timeouts:` block (see
   `client/spec.go`'s `TimeoutSpec`). This is why
-  `TargetStallDoesNotHangSession` above has to wait out the full 60s
-  default rather than a short configured one.
+  `TargetDisruptionDoesNotMissEvents/Stall` above has to wait out the full
+  60s default rather than a short configured one.
 
 ## Manual: poke at it with the real CLI
 
@@ -114,3 +114,46 @@ just inspect down
 
 `just inspect up` rebuilds the image from your current checkout each time
 (`--build`), so local source changes are picked up without an extra step.
+
+## Stress stack
+
+The stack above (3 targets) proves the fan-in *mechanism* generalizes past
+a single target; a separate, heavier stack exists for real scale, mirroring
+`integration/stream/`'s stress stack (see that README's "Stress stack"
+section for the fuller rationale):
+
+- `stress-compose.yaml` -- 15 real target relays (ports `45590`-`45604`),
+  same `x-relay: &relay` YAML anchor pattern as stream's stress stack,
+  project-named `ncli-inspect-stress-itest`. Independently confirmed all
+  15 containers build/start/respond correctly before relying on it.
+- `stress-inspect.yaml` -- the same two-filter-object pair as
+  `integration/stream/stress-stream.yaml` (`kinds: [1]`, and `kinds: [7]`
+  scoped to one author) -- see that file's header for the exact
+  inclusion/exclusion matrix. The checked-in file lists only `target1` in
+  `targets` (so it stays a valid, hand-runnable spec); the Go test
+  overrides `targets` with all 15 URLs.
+
+```
+just test-integration-inspect-stress
+```
+
+Runs `TestInspectStress` (`client/inspect_stress_test.go`). Not part of
+`just test`/`test-integration`/`test-integrations`, and **not run
+automatically in CI**. `just inspect-stress up`/`down` pokes at the stack
+by hand.
+
+Four scenarios:
+
+- **`ManyTargetsHighVolumeAllLand`** -- hundreds of events across all 15
+  targets at once, where the correctness suite's 3-target version only
+  proves the mechanism, not the scale.
+- **`FilterCorrectnessUnderLoad`** -- every target publishes the same
+  4-event inclusion/exclusion mix at once; asserts every matching event
+  lands in the local store *and* every non-matching one never does.
+- **`ConcurrentMultiTargetDisruption`** -- restarts 4 of the 15 targets
+  simultaneously mid-session, production's real flakiness shape.
+- **`ConcurrentMultiTargetStallDoesNotHangSession`** -- pauses 4 targets
+  simultaneously (a silent stall, not a restart). Costs no more wall-clock
+  time than pausing one (all wait out the same 60s default concurrently),
+  so this is the natural place to test *several* stalled targets at once
+  rather than repeating the single-target case at real scale for nothing.

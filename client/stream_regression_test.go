@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -427,5 +428,112 @@ func TestStreamEphemeralAckIsIgnored(t *testing.T) {
 
 	if logs := sc.logger.GetLastLogs(); len(logs) != 0 {
 		t.Errorf("an accepted=true, message=\"ephemeral: ...\" ack should produce no log output at all, got: %v", logs)
+	}
+}
+
+// TestFlowContextReloadResetsAge guards against the exact symptom reported
+// from production: the dashboard's Age column showed the same value for
+// every source regardless of how often it had actually retried, because
+// nothing ever reset FlowMetrics.createdAt after stream start -- Age was
+// really "time since the stream started," not "time since this flow's last
+// (re)connect." reload() is the single retry choke-point shared by both
+// sources and destinations, so that's where the reset belongs.
+func TestFlowContextReloadResetsAge(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	stat := tui.NewInboundMetrics(1, "flaky-source", func() {})
+	fc := NewFlowContext(nip01.NewSubscriptionFilterGroup(), stat, true, nil)
+
+	// reload() unconditionally schedules a retry via a bare goroutine
+	// (StreamWorker.Retry) that outlives this test; give it a harmless job
+	// instead of leaving worker.task nil, which would panic when that
+	// goroutine eventually fires.
+	worker := NewStreamWorker()
+	worker.SetJob(func(context.Context) {}, ctx)
+	fc.setWorker(worker)
+
+	time.Sleep(1100 * time.Millisecond)
+
+	const ageIndex = 6 // [id, events, pubkeys, kinds, failures, retries, age] on InboundMetrics
+	if age := stat.FlatRow()[ageIndex]; age < 1 {
+		t.Fatalf("expected Age to have accrued at least 1s before reload(), got %d", age)
+	}
+
+	fc.reload()
+
+	if age := stat.FlatRow()[ageIndex]; age != 0 {
+		t.Errorf("expected reload() to reset Age to ~0, got %d seconds -- Age must reset on every retry, not just track time since the stream started", age)
+	}
+}
+
+// TestDeliverToSubscriberSavesToRecoveryWhenPaused reproduces the second,
+// more serious production bug: a destination that's between (re)connect
+// cycles -- handleFlow's deferred pause() has run, the next cycle's open()
+// hasn't happened yet, a window that occurs on every single reconnect --
+// used to have any event routed to it via deliverToSubscriber vanish with
+// no trace at all: no recovery-store save, no stat increment, not even a
+// log line. Worse, the source that produced the event has already advanced
+// its own lastUpdate watermark past it by the time it reaches here, so a
+// later source-side reconnect can never re-fetch it either -- permanent,
+// silent loss, directly contradicting the stream's documented "zero-loss
+// design." This asserts a paused destination now hands the event to
+// recovery instead.
+func TestDeliverToSubscriberSavesToRecoveryWhenPaused(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	storePath := filepath.Join(t.TempDir(), "recovery.db")
+	// retryInterval is deliberately long: this test only cares that the
+	// event lands in recovery, not that a background retry against the
+	// (fake, unresolvable) destination name fires during the test.
+	rm, err := NewRecoveryManager(storePath, 10, time.Minute)
+	if err != nil {
+		t.Fatalf("NewRecoveryManager failed: %v", err)
+	}
+	rm.Start(ctx)
+	defer rm.Stop()
+
+	stat := tui.NewOutboundMetrics(1, "flaky-dest", func() {})
+	fc := NewFlowContext(nip01.NewSubscriptionFilterGroup(), stat, true, rm)
+
+	// Simulate the exact state deliverToSubscriber can observe mid-run:
+	// open() (as handleFlow's entry does every cycle), then pause() (as
+	// handleFlow's defer does on exit) -- without running handleFlow itself,
+	// since only the resulting pauseCh state matters here.
+	fc.open()
+	fc.pause()
+
+	// fc.incomingEvents is a large buffered channel with nothing draining
+	// it, so its send case is *also* always immediately ready -- select
+	// would otherwise pick between it and the (closed, also-ready) paused()
+	// case nondeterministically, defeating the whole point of this test.
+	// Saturate it first so paused() is the only case that can actually fire.
+	for i := 0; i < streamFlowBufferSize; i++ {
+		fc.incomingEvents <- newRegressionTestEvent(1_000_000 + i)
+	}
+
+	ev := newRegressionTestEvent(1)
+	deliverToSubscriber(ctx, fc, ev)
+
+	if _, stillPending := fc.pending.get(ev.ID); stillPending {
+		t.Error("pending entry for a dropped event must be cleared, not left dangling")
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	var recovered *nip01.Event
+	for time.Now().Before(deadline) {
+		if e, err := rm.findEvent(ev.ID); err == nil {
+			recovered = e
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if recovered == nil {
+		t.Fatal("expected an event dropped during a destination's reconnect window to be saved to recovery, but it was never found there")
+	}
+
+	if lost := stat.Lost(); lost != 0 {
+		t.Errorf("event was successfully handed to recovery, should not also count as permanently Lost; got Lost=%d", lost)
 	}
 }

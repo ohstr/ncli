@@ -113,7 +113,10 @@ func NewInspector(ctx context.Context, spec *InspectSpec, events *tui.EventTable
 			subscription = NewLocalSubscription(se, target.Trusted, target.WriteConcurrency)
 
 		case FlOW_REMOTE:
-			subscription = NewRemoteSubscription(target.relayURI, target.relayFallbackURI, target.Trusted, nil)
+			// 0 (unbounded): inspect targets are always sources, never a
+			// merged-stream destination -- see the comment below -- so the
+			// in-flight publish cap this param controls never applies here.
+			subscription = NewRemoteSubscription(target.relayURI, target.relayFallbackURI, target.Trusted, nil, 0)
 		}
 
 		i.subscriptions[subID] = subscription

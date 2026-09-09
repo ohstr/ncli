@@ -82,12 +82,34 @@ type FlowSpec struct {
 	Ensure  EnsurePolicy `json:"ensure,omitempty"`
 	Trusted bool         `json:"trusted,omitempty"`
 
-	// WriteConcurrency overrides how many concurrent workers a FlOW_LOCAL
-	// destination's LocalSubscription.Write runs (see localWriteConcurrency
-	// in client/stream.go). Zero/unset means "use the default" -- applied at
-	// NewLocalSubscription rather than here, since the bare-string shorthand
-	// branch of UnmarshalJSON below never goes through a default-filling
-	// step of its own.
+	// WriteConcurrency's meaning depends on the destination's Type:
+	//
+	//   - FlOW_LOCAL: how many concurrent workers LocalSubscription.Write
+	//     runs against the local store (see localWriteConcurrency in
+	//     client/stream.go). Zero/unset means "use the default".
+	//   - FlOW_REMOTE: how many sent-but-unacked events this destination may
+	//     have outstanding at once before RemoteSubscription.Write blocks
+	//     for more (see FlowContext.publishConcurrency). Zero/unset means
+	//     unbounded -- the only behavior before this field applied to remote
+	//     destinations at all, which is what let an unpaced burst of source
+	//     events overwhelm a destination relay's own concurrency guard (see
+	//     issue.md). Left unbounded by default for backward compatibility;
+	//     operators syncing against a rate-limiting destination should set
+	//     this below that relay's own concurrent-task ceiling.
+	//
+	//     Recommended default when the destination's own ceiling is unknown
+	//     (ncli has no protocol-level way to learn it -- not exposed via
+	//     NIP-11 today): 200-500. Comfortably under a stock nmilat relay's
+	//     default concurrent-task ceiling (2048) with margin for other
+	//     sessions sharing that relay, while still high enough that the
+	//     configured pacing is what's limiting throughput, not the cap
+	//     itself, under realistic backfill volume. If the destination's
+	//     actual ceiling is known, keep this at or below ~50% of it to
+	//     leave headroom for its other traffic.
+	//
+	// Applied at NewLocalSubscription/NewRemoteSubscription rather than
+	// here, since the bare-string shorthand branch of UnmarshalJSON below
+	// never goes through a default-filling step of its own.
 	WriteConcurrency int `json:"writeConcurrency,omitempty" yaml:"writeConcurrency,omitempty"`
 
 	relayURI *url.URL

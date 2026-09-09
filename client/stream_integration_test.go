@@ -57,84 +57,151 @@ func TestStreamIntegration(t *testing.T) {
 		waitForRelayReady(t, raw, 60*time.Second)
 	}
 
-	t.Run("DestinationReconnectDoesNotDropEvents", testDestinationReconnectDoesNotDropEvents)
-	t.Run("SourceReconnectDoesNotHang", testSourceReconnectDoesNotHang)
-	t.Run("DestinationStallTriggersTimeoutNotHang", testDestinationStallTriggersTimeoutNotHang)
-	t.Run("HighVolumeBurstAcrossAllSourcesIsNotLost", testHighVolumeBurstAcrossAllSourcesIsNotLost)
-	t.Run("MultipleDestinationsBothReceiveEvents", testMultipleDestinationsBothReceiveEvents)
+	scenarios := []struct {
+		name string
+		fn   func(t *testing.T)
+	}{
+		{"DestinationDisruptionDoesNotDropEvents", testDestinationDisruptionDoesNotDropEvents},
+		{"SourceReconnectDoesNotHang", testSourceReconnectDoesNotHang},
+		{"HighVolumeBurstAcrossAllSourcesIsNotLost", testHighVolumeBurstAcrossAllSourcesIsNotLost},
+		{"MultipleDestinationsBothReceiveEvents", testMultipleDestinationsBothReceiveEvents},
+	}
+	for _, sc := range scenarios {
+		t.Run(sc.name, sc.fn)
+	}
 }
 
-// testDestinationReconnectDoesNotDropEvents is the regression test for the
-// bug this harness was built for: a destination silently dropping events
-// received during its own reconnect window (client/stream.go's
-// deliverToSubscriber, paused() case). It forces several real destination
-// reconnects, publishes known events to a source while the destination is
-// *observed* to be in that window (not just assumed from timing), and
-// asserts every one of them eventually shows up at the destination -- or,
-// short of that, is at least accounted for by the Lost stat, never
-// unaccounted-for.
-func testDestinationReconnectDoesNotDropEvents(t *testing.T) {
-	spec := loadTestStreamSpec(t)
-	stream, err := NewStream(spec, false)
-	if err != nil {
-		t.Fatalf("NewStream failed: %v", err)
-	}
-	t.Cleanup(stream.Close)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-
-	upStats, downStats := stream.Sync(ctx)
-	if len(upStats) != 1 {
-		t.Fatalf("expected exactly 1 destination, got %d", len(upStats))
-	}
-	if len(downStats) != len(streamIntegrationSourceURLs) {
-		t.Fatalf("expected %d sources, got %d", len(streamIntegrationSourceURLs), len(downStats))
-	}
-
-	// Let the initial connections establish before doing anything else.
-	time.Sleep(1 * time.Second)
-
-	destFC := destinationFlowContext(t, stream)
-
-	var published []string
-	publishAndTrack := func(sourceURL, marker string) {
-		ev := newIntegrationEvent(t, marker)
-		publishEventToRelay(t, sourceURL, ev)
-		published = append(published, ev.ID)
-	}
-
-	// Baseline: normal delivery works before any forced reconnect.
-	publishAndTrack(streamIntegrationSourceURLs[0], "baseline")
-
-	const cycles = 3
-	for i := 0; i < cycles; i++ {
-		runCompose(t, streamIntegrationComposeFile, "restart", "destination")
-		waitUntilDestinationPaused(t, destFC, 15*time.Second)
-
-		// Still observed paused right now -- this is the exact window
-		// deliverToSubscriber's paused() branch handles, not a guess based
-		// on elapsed time.
-		if !isPaused(destFC) {
-			t.Fatalf("cycle %d: destination un-paused before the race-window publish could happen -- window too short to test reliably", i)
-		}
-		sourceURL := streamIntegrationSourceURLs[i%len(streamIntegrationSourceURLs)]
-		publishAndTrack(sourceURL, fmt.Sprintf("race-window-%d", i))
-
-		time.Sleep(1 * time.Second)
+// testDestinationDisruptionDoesNotDropEvents is table-driven across the two
+// ways a destination can become unavailable mid-stream:
+//
+//   - "Restart" -- an explicit disconnect (`docker compose restart`), the
+//     original regression test for the bug this harness was built for: a
+//     destination silently dropping events received during its own
+//     reconnect window (client/stream.go's deliverToSubscriber, paused()
+//     case).
+//   - "Stall" -- a *silent* stall (`docker compose pause`): the process is
+//     frozen via the kernel's cgroup freezer, TCP connection still
+//     technically open, no close/reset at all. Detecting this relies
+//     entirely on stream.yaml's configured ping/pong timeouts
+//     (getConnectionConfig, client/stream.go) actually firing -- a
+//     different code path than "Restart"'s explicit-disconnect detection.
+//     Independently confirmed `docker compose pause`/`unpause` actually
+//     works as intended (a paused relay is completely unresponsive to a
+//     fresh connection attempt; an unpaused one responds immediately
+//     again) before relying on it here.
+//
+// Both cases publish known events into the observed `paused()` window (not
+// assumed from timing) and assert every one of them eventually shows up at
+// the destination -- or, short of that, is at least accounted for by the
+// Lost stat, never unaccounted-for.
+func testDestinationDisruptionDoesNotDropEvents(t *testing.T) {
+	cases := []struct {
+		name                string
+		cycles              int
+		disrupt             func(t *testing.T) // knocks the destination out of its ready state
+		resolve             func(t *testing.T) // brings it back, if disrupt doesn't self-resolve; called exactly once, in the main flow below
+		cleanupIfUnresolved func()             // best-effort fallback if the test fails/panics before resolve runs; nil if resolve is a no-op anyway
+	}{
+		{
+			name:    "Restart",
+			cycles:  3,
+			disrupt: func(t *testing.T) { runCompose(t, streamIntegrationComposeFile, "restart", "destination") },
+			resolve: func(t *testing.T) {},
+		},
+		{
+			name:    "Stall",
+			cycles:  1,
+			disrupt: func(t *testing.T) { runCompose(t, streamIntegrationComposeFile, "pause", "destination") },
+			resolve: func(t *testing.T) { runCompose(t, streamIntegrationComposeFile, "unpause", "destination") },
+			cleanupIfUnresolved: func() {
+				_ = exec.Command("docker", "compose", "-f", streamIntegrationComposeFile, "unpause", "destination").Run()
+			},
+		},
 	}
 
-	// Give the destination time to fully reconnect and the recovery loop a
-	// few ticks to retry anything it queued during the windows above.
-	time.Sleep(8 * time.Second)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			spec := loadTestStreamSpec(t)
+			stream, err := NewStream(spec, false)
+			if err != nil {
+				t.Fatalf("NewStream failed: %v", err)
+			}
+			t.Cleanup(stream.Close)
 
-	missing := waitForEventsAtRelay(t, streamIntegrationDestURL, published, 10*time.Second)
-	if len(missing) > 0 {
-		t.Errorf("published %d events, but %d never reached the destination (permanently dropped): %v", len(published), len(missing), missing)
-	}
+			ctx, cancel := context.WithCancel(context.Background())
+			t.Cleanup(cancel)
 
-	if lost := upStats[0].Lost(); lost != 0 {
-		t.Errorf("expected Lost=0 (every event either delivered or handed to recovery), got %d", lost)
+			upStats, downStats := stream.Sync(ctx)
+			if len(upStats) != 1 {
+				t.Fatalf("expected exactly 1 destination, got %d", len(upStats))
+			}
+			if len(downStats) != len(streamIntegrationSourceURLs) {
+				t.Fatalf("expected %d sources, got %d", len(streamIntegrationSourceURLs), len(downStats))
+			}
+
+			// resolved tracks whether tc.resolve has already run in the main
+			// flow below, so this cleanup -- a best-effort safety net for a
+			// failure/panic partway through a cycle, so later cleanup steps
+			// (stream.Close, `docker compose down`) never get stuck waiting
+			// on a destination this subtest left paused -- doesn't then
+			// also unpause an already-unpaused container and fail an
+			// otherwise-passing test on that alone.
+			resolved := false
+			if tc.cleanupIfUnresolved != nil {
+				t.Cleanup(func() {
+					if !resolved {
+						tc.cleanupIfUnresolved()
+					}
+				})
+			}
+
+			// Let the initial connections establish before doing anything
+			// else.
+			time.Sleep(1 * time.Second)
+
+			destFC := destinationFlowContext(t, stream)
+
+			var published []string
+			publishAndTrack := func(sourceURL, marker string) {
+				ev := newIntegrationEvent(t, marker)
+				publishEventToRelay(t, sourceURL, ev)
+				published = append(published, ev.ID)
+			}
+
+			// Baseline: normal delivery works before any disruption.
+			publishAndTrack(streamIntegrationSourceURLs[0], tc.name+"-baseline")
+
+			for i := 0; i < tc.cycles; i++ {
+				tc.disrupt(t)
+				waitUntilDestinationPaused(t, destFC, 15*time.Second)
+
+				// Still observed paused right now -- this is the exact
+				// window deliverToSubscriber's paused() branch handles, not
+				// a guess based on elapsed time.
+				if !isPaused(destFC) {
+					t.Fatalf("cycle %d: destination un-paused before the race-window publish could happen -- window too short to test reliably", i)
+				}
+				sourceURL := streamIntegrationSourceURLs[i%len(streamIntegrationSourceURLs)]
+				publishAndTrack(sourceURL, fmt.Sprintf("%s-window-%d", tc.name, i))
+
+				tc.resolve(t)
+				resolved = true
+				time.Sleep(1 * time.Second)
+			}
+
+			// Give the destination time to fully reconnect and the recovery
+			// loop a few ticks to retry anything it queued during the
+			// windows above.
+			time.Sleep(8 * time.Second)
+
+			missing := waitForEventsAtRelay(t, streamIntegrationDestURL, published, 10*time.Second)
+			if len(missing) > 0 {
+				t.Errorf("published %d events, but %d never reached the destination (permanently dropped): %v", len(published), len(missing), missing)
+			}
+			if lost := upStats[0].Lost(); lost != 0 {
+				t.Errorf("expected Lost=0 (every event either delivered or handed to recovery), got %d", lost)
+			}
+		})
 	}
 }
 
@@ -175,67 +242,6 @@ func testSourceReconnectDoesNotHang(t *testing.T) {
 	missing := waitForEventsAtRelay(t, streamIntegrationDestURL, []string{before.ID, after.ID}, 20*time.Second)
 	if len(missing) > 0 {
 		t.Errorf("source reconnect: %d/2 events never reached the destination: %v", len(missing), missing)
-	}
-}
-
-// testDestinationStallTriggersTimeoutNotHang covers a failure mode
-// DestinationReconnectDoesNotDropEvents can't: a *silent* stall (the
-// destination process frozen, TCP connection still technically open) with
-// no close/reset at all, as opposed to `docker compose restart`'s abrupt
-// connection teardown. Detecting this relies entirely on
-// stream.yaml's configured ping/pong timeouts (getConnectionConfig,
-// client/stream.go) actually firing -- a real, previously-untested code
-// path distinct from the explicit-disconnect path the restart-based tests
-// exercise. `docker compose pause` freezes the container's processes via
-// the kernel's cgroup freezer without touching the network stack, so the
-// TCP connection itself stays established while the frozen relay can't
-// read, process, or answer a websocket ping -- exactly the "silent stall"
-// this needs.
-func testDestinationStallTriggersTimeoutNotHang(t *testing.T) {
-	spec := loadTestStreamSpec(t)
-	stream, err := NewStream(spec, false)
-	if err != nil {
-		t.Fatalf("NewStream failed: %v", err)
-	}
-	t.Cleanup(stream.Close)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-
-	upStats, _ := stream.Sync(ctx)
-	time.Sleep(1 * time.Second)
-
-	destFC := destinationFlowContext(t, stream)
-
-	runCompose(t, streamIntegrationComposeFile, "pause", "destination")
-	t.Cleanup(func() {
-		// Best-effort: later cleanup steps (stream.Close, then `docker
-		// compose down`) must not themselves get stuck waiting on a
-		// destination this subtest left paused, if it fails before
-		// reaching the unpause below.
-		_ = exec.Command("docker", "compose", "-f", streamIntegrationComposeFile, "unpause", "destination").Run()
-	})
-
-	// stream.yaml configures pong: "4s" -- this must observe paused()
-	// actually flip, not just sleep ~4s and hope, since that's the whole
-	// point of the test (proving the timeout path fires at all).
-	waitUntilDestinationPaused(t, destFC, 15*time.Second)
-
-	stalled := newIntegrationEvent(t, "destination-stall")
-	publishEventToRelay(t, streamIntegrationSourceURLs[0], stalled)
-
-	runCompose(t, streamIntegrationComposeFile, "unpause", "destination")
-
-	// Give the now-unfrozen destination time to finish reconnecting and the
-	// recovery loop a few ticks to retry anything queued during the stall.
-	time.Sleep(8 * time.Second)
-
-	missing := waitForEventsAtRelay(t, streamIntegrationDestURL, []string{stalled.ID}, 10*time.Second)
-	if len(missing) > 0 {
-		t.Errorf("event published during the stall never reached the destination: %v", missing)
-	}
-	if lost := upStats[0].Lost(); lost != 0 {
-		t.Errorf("expected Lost=0 (event either delivered or handed to recovery), got %d", lost)
 	}
 }
 

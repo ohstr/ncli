@@ -54,119 +54,84 @@ func TestSyncIntegration(t *testing.T) {
 
 	waitForRelayReady(t, syncIntegrationRemoteURL, 60*time.Second)
 
-	t.Run("BothDirectionsReconcile", testSyncBothDirectionsReconcile)
-	t.Run("LargeDivergentSetReconciles", testSyncLargeDivergentSetReconciles)
+	t.Run("ReconcileCompleteness", testSyncReconcileCompleteness)
 	t.Run("MaxReconcileRoundsTooLowSurfacesCleanly", testSyncMaxReconcileRoundsTooLowSurfacesCleanly)
 	t.Run("RemoteStallTriggersTimeoutNotHang", testSyncRemoteStallTriggersTimeoutNotHang)
 }
 
-// testSyncBothDirectionsReconcile seeds each side of a `direction: both`
-// sync with events the other side doesn't have, then asserts negentropy
-// reconciliation against a real relay carries every one of them the right
-// way: local-only events get pushed up, remote-only events get pulled
-// down. This is the real-relay analog of the two-endpoint shape
-// `examples/apply/sync.yaml` documents -- unlike stream/inspect, sync is
-// exactly one local store and one remote relay, never a multi-relay fan-in
-// (see SyncSpec.UnmarshalJSON's "only one local/remote flow allowed").
-func testSyncBothDirectionsReconcile(t *testing.T) {
-	spec := loadTestSyncSpec(t)
-
-	localPath := filepath.Join(t.TempDir(), "sync.db")
-	spec.GetLocal().Path = localPath
-
-	var remoteOnly []string
-	for i := 0; i < 3; i++ {
-		ev := newIntegrationEvent(t, fmt.Sprintf("sync-remote-only-%d", i))
-		publishEventToRelay(t, syncIntegrationRemoteURL, ev)
-		remoteOnly = append(remoteOnly, ev.ID)
+// testSyncReconcileCompleteness is table-driven across data volume: seeds
+// each side of a `direction: both` sync with events the other side doesn't
+// have, then asserts negentropy reconciliation against a real relay
+// carries every one of them the right way -- local-only events get pushed
+// up, remote-only events get pulled down. This is the real-relay analog of
+// the two-endpoint shape `examples/apply/sync.yaml` documents -- unlike
+// stream/inspect, sync is exactly one local store and one remote relay,
+// never a multi-relay fan-in (see SyncSpec.UnmarshalJSON's "only one
+// local/remote flow allowed"). "Large" is the "high input" case: hundreds
+// of events on each side instead of "Small"'s handful, forcing
+// sync.yaml's pullBatchSize (100) into multiple pull batches and giving
+// negentropy a genuinely large diff to reconcile against a real relay, not
+// a mock that can't reject/rate-limit anything.
+func testSyncReconcileCompleteness(t *testing.T) {
+	cases := []struct {
+		name string
+		n    int
+	}{
+		{"Small", 3},
+		{"Large", 150},
 	}
 
-	var localOnly []string
-	localEvents := make([]*nip01.Event, 0, 3)
-	for i := 0; i < 3; i++ {
-		ev := newIntegrationEvent(t, fmt.Sprintf("sync-local-only-%d", i))
-		localOnly = append(localOnly, ev.ID)
-		localEvents = append(localEvents, ev)
-	}
-	seedLocalSyncStore(t, localPath, localEvents)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			spec := loadTestSyncSpec(t)
 
-	sm, err := NewSyncModule(spec, nil, false)
-	if err != nil {
-		t.Fatalf("NewSyncModule failed: %v", err)
-	}
+			localPath := filepath.Join(t.TempDir(), "sync.db")
+			spec.GetLocal().Path = localPath
 
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
+			remoteOnly := publishManyEvents(t, syncIntegrationRemoteURL, tc.n, tc.name+"-remote")
 
-	logger, err := sm.Run(ctx)
-	if err != nil {
-		t.Fatalf("sm.Run failed: %v", err)
-	}
-	waitForSyncComplete(t, logger, 30*time.Second)
+			localOnly := make([]string, tc.n)
+			localEvents := make([]*nip01.Event, tc.n)
+			for i := 0; i < tc.n; i++ {
+				ev := newIntegrationEvent(t, fmt.Sprintf("%s-local-%d", tc.name, i))
+				localOnly[i] = ev.ID
+				localEvents[i] = ev
+			}
+			seedLocalSyncStore(t, localPath, localEvents)
 
-	// Give the deferred store.Close() inside SyncModule.execute() a moment
-	// to actually run -- "Sync complete" is logged just before execute()
-	// returns, not after, so there's a brief window where the local store
-	// file may still be held.
-	time.Sleep(200 * time.Millisecond)
+			sm, err := NewSyncModule(spec, nil, false)
+			if err != nil {
+				t.Fatalf("NewSyncModule failed: %v", err)
+			}
+			t.Cleanup(sm.Close)
 
-	missingRemote := waitForEventsAtRelay(t, syncIntegrationRemoteURL, localOnly, 10*time.Second)
-	if len(missingRemote) > 0 {
-		t.Errorf("push: %d local-only event(s) never reached the remote relay: %v", len(missingRemote), missingRemote)
-	}
+			// Generous enough for both rows -- a ceiling, not an expected
+			// duration, so "Small" isn't slowed down by sharing it with
+			// "Large".
+			ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+			defer cancel()
 
-	missingLocal := waitForEventsInLocalStore(t, localPath, remoteOnly, 10*time.Second)
-	if len(missingLocal) > 0 {
-		t.Errorf("pull: %d remote-only event(s) never landed in the local store: %v", len(missingLocal), missingLocal)
-	}
-}
+			logger, err := sm.Run(ctx)
+			if err != nil {
+				t.Fatalf("sm.Run failed: %v", err)
+			}
+			waitForSyncComplete(t, logger, 90*time.Second)
 
-// testSyncLargeDivergentSetReconciles is the "high input" case for sync:
-// hundreds of events on each side instead of BothDirectionsReconcile's
-// handful, forcing sync.yaml's pullBatchSize (100) into multiple pull
-// batches and giving negentropy a genuinely large diff to reconcile
-// against a real relay, not a mock that can't reject/rate-limit anything.
-func testSyncLargeDivergentSetReconciles(t *testing.T) {
-	spec := loadTestSyncSpec(t)
+			// Give the deferred store.Close() inside SyncModule.execute() a
+			// moment to actually run -- "Sync complete" is logged just
+			// before execute() returns, not after, so there's a brief
+			// window where the local store file may still be held.
+			time.Sleep(200 * time.Millisecond)
 
-	localPath := filepath.Join(t.TempDir(), "sync.db")
-	spec.GetLocal().Path = localPath
-
-	const n = 150
-	remoteOnly := publishManyEvents(t, syncIntegrationRemoteURL, n, "sync-large-remote")
-
-	localOnly := make([]string, n)
-	localEvents := make([]*nip01.Event, n)
-	for i := 0; i < n; i++ {
-		ev := newIntegrationEvent(t, fmt.Sprintf("sync-large-local-%d", i))
-		localOnly[i] = ev.ID
-		localEvents[i] = ev
-	}
-	seedLocalSyncStore(t, localPath, localEvents)
-
-	sm, err := NewSyncModule(spec, nil, false)
-	if err != nil {
-		t.Fatalf("NewSyncModule failed: %v", err)
-	}
-	t.Cleanup(sm.Close)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-	defer cancel()
-
-	logger, err := sm.Run(ctx)
-	if err != nil {
-		t.Fatalf("sm.Run failed: %v", err)
-	}
-	waitForSyncComplete(t, logger, 90*time.Second)
-	time.Sleep(200 * time.Millisecond) // let execute()'s deferred store.Close() run
-
-	missingRemote := waitForEventsAtRelay(t, syncIntegrationRemoteURL, localOnly, 20*time.Second)
-	if len(missingRemote) > 0 {
-		t.Errorf("push: %d/%d local-only events never reached the remote relay: %v", len(missingRemote), n, missingRemote)
-	}
-	missingLocal := waitForEventsInLocalStore(t, localPath, remoteOnly, 20*time.Second)
-	if len(missingLocal) > 0 {
-		t.Errorf("pull: %d/%d remote-only events never landed in the local store: %v", len(missingLocal), n, missingLocal)
+			missingRemote := waitForEventsAtRelay(t, syncIntegrationRemoteURL, localOnly, 20*time.Second)
+			if len(missingRemote) > 0 {
+				t.Errorf("push: %d/%d local-only event(s) never reached the remote relay: %v", len(missingRemote), tc.n, missingRemote)
+			}
+			missingLocal := waitForEventsInLocalStore(t, localPath, remoteOnly, 20*time.Second)
+			if len(missingLocal) > 0 {
+				t.Errorf("pull: %d/%d remote-only event(s) never landed in the local store: %v", len(missingLocal), tc.n, missingLocal)
+			}
+		})
 	}
 }
 

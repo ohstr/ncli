@@ -13,11 +13,13 @@ observe honestly.
 
 - `compose.yaml` -- `destination` (port `45500`) + `source1`/`source2`/`source3`
   (ports `45501`-`45503`), each a real `ncli relay` built from this repo's
-  own `build/relay/Dockerfile`. Project-named `ncli-stream-itest` so it
-  never collides with `build/relay/docker-compose.dev.yaml`'s stack.
-- `relay.yaml` -- minimal relay config shared read-only by all four
-  services (each has its own volume, so the identical in-container paths
-  never collide).
+  own `build/relay/Dockerfile`, plus `destination2` (port `45505`), used
+  only by the `MultipleDestinationsBothReceiveEvents` scenario below.
+  Project-named `ncli-stream-itest` so it never collides with
+  `build/relay/docker-compose.dev.yaml`'s stack.
+- `relay.yaml` -- minimal relay config shared read-only by every service
+  (each has its own volume, so the identical in-container paths never
+  collide).
 - `stream.yaml` -- a stream spec fixture pointed at this stack's ports.
   Same schema as `examples/apply/stream.yaml`; usable both by the
   automated test and by hand with the real CLI.
@@ -42,6 +44,27 @@ The client runs in-process rather than as a `ncli apply` subprocess/compose
 service specifically so the test can observe `FlowContext.paused()`
 directly and inject events into the exact reconnect-drop window
 deterministically, instead of guessing from timing or log output.
+
+Five scenarios:
+
+- **`DestinationReconnectDoesNotDropEvents`** -- the original regression
+  test: forces several real destination reconnects (`docker compose
+  restart`) and confirms events published into the observed `paused()`
+  window are never silently lost.
+- **`SourceReconnectDoesNotHang`** -- restarting a source mid-stream must
+  not hang or drop the stream.
+- **`DestinationStallTriggersTimeoutNotHang`** -- `docker compose pause`
+  freezes the destination process without touching its TCP connection, a
+  *silent* stall distinct from `restart`'s abrupt teardown. Confirms
+  `stream.yaml`'s configured ping/pong timeouts actually detect it (a
+  previously-untested code path) instead of hanging forever.
+- **`HighVolumeBurstAcrossAllSourcesIsNotLost`** -- hundreds of events
+  across all 3 sources at once, the e2e regression coverage
+  [PR #45](https://github.com/ohstr/ncli/pull/45)'s write-concurrency-cap
+  fix never got (only unit-level coverage existed before this).
+- **`MultipleDestinationsBothReceiveEvents`** -- every other scenario here
+  uses exactly one destination; this adds a second real one and confirms
+  `broadcastEvents`' fan-out actually reaches both.
 
 ## Manual: poke at it with the real CLI
 

@@ -41,14 +41,46 @@ automatically in CI on every push/PR via its own `integrations` job
 (`.github/workflows/ci.yml`) -- it needs Docker, which that job's
 `ubuntu-latest` runner already has.
 
-The one scenario, `BothDirectionsReconcile`, seeds each side with events
-the other side doesn't have (three published straight to the remote relay,
-three inserted straight into a fresh local store) and asserts a single
-`direction: both` sync run carries every one of them the right way: the
-local-only events get pushed up and are independently confirmed present on
-the remote relay by querying it directly over the wire; the remote-only
-events get pulled down and are independently confirmed present in the
-local store by reopening it fresh once the sync run reports completion.
+Four scenarios:
+
+- **`BothDirectionsReconcile`** -- seeds each side with events the other
+  side doesn't have (three published straight to the remote relay, three
+  inserted straight into a fresh local store) and asserts a single
+  `direction: both` sync run carries every one of them the right way: the
+  local-only events get pushed up and are independently confirmed present
+  on the remote relay by querying it directly over the wire; the
+  remote-only events get pulled down and are independently confirmed
+  present in the local store by reopening it fresh once the sync run
+  reports completion.
+- **`LargeDivergentSetReconciles`** -- the "high input" case: 150 events on
+  each side instead of a handful, forcing `sync.yaml`'s `pullBatchSize`
+  (100) into multiple pull batches against a real relay.
+- **`MaxReconcileRoundsTooLowSurfacesCleanly`** -- forces
+  `spec.MaxReconcileRounds` down to 1 against a large divergent set,
+  covering `client/neg_sync.go`'s round-cap branch (logs a warning, syncs
+  whatever partial have/need sets it collected, still finishes) for the
+  first time. Asserts graceful degradation, not an exact round count.
+- **`RemoteStallTriggersTimeoutNotHang`** -- `docker compose pause`, a
+  silent stall as opposed to an explicit disconnect. Only meaningful
+  because `TimeoutSpec.ConnectionConfig` (`client/spec.go`) actually parses
+  a configured `timeouts:` block now -- see "Bug found and fixed" below.
+  Sync has no reconnect loop of its own, so this confirms a stalled
+  connection surfaces a clean error and returns instead of hanging.
+
+## Bug found and fixed while building this
+
+`SyncModule.execute` (`client/neg_sync.go`) used to build its connection
+config as `&relayclient.ConnectionConfig{}` whenever `spec.Timeouts` was
+non-nil -- an all-zero struct. `relayclient.NewConnection` backfills any
+zero field with its own hardcoded defaults regardless of whether the whole
+config is nil or just zero-valued, so a `sync.yaml` with an explicit
+`timeouts:` block (this fixture included) had **zero effect**: every sync
+connection always used `relayclient`'s own defaults no matter what the
+spec said. Fixed by giving `TimeoutSpec` a single `ConnectionConfig` method
+that both `stream` and `sync` now share (`client/spec_test.go`'s
+`TestTimeoutSpecConnectionConfig` is the regression guard) -- found because
+`RemoteStallTriggersTimeoutNotHang` needed a short configured `Pong` to
+actually take effect.
 
 ## Known ncli limitation surfaced while building this
 

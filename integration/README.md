@@ -11,6 +11,13 @@ extending the same pattern to `integration/inspect/` and
 ncli's harder-to-unit-test behavior gets regression-tested, not a
 one-off built for a single bug.
 
+That extension already paid for itself once: building sync's stall test
+surfaced a second real, previously-unknown bug -- `SyncModule`'s
+`timeouts:` spec block was silently a no-op (see
+`integration/sync/README.md`'s "Bug found and fixed"), found only because
+writing a real test against real timeout behavior required that behavior
+to actually work.
+
 ## The four layers of testing that exist in this repo today
 
 It's worth being explicit about these, because they solve different
@@ -100,6 +107,18 @@ should be followed by anything added next:
   destination; a plain settle-sleep for source/target reconnects, matching
   `testSourceReconnectDoesNotHang`'s existing precedent) rather than
   sleeping a guessed duration and hoping the window was hit.
+- **`docker compose pause`/`unpause` for a *silent* stall, distinct from
+  `restart`'s abrupt teardown**: pausing freezes a container's processes
+  via the kernel's cgroup freezer without touching the TCP connection
+  itself, so the peer can't read/process/respond to anything (including a
+  websocket ping) until unpaused -- independently confirmed this actually
+  works as intended (a paused relay is completely unresponsive to a fresh
+  connection attempt; an unpaused one responds immediately again) before
+  relying on it. This is what every `*StallTriggersTimeoutNotHang`/
+  `TargetStallDoesNotHangSession` scenario uses to test timeout-based dead
+  connection detection specifically -- a different code path than
+  `restart`'s explicit-close detection, and one `restart` alone can never
+  exercise.
 - **Independent verification, never trust the client's own self-report**:
   after the operation under test, query the *destination* (or local store)
   directly and independently -- `fetchEventIDsFromRelay`/
@@ -164,9 +183,9 @@ branch's first commit).
 
 | Feature | Current e2e coverage | Real-scenario gap | Priority |
 |---|---|---|---|
-| `apply -f stream.yaml` | `integration/stream/` -- destination reconnect-drop (the bug this layer was built for), source reconnect | Concurrent multiple destinations (only ever tested with one); recovery-store replay surviving a process restart, not just an in-memory `RecoveryManager` (today's test never kills and restarts the *client* process, only the relay containers); the write-concurrency burst bug fixed in PR #45 (`fix/apply-stream-publish-concurrency-cap`) has no docker-level regression test at all, only whatever unit coverage that PR added | High -- these are two more confirmed-real production bug shapes with zero e2e coverage |
-| `apply -f inspect.yaml` | `integration/inspect/` -- multi-target fan-in aggregation, target reconnect | Mixed remote+local targets in one session (this stack is relay-only; `examples/apply/inspect.yaml` explicitly mixes both); overlapping relays serving the *same* event (dedup path -- `InspectStore.Insert`'s `ErrEventDuplicated` handling has a unit test but no live-relay-duplication test) | Medium |
-| `apply -f sync.yaml` | `integration/sync/` -- two-way reconcile (push local-only, pull remote-only) against a real relay | `direction: up`/`direction: down` in isolation (only `both` is covered); a sync interrupted mid-reconciliation (context cancel/relay restart mid-negentropy-round) and re-run to confirm it still converges; `maxReconcileRounds` actually being hit (large divergent sets) | Medium |
+| `apply -f stream.yaml` | `integration/stream/` -- destination reconnect-drop (the bug this layer was built for), source reconnect, destination *stall* (silent, timeout-detected vs. restart's abrupt teardown), a high-volume burst across all sources (PR #45's write-concurrency-cap fix, previously only unit-tested), fan-out to 2 destinations | Recovery-store replay surviving a process restart, not just an in-memory `RecoveryManager` (today's tests never kill and restart the *client* process, only the relay containers); a *source* stall (only destination-stall and source-*restart* are covered, not source-stall) | Medium -- the two highest-priority gaps from this table's first pass (multi-destination, burst-under-load) are now closed |
+| `apply -f inspect.yaml` | `integration/inspect/` -- multi-target fan-in aggregation, target reconnect, target stall, a high-volume multi-target case, duplicate-event dedup across two *live* overlapping targets | Mixed remote+local targets in one session (this stack is relay-only; `examples/apply/inspect.yaml` explicitly mixes both); no way to configure inspect's connection timeouts at all (see "Known ncli limitations" in `integration/inspect/README.md`) forces its stall test to eat the full 60s default -- fixing that gap in `client/inspect.go` would also make a short-timeout variant of that test possible | Medium -- the dedup and high-volume gaps are now closed; the mixed-target-type case remains |
+| `apply -f sync.yaml` | `integration/sync/` -- two-way reconcile (push local-only, pull remote-only), a large divergent set forcing multiple pull batches, `maxReconcileRounds` actually being hit and degrading gracefully, a remote stall (only possible after fixing `TimeoutSpec.ConnectionConfig` -- see `integration/sync/README.md`'s "Bug found and fixed") | `direction: up`/`direction: down` in isolation (only `both` is covered); a sync interrupted mid-reconciliation by canceling its own context (as opposed to a relay-side stall) and re-run to confirm it still converges from a partial local store | Low -- the two highest-priority gaps from this table's first pass (high input, `maxReconcileRounds`) are now closed |
 | `ncli relay` admin surface (`stats`/`reindex`/`members`/`invites`/`roles`/`clear`) | None at the docker/real-relay level; `cli/relay/*_test.go` covers config/context/service-lifecycle in isolation | A full realistic lifecycle against one running container: create an invite, redeem it, assign a role, hit an admin endpoint requiring that role, reindex, clear, confirm state after each step via the admin API itself -- this is exactly the surface `integration/agent-eval`'s R3 already exercises via an LLM agent, but with no deterministic Go-level regression gate underneath it | High -- admin auth/authorization bugs are exactly the kind that "looks fine in a unit test with a mocked auth layer" but breaks for real |
 | `blossom` (upload/download/list/rm/mirror/servers/report) | `cli/blossom/blackbox_test.go` against an in-process fake server (thorough for CLI-surface correctness, e.g. the mirror BUD-11 `x`-tag bug agent-eval R7 found -- see `integration/agent-eval/followup/issues.md` #3 -- has a regression test there, `TestBlossomMirror_AgainstServerRequiringHashScope`, extending the fake) | A docker-based stack against a **real** reference Blossom server (e.g. `hzrd149/blossom-server`, already used by `integration/agent-eval/compose.yaml`) would catch protocol-conformance gaps a hand-rolled fake can't by construction -- the mirror bug above is a good example of exactly that class of bug, caught by agent-eval's real server, not by the fake that existed at the time | Medium-High |
 | `bunker` (NIP-46) | `cli/bunker/daemon_integration_test.go` (`-tags integration`, live `wss://relay.ohstr.com`) + extensive in-process unit coverage | Same fragility class as the old `neg_sync_test.go`: depends on a live public relay's uptime. A docker-based real-relay equivalent, plus a relay-restart-mid-session scenario (does bunker's own websocket layer silently drop a signing request the same shape as bug 2, or does it surface/retry cleanly?) is untested in either direction today | Medium |

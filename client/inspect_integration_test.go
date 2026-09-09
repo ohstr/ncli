@@ -137,19 +137,28 @@ func testInspectHighVolumeAcrossManyTargetsAllLand(t *testing.T) {
 	spec := loadTestInspectSpec(t)
 
 	const perTarget = 100
-	var wg sync.WaitGroup
 	idsByTarget := make([][]string, len(inspectIntegrationTargetURLs))
+	errsByTarget := make([]error, len(inspectIntegrationTargetURLs))
+	var wg sync.WaitGroup
 	for i, target := range inspectIntegrationTargetURLs {
 		wg.Add(1)
 		go func(i int, target string) {
 			defer wg.Done()
-			idsByTarget[i] = publishManyEvents(t, target, perTarget, fmt.Sprintf("volume-t%d", i))
+			// publishManyEventsErr, not publishManyEvents: this runs in a
+			// goroutine that isn't the one running the test, and t.Fatalf
+			// must never be called from anywhere else -- see its doc
+			// comment. Fatal on the aggregated results below instead, back
+			// on this function's own goroutine.
+			idsByTarget[i], errsByTarget[i] = publishManyEventsErr(target, perTarget, fmt.Sprintf("volume-t%d", i))
 		}(i, target)
 	}
 	wg.Wait()
 
 	var published []string
-	for _, ids := range idsByTarget {
+	for i, ids := range idsByTarget {
+		if errsByTarget[i] != nil {
+			t.Fatal(errsByTarget[i])
+		}
 		published = append(published, ids...)
 	}
 

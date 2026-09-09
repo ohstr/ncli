@@ -29,9 +29,16 @@ problems and shouldn't be conflated:
    **in-process** inside the Go test, not as a compose service, so the test
    gets white-box access to internal state (e.g. `FlowContext.paused()`)
    for deterministic scenario injection instead of guessing from timing.
-   Needs Docker; not run in CI or by `just test`/`test-integration`; each
-   has its own `just test-integration-<feature>` recipe. See "Conventions"
-   below for the pattern every stack here follows.
+   Needs Docker; runs automatically in CI on every push/PR
+   (`.github/workflows/ci.yml`'s `integration-docker` job) as its own
+   job, separate from `check`'s fast unit-test run -- unlike `just
+   test-integration` (deliberately excluded from CI: it hits real public
+   relays and isn't deterministic), these are fully hermetic, so there's
+   no reason not to gate merges on them. Each stack also has its own `just
+   test-integration-<feature>` recipe for running just that one locally,
+   plus `just test-integration-docker` to run all three exactly as CI
+   does. See "Conventions" below for the pattern every stack here
+   follows.
 
 3. **Black-box process-level tests** -- `cli/blossom/blackbox_test.go`,
    `cli/ncli/miner_test.go`: build the real `ncli` binary once and shell out
@@ -113,9 +120,11 @@ should be followed by anything added next:
   new need is genuinely feature-specific.
 - **Skip-gating**: `if testing.Short() { t.Skip(...) }` + a `docker` PATH
   check at the top of the outer `Test<Feature>Docker` function. This keeps
-  every stack out of CI's `go test -short -race ./...` with zero extra
-  build-tag machinery, matching `client/multi_relay_test.go`/
-  `client/neg_sync_test.go`'s pre-existing convention. Note
+  every stack out of the `check` job's `go test -short -race ./...` (which
+  has no Docker step) with zero extra build-tag machinery, matching
+  `client/multi_relay_test.go`/`client/neg_sync_test.go`'s pre-existing
+  convention -- CI instead runs them via the separate `integration-docker`
+  job's plain (non-`-short`) `go test -run '...Docker'`. Note
   `cli/bunker/daemon_integration_test.go` uses a *different* convention
   (`//go:build integration`, run via `-tags integration`) -- worth
   reconciling onto one convention if/when bunker gets a docker-based stack
@@ -134,13 +143,17 @@ should be followed by anything added next:
    `client/dockerharness_test.go`'s helpers; add new ones there only if
    genuinely generic.
 3. `justfile` -- a `test-integration-<feature>` recipe (mirrors the
-   existing three) and a `<feature> cmd="up" *args` recipe for manual
-   poking (mirrors `stream`/`inspect`/`sync`).
-4. If a manual run writes local state outside `t.TempDir()` (a recovery
+   existing three), add `Test<Feature>Docker` to `test-integration-docker`'s
+   `-run` regex, and a `<feature> cmd="up" *args` recipe for manual poking
+   (mirrors `stream`/`inspect`/`sync`).
+4. `.github/workflows/ci.yml`'s `integration-docker` job -- add
+   `Test<Feature>Docker` to that step's `-run` regex too, so the new stack
+   actually fires on every push/PR instead of only running locally.
+5. If a manual run writes local state outside `t.TempDir()` (a recovery
    store, a local sync/inspect DB), gitignore it (see `.gitignore`'s
    `/integration/stream/.recovery/` and `/integration/sync/.data/`
    entries).
-5. Update this file's backlog table below.
+6. Update this file's backlog table below.
 
 ## Backlog: e2e coverage gaps by feature, prioritized
 
@@ -201,8 +214,7 @@ the Docker daemon's own bridge network at all, not even to a container's
 raw bridge IP, not just `localhost` forwarding. If `just test-integration-<feature>`
 times out in `waitForRelayReady` even though `docker compose ps`/`docker
 logs` show the relay container up and listening, check for exactly this
-before assuming
-the test itself is broken -- confirm with `docker run --rm --network
+before assuming the test itself is broken -- confirm with `docker run --rm --network
 container:<container-name> curlimages/curl:latest -sS <container's
 internal port>` (bypasses host-port forwarding entirely, isolating whether
 the *relay* is reachable at all vs. whether only the host-forwarding path

@@ -35,9 +35,11 @@ just test-integration-sync
 This runs `TestSyncDocker` (`client/sync_docker_test.go`), which brings the
 stack up itself, drives `client.NewSyncModule`/`(*SyncModule).Run` **in
 process** against the compose stack's published port, and tears the stack
-down when done. Not run by `just test`/`test-integration` or in CI (skipped
-under `-short`, same convention as this family's other docker tests) -- it
-needs Docker.
+down when done. Not part of `just test`/`test-integration` (skipped under
+`-short`, same convention as this family's other docker tests), but runs
+automatically in CI on every push/PR via its own `integration-docker` job
+(`.github/workflows/ci.yml`) -- it needs Docker, which that job's
+`ubuntu-latest` runner already has.
 
 The one scenario, `BothDirectionsReconcile`, seeds each side with events
 the other side doesn't have (three published straight to the remote relay,

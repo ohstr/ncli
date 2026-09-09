@@ -1,0 +1,55 @@
+# Stream spec fixture for the stress stack (see stress-compose.yaml and
+# this directory's README). 20 real source relays -> 1 destination, with
+# two filter objects deliberately chosen to exercise both halves of NIP-01
+# filter semantics under real multi-source load, not just "did events
+# arrive at all":
+#
+#   - filters are OR'd together (an event matching ANY one filter passes)
+#   - the fields *within* one filter are AND'd (kind AND authors, here)
+#
+# client/stream_stress_test.go's filter-correctness scenario publishes a
+# precise mix of events against this exact filter pair and asserts exactly
+# which ones should and shouldn't arrive:
+#   - kind 1, any author            -> matches filter 1 (kinds only)      -> included
+#   - kind 7, integrationPubKey     -> matches filter 2 (kind+author)     -> included
+#   - kind 7, integrationPubKeyAlt  -> matches neither (wrong author)     -> excluded
+#   - kind 3, any author            -> matches neither (wrong kind)       -> excluded
+#
+# integrationPubKey below is client/integrationharness_test.go's fixed
+# primary test identity's public key (derived from integrationPrivKey) --
+# kept in sync by hand, not computed; see that file if either ever changes.
+kind: stream
+spec:
+  timeouts:
+    handshake: "2s"
+    ping: "2s"
+    pong: "4s"
+    write: "5s"
+
+  filters:
+    - kinds: [1]
+    - kinds: [7]
+      authors:
+        - "3c1db3dd55e2ff09ba5317dd8eec2339797e9e2ddf74591172735c47f3a2ad6e"
+
+  # The Go test overrides `from` entirely with all 20 stress-compose.yaml
+  # source URLs (ws://localhost:45561-45580) -- see
+  # loadTestStreamStressSpec. Only source1 is listed here so this file is
+  # still a valid, hand-runnable spec on its own (StreamSpec requires a
+  # non-empty `from`).
+  from:
+    - relay: ws://localhost:45561
+      trusted: true
+
+  to:
+    - relay: ws://localhost:45560
+      trusted: true
+      writeConcurrency: 32
+
+  recovery:
+    store_path: ./integration/stream/.recovery-stress/stream.db
+    max_retries: 50
+    retry_interval: "1s"
+
+  raw: true
+  strictPow: false

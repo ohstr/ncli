@@ -86,3 +86,64 @@ either.
 `just stream up` rebuilds the image from your current checkout each time
 (`--build`), so local source changes (including to `nmilat` if you're
 using the workspace's local checkout) are picked up without an extra step.
+
+## Stress stack
+
+The stack above (3 sources) proves the fan-in *mechanism* generalizes past
+a single source; it was never meant to stress production's actual scale.
+Bug 2 (this branch's first commit) came from a real ~55-source -> 1
+destination topology, so a separate, heavier stack exists for that:
+
+- `stress-compose.yaml` -- 20 real source relays (ports `45561`-`45580`) +
+  1 destination (port `45560`), same `build/relay/Dockerfile` image,
+  project-named `ncli-stream-stress-itest` (distinct from `compose.yaml`'s
+  `ncli-stream-itest`, so both can run at once without colliding). Uses a
+  `x-relay: &relay` YAML anchor + `<<: *relay` merge per service to avoid
+  20 repeats of the identical build/image/command/restart block --
+  independently confirmed the merge actually resolves correctly (`docker
+  compose config`) and that all 21 containers build/start/respond
+  correctly before relying on it.
+- `stress-stream.yaml` -- pointed at the stress stack, with **two filter
+  objects** (`kinds: [1]`, and `kinds: [7]` scoped to one author) instead
+  of `stream.yaml`'s single catch-all `since: 0` -- see the file's own
+  header for the exact inclusion/exclusion matrix
+  `client/stream_stress_test.go`'s filter-correctness scenario asserts
+  against. The checked-in file lists only `source1` in `from` (so it stays
+  a valid, hand-runnable spec); the Go test overrides `from` with all 20
+  URLs.
+
+```
+just test-integration-stream-stress
+```
+
+Runs `TestStreamStress` (`client/stream_stress_test.go`). Not part of
+`just test`/`test-integration`/`test-integrations`, and **not run
+automatically in CI** -- heavier and slower than the correctness suite
+(21 containers vs. up to 5), so run it explicitly before a release or when
+touching stream's fan-in/concurrency/recovery paths, via `just
+test-integration-stream-stress` or `just stream-stress up`/`down` to poke
+at it by hand.
+
+Five scenarios:
+
+- **`ManySourcesHighVolumeIsNotLost`** -- the direct "bug 2 at real scale"
+  case: 1000 events (50 per source) across all 20 sources concurrently,
+  asserting zero loss where the correctness suite's 3-source version only
+  proves the mechanism, not the scale.
+- **`FilterCorrectnessUnderLoad`** -- every source publishes the same
+  4-event inclusion/exclusion mix (see `stress-stream.yaml`'s header) at
+  once; asserts every matching event arrives *and* every non-matching one
+  never does. Checking exclusion under real multi-source load is new --
+  nothing else in this package proves a filter actually excludes anything,
+  only that matching events get through.
+- **`SustainedLoadOverTime`** -- every source publishes continuously for
+  10s instead of one instantaneous burst, covering throughput/pacing
+  behavior a single-shot burst can't.
+- **`ConcurrentMultiSourceDisruption`** -- restarts 5 of the 20 sources
+  *simultaneously* mid-stream, matching production's real flakiness shape
+  (several of ~55 sources flapping at once, not one at a time).
+- **`DestinationStallUnderHighSustainedLoad`** -- stream_integration_test.go's
+  `DestinationDisruptionDoesNotDropEvents/Stall`, stress-tested: all 20
+  sources publish concurrently *while* the destination is paused, instead
+  of one source publishing one event, exercising the recovery store's
+  capacity to absorb a genuinely large simultaneous failed-delivery burst.

@@ -25,6 +25,15 @@ test-integration:
 test-integration-stream:
     go test ./client/... -run 'TestStreamIntegration' -v -count=1 -timeout 10m
 
+# Run the stream *stress* test (needs Docker; 20 real source containers
+# instead of test-integration-stream's 3 -- see integration/stream/README.md's
+# "Stress stack" section). Heavier and slower than the correctness suite,
+# so unlike the other test-integration-* recipes this is NOT run
+# automatically in CI; run explicitly before a release or when touching
+# stream's fan-in/concurrency/recovery paths.
+test-integration-stream-stress:
+    go test ./client/... -run 'TestStreamStress' -v -count=1 -timeout 15m
+
 # Run the inspect integration test (needs Docker; see
 # integration/inspect/README.md). Runs automatically in CI; not part of
 # `just test`/`test-integration`.
@@ -124,6 +133,20 @@ stream cmd="up" *args:
     "up") docker compose -f integration/stream/compose.yaml up -d --build {{args}} ;;
     "down") docker compose -f integration/stream/compose.yaml down -v {{args}} ;;
     *) echo "unknown stream subcommand: {{cmd}} (expected up|down)" >&2 && exit 1 ;;
+    esac
+
+# Local stream *stress* stack (20 source + 1 destination real ncli relay
+# containers -- see integration/stream/README.md's "Stress stack"
+# section): [up|down]. The Go test behind `just test-integration-stream-stress`
+# manages its own compose lifecycle, so this is for poking at the stack by
+# hand.
+stream-stress cmd="up" *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{cmd}}" in
+    "up") docker compose -f integration/stream/stress-compose.yaml up -d --build {{args}} ;;
+    "down") docker compose -f integration/stream/stress-compose.yaml down -v {{args}} ;;
+    *) echo "unknown stream-stress subcommand: {{cmd}} (expected up|down)" >&2 && exit 1 ;;
     esac
 
 # Local inspect e2e test stack (three real ncli relay containers -- see

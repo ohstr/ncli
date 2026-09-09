@@ -8,6 +8,7 @@
 # Recovery store written by a manual `ncli apply -f integration/stream/stream.yaml`
 # run against `just stream up` (the automated Go test uses its own temp dir instead)
 /integration/stream/.recovery/
+/integration/stream/.recovery-stress/
 
 # Local store written by a manual `ncli apply -f integration/sync/sync.yaml`
 # run against `just sync up` (the automated Go test uses its own temp dir instead)

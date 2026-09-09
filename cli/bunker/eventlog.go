@@ -85,11 +85,11 @@ type EventLog struct {
 //
 // Anything still in the pending set once replay finishes was genuinely
 // in-flight when whatever wrote this log last stopped running (a crash,
-// or just a restart with an undecided request sitting on screen) -- see
-// this session's plan doc for why that does NOT mean "resume trying to
-// get it approved": NIP-46 clients already resend an unanswered request,
-// so by the time a human could act on a resurrected multi-minute-old
-// prompt the live path has almost always already superseded it. Instead
+// or just a restart with an undecided request sitting on screen). That
+// does NOT mean "resume trying to get it approved": NIP-46 clients
+// already resend an unanswered request, so by the time a human could act
+// on a resurrected multi-minute-old prompt the live path has almost
+// always already superseded it. Instead
 // each leftover is folded into history as a terminal Expired entry (the
 // same status a real Queue timeout already produces) and that resolution
 // is durably appended right away, so a second restart doesn't rediscover

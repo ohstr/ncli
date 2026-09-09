@@ -2156,11 +2156,12 @@ func urgencyColor(expiresAt time.Time) (color tcell.Color, ok bool) {
 
 // IdentityBar is a two-line, borderless strip showing which identity this
 // bunker daemon is signing for, and whether it's actually reachable --
-// the plan called for the identity line and it was never wired up
-// (StatusInfo's own doc comment already promised "the TUI header show[s]"
-// it); the relay line answers "is this working or not" directly, rather
-// than leaving a fully-disconnected signer to be discovered as "nothing
-// ever happens." The identity half shows a shortened npub immediately
+// the identity line existed only as a promise until now (StatusInfo's own
+// doc comment already said "the TUI header show[s]" it, but nothing had
+// actually wired it up); the relay line answers "is this working or not"
+// directly, rather than leaving a fully-disconnected signer to be
+// discovered as "nothing ever happens." The identity half shows a
+// shortened npub immediately
 // (Status() never blocks), then upgrades to a resolved display name/nip05
 // once the daemon's own best-effort kind:0 lookup (Daemon.fetchProfile)
 // resolves -- on the same render ticker every other bunker panel already

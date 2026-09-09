@@ -63,7 +63,6 @@ func LoadViperConfig(path string) error {
 	// own extension-based type inference.
 	viper.SetConfigType("yaml")
 
-	// Priority: ncli.yaml then relay.yaml
 	viper.SetConfigName("ncli")
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {

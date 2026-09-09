@@ -356,10 +356,8 @@ Exits non-zero if any checked event fails.`,
 		if jsonMode {
 			common.PrintJSON(report)
 		} else {
-			// The per-event verdicts and summary are this command's result,
-			// not narration -- same stdout-only-holds-the-result convention
-			// as jsonMode's report above, just human-readable instead of
-			// JSON (see the equivalent fix in "miner mine" above).
+			// Same stdout-only-holds-the-result convention as "miner mine"
+			// above.
 			for _, r := range report.Results {
 				if r.Valid {
 					fmt.Println("id:        ", r.ID)

@@ -70,10 +70,8 @@ Exits non-zero if any pair fails.`,
 		if jsonMode {
 			common.PrintJSON(report)
 		} else {
-			// The per-(event,relay) outcomes and summary are this command's
-			// result, not narration -- same stdout-only-holds-the-result
-			// convention as jsonMode's report above (see the equivalent fix
-			// in cli/ncli/miner.go).
+			// Same stdout-only-holds-the-result convention as "miner mine"
+			// (see cli/ncli/miner.go).
 			for _, r := range report.Results {
 				if r.Accepted {
 					fmt.Printf("published %s to %s\n", r.ID, r.Relay)

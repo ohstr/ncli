@@ -122,9 +122,8 @@ func (t *Logger) clearOldLogs() {
 	// tview doesn't expose line count, so we estimate based on buffer length
 	// Average line ~100 chars, so 5MB of text ~= 50k lines
 	bufLen := len(t.logs.GetText(false))
-	if bufLen > 5*1024*1024 { // 5MB threshold
+	if bufLen > 5*1024*1024 {
 		t.logs.Clear()
-		// TextView is now empty, new logs will be appended in Update()
 	}
 }
 

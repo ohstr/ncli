@@ -31,11 +31,11 @@ import (
 )
 
 const (
-	streamFlowBufferSize = 10240 // 10240
+	streamFlowBufferSize = 10240
 
 	workerFailureThreshold = 2
-	workerCoolDownTime     = time.Second * 10 // 10
-	workerDelayTime        = time.Second * 5  // 5
+	workerCoolDownTime     = time.Second * 10
+	workerDelayTime        = time.Second * 5
 
 	// maxEventHistorySize bounds each destination's pending-ack map. It's a
 	// defensive cap, not a load-bearing one: entries are removed as soon as
@@ -447,7 +447,9 @@ func (sc *StreamChannel) handleEvent(ctx context.Context, fc *FlowContext, event
 	}
 
 	fc.stat.AddEvent(event.Kind, event.PubKey)
-	fc.lastUpdate = uint64(time.Now().Unix()) // event.CreatedAt
+	// Wall-clock receive time, not event.CreatedAt -- this is the watermark
+	// reload() passes to ResetSince on reconnect.
+	fc.lastUpdate = uint64(time.Now().Unix())
 
 }
 
@@ -586,11 +588,11 @@ type Stream struct {
 	// FlowContext.strictPow.
 	strictPow bool
 
-	// getConnectionConfig helper to convert TimeoutSpec to relayclient.ConnectionConfig
 	cancel context.CancelFunc
 }
 
-// getConnectionConfig helper to convert TimeoutSpec to relayclient.ConnectionConfig
+// getConnectionConfig converts sc.timeouts into a relayclient.ConnectionConfig,
+// falling back to relayclient's own defaults for any timeout left unset.
 func (sc *StreamChannel) getConnectionConfig() *relayclient.ConnectionConfig {
 	cfg := relayclient.DefaultConnectionConfig()
 	if sc.timeouts == nil {
@@ -1308,7 +1310,6 @@ func (rs *RemoteSubscription) Write(parent context.Context) {
 	}
 	defer conn.Close()
 
-	// Create a channel to signal connection death to the main loop
 	connDead := make(chan struct{})
 
 	go func() {

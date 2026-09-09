@@ -306,10 +306,9 @@ func (d *Daemon) recordHistory(ev ResolvedEvent) {
 // never touched Queue.Add/Queue.OnResolved at all -- without this,
 // Request History only ever showed requests that needed a human decision,
 // even though skills/ncli-bunker/SKILL.md's own "Trusted Apps > Last
-// Request" column is documented as derived from history (see followup
-// issue in integration/agent-eval/followup/issues.md). Delegates straight
-// to recordHistory so persistence/compaction/activity-log behavior stays
-// identical to every other resolution.
+// Request" column is documented as derived from history. Delegates
+// straight to recordHistory so persistence/compaction/activity-log
+// behavior stays identical to every other resolution.
 func (d *Daemon) recordAutoApproved(p Pending) {
 	d.recordHistory(ResolvedEvent{Pending: p, Verdict: Allow, AutoApproved: true})
 }
@@ -642,8 +641,7 @@ func (d *Daemon) serveConn(ctx context.Context, conn *relayclient.Connection) {
 // handleIncoming verifies, decrypts, and dispatches one raw event received
 // on conn. Never logs decrypted content or key material -- only the
 // method/kind/pubkey/request-id shape already visible in Pending/log
-// lines, per the plan's logging-safety requirement (a headless daemon's
-// log file is not a redaction layer).
+// lines: a headless daemon's log file is not a redaction layer.
 //
 // parseRequestEventFallback re-attempts decrypting ev as a NIP-46 request
 // using whichever encryption scheme ParseRequestEvent (nip46) did NOT

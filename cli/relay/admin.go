@@ -174,7 +174,7 @@ func getAdminConfig() (string, int, string, error) {
 
 	port := viper.GetInt("port")
 	if port == 0 {
-		port = 5500 // Default
+		port = 5500
 	}
 
 	privKey := viper.GetString("nip11.privkey")

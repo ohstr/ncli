@@ -136,19 +136,17 @@ func newRemoteFlowSpec(t *testing.T, relayURL string, trusted bool, writeConcurr
 // exists to guard against.
 const publishManyEventsConcurrency = 16
 
-// publishManyEvents signs and publishes n distinct kind:1 events to
-// relayURL, using markerPrefix plus each event's index to keep every one
-// content-distinct (see newIntegrationEvent), and returns their IDs in
-// index order. Used by this package's high-volume-input scenarios to
-// stress a relay/flow with real traffic instead of a handful of events.
-//
-// Publishes concurrently but never calls t.Fatalf/t.Errorf from the worker
-// goroutines themselves -- t's Fail-family methods must only be called
-// from the goroutine running the test (see testing.T's docs), so every
-// worker reports its outcome back over a channel and only the calling
-// goroutine ever fails the test.
-func publishManyEvents(t *testing.T, relayURL string, n int, markerPrefix string) []string {
-	t.Helper()
+// publishManyEventsErr is publishManyEvents' error-returning core --
+// exported (within the package) specifically so callers that need to run
+// several of these concurrently across different relays (e.g. one per
+// source/target, for a burst that actually overlaps in time) can do so
+// safely: spawn goroutines calling *this*, collect `(ids, err)` back
+// through an ordinary channel or slice, and only call t.Fatalf once back
+// on the main test goroutine. Calling the t-based publishManyEvents
+// directly from inside such a goroutine would violate the same rule its
+// own internal workers have to follow -- see publishManyEvents' doc
+// comment.
+func publishManyEventsErr(relayURL string, n int, markerPrefix string) ([]string, error) {
 	ids := make([]string, n)
 	errs := make(chan error, n)
 
@@ -171,8 +169,28 @@ func publishManyEvents(t *testing.T, relayURL string, n int, markerPrefix string
 
 	for err := range errs {
 		if err != nil {
-			t.Fatalf("publishManyEvents(%q, n=%d, %q): %v", relayURL, n, markerPrefix, err)
+			return nil, fmt.Errorf("publishManyEvents(%q, n=%d, %q): %w", relayURL, n, markerPrefix, err)
 		}
+	}
+	return ids, nil
+}
+
+// publishManyEvents signs and publishes n distinct kind:1 events to
+// relayURL, using markerPrefix plus each event's index to keep every one
+// content-distinct (see newIntegrationEvent), and returns their IDs in
+// index order. Used by this package's high-volume-input scenarios to
+// stress a relay/flow with real traffic instead of a handful of events.
+//
+// Only ever call this from the goroutine actually running the test (or a
+// t.Run subtest closure) -- it calls t.Fatalf on failure, which must not
+// happen from another goroutine (see testing.T's docs). If you need
+// several of these running concurrently against different relays at once,
+// use publishManyEventsErr directly instead (see its own doc comment).
+func publishManyEvents(t *testing.T, relayURL string, n int, markerPrefix string) []string {
+	t.Helper()
+	ids, err := publishManyEventsErr(relayURL, n, markerPrefix)
+	if err != nil {
+		t.Fatal(err)
 	}
 	return ids
 }

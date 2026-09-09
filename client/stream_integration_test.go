@@ -263,19 +263,28 @@ func testHighVolumeBurstAcrossAllSourcesIsNotLost(t *testing.T) {
 	time.Sleep(1 * time.Second)
 
 	const perSource = 100
-	var wg sync.WaitGroup
 	idsBySource := make([][]string, len(streamIntegrationSourceURLs))
+	errsBySource := make([]error, len(streamIntegrationSourceURLs))
+	var wg sync.WaitGroup
 	for i, sourceURL := range streamIntegrationSourceURLs {
 		wg.Add(1)
 		go func(i int, sourceURL string) {
 			defer wg.Done()
-			idsBySource[i] = publishManyEvents(t, sourceURL, perSource, fmt.Sprintf("burst-src%d", i))
+			// publishManyEventsErr, not publishManyEvents: this runs in a
+			// goroutine that isn't the one running the test, and t.Fatalf
+			// must never be called from anywhere else -- see its doc
+			// comment. Fatal on the aggregated results below instead, back
+			// on this function's own goroutine.
+			idsBySource[i], errsBySource[i] = publishManyEventsErr(sourceURL, perSource, fmt.Sprintf("burst-src%d", i))
 		}(i, sourceURL)
 	}
 	wg.Wait()
 
 	var published []string
-	for _, ids := range idsBySource {
+	for i, ids := range idsBySource {
+		if errsBySource[i] != nil {
+			t.Fatal(errsBySource[i])
+		}
 		published = append(published, ids...)
 	}
 

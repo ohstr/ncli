@@ -36,7 +36,22 @@ import (
 // verifies every event's ID/signature unconditionally -- a flow's own
 // `trusted` setting only ever governs what THIS client's read side skips
 // checking, never what a relay server accepts on write.
-const integrationPrivKey = "0acd12cbf0fb87cd13b17bc9b57dffd11b3870b407984cec5a4ce2a69b90268c"
+const (
+	integrationPrivKey = "0acd12cbf0fb87cd13b17bc9b57dffd11b3870b407984cec5a4ce2a69b90268c"
+	integrationPubKey  = "3c1db3dd55e2ff09ba5317dd8eec2339797e9e2ddf74591172735c47f3a2ad6e" // derives from integrationPrivKey
+)
+
+// integrationPrivKeyAlt/integrationPubKeyAlt are a second arbitrary, fixed
+// test-only keypair -- distinct from integrationPrivKey/integrationPubKey
+// -- used only by filter-correctness scenarios that need to prove an
+// `authors` filter actually excludes events from the "wrong" author, not
+// just include events from the right one. Everything else in this package
+// shares the one identity; nothing relies on these two ever being
+// confused with each other.
+const (
+	integrationPrivKeyAlt = "ad8b71b0611f697ebd0b210ccc70ee3947b85fe59bad0c04f608217553b9c6d4"
+	integrationPubKeyAlt  = "b94c6f8d038e6e9622a530991a189ae5f4a785efb234025e2a99fb3c5516c8b2" // derives from integrationPrivKeyAlt
+)
 
 // runCompose runs `docker compose -f composeFile <args...>`, failing
 // the test immediately (t.Fatalf) on error. Cleanup teardown steps that
@@ -52,20 +67,49 @@ func runCompose(t *testing.T, composeFile string, args ...string) {
 	}
 }
 
-// newIntegrationEventUnchecked is newIntegrationEvent's error-returning
-// core -- signing a fixed, valid hex private key cannot actually fail, so
-// this only exists to give publishManyEvents an error to check without
-// calling t.Fatalf from a worker goroutine (see its own doc comment for
-// why that matters).
-func newIntegrationEventUnchecked(marker string) *nip01.Event {
-	ev := nip01.NewEvent(1, fmt.Sprintf("ncli itest %s", marker))
-	if err := ev.Sign(integrationPrivKey); err != nil {
-		// Unreachable in practice (integrationPrivKey is a fixed, valid
-		// key), but panic rather than silently return an unsigned event if
-		// it ever somehow did fail.
+// newIntegrationEventOfKindUnchecked is newIntegrationEventOfKind's
+// error-returning core -- signing a fixed, valid hex private key cannot
+// actually fail, so this only exists to give publishManyEvents an error to
+// check without calling t.Fatalf from a worker goroutine (see its own doc
+// comment for why that matters). Generalizes newIntegrationEventUnchecked
+// to an arbitrary kind/author/tag set, for filter-correctness scenarios
+// that need to prove NIP-01 matching (kind/author/tag AND-within-a-filter,
+// OR-across-filters) actually holds under real load, not just that events
+// arrive at all.
+func newIntegrationEventOfKindUnchecked(kind int, privKey, marker string, tags ...[]string) *nip01.Event {
+	ev := nip01.NewEvent(kind, fmt.Sprintf("ncli itest %s", marker), tags...)
+	if err := ev.Sign(privKey); err != nil {
+		// Unreachable in practice (privKey is always one of this file's
+		// fixed, valid keys), but panic rather than silently return an
+		// unsigned event if it ever somehow did fail.
 		panic(fmt.Sprintf("failed to sign synthetic test event: %v", err))
 	}
 	return ev
+}
+
+// newIntegrationEventOfKind signs a small, uniquely-content-tagged event of
+// the given kind (and, optionally, tags) from the primary test identity
+// (integrationPrivKey/integrationPubKey) -- marker only needs to make this
+// call's content distinct from every other call's, which is all that's
+// needed for a distinct event ID.
+func newIntegrationEventOfKind(t *testing.T, kind int, marker string, tags ...[]string) *nip01.Event {
+	t.Helper()
+	return newIntegrationEventOfKindUnchecked(kind, integrationPrivKey, marker, tags...)
+}
+
+// newIntegrationEventFromAltAuthor is newIntegrationEventOfKind's sibling,
+// signed by integrationPrivKeyAlt instead -- for scenarios proving an
+// `authors` filter excludes the "wrong" author, not just includes the
+// right one.
+func newIntegrationEventFromAltAuthor(t *testing.T, kind int, marker string, tags ...[]string) *nip01.Event {
+	t.Helper()
+	return newIntegrationEventOfKindUnchecked(kind, integrationPrivKeyAlt, marker, tags...)
+}
+
+// newIntegrationEventUnchecked is newIntegrationEvent's error-returning
+// core; see newIntegrationEventOfKindUnchecked.
+func newIntegrationEventUnchecked(marker string) *nip01.Event {
+	return newIntegrationEventOfKindUnchecked(1, integrationPrivKey, marker)
 }
 
 // newIntegrationEvent signs a small, uniquely-content-tagged kind:1 event
@@ -277,9 +321,17 @@ func waitForEventsAtRelay(t *testing.T, relayURL string, ids []string, timeout t
 // image build.
 func waitForRelayReady(t *testing.T, relayURL string, timeout time.Duration) {
 	t.Helper()
+	if err := waitForRelayReadyErr(relayURL, timeout); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// waitForRelayReadyErr is waitForRelayReady's error-returning core, safe
+// to call from any goroutine (see waitForAllRelaysReady).
+func waitForRelayReadyErr(relayURL string, timeout time.Duration) error {
 	u, err := url.Parse(relayURL)
 	if err != nil {
-		t.Fatalf("invalid relay URL %q: %v", relayURL, err)
+		return fmt.Errorf("invalid relay URL %q: %w", relayURL, err)
 	}
 	filters := nip01.NewSubscriptionFilterGroup()
 	filters.Add(&nip01.SubscriptionFilter{})
@@ -291,9 +343,39 @@ func waitForRelayReady(t *testing.T, relayURL string, timeout time.Duration) {
 		_, lastErr = relayclient.ReadEventsFromRelay(ctx, u, filters)
 		cancel()
 		if lastErr == nil {
-			return
+			return nil
 		}
 		time.Sleep(300 * time.Millisecond)
 	}
-	t.Fatalf("relay at %s never became ready within %s: %v", relayURL, timeout, lastErr)
+	return fmt.Errorf("relay at %s never became ready within %s: %w", relayURL, timeout, lastErr)
+}
+
+// waitForAllRelaysReady waits for every URL in urls concurrently, instead
+// of waitForRelayReady's implied sequential cost -- with a couple dozen
+// containers in a stress stack, waiting up to `timeout` *each* in sequence
+// would dominate the whole test's runtime for no reason, since they're all
+// starting up in parallel anyway. Fails with every URL that timed out, not
+// just the first, so a genuinely broken stack is diagnosable in one shot.
+func waitForAllRelaysReady(t *testing.T, urls []string, timeout time.Duration) {
+	t.Helper()
+	errs := make([]error, len(urls))
+	var wg sync.WaitGroup
+	for i, u := range urls {
+		wg.Add(1)
+		go func(i int, u string) {
+			defer wg.Done()
+			errs[i] = waitForRelayReadyErr(u, timeout)
+		}(i, u)
+	}
+	wg.Wait()
+
+	var failed []error
+	for _, err := range errs {
+		if err != nil {
+			failed = append(failed, err)
+		}
+	}
+	if len(failed) > 0 {
+		t.Fatalf("%d/%d relays never became ready: %v", len(failed), len(urls), failed)
+	}
 }

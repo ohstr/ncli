@@ -41,6 +41,7 @@ type FlowStat interface {
 	IncSynced()
 	GetAttributes() FlowAttr
 	IncreaseRetries(time.Time)
+	ResetAge()
 	EOSECount() int
 	ResetEOSECounter()
 	SetIndexWidth(int)
@@ -455,6 +456,14 @@ func (fm *FlowMetrics) IncreaseRetries(nextRetry time.Time) {
 	defer fm.mu.Unlock()
 	fm.retries++
 	fm.nextRetry = nextRetry
+}
+
+// ResetAge restarts the Age column's clock, so a row reports time since its
+// last (re)connect attempt rather than time since the stream itself started.
+func (fm *FlowMetrics) ResetAge() {
+	fm.mu.Lock()
+	defer fm.mu.Unlock()
+	fm.createdAt = time.Now()
 }
 
 func (fm *FlowMetrics) AddEvent(kind int, pubkey string) {

@@ -17,6 +17,12 @@ test-integration:
     go test ./client/... -run 'TestMultiRelaySync|TestNegSync_Integration' -v -count=1
     go test -tags integration ./cli/bunker/... -run Live -v -count=1
 
+# Run the stream e2e integration test (needs Docker; brings up/tears down its
+# own local relay containers -- see integration/stream/README.md -- and hits
+# no real production relay). Not run in CI or by `just test`/`test-integration`.
+test-integration-stream:
+    go test ./client/... -run 'TestStreamDocker' -v -count=1 -timeout 10m
+
 # Run the client package's benchmarks (stream pipeline hot paths)
 bench:
     go test ./client/... -run '^$' -bench . -benchmem
@@ -82,6 +88,20 @@ _dev-up:
 # Stop the local dev stack
 _dev-down:
     docker compose -f build/relay/docker-compose.dev.yaml down
+
+# Local stream e2e test stack (real destination + source ncli relay
+# containers -- see integration/stream/README.md): [up|down]. The Go test
+# behind `just test-integration-stream` manages its own compose lifecycle,
+# so this is for poking at the stack by hand (e.g. running a real
+# `ncli apply -f integration/stream/stream.yaml` against it).
+stream cmd="up" *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{cmd}}" in
+    "up") docker compose -f integration/stream/compose.yaml up -d --build {{args}} ;;
+    "down") docker compose -f integration/stream/compose.yaml down -v {{args}} ;;
+    *) echo "unknown stream subcommand: {{cmd}} (expected up|down)" >&2 && exit 1 ;;
+    esac
 
 # Run the docs site locally with hot reload -- README.md, AGENTS.md, and
 # CHANGELOG.md changes sync automatically. http://localhost:4321/

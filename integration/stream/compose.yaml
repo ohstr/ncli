@@ -1,0 +1,75 @@
+# Local stream e2e test stack: one destination + three source `ncli relay`
+# instances, all built from this repo's own source (build/relay/Dockerfile),
+# so the stream client under test talks to real relay server processes over
+# real websocket connections -- not mocks -- without touching production
+# (relay.ohstr.com).
+#
+# Driven by client/stream_docker_test.go (TestStreamDocker), which manages
+# this stack's lifecycle itself; or run by hand via `just stream up`/`down`
+# to poke at it directly (e.g. `ncli apply -f integration/stream/stream.yaml`
+# against it -- see stream.yaml's own header and this directory's README).
+#
+# `name:` pins the Compose project name regardless of the caller's working
+# directory, so this stack's containers/volumes/network never collide with
+# build/relay/docker-compose.dev.yaml's (fixed `ncli_relay`/`ncli_search`
+# container names) even if both happen to be up at once.
+name: ncli-stream-itest
+
+services:
+  destination:
+    build:
+      context: ../..
+      dockerfile: build/relay/Dockerfile
+    image: ncli:stream-itest
+    command: ["relay", "--config", "/config/relay.yaml"]
+    ports:
+      - "45500:5500"
+    volumes:
+      - ./relay.yaml:/config/relay.yaml:ro
+      - destination-data:/app/ncli/data
+    restart: unless-stopped
+
+  source1:
+    build:
+      context: ../..
+      dockerfile: build/relay/Dockerfile
+    image: ncli:stream-itest
+    command: ["relay", "--config", "/config/relay.yaml"]
+    ports:
+      - "45501:5500"
+    volumes:
+      - ./relay.yaml:/config/relay.yaml:ro
+      - source1-data:/app/ncli/data
+    restart: unless-stopped
+
+  source2:
+    build:
+      context: ../..
+      dockerfile: build/relay/Dockerfile
+    image: ncli:stream-itest
+    command: ["relay", "--config", "/config/relay.yaml"]
+    ports:
+      - "45502:5500"
+    volumes:
+      - ./relay.yaml:/config/relay.yaml:ro
+      - source2-data:/app/ncli/data
+    restart: unless-stopped
+
+  source3:
+    build:
+      context: ../..
+      dockerfile: build/relay/Dockerfile
+    image: ncli:stream-itest
+    command: ["relay", "--config", "/config/relay.yaml"]
+    ports:
+      - "45503:5500"
+    volumes:
+      - ./relay.yaml:/config/relay.yaml:ro
+      - source3-data:/app/ncli/data
+    restart: unless-stopped
+
+volumes:
+  destination-data:
+  source1-data:
+  source2-data:
+  source3-data:

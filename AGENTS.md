@@ -28,7 +28,7 @@ that priority order.
 | `ncli id [identifier]` | Generate or inspect a Nostr keypair (local vault) |
 | `ncli id delegate` | Mint a NIP-26 delegation token |
 | `ncli id sign -e <events.json> -o <signed.json>` | Sign one or more unsigned events with a vault/nsec identity |
-| `ncli decode <entity>` | Decode any NIP-19 bech32 entity (npub/nsec/note/nprofile/nevent/naddr) |
+| `ncli decode <entity>` | Decode any NIP-19 bech32 entity (npub/nsec/note/nprofile/nevent/naddr), a NIP-CASH cash-token-family string, or a NIP-CW circlehub1... connection |
 | `ncli miner -e <event.yaml>` | Mine or check NIP-13 proof-of-work on an event |
 | `ncli version` | Build info + on-disk paths |
 
@@ -117,7 +117,8 @@ or invoking a command in that area:
   members`/`invites`/`roles`, or NIP-AA `agent_auth`) →
   `skills/ncli-relay-ops/SKILL.md`
 - Generating/managing keys or delegation tokens (`id`, `id delegate`), or
-  decoding a NIP-19 entity (`decode`) → `skills/ncli-identity/SKILL.md`
+  decoding a NIP-19 entity, cash token, or circlehub1... connection
+  (`decode`) → `skills/ncli-identity/SKILL.md`
 - Mining or verifying proof-of-work (`miner`) → `skills/ncli-miner/SKILL.md`
 - Running `ncli` as a remote NIP-46 signer (`bunker`, `bunker attach/
   status/stop/sessions/history/connect`), including pairing an agent as

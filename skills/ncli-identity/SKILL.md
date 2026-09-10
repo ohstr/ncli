@@ -1,13 +1,13 @@
 ---
 name: ncli-identity
-description: Generate, inspect, and manage Nostr keypairs with ncli's local vault (`ncli id`), decode any NIP-19 bech32 entity (`ncli decode`), sign unsigned events with a vault/nsec identity (`ncli id sign`), and mint NIP-26 delegation tokens (`ncli id delegate`) for scripted or agent-driven signing. Use when generating or resolving a Nostr identity (hex/npub/nsec/NIP-05), decoding an npub/nsec/note/nprofile/nevent/naddr, signing a hand-authored or dumped unsigned event so it can be published, scripting vault access with NCLI_VAULT_PASSWORD, or non-interactively creating a delegation token with --issuer/NCLI_DELEGATE_ISSUER.
+description: Generate, inspect, and manage Nostr keypairs with ncli's local vault (`ncli id`), decode any NIP-19 bech32 entity, NIP-CASH cash token, or NIP-CW circlehub1... connection (`ncli decode`), sign unsigned events with a vault/nsec identity (`ncli id sign`), and mint NIP-26 delegation tokens (`ncli id delegate`) for scripted or agent-driven signing. Use when generating or resolving a Nostr identity (hex/npub/nsec/NIP-05), decoding an npub/nsec/note/nprofile/nevent/naddr, a lokicash1...-style cash token, or a circlehub1... connection, signing a hand-authored or dumped unsigned event so it can be published, scripting vault access with NCLI_VAULT_PASSWORD, or non-interactively creating a delegation token with --issuer/NCLI_DELEGATE_ISSUER.
 license: Unlicense
 ---
 
-<!-- Mirrors ohstr/ncli's cli/ncli/id.go, cli/ncli/id_sign.go, and
-cli/delegate/command.go as of writing. This skill is self-contained by
-design and won't see repo changes automatically — update by hand if
-flags/schemas change. -->
+<!-- Mirrors ohstr/ncli's cli/ncli/id.go, cli/ncli/id_sign.go,
+cli/ncli/decode.go, client/decode.go, and cli/delegate/command.go as of
+writing. This skill is self-contained by design and won't see repo
+changes automatically — update by hand if flags/schemas change. -->
 
 # ncli id / ncli id sign / ncli id delegate
 
@@ -45,13 +45,15 @@ ncli id list --json --reveal                    # list with decrypted keys
 an arbitrary npub/nsec/NIP-05 that isn't vault-saved and asking to reveal it
 errors with "identity not saved in vault, nothing to reveal".
 
-## `ncli decode` — decode any NIP-19 entity
+## `ncli decode` — decode any NIP-19 entity, cash token, or circlehub1... connection
 
 A standalone counterpart to `id`'s inspect mode: `id <identifier>` only
 resolves things that represent a *keypair* (npub/hex/nsec/nprofile/NIP-05,
 plus vault lookups); `decode` handles all six NIP-19 bech32 shapes,
 including the two that aren't identities at all -- `note`/`nevent` (event
-pointers) and `naddr` (an addressable-event coordinate):
+pointers) and `naddr` (an addressable-event coordinate) -- plus two
+adjacent bech32-TLV formats from cashctl's own protocols, NIP-CASH and
+NIP-CW:
 
 ```sh
 ncli decode npub1...              # -> pubkey
@@ -60,6 +62,8 @@ ncli decode note1...               # -> event id
 ncli decode nprofile1...           # -> pubkey + relay hints
 ncli decode nevent1...             # -> event id + optional relays/author/kind
 ncli decode naddr1...              # -> identifier + pubkey + kind + relay hints
+ncli decode lokicash1...           # -> hrp + wallet pubkey + relays + identity_required/mint_signature/attested_amount_millis
+ncli decode circlehub1...          # -> hrp + wallet pubkey + relays + label
 ncli decode npub1... --json        # structured JSON instead of text
 ```
 
@@ -69,6 +73,21 @@ one: `nevent`'s kind is optional (omitted if the encoder never set it),
 while `naddr`'s kind is required by the format itself, so a literal `kind:
 0` (the `set_metadata` kind) is still included rather than treated as
 absent.
+
+`lokicash1...`/`satscash1...`/... (any HRP — NIP-CASH's cash-token-family
+format) and `circlehub1...` (NIP-CW's Circle Hub connection) are the two
+non-NIP-19 shapes: both are TLV-encoded bech32, same as NIP-19, just from
+cashctl's own protocol layer rather than core Nostr. A cash token's
+`identity_required`, `mint_signature`, and `attested_amount_millis` are
+each only present in the output when the token actually carries them --
+`mint_signature`/`attested_amount_millis` are always both-or-neither (a
+lone half is dropped by the decoder itself, never surfaced as a partial
+result). **The pairing secret embedded in either format is never included
+in the output, in any mode** -- decoding is inspection, never a way to
+extract a working spending/dialing credential. A `cashhub1...` string
+(NIP-CASH's *mint-side* Hub connection) is recognized but always rejected
+with a specific error — there's no local decoder for that format here,
+same as cashctl's own stance.
 
 ## Scripted vault access
 

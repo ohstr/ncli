@@ -640,3 +640,76 @@ func TestSaveToRecoveryOrLoseClearsPendingEntry(t *testing.T) {
 		t.Errorf("event was successfully handed to recovery, should not also count as permanently Lost; got Lost=%d", lost)
 	}
 }
+
+// TestReleaseSlotSurvivesPendingEviction is a regression guard for the
+// other half of the destination-stall bug (see
+// TestStreamEventHistoryNewGenerationPurgesOnlyStaleDispatched for the
+// reconnect-driven half): pending is a capped LRU (maxEventHistorySize)
+// that can legitimately evict a still-live, current-generation entry from
+// heavy backlog alone -- no reconnect required, just enough distinct
+// events in flight at once (a large multi-source fan-in against a small
+// publishConcurrency is enough on its own). Before dispatched existed,
+// releaseSlot's correctness depended entirely on pending still holding the
+// entry when its real ACK arrived, so that eviction alone permanently
+// leaked a slot. dispatched is sized by publishConcurrency, never by
+// pending's cap, so releaseSlot must still fire correctly after pending
+// has evicted the entry.
+func TestReleaseSlotSurvivesPendingEviction(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sc := NewStreamChannel(1, nil)
+	stat := tui.NewOutboundMetrics(1, "dest", func() {})
+	fc := NewFlowContext(nip01.NewSubscriptionFilterGroup(), stat, true, nil)
+	fc.setPublishConcurrency(1)
+	sc.addSubscriber(fc)
+	go sc.handleFlow(ctx, fc) // real ack-processing path, incl. open()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for fc.inFlightSlots() == nil {
+		if time.Now().After(deadline) {
+			t.Fatal("timed out waiting for handleFlow's open() to initialize inFlight")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	sem := fc.inFlightSlots()
+
+	// Simulate exactly what RemoteSubscription.Write does on a successful
+	// dispatch: register in pending, mark it, take the slot it now holds.
+	ev := newRegressionTestEvent(1)
+	fc.pending.add(ev)
+	fc.pending.markDispatched(ev.ID)
+	fc.dispatched.add(ev.ID)
+	select {
+	case sem <- struct{}{}:
+	default:
+		t.Fatal("failed to acquire the single publish slot for setup")
+	}
+
+	// Flood pending past its cap with unrelated events -- simulates heavy
+	// backlog alone pushing it over, no reconnect involved.
+	for i := 0; i < maxEventHistorySize+1; i++ {
+		fc.pending.add(newRegressionTestEvent(1_000_000 + i))
+	}
+	if _, found := fc.pending.get(ev.ID); found {
+		t.Fatal("test setup invalid: ev should have been evicted from pending by now")
+	}
+
+	// ev's real ACK, arriving through the actual handleFlow code path --
+	// not a direct releaseSlot() call, so a regression in the real
+	// found-vs-dispatched wiring would be caught here too.
+	fc.receive(&wire.OkSubscriptionResponse{EventID: ev.ID, Accepted: true})
+
+	deadline = time.Now().Add(2 * time.Second)
+	for {
+		select {
+		case sem <- struct{}{}:
+			return // released and immediately reacquired: success
+		default:
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("expected the slot to be released and reacquirable after ev's real ACK -- pending's eviction must not leak it")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}

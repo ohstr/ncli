@@ -266,7 +266,7 @@ func TestRemoteDestinationPublishConcurrencyCapPreventsRateLimiting(t *testing.T
 // TestFlowContextInFlightSlotAcquireReleaseCycle is a fast, network-free unit
 // test of the semaphore mechanics themselves: a bounded FlowContext's
 // in-flight slot enforces its capacity, and handleFlow's processing of a
-// genuinely correlated ack (found in fc.pending) releases it.
+// genuinely correlated ack (found in fc.dispatched) releases it.
 func TestFlowContextInFlightSlotAcquireReleaseCycle(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -317,6 +317,7 @@ func TestFlowContextInFlightSlotAcquireReleaseCycle(t *testing.T) {
 
 	ev := newRegressionTestEvent(1)
 	fc.pending.add(ev)
+	fc.dispatched.add(ev.ID) // Write's real invariant: only add here once a slot is actually held
 	fc.receive(&wire.OkSubscriptionResponse{EventID: ev.ID, Accepted: true})
 
 	select {
@@ -362,12 +363,12 @@ func TestFlowContextUnmatchedAckDoesNotDeadlockSlotRelease(t *testing.T) {
 
 	// Simulate RemoteSubscription.Write having acquired the (only) slot for
 	// a genuine send -- production always holds this invariant: an event
-	// only ever reaches fc.pending with a slot already held for it (Write
-	// acquires before conn.Send; deliverToSubscriber's pending.add happens
-	// even earlier). Skipping this step is exactly what made an earlier
-	// version of this test release a slot nothing had acquired, hanging on
-	// the empty channel itself -- a test bug, not a reason to weaken the
-	// invariant being asserted here.
+	// only ever enters fc.dispatched with a slot already held for it (Write
+	// acquires the slot, then conn.Send succeeds, then dispatched.add).
+	// Skipping this step is exactly what made an earlier version of this
+	// test release a slot nothing had acquired, hanging on the empty
+	// channel itself -- a test bug, not a reason to weaken the invariant
+	// being asserted here.
 	select {
 	case sem <- struct{}{}:
 	default:
@@ -375,6 +376,7 @@ func TestFlowContextUnmatchedAckDoesNotDeadlockSlotRelease(t *testing.T) {
 	}
 	ev := newRegressionTestEvent(1)
 	fc.pending.add(ev)
+	fc.dispatched.add(ev.ID)
 
 	// Unmatched: no pending entry was ever registered for this other ID --
 	// the same shape as a relay re-sending/late-sending an OK for something

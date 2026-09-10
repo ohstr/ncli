@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/ohstr/ncli/client/tui"
@@ -18,6 +19,12 @@ import (
 	"github.com/ohstr/nmilat/wire"
 	"github.com/rs/zerolog/log"
 )
+
+// pushAckTimeout bounds how long pushEvents waits for a batch's OK
+// responses before moving on. Without this, a burst of conn.Send calls has
+// no way to know whether the remote actually received them before the
+// connection closes -- see pushEvents.
+var pushAckTimeout = 30 * time.Second
 
 var syncAttr = tui.FlowAttr{
 	Index:     1,
@@ -333,7 +340,7 @@ func (s *SyncModule) pullEvents(ctx context.Context, conn *relayclient.Connectio
 					break batchLoop
 				}
 			case err := <-conn.Errors():
-				s.logger.Error(fmt.Errorf("pull error: %w", err), syncAttr)
+				s.logger.Error(fmt.Errorf("connection error (pull): %w", err), syncAttr)
 				return
 			case <-ctx.Done():
 				return
@@ -391,13 +398,51 @@ func (s *SyncModule) pushEvents(ctx context.Context, conn *relayclient.Connectio
 		s.logger.Debug(fmt.Sprintf("Found %d/%d events in store to push", len(events), len(batch)), syncAttr)
 
 		traceEnabled := s.logger.Enabled(tui.LogLevelTrace)
+		pending := make(map[string]bool, len(events))
 		for _, ev := range events {
 			if traceEnabled {
 				s.logger.Trace(fmt.Sprintf("Publishing event %s", ev.ID[:8]), syncAttr)
 			}
 			if conn.Send(ev) {
-				pushed++
+				pending[ev.ID] = true
+			} else {
+				s.logger.Warn(fmt.Sprintf("failed to send event %s: connection closed", ev.ID), syncAttr)
 			}
+		}
+
+		// Wait for this batch's OKs before moving to the next one (or
+		// returning, which closes the connection): without this, a burst of
+		// sends can outrun the connection's own flush and silently lose
+		// events the moment it closes -- the same class of bug
+		// client/stream.go's deliverToSubscriber guards against on the
+		// stream side.
+		batchCtx, batchCancel := context.WithTimeout(ctx, pushAckTimeout)
+	ackLoop:
+		for len(pending) > 0 {
+			select {
+			case resp := <-conn.Read():
+				if ok, isOk := resp.(*wire.OkSubscriptionResponse); isOk && pending[ok.EventID] {
+					delete(pending, ok.EventID)
+					if ok.Accepted {
+						pushed++
+					} else {
+						s.logger.Warn(fmt.Sprintf("push rejected for %s: %s", ok.EventID, ok.Message), syncAttr)
+					}
+				}
+			case err := <-conn.Errors():
+				s.logger.Error(fmt.Errorf("connection error (push): %w", err), syncAttr)
+				batchCancel()
+				return
+			case <-ctx.Done():
+				batchCancel()
+				return
+			case <-batchCtx.Done():
+				break ackLoop
+			}
+		}
+		batchCancel()
+		if len(pending) > 0 {
+			s.logger.Warn(fmt.Sprintf("%d/%d event(s) in this batch never got an ack within %s", len(pending), len(events), pushAckTimeout), syncAttr)
 		}
 	}
 

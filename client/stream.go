@@ -578,7 +578,7 @@ func (sc *StreamChannel) handleFlow(ctx context.Context, fc *FlowContext) {
 					}
 
 				} else if isDuplicatedEvent(o.Message) {
-					fc.stat.IncSynced()
+					fc.stat.IncDuplicates()
 
 				} else if found {
 					sc.logger.LogEvent(o.EventID, fc.stat.GetAttributes())

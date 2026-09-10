@@ -323,15 +323,15 @@ func TestFlowContextPendingDoesNotCrossContaminate(t *testing.T) {
 	}
 }
 
-// TestOutboundMetricsShowsSynced guards against the exact confusion a user
-// hit in practice: re-running a stream against a destination that's already
-// fully synced makes every event land as a duplicate ack, so
-// Events/Failures/Retries all correctly stay at zero -- but if "Synced"
+// TestOutboundMetricsShowsDuplicates guards against the exact confusion a
+// user hit in practice: re-running a stream against a destination that's
+// already fully synced makes every event land as a duplicate ack, so
+// Events/Failures/Retries all correctly stay at zero -- but if "Duplicates"
 // (the destination's "other side already had this" counter) were hidden
 // from destination rows, the panel would look identical to a stuck/broken
-// destination. This asserts the Synced counter is visible and increments in
-// exactly that scenario.
-func TestOutboundMetricsShowsSynced(t *testing.T) {
+// destination. This asserts the Duplicates counter is visible and
+// increments in exactly that scenario.
+func TestOutboundMetricsShowsDuplicates(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -349,11 +349,11 @@ func TestOutboundMetricsShowsSynced(t *testing.T) {
 		Message:  "duplicate: already have this event",
 	})
 
-	const syncedIndex = 3 // [id, events, failures, synced, retries, age] (Pubkeys/Kinds skipped on destinations)
+	const duplicatesIndex = 3 // [id, events, failures, duplicates, retries, age] (Pubkeys/Kinds skipped on destinations)
 	deadline := time.Now().Add(2 * time.Second)
-	for stat.FlatRow()[syncedIndex] < 1 {
+	for stat.FlatRow()[duplicatesIndex] < 1 {
 		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for Synced to increment, row=%v", stat.FlatRow())
+			t.Fatalf("timed out waiting for Duplicates to increment, row=%v", stat.FlatRow())
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -364,12 +364,12 @@ func TestOutboundMetricsShowsSynced(t *testing.T) {
 
 	found := false
 	for _, header := range stat.Columns() {
-		if header.Name == "Synced" {
+		if header.Name == "Duplicates" {
 			found = true
 		}
 	}
 	if !found {
-		t.Error("expected \"Synced\" to be a visible column on destination (OutboundMetrics) rows")
+		t.Error("expected \"Duplicates\" to be a visible column on destination (OutboundMetrics) rows")
 	}
 }
 

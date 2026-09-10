@@ -47,7 +47,10 @@ const (
 	// awaiting handleFlow) -- a combined worst case of 2*streamFlowBufferSize
 	// (20480). The cap must stay comfortably above that, or it'll evict
 	// still-live entries and their eventual ACK will hit the "unexpected
-	// ack" fallback instead of being counted.
+	// ack" fallback instead of being counted -- or, if that entry had
+	// already been dispatched to the wire, permanently leak its inFlight
+	// slot (see StreamEventHistory.newGeneration, which purges dead
+	// connections' zombie entries so they can't also crowd this cap).
 	maxEventHistorySize = 24000
 
 	// localWriteConcurrency is the fallback worker count for a
@@ -156,6 +159,10 @@ func (fc *FlowContext) open() {
 	} else {
 		fc.inFlight = nil
 	}
+
+	// Purge the previous generation's zombie sends -- see
+	// StreamEventHistory.newGeneration.
+	fc.pending.newGeneration()
 }
 
 // paused returns the current generation's pause signal channel, safe to call
@@ -232,14 +239,22 @@ func (fc *FlowContext) setPublishConcurrency(n int) {
 }
 
 // StreamEventHistory is an O(1) LRU: a map for lookup plus a doubly-linked
-// list (most-recent at the front) for eviction order. list.Element.Value
-// holds the *nip01.Event directly -- nip01.Event already carries its own ID,
-// so wrapping it in a separate struct just to keep a second copy of that ID
-// around would be a pure extra allocation on every add() for no benefit.
+// list (most-recent at the front) for eviction order. Each entry also
+// tracks which connection generation dispatched it to the wire (0 if never
+// dispatched yet), so newGeneration can tell a genuinely dead send (sent,
+// never acked, its connection is now gone for good) apart from an event
+// that's merely still queued -- safe to retry as-is once the next
+// connection's Write loop gets to it.
 type StreamEventHistory struct {
-	data  map[string]*list.Element // eventID -> element (Value is *nip01.Event)
-	order *list.List
-	mu    sync.RWMutex
+	data       map[string]*list.Element // eventID -> element (Value is *pendingEntry)
+	order      *list.List
+	mu         sync.RWMutex
+	generation int
+}
+
+type pendingEntry struct {
+	event         *nip01.Event
+	dispatchedGen int
 }
 
 func newStreamEventHistory() *StreamEventHistory {
@@ -256,7 +271,7 @@ func (seh *StreamEventHistory) get(eventID string) (*nip01.Event, bool) {
 	if !ok {
 		return nil, false
 	}
-	return elem.Value.(*nip01.Event), true
+	return elem.Value.(*pendingEntry).event, true
 }
 
 func (seh *StreamEventHistory) add(event *nip01.Event) {
@@ -264,18 +279,18 @@ func (seh *StreamEventHistory) add(event *nip01.Event) {
 	defer seh.mu.Unlock()
 
 	if elem, exists := seh.data[event.ID]; exists {
-		elem.Value = event
+		elem.Value = &pendingEntry{event: event}
 		seh.order.MoveToFront(elem)
 		return
 	}
 
-	elem := seh.order.PushFront(event)
+	elem := seh.order.PushFront(&pendingEntry{event: event})
 	seh.data[event.ID] = elem
 
 	if seh.order.Len() > maxEventHistorySize {
 		oldest := seh.order.Back()
 		seh.order.Remove(oldest)
-		delete(seh.data, oldest.Value.(*nip01.Event).ID)
+		delete(seh.data, oldest.Value.(*pendingEntry).event.ID)
 	}
 }
 
@@ -285,6 +300,50 @@ func (seh *StreamEventHistory) delete(eventID string) {
 	if elem, ok := seh.data[eventID]; ok {
 		seh.order.Remove(elem)
 		delete(seh.data, eventID)
+	}
+}
+
+func (seh *StreamEventHistory) size() int {
+	seh.mu.RLock()
+	defer seh.mu.RUnlock()
+	return len(seh.data)
+}
+
+// markDispatched records that eventID was just handed to the wire under the
+// current connection generation. Call only after an actual send succeeds --
+// see newGeneration.
+func (seh *StreamEventHistory) markDispatched(eventID string) {
+	seh.mu.Lock()
+	defer seh.mu.Unlock()
+	if elem, ok := seh.data[eventID]; ok {
+		elem.Value.(*pendingEntry).dispatchedGen = seh.generation
+	}
+}
+
+// newGeneration marks the start of a fresh connection cycle (call from
+// FlowContext.open). Entries dispatched under a previous generation can
+// never receive a real ACK -- their connection is gone -- so left alone
+// they'd sit here until the LRU cap forces an eviction, crowding out live
+// entries and eventually leaking every inFlight slot for good (see
+// maxEventHistorySize, releaseSlot). Purging them here instead, once per
+// reconnect, keeps this map's real size close to what
+// maxEventHistorySize's worst-case math assumes. Entries never yet
+// dispatched (dispatchedGen == 0, still just queued) are left alone --
+// they're still safe to retry on the new connection.
+func (seh *StreamEventHistory) newGeneration() {
+	seh.mu.Lock()
+	defer seh.mu.Unlock()
+	seh.generation++
+	cur := seh.generation
+
+	for e := seh.order.Back(); e != nil; {
+		prev := e.Prev()
+		pe := e.Value.(*pendingEntry)
+		if pe.dispatchedGen != 0 && pe.dispatchedGen < cur {
+			seh.order.Remove(e)
+			delete(seh.data, pe.event.ID)
+		}
+		e = prev
 	}
 }
 
@@ -1341,10 +1400,19 @@ func (rs *RemoteSubscription) Write(parent context.Context) {
 				select {
 				case sem <- struct{}{}:
 				case <-connDead:
+					// ev was dequeued but never actually sent -- same
+					// handling as a failed Send below, not a bare drop.
+					log.Warn().
+						Str("relay", rs.relay.String()).
+						Str("event_id", ev.ID).
+						Msg("connection died waiting for a publish slot")
+					rs.saveToRecoveryOrLose(ev, relayclient.ErrConnectionClosed)
 					return
 				case <-rs.fc.closed():
+					rs.fc.pending.delete(ev.ID) // never actually sent
 					return
 				case <-ctx.Done():
+					rs.fc.pending.delete(ev.ID) // never actually sent
 					return
 				}
 			}
@@ -1356,29 +1424,18 @@ func (rs *RemoteSubscription) Write(parent context.Context) {
 			// Write avoids by only ever counting through the synthetic ack it
 			// sends itself.
 			if ok := conn.Send(ev); !ok {
-				// No explicit release: Write returns right below, and this
-				// connection's whole semaphore is discarded next cycle
+				// No explicit slot release: Write returns right below, and
+				// this connection's whole semaphore is discarded next cycle
 				// anyway (see inFlight) -- nothing left to starve.
 				log.Warn().
 					Str("relay", rs.relay.String()).
 					Str("event_id", ev.ID).
 					Msg("send interrupted; connection closed")
-
-				// Try to save to recovery; IncreaseLost only fires below if
-				// that also fails -- see the OkSubscriptionResponse handling
-				// in handleFlow for the full Lost-vs-Failures distinction.
-				if rs.recovery != nil {
-					if err := rs.recovery.SaveFailedEvent(ev, rs.relay.String(), relayclient.ErrConnectionClosed); err != nil {
-						log.Error().Err(err).Msg("failed to save event to recovery")
-						rs.fc.stat.IncreaseLost()
-					}
-				} else {
-					rs.fc.stat.IncreaseLost()
-				}
-
+				rs.saveToRecoveryOrLose(ev, relayclient.ErrConnectionClosed)
 				rs.fc.sendError(ctx, relayclient.ErrConnectionClosed)
 				return
 			}
+			rs.fc.pending.markDispatched(ev.ID)
 
 		case <-connDead:
 			return
@@ -1391,6 +1448,24 @@ func (rs *RemoteSubscription) Write(parent context.Context) {
 		}
 	}
 
+}
+
+// saveToRecoveryOrLose hands ev to recovery so it can be retried on this
+// destination in the background; if recovery can't take it (or isn't
+// configured), it's counted as a genuine, unrecoverable loss -- see the
+// OkSubscriptionResponse handling in handleFlow for the full
+// Lost-vs-Failures distinction. Either way, ev is no longer awaiting an ACK
+// on this connection, so its pending entry is dropped too.
+func (rs *RemoteSubscription) saveToRecoveryOrLose(ev *nip01.Event, reason error) {
+	if rs.recovery != nil {
+		if err := rs.recovery.SaveFailedEvent(ev, rs.relay.String(), reason); err != nil {
+			log.Error().Err(err).Msg("failed to save event to recovery")
+			rs.fc.stat.IncreaseLost()
+		}
+	} else {
+		rs.fc.stat.IncreaseLost()
+	}
+	rs.fc.pending.delete(ev.ID)
 }
 
 func (rs *RemoteSubscription) Name() string {

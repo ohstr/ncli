@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/ohstr/ncli/client/tui"
 	"github.com/ohstr/nmilat/nip01"
+	relayclient "github.com/ohstr/nmilat/relay/client"
 	"github.com/ohstr/nmilat/wire"
 )
 
@@ -518,6 +520,122 @@ func TestDeliverToSubscriberSavesToRecoveryWhenPaused(t *testing.T) {
 		t.Fatal("expected an event dropped during a destination's reconnect window to be saved to recovery, but it was never found there")
 	}
 
+	if lost := stat.Lost(); lost != 0 {
+		t.Errorf("event was successfully handed to recovery, should not also count as permanently Lost; got Lost=%d", lost)
+	}
+}
+
+// TestStreamEventHistoryNewGenerationPurgesOnlyStaleDispatched is a
+// regression guard for a real destination-stall bug: pending never used to
+// be cleared across reconnects, so a dead connection's still-unacked sends
+// piled up in it forever. Once enough accumulated (as few as
+// publishConcurrency's worth), maxEventHistorySize's eviction would start
+// hitting genuinely live entries instead, permanently leaking their
+// inFlight slot -- eventually every slot was gone and the destination could
+// never send again, even though its connection had long since recovered.
+// newGeneration must purge only entries dispatched under a now-superseded
+// generation (unrecoverable -- that connection is gone) and must leave
+// alone anything still merely queued (dispatchedGen == 0), since that's
+// still safe to retry as-is on the new connection.
+func TestStreamEventHistoryNewGenerationPurgesOnlyStaleDispatched(t *testing.T) {
+	seh := newStreamEventHistory()
+
+	staleDispatched := newRegressionTestEvent(1)
+	stillQueued := newRegressionTestEvent(2)
+	seh.add(staleDispatched)
+	seh.add(stillQueued)
+
+	seh.newGeneration() // generation 1: the connection these two were added under
+	seh.markDispatched(staleDispatched.ID)
+	// stillQueued is deliberately never dispatched.
+
+	currentDispatched := newRegressionTestEvent(3)
+	seh.newGeneration() // generation 2: staleDispatched's connection is now dead
+	seh.add(currentDispatched)
+	seh.markDispatched(currentDispatched.ID)
+
+	if _, found := seh.get(staleDispatched.ID); found {
+		t.Error("an event dispatched under a superseded generation must be purged -- its connection is gone, no real ACK will ever arrive")
+	}
+	if _, found := seh.get(stillQueued.ID); !found {
+		t.Error("an event that was only ever queued, never dispatched, must survive a reconnect -- it's still safe to retry as-is")
+	}
+	if _, found := seh.get(currentDispatched.ID); !found {
+		t.Error("an event dispatched under the current generation must not be purged")
+	}
+}
+
+// TestFlowContextOpenPurgesZombiesAcrossManyReconnects proves the fix holds
+// over many reconnects, not just one: repeatedly open()ing (as handleFlow
+// does on every (re)connect) with a dispatched-but-never-acked event each
+// time must never let pending grow -- each cycle's zombie must be purged by
+// the next open(), not accumulate toward maxEventHistorySize.
+func TestFlowContextOpenPurgesZombiesAcrossManyReconnects(t *testing.T) {
+	stat := tui.NewOutboundMetrics(1, "dest", func() {})
+	fc := NewFlowContext(nip01.NewSubscriptionFilterGroup(), stat, true, nil)
+
+	const reconnects = 50
+	for i := 0; i < reconnects; i++ {
+		fc.open()
+		ev := newRegressionTestEvent(i)
+		fc.pending.add(ev)
+		fc.pending.markDispatched(ev.ID) // sent on this cycle's connection, never acked before it died
+	}
+	fc.open() // one more reconnect: the last cycle's zombie is now stale too
+
+	if size := fc.pending.size(); size != 0 {
+		t.Errorf("expected every reconnect's dispatched-but-unacked zombie to be purged by the following open(), got %d entries still pending", size)
+	}
+}
+
+// TestSaveToRecoveryOrLoseClearsPendingEntry is a regression guard for a
+// silent event-loss bug: RemoteSubscription.Write used to drop an
+// already-dequeued event outright (no recovery save, no pending cleanup) if
+// its connection died while the event was waiting for a publish slot.
+// saveToRecoveryOrLose must both hand the event to recovery and stop
+// tracking it in pending -- otherwise its dead-connection entry just
+// becomes another zombie for newGeneration to clean up later.
+func TestSaveToRecoveryOrLoseClearsPendingEntry(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	storePath := filepath.Join(t.TempDir(), "recovery.db")
+	rm, err := NewRecoveryManager(storePath, 10, time.Minute)
+	if err != nil {
+		t.Fatalf("NewRecoveryManager failed: %v", err)
+	}
+	rm.Start(ctx)
+	defer rm.Stop()
+
+	stat := tui.NewOutboundMetrics(1, "flaky-dest", func() {})
+	fc := NewFlowContext(nip01.NewSubscriptionFilterGroup(), stat, true, rm)
+	rs := &RemoteSubscription{
+		relay:                     &url.URL{Scheme: "ws", Host: "example.invalid"},
+		recovery:                  rm,
+		ClientSubscriptionContext: &ClientSubscriptionContext{fc: fc},
+	}
+
+	ev := newRegressionTestEvent(1)
+	fc.pending.add(ev)
+
+	rs.saveToRecoveryOrLose(ev, relayclient.ErrConnectionClosed)
+
+	if _, found := fc.pending.get(ev.ID); found {
+		t.Error("saveToRecoveryOrLose must stop tracking the event in pending -- it will never get a real ACK on this dead connection")
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	var recovered *nip01.Event
+	for time.Now().Before(deadline) {
+		if e, err := rm.findEvent(ev.ID); err == nil {
+			recovered = e
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if recovered == nil {
+		t.Fatal("expected an event that died waiting for a publish slot to be saved to recovery, but it was never found there")
+	}
 	if lost := stat.Lost(); lost != 0 {
 		t.Errorf("event was successfully handed to recovery, should not also count as permanently Lost; got Lost=%d", lost)
 	}

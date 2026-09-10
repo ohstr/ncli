@@ -288,7 +288,6 @@ func testSyncRemoteStallTriggersTimeoutNotHang(t *testing.T) {
 	}
 }
 
-// loadTestSyncSpec loads sync.yaml.
 func loadTestSyncSpec(t *testing.T) *SyncSpec {
 	t.Helper()
 	rs, err := loadSpecFromYaml(syncIntegrationSpecFile)

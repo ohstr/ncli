@@ -304,7 +304,6 @@ func loadTestStreamSpec(t *testing.T) *StreamSpec {
 	return spec
 }
 
-// destinationFlowContext returns the (sole) destination's FlowContext.
 func destinationFlowContext(t *testing.T, stream *Stream) *FlowContext {
 	t.Helper()
 	stream.sc.subscribersMu.RLock()

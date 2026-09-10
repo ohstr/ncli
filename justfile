@@ -17,6 +17,51 @@ test-integration:
     go test ./client/... -run 'TestMultiRelaySync|TestNegSync_Integration' -v -count=1
     go test -tags integration ./cli/bunker/... -run Live -v -count=1
 
+# Run the stream integration test (needs Docker; brings up/tears down its
+# own local relay containers -- see integration/stream/README.md -- and hits
+# no real production relay). Runs automatically in CI (see
+# .github/workflows/ci.yml's `integrations` job); not part of
+# `just test`/`test-integration`.
+test-integration-stream:
+    go test ./client/... -run 'TestStreamIntegration' -v -count=1 -timeout 10m
+
+# Run the stream *stress* test (needs Docker; 20 real source containers
+# instead of test-integration-stream's 3 -- see integration/stream/README.md's
+# "Stress stack" section). Heavier and slower than the correctness suite,
+# so unlike the other test-integration-* recipes this is NOT run
+# automatically in CI; run explicitly before a release or when touching
+# stream's fan-in/concurrency/recovery paths.
+test-integration-stream-stress:
+    go test ./client/... -run 'TestStreamStress' -v -count=1 -timeout 15m
+
+# Run the inspect integration test (needs Docker; see
+# integration/inspect/README.md). Runs automatically in CI; not part of
+# `just test`/`test-integration`.
+test-integration-inspect:
+    go test ./client/... -run 'TestInspectIntegration' -v -count=1 -timeout 10m
+
+# Run the inspect *stress* test (needs Docker; 15 real target containers
+# instead of test-integration-inspect's 3 -- see integration/inspect/README.md's
+# "Stress stack" section). Heavier/slower, not run automatically in CI --
+# run explicitly before a release or when touching inspect's fan-in path.
+test-integration-inspect-stress:
+    go test ./client/... -run 'TestInspectStress' -v -count=1 -timeout 15m
+
+# Run the sync integration test (needs Docker; see
+# integration/sync/README.md). Runs automatically in CI; not part of
+# `just test`/`test-integration`.
+test-integration-sync:
+    go test ./client/... -run 'TestSyncIntegration' -v -count=1 -timeout 10m
+
+# Run every hermetic integration test together (stream + inspect + sync --
+# needs Docker). This is what .github/workflows/ci.yml's `integrations` job
+# actually runs, so `just test-integrations` reproduces a CI failure
+# locally exactly. Each Test<Feature>Integration brings up/tears down its
+# own compose stack (see each integration/<feature>/README.md), so running
+# them together here is just one `go test` invocation, not a shared stack.
+test-integrations:
+    go test ./client/... -run 'TestStreamIntegration|TestInspectIntegration|TestSyncIntegration' -v -count=1 -timeout 30m
+
 # Run the client package's benchmarks (stream pipeline hot paths)
 bench:
     go test ./client/... -run '^$' -bench . -benchmem
@@ -82,6 +127,73 @@ _dev-up:
 # Stop the local dev stack
 _dev-down:
     docker compose -f build/relay/docker-compose.dev.yaml down
+
+# Local stream e2e test stack (real destination + source ncli relay
+# containers -- see integration/stream/README.md): [up|down]. The Go test
+# behind `just test-integration-stream` manages its own compose lifecycle,
+# so this is for poking at the stack by hand (e.g. running a real
+# `ncli apply -f integration/stream/stream.yaml` against it).
+stream cmd="up" *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{cmd}}" in
+    "up") docker compose -f integration/stream/compose.yaml up -d --build {{args}} ;;
+    "down") docker compose -f integration/stream/compose.yaml down -v {{args}} ;;
+    *) echo "unknown stream subcommand: {{cmd}} (expected up|down)" >&2 && exit 1 ;;
+    esac
+
+# Local stream *stress* stack (20 source + 1 destination real ncli relay
+# containers -- see integration/stream/README.md's "Stress stack"
+# section): [up|down]. The Go test behind `just test-integration-stream-stress`
+# manages its own compose lifecycle, so this is for poking at the stack by
+# hand.
+stream-stress cmd="up" *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{cmd}}" in
+    "up") docker compose -f integration/stream/stress-compose.yaml up -d --build {{args}} ;;
+    "down") docker compose -f integration/stream/stress-compose.yaml down -v {{args}} ;;
+    *) echo "unknown stream-stress subcommand: {{cmd}} (expected up|down)" >&2 && exit 1 ;;
+    esac
+
+# Local inspect e2e test stack (three real ncli relay containers -- see
+# integration/inspect/README.md): [up|down]. The Go test behind
+# `just test-integration-inspect` manages its own compose lifecycle, so
+# this is for poking at the stack by hand.
+inspect cmd="up" *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{cmd}}" in
+    "up") docker compose -f integration/inspect/compose.yaml up -d --build {{args}} ;;
+    "down") docker compose -f integration/inspect/compose.yaml down -v {{args}} ;;
+    *) echo "unknown inspect subcommand: {{cmd}} (expected up|down)" >&2 && exit 1 ;;
+    esac
+
+# Local inspect *stress* stack (15 real target ncli relay containers -- see
+# integration/inspect/README.md's "Stress stack" section): [up|down]. The
+# Go test behind `just test-integration-inspect-stress` manages its own
+# compose lifecycle, so this is for poking at the stack by hand.
+inspect-stress cmd="up" *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{cmd}}" in
+    "up") docker compose -f integration/inspect/stress-compose.yaml up -d --build {{args}} ;;
+    "down") docker compose -f integration/inspect/stress-compose.yaml down -v {{args}} ;;
+    *) echo "unknown inspect-stress subcommand: {{cmd}} (expected up|down)" >&2 && exit 1 ;;
+    esac
+
+# Local sync e2e test stack (one real ncli relay container -- see
+# integration/sync/README.md): [up|down]. The Go test behind
+# `just test-integration-sync` manages its own compose lifecycle, so this
+# is for poking at the stack by hand.
+sync cmd="up" *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{cmd}}" in
+    "up") docker compose -f integration/sync/compose.yaml up -d --build {{args}} ;;
+    "down") docker compose -f integration/sync/compose.yaml down -v {{args}} ;;
+    *) echo "unknown sync subcommand: {{cmd}} (expected up|down)" >&2 && exit 1 ;;
+    esac
 
 # Run the docs site locally with hot reload -- README.md, AGENTS.md, and
 # CHANGELOG.md changes sync automatically. http://localhost:4321/

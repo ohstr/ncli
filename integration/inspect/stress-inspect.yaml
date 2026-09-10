@@ -1,0 +1,19 @@
+# Stress stack fixture: 15 targets. Same filter pair as
+# integration/stream/stress-stream.yaml:
+#   kind 1, any author           -> filter 1 -> included
+#   kind 7, integrationPubKey    -> filter 2 -> included
+#   kind 7, integrationPubKeyAlt -> neither   -> excluded
+#   kind 3, any author           -> neither   -> excluded
+# The Go test overrides `targets` with all 15 URLs; only target1 here so
+# this stays a valid standalone spec.
+kind: inspect
+spec:
+  targets:
+    - relay: ws://localhost:45590
+      trusted: true
+
+  filters:
+    - kinds: [1]
+    - kinds: [7]
+      authors:
+        - "3c1db3dd55e2ff09ba5317dd8eec2339797e9e2ddf74591172735c47f3a2ad6e"

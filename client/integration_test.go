@@ -201,7 +201,7 @@ func TestRateLimitRecovery(t *testing.T) {
 	// Failures should be > 0. Lost should be 0 (because recovered).
 
 	vals := upStats[0].FlatRow()
-	// OutboundMetrics skips Pubkeys/Kinds: [id, events, failures, synced, retries, age]
+	// OutboundMetrics skips Pubkeys/Kinds: [id, events, failures, duplicates, retries, age]
 	// Index 2 is Failures. Lost has no column of its own (folded into the
 	// Failures cell for display) so it's read via the Lost() accessor.
 	failures := vals[2]

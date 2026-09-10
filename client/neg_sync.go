@@ -126,12 +126,7 @@ func (s *SyncModule) execute(ctx context.Context) {
 	remote := s.spec.GetRemote()
 	s.logger.Info(fmt.Sprintf("Connecting to %s", remote.Relay), syncAttr)
 
-	var cfg *relayclient.ConnectionConfig
-	if s.spec.Timeouts != nil {
-		cfg = &relayclient.ConnectionConfig{}
-	}
-
-	conn, err := connectRelayWithFallback(ctx, remote.relayURI, remote.relayFallbackURI, cfg)
+	conn, err := connectRelayWithFallback(ctx, remote.relayURI, remote.relayFallbackURI, s.spec.Timeouts.ConnectionConfig())
 	if err != nil {
 		s.logger.Error(fmt.Errorf("failed to connect: %w", err), syncAttr)
 		return

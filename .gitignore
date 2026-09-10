@@ -5,6 +5,13 @@
 # Runtime data for the local Docker dev stack (build/relay/docker-compose.dev.yaml)
 /build/.dev/
 
+# Recovery store from a manual `ncli apply -f integration/stream/stream.yaml` run
+/integration/stream/.recovery/
+/integration/stream/.recovery-stress/
+
+# Local store from a manual `ncli apply -f integration/sync/sync.yaml` run
+/integration/sync/.data/
+
 # Docker Compose env files (hold secrets like MEILI_MASTER_KEY) - keep the
 # .example template tracked, never the real file
 .env
@@ -40,3 +47,6 @@ vendor/
 
 # Local cache of ohstr/docs-kit, cloned on demand by `just docs-dev`
 /.docs-kit/
+
+# Local scratch drafts, not meant to be tracked
+/.drafts/

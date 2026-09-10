@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.4.9]
+
+### Fixed
+
+- `apply stream`'s destination could silently drop an in-flight event
+  during its own reconnect window instead of recovering it, and its Age
+  column never reset on retry.
+  ([#48](https://github.com/ohstr/ncli/pull/48))
+- `apply sync`'s `timeouts:` spec block was silently a no-op.
+  ([#48](https://github.com/ohstr/ncli/pull/48))
+- `apply stream`'s destination could permanently leak a
+  `writeConcurrency` publish slot and stall for good, either after many
+  reconnects or from a large multi-source fan-in against one throttled
+  destination alone -- the source kept receiving fine while the
+  destination simply stopped.
+  ([#48](https://github.com/ohstr/ncli/pull/48))
+
+### Changed
+
+- `apply stream`'s destination "Synced" TUI column renamed to
+  "Duplicates" -- it counts duplicate acks, not overall sync progress.
+  ([#48](https://github.com/ohstr/ncli/pull/48))
+
+### Added
+
+- Hermetic Docker Compose e2e coverage for `inspect`/`sync` (previously
+  stream-only), plus dedicated stress suites (20 source relays for
+  stream, 15 targets for inspect).
+  ([#48](https://github.com/ohstr/ncli/pull/48))
+
 ## [0.4.8]
 
 ### Fixed

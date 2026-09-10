@@ -1,0 +1,48 @@
+# Local inspect e2e stack: 3 target `ncli relay` containers. See
+# integration/inspect/README.md. Run by hand via `just inspect up`/`down`.
+name: ncli-inspect-itest
+
+services:
+  target1:
+    build:
+      context: ../..
+      dockerfile: build/relay/Dockerfile
+    image: ncli:inspect-itest
+    command: ["relay", "--config", "/config/relay.yaml"]
+    ports:
+      - "45510:5500"
+    volumes:
+      - ./relay.yaml:/config/relay.yaml:ro
+      - target1-data:/app/ncli/data
+    restart: unless-stopped
+
+  target2:
+    build:
+      context: ../..
+      dockerfile: build/relay/Dockerfile
+    image: ncli:inspect-itest
+    command: ["relay", "--config", "/config/relay.yaml"]
+    ports:
+      - "45511:5500"
+    volumes:
+      - ./relay.yaml:/config/relay.yaml:ro
+      - target2-data:/app/ncli/data
+    restart: unless-stopped
+
+  target3:
+    build:
+      context: ../..
+      dockerfile: build/relay/Dockerfile
+    image: ncli:inspect-itest
+    command: ["relay", "--config", "/config/relay.yaml"]
+    ports:
+      - "45512:5500"
+    volumes:
+      - ./relay.yaml:/config/relay.yaml:ro
+      - target3-data:/app/ncli/data
+    restart: unless-stopped
+
+volumes:
+  target1-data:
+  target2-data:
+  target3-data:

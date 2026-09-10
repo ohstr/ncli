@@ -1,0 +1,30 @@
+# Spec fixture for the local sync e2e stack (see compose.yaml). Same
+# schema as examples/apply/sync.yaml. The Go test overrides `to`'s local
+# path to a fresh temp file per run.
+kind: sync
+spec:
+  from:
+    relay: ws://localhost:45520
+    trusted: true
+
+  to:
+    type: local
+    path: ./integration/sync/.data/sync.db # overridden by the Go test
+    ensure: create
+
+  direction: both # exercises push and pull in the same run
+
+  # since: 0, not a rolling window, so every seeded event is in-window.
+  filters:
+    - since: 0
+
+  maxReconcileRounds: 50
+  pullBatchSize: 100
+
+  timeouts:
+    handshake: "5s"
+    ping: "10s"
+    pong: "20s"
+    write: "20s"
+
+  strictPow: false

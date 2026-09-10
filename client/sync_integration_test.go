@@ -237,21 +237,38 @@ func testSyncMaxReconcileRoundsTooLowSurfacesCleanly(t *testing.T) {
 	}
 }
 
-// testSyncRemoteStallTriggersTimeoutNotHang: `docker compose pause` on the
-// remote, with a short configured Ping/Pong. Sync has no reconnect loop, so
-// a stalled connection must surface a "connection error" and return, not
-// hang. Ping must also be shortened, not just Pong -- relayclient's default
-// 30s ping interval means the first ping (the thing that starts the pong
-// countdown) would never even fire within this test's detection window
-// otherwise, leaving the shortened Pong with nothing to time out against.
+// testSyncRemoteStallTriggersTimeoutNotHang: the remote is paused *before*
+// sync ever connects to it, with short configured Handshake/Ping/Pong.
+// Pausing after a fixed sleep instead (racing a timer against however fast
+// reconciliation+pull happen to finish) was tried first and never worked:
+// on a fast local Docker network, sync can reconcile+pull+push everything
+// well within any reasonable grace period, so the pause routinely landed
+// on an already-finished, already-closed connection with nothing left to
+// stall -- confirmed by the exact same ~16.3s failure appearing across
+// three different config attempts. Pausing first removes the race
+// entirely: the very first connection attempt is guaranteed to hit an
+// already-frozen relay.
+//
+// Sync has no reconnect loop, so a stall anywhere in its lifecycle
+// (connect, reconcile, pull, or push) must surface as a logged error and
+// return, not hang. Which specific stage it fails at isn't the point --
+// only that it fails visibly and promptly -- so this checks for any
+// Error()-level log line (the same [ColorDanger]●[-] marker every error
+// path in neg_sync.go already goes through) rather than one exact message.
 func testSyncRemoteStallTriggersTimeoutNotHang(t *testing.T) {
 	spec := loadTestSyncSpec(t)
+	shortHandshake := "2s"
 	shortPing := "2s"
 	shortPong := "3s"
-	spec.Timeouts = &TimeoutSpec{Ping: &shortPing, Pong: &shortPong}
+	spec.Timeouts = &TimeoutSpec{Handshake: &shortHandshake, Ping: &shortPing, Pong: &shortPong}
 
 	localPath := filepath.Join(t.TempDir(), "sync.db")
 	spec.GetLocal().Path = localPath
+
+	runCompose(t, syncIntegrationComposeFile, "pause", "remote")
+	t.Cleanup(func() {
+		_ = exec.Command("docker", "compose", "-f", syncIntegrationComposeFile, "unpause", "remote").Run()
+	})
 
 	sm, err := NewSyncModule(spec, nil, false)
 	if err != nil {
@@ -267,18 +284,12 @@ func testSyncRemoteStallTriggersTimeoutNotHang(t *testing.T) {
 		t.Fatalf("sm.Run failed: %v", err)
 	}
 
-	time.Sleep(1 * time.Second) // let the connection establish before stalling it
-
-	runCompose(t, syncIntegrationComposeFile, "pause", "remote")
-	t.Cleanup(func() {
-		_ = exec.Command("docker", "compose", "-f", syncIntegrationComposeFile, "unpause", "remote").Run()
-	})
-
+	errorMarker := fmt.Sprintf("[%s]●[-]", tui.ColorDanger)
 	deadline := time.Now().Add(15 * time.Second)
 	for {
 		for _, row := range logger.GetLastLogs() {
 			for _, cell := range row {
-				if strings.Contains(cell, "connection error") {
+				if strings.Contains(cell, errorMarker) {
 					runCompose(t, syncIntegrationComposeFile, "unpause", "remote")
 					return // stall was detected and surfaced cleanly -- test passes
 				}
@@ -286,7 +297,7 @@ func testSyncRemoteStallTriggersTimeoutNotHang(t *testing.T) {
 		}
 		if time.Now().After(deadline) {
 			runCompose(t, syncIntegrationComposeFile, "unpause", "remote")
-			t.Fatal("a stalled remote with a 3s configured pong timeout never surfaced a connection error within 15s -- sync appears to hang on a silent stall instead of timing out")
+			t.Fatal("a remote paused before sync ever connected to it never surfaced any error within 15s -- sync appears to hang on a silent stall instead of timing out")
 		}
 		time.Sleep(200 * time.Millisecond)
 	}

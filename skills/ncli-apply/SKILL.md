@@ -189,8 +189,8 @@ a column, `d` removes a flow with confirmation) next to a live log pane;
 `Ctrl+S` snapshots the current spec (incl. any live edits) to a new YAML
 file. `inspect`'s Targets panel is the same sortable/`d`-removable
 metrics table, one row per target, but with Pubkeys/Kinds columns (unique
-counts) in place of Synced -- Synced is a destination-only concept (an
-event the other side already had on publish) that `inspect` never
+counts) in place of Duplicates -- Duplicates is a destination-only concept
+(an event the other side already had on publish) that `inspect` never
 reaches, since it never publishes; Pubkeys/Kinds diversity, on the other
 hand, is genuinely different per target here, unlike a stream
 destination that mirrors the same merged stream as every other

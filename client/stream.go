@@ -110,8 +110,21 @@ type FlowContext struct {
 
 	// pending tracks events handed to this destination that are awaiting an
 	// ACK, so handleFlow can correlate an OkSubscriptionResponse back to the
-	// event without depending on any other flow's state.
+	// event without depending on any other flow's state. Capped (see
+	// maxEventHistorySize) -- losing an entry here under heavy backlog only
+	// costs Events/Duplicates accounting accuracy and an "unexpected ack"
+	// log line, never a slot leak; see dispatched for why.
 	pending *StreamEventHistory
+
+	// dispatched tracks exactly which events currently hold one of this
+	// destination's inFlight slots, so releaseSlot only ever fires for a
+	// slot that's actually held -- independent of pending, and never
+	// capped: an entry only exists here between acquiring a slot and either
+	// its ACK or a reconnect, so its size can never exceed
+	// publishConcurrency. Deliberately separate from pending (which *can*
+	// lose live entries under heavy backlog) so a lost pending entry can
+	// never also leak a slot.
+	dispatched *dispatchTracker
 }
 
 func NewFlowContext(filters *nip01.SubscriptionFilterGroup, stat tui.FlowStat, trusted bool, recovery *RecoveryManager) *FlowContext {
@@ -125,6 +138,7 @@ func NewFlowContext(filters *nip01.SubscriptionFilterGroup, stat tui.FlowStat, t
 		closeCh:        make(chan interface{}),
 		recovery:       recovery,
 		pending:        newStreamEventHistory(),
+		dispatched:     newDispatchTracker(),
 	}
 }
 
@@ -163,6 +177,12 @@ func (fc *FlowContext) open() {
 	// Purge the previous generation's zombie sends -- see
 	// StreamEventHistory.newGeneration.
 	fc.pending.newGeneration()
+
+	// Anything still in dispatched belongs to the connection that just
+	// died -- its real ACK can never arrive, and inFlight above was just
+	// replaced wholesale anyway, so there's no slot left for a stale entry
+	// to (over-)release against.
+	fc.dispatched.reset()
 }
 
 // paused returns the current generation's pause signal channel, safe to call
@@ -345,6 +365,48 @@ func (seh *StreamEventHistory) newGeneration() {
 		}
 		e = prev
 	}
+}
+
+// dispatchTracker records which events currently hold one of a
+// destination's inFlight slots. Deliberately a plain, uncapped map, not an
+// LRU like StreamEventHistory: an entry only exists here for the window
+// between acquiring a slot and either its ACK or the connection dying, so
+// its size can never exceed publishConcurrency -- there's nothing for a cap
+// to defend against. That's the whole point: releaseSlot's correctness
+// must never depend on a capped structure that can legitimately evict a
+// still-live entry under heavy backlog (see maxEventHistorySize).
+type dispatchTracker struct {
+	mu   sync.Mutex
+	data map[string]struct{}
+}
+
+func newDispatchTracker() *dispatchTracker {
+	return &dispatchTracker{data: make(map[string]struct{})}
+}
+
+func (dt *dispatchTracker) add(eventID string) {
+	dt.mu.Lock()
+	defer dt.mu.Unlock()
+	dt.data[eventID] = struct{}{}
+}
+
+// takeIfPresent reports whether eventID was dispatched under the current
+// connection, removing it either way so a duplicate/late ACK for the same
+// ID can't release a slot twice.
+func (dt *dispatchTracker) takeIfPresent(eventID string) bool {
+	dt.mu.Lock()
+	defer dt.mu.Unlock()
+	if _, ok := dt.data[eventID]; ok {
+		delete(dt.data, eventID)
+		return true
+	}
+	return false
+}
+
+func (dt *dispatchTracker) reset() {
+	dt.mu.Lock()
+	defer dt.mu.Unlock()
+	dt.data = make(map[string]struct{})
 }
 
 type StreamChannel struct {
@@ -547,13 +609,17 @@ func (sc *StreamChannel) handleFlow(ctx context.Context, fc *FlowContext) {
 				sc.handleEvent(ctx, fc, o.Event)
 
 			case *wire.OkSubscriptionResponse:
-				// Hoisted so every branch shares one get/delete, and
-				// releaseSlot only fires when found -- an unconditional
-				// release per branch would free a slot for a stale/unmatched
-				// ack too. See releaseSlot's doc comment.
+				// Hoisted so every branch shares one get/delete. Slot
+				// release is decided from dispatched, not found/pending --
+				// pending can legitimately lose a still-live entry under
+				// heavy backlog (see maxEventHistorySize), and releasing a
+				// slot must never depend on that. See releaseSlot's doc
+				// comment for why an unconditional release per branch would
+				// be wrong regardless (frees a slot for a stale/unmatched
+				// ack too).
 				event, found := fc.pending.get(o.EventID)
 				fc.pending.delete(o.EventID)
-				if found {
+				if fc.dispatched.takeIfPresent(o.EventID) {
 					fc.releaseSlot()
 				}
 
@@ -1426,7 +1492,9 @@ func (rs *RemoteSubscription) Write(parent context.Context) {
 			if ok := conn.Send(ev); !ok {
 				// No explicit slot release: Write returns right below, and
 				// this connection's whole semaphore is discarded next cycle
-				// anyway (see inFlight) -- nothing left to starve.
+				// anyway (see inFlight) -- nothing left to starve. ev never
+				// enters dispatched, so a stray late ack for it can't
+				// release a slot either.
 				log.Warn().
 					Str("relay", rs.relay.String()).
 					Str("event_id", ev.ID).
@@ -1436,6 +1504,7 @@ func (rs *RemoteSubscription) Write(parent context.Context) {
 				return
 			}
 			rs.fc.pending.markDispatched(ev.ID)
+			rs.fc.dispatched.add(ev.ID)
 
 		case <-connDead:
 			return

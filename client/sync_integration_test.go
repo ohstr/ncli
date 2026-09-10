@@ -238,13 +238,17 @@ func testSyncMaxReconcileRoundsTooLowSurfacesCleanly(t *testing.T) {
 }
 
 // testSyncRemoteStallTriggersTimeoutNotHang: `docker compose pause` on the
-// remote, with a short configured Pong. Sync has no reconnect loop, so a
-// stalled connection must surface a "connection error" and return, not
-// hang.
+// remote, with a short configured Ping/Pong. Sync has no reconnect loop, so
+// a stalled connection must surface a "connection error" and return, not
+// hang. Ping must also be shortened, not just Pong -- relayclient's default
+// 30s ping interval means the first ping (the thing that starts the pong
+// countdown) would never even fire within this test's detection window
+// otherwise, leaving the shortened Pong with nothing to time out against.
 func testSyncRemoteStallTriggersTimeoutNotHang(t *testing.T) {
 	spec := loadTestSyncSpec(t)
+	shortPing := "2s"
 	shortPong := "3s"
-	spec.Timeouts = &TimeoutSpec{Pong: &shortPong}
+	spec.Timeouts = &TimeoutSpec{Ping: &shortPing, Pong: &shortPong}
 
 	localPath := filepath.Join(t.TempDir(), "sync.db")
 	spec.GetLocal().Path = localPath

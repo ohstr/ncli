@@ -1,19 +1,7 @@
-# Spec fixture for the local inspect e2e test stack (see compose.yaml and
-# this directory's README). Same schema as examples/apply/inspect.yaml,
-# pointed at this stack's fixed localhost ports instead of real public
-# relays.
-#
-# client/inspect_integration_test.go loads this file the same way `ncli apply`
-# itself would (loadSpecFromYaml) rather than constructing an *InspectSpec
-# by hand, so it exercises the real on-disk schema.
-#
-# You can also run this by hand against `just inspect up`, e.g.:
-#   just inspect up
-#   ncli apply -f integration/inspect/inspect.yaml
-#   just inspect down
-# Unlike stream, inspect has no `raw: true` escape hatch (see this
-# directory's README's "Known ncli limitation" note) -- running it by hand
-# needs a real terminal.
+# Spec fixture for the local inspect e2e stack (see compose.yaml). Same
+# schema as examples/apply/inspect.yaml. Unlike stream, inspect has no
+# `raw: true` escape hatch, so running by hand (`just inspect up` +
+# `ncli apply -f inspect.yaml`) needs a real terminal.
 kind: inspect
 spec:
   targets:
@@ -24,8 +12,6 @@ spec:
     - relay: ws://localhost:45512
       trusted: true
 
-  # since: 0, not a rolling window like production defaults -- this test
-  # wants every event it publishes to be in-window regardless of wall-clock
-  # skew between the test run and whatever it just published.
+  # since: 0, not a rolling window, so every published event is in-window.
   filters:
     - since: 0

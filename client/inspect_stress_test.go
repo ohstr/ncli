@@ -11,23 +11,14 @@ import (
 	"github.com/ohstr/nmilat/nip01"
 )
 
-// See integration/inspect/README.md's "Stress stack" section for what
-// this is and why it's separate from inspect_integration_test.go's (15
-// real target containers vs. 3): inspect's own "several relays feeding
-// one place" shape is exactly what production's stream fan-in (bug 2,
-// this branch's first commit) has too, at ~55 sources; 3 targets proves
-// the mechanism generalizes but never stresses it at real scale. Not run
-// by `just test`/`test-integration`/the default CI `integrations` job --
-// run explicitly via `just test-integration-inspect-stress`.
+// See integration/inspect/README.md's "Stress stack" section. 15 target
+// containers, not run by default CI -- `just test-integration-inspect-stress`.
 const (
 	inspectStressComposeFile = "../integration/inspect/stress-compose.yaml"
 	inspectStressSpecFile    = "../integration/inspect/stress-inspect.yaml"
 	inspectStressTargetCount = 15
 )
 
-// inspectStressTargetURLs returns all inspectStressTargetCount target
-// URLs, ws://localhost:45590 through 45590+inspectStressTargetCount-1 --
-// see stress-compose.yaml.
 func inspectStressTargetURLs() []string {
 	urls := make([]string, inspectStressTargetCount)
 	for i := 0; i < inspectStressTargetCount; i++ {
@@ -68,10 +59,8 @@ func TestInspectStress(t *testing.T) {
 	}
 }
 
-// testInspectStressManyTargetsHighVolume is the "bug 2 at real scale"
-// analog for inspect's read-only fan-in: hundreds of events across all 15
-// targets at once, where inspect_integration_test.go's 3-target version
-// only proves the mechanism, not the scale.
+// testInspectStressManyTargetsHighVolume: hundreds of events across all
+// 15 targets at once.
 func testInspectStressManyTargetsHighVolume(t *testing.T) {
 	spec := loadTestInspectStressSpec(t)
 
@@ -108,13 +97,9 @@ func testInspectStressManyTargetsHighVolume(t *testing.T) {
 	}
 }
 
-// testInspectStressFilterCorrectnessUnderLoad is stress-inspect.yaml's
-// filter pair proved under real multi-target load -- see
-// stream_stress_test.go's identical-in-spirit
-// testStreamStressFilterCorrectnessUnderLoad for the full rationale (this
-// mirrors it exactly, just verified against the local session store
-// instead of a destination relay). Checking exclusion, not just
-// inclusion, at this scale is the point.
+// testInspectStressFilterCorrectnessUnderLoad mirrors stream's
+// testStreamStressFilterCorrectnessUnderLoad, verified against the local
+// session store instead of a destination relay.
 func testInspectStressFilterCorrectnessUnderLoad(t *testing.T) {
 	spec := loadTestInspectStressSpec(t)
 	urls := inspectStressTargetURLs()
@@ -168,9 +153,6 @@ func testInspectStressFilterCorrectnessUnderLoad(t *testing.T) {
 		t.Errorf("filter-matching events from %d targets, but %d never landed in the inspect session's local store: %v", len(urls), len(missing), missing)
 	}
 
-	// By the time every matching event above has settled, enough time has
-	// passed that a wrongly-leaked excluded event would have landed too --
-	// a single snapshot check is enough, not another poll loop.
 	events, err := insp.store.store.FindEvents(context.Background(), &nip01.SubscriptionFilter{IDs: excluded})
 	if err != nil {
 		t.Fatalf("failed to query inspect session store: %v", err)
@@ -184,10 +166,8 @@ func testInspectStressFilterCorrectnessUnderLoad(t *testing.T) {
 	}
 }
 
-// testInspectStressConcurrentMultiTargetDisruption is
-// stream_stress_test.go's ConcurrentMultiSourceDisruption, for inspect's
-// targets: several restarted simultaneously, not one at a time, matching
-// production's real flakiness shape.
+// testInspectStressConcurrentMultiTargetDisruption: several targets
+// restarted simultaneously, not one at a time.
 func testInspectStressConcurrentMultiTargetDisruption(t *testing.T) {
 	spec := loadTestInspectStressSpec(t)
 
@@ -211,9 +191,6 @@ func testInspectStressConcurrentMultiTargetDisruption(t *testing.T) {
 		service := fmt.Sprintf("target%d", i+1)
 		go func(service string) {
 			defer restartWG.Done()
-			// t.Errorf (unlike t.Fatalf) is safe to call from any
-			// goroutine, as long as it happens before the test function
-			// returns -- restartWG.Wait() below ensures that.
 			cmd := exec.Command("docker", "compose", "-f", inspectStressComposeFile, "restart", service)
 			if out, err := cmd.CombinedOutput(); err != nil {
 				t.Errorf("docker compose restart %s failed: %v\n%s", service, err, out)
@@ -239,14 +216,9 @@ func testInspectStressConcurrentMultiTargetDisruption(t *testing.T) {
 }
 
 // testInspectStressConcurrentMultiTargetStall pauses several targets at
-// once (a silent stall, distinct from restart's abrupt teardown -- see
-// stream_integration_test.go's DestinationDisruptionDoesNotDropEvents for
-// the full rationale) and confirms the session survives and recovers on
-// all of them. Necessarily slow (~70s): InspectSpec has no `timeouts:`
-// block at all (see integration/README.md's backlog), so this relies on
-// relayclient's hardcoded default 60s PongTimeout -- pausing several
-// targets at once costs no more wall-clock time than pausing one, since
-// they're all waiting out the same timeout concurrently.
+// once. Necessarily slow (~70s, InspectSpec has no timeouts: block), but
+// pausing several costs no more time than pausing one -- all wait out the
+// same default concurrently.
 func testInspectStressConcurrentMultiTargetStall(t *testing.T) {
 	spec := loadTestInspectStressSpec(t)
 
@@ -301,11 +273,8 @@ func testInspectStressConcurrentMultiTargetStall(t *testing.T) {
 	}
 }
 
-// loadTestInspectStressSpec loads integration/inspect/stress-inspect.yaml
-// the same way `ncli apply` itself would (loadSpecFromYaml), then
-// overrides `targets` with all inspectStressTargetCount URLs (the
-// checked-in file only lists one, to stay a valid, hand-runnable spec on
-// its own -- see its header).
+// loadTestInspectStressSpec loads stress-inspect.yaml, overriding
+// `targets` with all 15 URLs (the file only lists one).
 func loadTestInspectStressSpec(t *testing.T) *InspectSpec {
 	t.Helper()
 	rs, err := loadSpecFromYaml(inspectStressSpecFile)

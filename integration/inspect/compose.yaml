@@ -1,20 +1,5 @@
-# Local inspect e2e test stack: three real `ncli relay` instances, all
-# built from this repo's own source (build/relay/Dockerfile), so the
-# inspect client under test reads from real relay server processes over
-# real websocket connections -- not mocks -- without touching production.
-#
-# Driven by client/inspect_integration_test.go (TestInspectIntegration), which
-# manages this stack's lifecycle itself; or run by hand via
-# `just inspect up`/`down` to poke at it directly (e.g. publish events to
-# one of the three ports below, then query all three with
-# `ncli apply -f integration/inspect/inspect.yaml` -- see this directory's
-# README).
-#
-# `name:` pins the Compose project name regardless of the caller's working
-# directory, so this stack's containers/volumes/network never collide with
-# build/relay/docker-compose.dev.yaml's or integration/stream/'s (distinct
-# host ports too: 45510-45512, vs. stream's 45500-45503) even if all three
-# happen to be up at once.
+# Local inspect e2e stack: 3 target `ncli relay` containers. See
+# integration/inspect/README.md. Run by hand via `just inspect up`/`down`.
 name: ncli-inspect-itest
 
 services:

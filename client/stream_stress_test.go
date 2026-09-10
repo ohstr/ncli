@@ -12,14 +12,8 @@ import (
 	"github.com/ohstr/nmilat/nip01"
 )
 
-// See integration/stream/README.md's "Stress stack" section for what this
-// is and why it's a separate, heavier stack from stream_integration_test.go's
-// (20 real source containers vs. 3): bug 2 (this branch's first commit)
-// was found in production's ~55-source fan-in topology, which 3 sources
-// can prove the *mechanism* generalizes across but can't stress at any
-// real scale. Not run by `just test`/`test-integration`/the default CI
-// `integrations` job (heavier and slower than the correctness suite) --
-// run explicitly via `just test-integration-stream-stress`.
+// See integration/stream/README.md's "Stress stack" section. 20 source
+// containers, not run by default CI -- `just test-integration-stream-stress`.
 const (
 	streamStressComposeFile = "../integration/stream/stress-compose.yaml"
 	streamStressSpecFile    = "../integration/stream/stress-stream.yaml"
@@ -27,9 +21,6 @@ const (
 	streamStressDestURL     = "ws://localhost:45560"
 )
 
-// streamStressSourceURLs returns all streamStressSourceCount source URLs,
-// ws://localhost:45561 through 45560+streamStressSourceCount -- see
-// stress-compose.yaml.
 func streamStressSourceURLs() []string {
 	urls := make([]string, streamStressSourceCount)
 	for i := 0; i < streamStressSourceCount; i++ {
@@ -71,11 +62,8 @@ func TestStreamStress(t *testing.T) {
 	}
 }
 
-// testStreamStressManySourcesHighVolume is the direct "bug 2 at real
-// scale" scenario: streamStressSourceCount (20) real source relays instead
-// of stream_integration_test.go's 3, each publishing a genuine burst
-// concurrently, against one destination -- the shape production's ~55
-// sources -> 1 destination actually has, just not yet at its full size.
+// testStreamStressManySourcesHighVolume: 20 real sources, each bursting
+// concurrently, against one destination.
 func testStreamStressManySourcesHighVolume(t *testing.T) {
 	spec := loadTestStreamStressSpec(t)
 	stream, err := NewStream(spec, false)
@@ -125,14 +113,9 @@ func testStreamStressManySourcesHighVolume(t *testing.T) {
 	}
 }
 
-// testStreamStressFilterCorrectnessUnderLoad proves stress-stream.yaml's
-// two filter objects are enforced correctly under real multi-source load,
-// not just that events arrive at all: every one of streamStressSourceCount
-// sources publishes the same 4-event mix (see stress-stream.yaml's header
-// for the exact matching matrix), and this asserts every "should match"
-// event arrives while every "should not match" event never does --
-// checking exclusion, which nothing else in this package does at this
-// scale, is exactly as important as checking inclusion.
+// testStreamStressFilterCorrectnessUnderLoad: every source publishes the
+// same 4-event mix (see stress-stream.yaml's header for the matching
+// matrix); asserts matching events arrive and non-matching ones never do.
 func testStreamStressFilterCorrectnessUnderLoad(t *testing.T) {
 	spec := loadTestStreamStressSpec(t)
 	stream, err := NewStream(spec, false)
@@ -161,14 +144,11 @@ func testStreamStressFilterCorrectnessUnderLoad(t *testing.T) {
 		go func(i int, sourceURL string) {
 			defer wg.Done()
 
-			// kind 1, any author -- matches filter 1 (kinds only) -> included.
+			// included: kind 1 (any author), kind 7 (primary author).
+			// excluded: kind 7 (alt author), kind 3.
 			e1 := newIntegrationEventOfKindUnchecked(1, integrationPrivKey, fmt.Sprintf("filter-src%d-k1", i))
-			// kind 7, primary author -- matches filter 2 (kind+author) -> included.
 			e2 := newIntegrationEventOfKindUnchecked(7, integrationPrivKey, fmt.Sprintf("filter-src%d-k7-primary", i))
-			// kind 7, alt author -- matches neither (wrong author for
-			// filter 2, wrong kind for filter 1) -> excluded.
 			e3 := newIntegrationEventOfKindUnchecked(7, integrationPrivKeyAlt, fmt.Sprintf("filter-src%d-k7-alt", i))
-			// kind 3, any author -- matches neither -> excluded.
 			e4 := newIntegrationEventOfKindUnchecked(3, integrationPrivKey, fmt.Sprintf("filter-src%d-k3", i))
 
 			for _, ev := range []*nip01.Event{e1, e2, e3, e4} {
@@ -199,20 +179,14 @@ func testStreamStressFilterCorrectnessUnderLoad(t *testing.T) {
 		t.Errorf("filter-matching events from %d sources, but %d never reached the destination: %v", len(urls), len(missing), missing)
 	}
 
-	// By the time every matching event above has settled (the wait just
-	// above), enough time has passed that a wrongly-leaked excluded event
-	// would have arrived too -- a single snapshot check is enough here,
-	// not another poll loop.
 	leaked := fetchEventIDsFromRelay(t, streamStressDestURL, excluded)
 	if len(leaked) > 0 {
 		t.Errorf("%d event(s) that should have been excluded by the stream's filters reached the destination anyway: %v", len(leaked), leaked)
 	}
 }
 
-// testStreamStressSustainedLoad covers throughput over time rather than a
-// single instantaneous burst: every source publishes continuously for a
-// fixed duration, exercising sustained backpressure/pacing behavior none
-// of this package's one-shot burst tests do.
+// testStreamStressSustainedLoad: every source publishes continuously for
+// a fixed duration instead of one burst.
 func testStreamStressSustainedLoad(t *testing.T) {
 	spec := loadTestStreamStressSpec(t)
 	stream, err := NewStream(spec, false)
@@ -272,12 +246,8 @@ func testStreamStressSustainedLoad(t *testing.T) {
 	}
 }
 
-// testStreamStressConcurrentMultiSourceDisruption covers production's
-// actual flakiness shape: with ~55 sources, several are realistically
-// flapping at any given moment, not just one. Restarts a meaningful
-// fraction of sources simultaneously (not sequentially) while the stream
-// is live, then confirms every source -- disrupted or not -- still gets
-// its events through.
+// testStreamStressConcurrentMultiSourceDisruption: restarts several
+// sources at once, mid-stream, then confirms every source's events land.
 func testStreamStressConcurrentMultiSourceDisruption(t *testing.T) {
 	spec := loadTestStreamStressSpec(t)
 	stream, err := NewStream(spec, false)
@@ -301,7 +271,6 @@ func testStreamStressConcurrentMultiSourceDisruption(t *testing.T) {
 		before = append(before, ev.ID)
 	}
 
-	// Restart several sources at once, not one at a time.
 	const disrupted = 5
 	var restartWG sync.WaitGroup
 	for i := 0; i < disrupted; i++ {
@@ -309,9 +278,6 @@ func testStreamStressConcurrentMultiSourceDisruption(t *testing.T) {
 		service := fmt.Sprintf("source%d", i+1)
 		go func(service string) {
 			defer restartWG.Done()
-			// t.Errorf (unlike t.Fatalf) is safe to call from any
-			// goroutine, as long as it happens before the test function
-			// returns -- restartWG.Wait() below ensures that.
 			cmd := exec.Command("docker", "compose", "-f", streamStressComposeFile, "restart", service)
 			if out, err := cmd.CombinedOutput(); err != nil {
 				t.Errorf("docker compose restart %s failed: %v\n%s", service, err, out)
@@ -325,8 +291,7 @@ func testStreamStressConcurrentMultiSourceDisruption(t *testing.T) {
 	after := make([]string, 0, len(urls))
 	for i, u := range urls {
 		ev := newIntegrationEvent(t, fmt.Sprintf("chaos-after-%d", i))
-		// The first `disrupted` sources may still be mid-restart.
-		publishEventWithRetry(t, u, ev, 30*time.Second)
+		publishEventWithRetry(t, u, ev, 30*time.Second) // first `disrupted` sources may still be mid-restart
 		after = append(after, ev.ID)
 	}
 
@@ -337,13 +302,8 @@ func testStreamStressConcurrentMultiSourceDisruption(t *testing.T) {
 	}
 }
 
-// testStreamStressDestinationStallUnderLoad is
-// stream_integration_test.go's DestinationDisruptionDoesNotDropEvents'
-// "Stall" case, stress-tested: every one of streamStressSourceCount
-// sources publishes concurrently *while* the destination is paused,
-// instead of one source publishing one event -- stresses the recovery
-// store's capacity to absorb a genuinely large simultaneous burst of
-// failed deliveries, not just prove the single-event mechanism works.
+// testStreamStressDestinationStallUnderLoad: all sources publish
+// concurrently while the destination is paused, not just one event.
 func testStreamStressDestinationStallUnderLoad(t *testing.T) {
 	spec := loadTestStreamStressSpec(t)
 	stream, err := NewStream(spec, false)
@@ -398,9 +358,7 @@ func testStreamStressDestinationStallUnderLoad(t *testing.T) {
 		published = append(published, ids...)
 	}
 
-	// Give the destination time to fully reconnect and the recovery loop
-	// several ticks to retry everything it queued during the stall.
-	time.Sleep(15 * time.Second)
+	time.Sleep(15 * time.Second) // let the destination reconnect and recovery retry
 
 	missing := waitForEventsAtRelay(t, streamStressDestURL, published, 60*time.Second)
 	if len(missing) > 0 {
@@ -411,12 +369,9 @@ func testStreamStressDestinationStallUnderLoad(t *testing.T) {
 	}
 }
 
-// loadTestStreamStressSpec loads integration/stream/stress-stream.yaml the
-// same way `ncli apply` itself would (loadSpecFromYaml), then overrides
-// `from` with all streamStressSourceCount source URLs (the checked-in file
-// only lists one, to stay a valid, hand-runnable spec on its own -- see
-// its header) and the recovery block (fresh temp dir, short retry
-// interval, same rationale as loadTestStreamSpec).
+// loadTestStreamStressSpec loads stress-stream.yaml, overriding `from`
+// with all 20 source URLs (the file only lists one) and the recovery
+// block (fresh temp dir, short retry interval).
 func loadTestStreamStressSpec(t *testing.T) *StreamSpec {
 	t.Helper()
 	rs, err := loadSpecFromYaml(streamStressSpecFile)

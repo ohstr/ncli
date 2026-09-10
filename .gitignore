@@ -5,13 +5,11 @@
 # Runtime data for the local Docker dev stack (build/relay/docker-compose.dev.yaml)
 /build/.dev/
 
-# Recovery store written by a manual `ncli apply -f integration/stream/stream.yaml`
-# run against `just stream up` (the automated Go test uses its own temp dir instead)
+# Recovery store from a manual `ncli apply -f integration/stream/stream.yaml` run
 /integration/stream/.recovery/
 /integration/stream/.recovery-stress/
 
-# Local store written by a manual `ncli apply -f integration/sync/sync.yaml`
-# run against `just sync up` (the automated Go test uses its own temp dir instead)
+# Local store from a manual `ncli apply -f integration/sync/sync.yaml` run
 /integration/sync/.data/
 
 # Docker Compose env files (hold secrets like MEILI_MASTER_KEY) - keep the

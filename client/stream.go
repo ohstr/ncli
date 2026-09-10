@@ -353,9 +353,8 @@ func (sc *StreamChannel) removeSubscriber(index int) {
 	sc.snapshotSubscribers()
 }
 
-// errDestinationReconnecting is the recovery-store reason recorded for an
-// event that arrived while its destination was between (re)connect cycles
-// -- see deliverToSubscriber's paused() case.
+// errDestinationReconnecting is the recovery-store reason for an event
+// that arrived while its destination was between (re)connect cycles.
 var errDestinationReconnecting = errors.New("destination reconnecting")
 
 // deliverToSubscriber hands an event to a single destination's flow, and
@@ -373,18 +372,9 @@ func deliverToSubscriber(ctx context.Context, subscriber *FlowContext, event *ni
 	case subscriber.incomingEvents <- event:
 
 	case <-subscriber.paused():
-		// The destination is between (re)connect cycles: pause() has run
-		// (handleFlow already returned) but the next open() hasn't yet, a
-		// window that lasts at least workerDelayTime on every single
-		// reconnect. Without saving to recovery here, this event would
-		// vanish with no trace at all -- not even counted as lost -- while
-		// the source that produced it has already advanced its own
-		// lastUpdate watermark past it (see handleEvent), so a later
-		// source-side reconnect can never re-fetch it either. That's a
-		// silent, permanent violation of the stream's zero-loss design, so
-		// this is handled exactly like RemoteSubscription.Write's own
-		// send-failure path below: hand it to recovery, and only count it
-		// as genuinely lost if recovery itself can't take it.
+		// Destination between (re)connect cycles. Without recovery, this
+		// event would vanish untracked, and the source has already moved
+		// its watermark past it -- handle it like a send failure below.
 		subscriber.pending.delete(event.ID) // never actually delivered
 		if subscriber.recovery != nil {
 			if err := subscriber.recovery.SaveFailedEvent(event, subscriber.stat.GetAttributes().Name, errDestinationReconnecting); err != nil {
@@ -395,14 +385,8 @@ func deliverToSubscriber(ctx context.Context, subscriber *FlowContext, event *ni
 		}
 
 	case <-ctx.Done():
-		// Final shutdown, not a transient reconnect: Stream.Close cancels
-		// this same ctx before calling RecoveryManager.Stop, so attempting a
-		// fresh SaveFailedEvent here would race the recovery manager's own
-		// best-effort shutdown drain (a single non-blocking pass) -- it could
-		// land just after that pass returns and sit in saveQueue forever,
-		// worse than today's behavior. Left as a plain drop, matching
-		// TestStreamCloseDoesNotHangOnStuckDestination's expectation that
-		// shutdown must not hang on an undrained destination.
+		// Final shutdown: saving here could race RecoveryManager.Stop's
+		// own drain and land in saveQueue forever, so just drop.
 		subscriber.pending.delete(event.ID) // never actually delivered
 	}
 }

@@ -1,22 +1,8 @@
-# Stream spec fixture for the local e2e test stack (see compose.yaml and
-# this directory's README). Same schema as examples/apply/stream.yaml and
-# production's own stream.yaml, pointed at this stack's fixed localhost
-# ports instead of real public relays.
-#
-# client/stream_integration_test.go loads this file the same way `ncli apply`
-# itself does (loadSpecFromYaml) rather than constructing a *StreamSpec by
-# hand, so it exercises the real on-disk schema -- it only overrides the
-# `recovery` block's store_path/max_retries/retry_interval afterward, to
-# use a fresh temp directory and a short interval for the test's own
-# lifetime. Everything else here is exactly what a user would write.
-#
-# You can also run this by hand against `just stream up`, e.g.:
-#   just stream up
-#   ncli apply -f integration/stream/stream.yaml
-#   just stream down
-# `raw: true` below means that always logs to stdout instead of opening the
-# interactive TUI -- deliberate, so this fixture is safe to run
-# non-interactively (CI, scripts) as well as by hand.
+# Stream spec fixture for the local e2e stack (see compose.yaml). Same
+# schema as examples/apply/stream.yaml, pointed at this stack's ports. The
+# Go test overrides `recovery` (fresh temp dir, short retry interval);
+# everything else is what a user would write. `raw: true` keeps it
+# non-interactive for `just stream up` + `ncli apply -f stream.yaml`.
 kind: stream
 spec:
   timeouts:
@@ -25,9 +11,7 @@ spec:
     pong: "4s"
     write: "5s"
 
-  # since: 0, not a rolling window like production's `24h` -- this test
-  # wants every event it publishes to be in-window regardless of wall-clock
-  # skew between the test run and whatever it just published.
+  # since: 0, not a rolling window, so every published event is in-window.
   filters:
     - since: 0
 
@@ -44,9 +28,7 @@ spec:
       trusted: true
       writeConcurrency: 8
 
-  # Overridden by the Go test (fresh temp dir, short retry_interval) --
-  # these are just sane defaults for a manual `ncli apply` run against
-  # `just stream up`.
+  # Overridden by the Go test; sane defaults for a manual run.
   recovery:
     store_path: ./integration/stream/.recovery/stream.db
     max_retries: 50

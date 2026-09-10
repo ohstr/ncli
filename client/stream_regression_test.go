@@ -431,13 +431,8 @@ func TestStreamEphemeralAckIsIgnored(t *testing.T) {
 	}
 }
 
-// TestFlowContextReloadResetsAge guards against the exact symptom reported
-// from production: the dashboard's Age column showed the same value for
-// every source regardless of how often it had actually retried, because
-// nothing ever reset FlowMetrics.createdAt after stream start -- Age was
-// really "time since the stream started," not "time since this flow's last
-// (re)connect." reload() is the single retry choke-point shared by both
-// sources and destinations, so that's where the reset belongs.
+// TestFlowContextReloadResetsAge: Age must reset on every retry, not just
+// track time since the stream started.
 func TestFlowContextReloadResetsAge(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -467,18 +462,8 @@ func TestFlowContextReloadResetsAge(t *testing.T) {
 	}
 }
 
-// TestDeliverToSubscriberSavesToRecoveryWhenPaused reproduces the second,
-// more serious production bug: a destination that's between (re)connect
-// cycles -- handleFlow's deferred pause() has run, the next cycle's open()
-// hasn't happened yet, a window that occurs on every single reconnect --
-// used to have any event routed to it via deliverToSubscriber vanish with
-// no trace at all: no recovery-store save, no stat increment, not even a
-// log line. Worse, the source that produced the event has already advanced
-// its own lastUpdate watermark past it by the time it reaches here, so a
-// later source-side reconnect can never re-fetch it either -- permanent,
-// silent loss, directly contradicting the stream's documented "zero-loss
-// design." This asserts a paused destination now hands the event to
-// recovery instead.
+// TestDeliverToSubscriberSavesToRecoveryWhenPaused: an event routed to a
+// destination between (re)connect cycles must go to recovery, not vanish.
 func TestDeliverToSubscriberSavesToRecoveryWhenPaused(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

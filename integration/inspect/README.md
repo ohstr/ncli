@@ -1,29 +1,16 @@
 # Inspect e2e integration test stack
 
-A local Docker Compose stack of **three real `ncli relay` server
-processes**, used to test `ncli apply -f inspect.yaml`'s read-only,
-multi-target flow end-to-end without touching a production relay. Built to
-close a real coverage gap, not to chase a specific bug: before this,
-`kind: inspect` had zero test coverage against a real relay at all --
-`client/inspect_store_test.go` only ever exercises the local session store
-in isolation, never a live relay connection. This mirrors
-`integration/stream/`'s pattern (see that directory's README for the full
-rationale) applied to inspect's own "several relays feeding one place"
-shape: instead of many sources fanning into one destination, several
-targets fan into one local session store.
+Real `ncli relay` containers (3 targets), testing
+`ncli apply -f inspect.yaml`'s read-only multi-target flow end-to-end.
+Closes a real coverage gap: before this, `kind: inspect` had zero
+real-relay coverage (`client/inspect_store_test.go` only exercises the
+local store).
 
 ## What's here
 
-- `compose.yaml` -- `target1`/`target2`/`target3` (ports `45510`-`45512`),
-  each a real `ncli relay` built from this repo's own
-  `build/relay/Dockerfile`. Project-named `ncli-inspect-itest` so it never
-  collides with `build/relay/docker-compose.dev.yaml`'s stack or
-  `integration/stream/`'s (distinct host ports too).
-- `relay.yaml` -- minimal relay config shared read-only by all three
-  services (each has its own volume, so the identical in-container paths
-  never collide).
-- `inspect.yaml` -- an inspect spec fixture pointed at this stack's ports.
-  Same schema as `examples/apply/inspect.yaml`.
+- `compose.yaml` -- `target1-3` (45510-45512), project `ncli-inspect-itest`.
+- `relay.yaml` -- shared minimal relay config.
+- `inspect.yaml` -- spec fixture pointed at this stack's ports.
 
 ## Automated: the Go test
 
@@ -31,129 +18,69 @@ targets fan into one local session store.
 just test-integration-inspect
 ```
 
-This runs `TestInspectIntegration` (`client/inspect_integration_test.go`), which
-brings the stack up itself, drives `client.NewInspector` **in process**
-against the compose stack's published ports, and tears the stack down when
-done. Not part of `just test`/`test-integration` (skipped under `-short`,
-same convention as `client/multi_relay_test.go` and
-`client/stream_integration_test.go`), but runs automatically in CI on every
-push/PR via its own `integrations` job
-(`.github/workflows/ci.yml`) -- it needs Docker, which that job's
-`ubuntu-latest` runner already has.
+Runs `TestInspectIntegration`. Needs Docker; runs automatically in CI.
 
-Three top-level scenarios, table-driven where a scenario has more than one
-natural case:
+Three scenarios:
 
-- **`CollectsFromAllTargets`** -- table-driven across data volume, the
-  "all relays as source" case: each of the three targets holds events none
-  of the others do, and a single inspect session pointed at all three must
-  end up with every one of them in its local session store, not just some.
-  - `/Small` -- a handful of events per target.
-  - `/Large` -- the "high input" case: hundreds of events per target at
-    once.
-- **`TargetDisruptionDoesNotMissEvents`** -- table-driven across the same
-  two disruption mechanisms as stream's
-  `DestinationDisruptionDoesNotDropEvents`: the disruption must not hang
-  the session, and an event published to that target once it's back must
-  still be picked up. Inspect's targets run through the exact same
-  `ClientSubscriptionContext.Run`/retry machinery stream's sources do (see
-  `client/inspect.go`'s `NewInspector`), so this exercises the same
-  mechanism on inspect's own code path instead of assuming it carries over.
-  - `/Restart` -- an explicit disconnect (`docker compose restart`).
-  - `/Stall` -- `docker compose pause`, a *silent* stall distinct from
-    `/Restart`'s abrupt teardown. Necessarily slow (~70s): unlike stream,
-    `InspectSpec` has no `timeouts:` block at all (see "Known ncli
-    limitations" below), so this relies on `relayclient`'s hardcoded 60s
-    default `PongTimeout` with no way to configure a shorter one.
-- **`DuplicateEventAcrossOverlappingTargetsIsNotDoubleStored`** -- publishes
-  one signed event to two targets and confirms the local store ends up
-  with exactly one row for it: overlapping relays serving the same event
-  is a routine occurrence for a real inspect session, and this exercises
-  two *live, concurrent* deliveries of the same ID racing each other, not
-  just two sequential same-goroutine `Insert` calls (which
-  `client/inspect_store_test.go`'s `TestInspectStoreInsertToleratesDuplicateEvent`
-  already covers at the store level alone).
+- **`CollectsFromAllTargets`** -- table-driven `/Small` and `/Large`:
+  each target holds events none of the others do; a session pointed at
+  all three must collect every one.
+- **`TargetDisruptionDoesNotMissEvents`** -- `/Restart` and `/Stall`
+  (mirrors stream's `DestinationDisruptionDoesNotDropEvents`). `/Stall`
+  is necessarily slow (~70s): `InspectSpec` has no `timeouts:` block, so
+  it waits out `relayclient`'s default 60s `PongTimeout`.
+- **`DuplicateEventAcrossOverlappingTargetsIsNotDoubleStored`** --
+  publishes one event to two targets, asserts exactly one stored row
+  (two *live, concurrent* deliveries racing, not just sequential
+  same-goroutine `Insert` calls).
 
-Unlike stream, inspect has no destination, so the specific bug
-`integration/stream/`'s harness was built for (a *destination* silently
-dropping events during its own reconnect window) has no inspect
-counterpart -- there's nothing downstream of inspect to pause. What both
-stacks actually share is the fan-in shape and the need for a real relay to
-observe reconnect behavior honestly.
+Inspect has no destination, so stream's specific reconnect-drop bug has no
+counterpart here -- what both stacks share is the fan-in shape.
 
-## Known ncli limitations surfaced while building this
+## Known ncli limitations found while building this
 
-- `client.Client.init()` (`client/client.go`) currently refuses to run
-  `kind: inspect` (and `kind: sync`) headlessly at all: `ncli apply -f
-  inspect.yaml` from a script/CI/agent with no tty fails immediately with
-  "this workflow's kind requires an interactive terminal ... use a stream
-  workflow (with raw: true) for unattended/agent use". Only `stream`
-  supports `raw: true`. That's why this test (like
-  `client/stream_integration_test.go`) constructs `*Inspector` directly
-  instead of going through `Client`/`ncli apply` -- there is currently no
-  other way to exercise inspect non-interactively at all. See
-  `integration/README.md`'s backlog for the suggested fix (extend `raw:
-  true` support to `inspect`/`sync`).
-- `InspectSpec` has no `timeouts:` block at all (`client/inspect.go`'s
-  `NewInspector` hardcodes `NewStreamChannel(0, nil)`), so every inspect
-  target always uses `relayclient`'s hardcoded defaults (30s ping / 60s
-  pong / ...) with no way to configure them -- unlike `stream`/`sync`,
-  which both support a `timeouts:` block (see
-  `client/spec.go`'s `TimeoutSpec`). This is why
-  `TargetDisruptionDoesNotMissEvents/Stall` above has to wait out the full
-  60s default rather than a short configured one.
+- `client.Client.init()` refuses `kind: inspect`/`sync` headlessly at all
+  (no tty → immediate failure). Only `stream` supports `raw: true`. That's
+  why this test constructs `*Inspector` directly instead of going through
+  `Client`/`ncli apply`. See `integration/README.md`'s backlog.
+- `InspectSpec` has no `timeouts:` block at all -- every target uses
+  `relayclient`'s hardcoded defaults, unlike stream/sync.
 
 ## Manual: poke at it with the real CLI
 
 ```
 just inspect up
 ncli apply -f integration/inspect/inspect.yaml
-# ... needs a real terminal, per the limitation above ...
 just inspect down
 ```
 
-`just inspect up` rebuilds the image from your current checkout each time
-(`--build`), so local source changes are picked up without an extra step.
+Needs a real terminal, per the limitation above.
 
 ## Stress stack
 
-The stack above (3 targets) proves the fan-in *mechanism* generalizes past
-a single target; a separate, heavier stack exists for real scale, mirroring
-`integration/stream/`'s stress stack (see that README's "Stress stack"
-section for the fuller rationale):
+Mirrors `integration/stream/`'s stress stack for real scale:
 
-- `stress-compose.yaml` -- 15 real target relays (ports `45590`-`45604`),
-  same `x-relay: &relay` YAML anchor pattern as stream's stress stack,
-  project-named `ncli-inspect-stress-itest`. Independently confirmed all
-  15 containers build/start/respond correctly before relying on it.
-- `stress-inspect.yaml` -- the same two-filter-object pair as
-  `integration/stream/stress-stream.yaml` (`kinds: [1]`, and `kinds: [7]`
-  scoped to one author) -- see that file's header for the exact
-  inclusion/exclusion matrix. The checked-in file lists only `target1` in
-  `targets` (so it stays a valid, hand-runnable spec); the Go test
-  overrides `targets` with all 15 URLs.
+- `stress-compose.yaml` -- 15 targets (45590-45604), same YAML-anchor
+  pattern, project `ncli-inspect-stress-itest`.
+- `stress-inspect.yaml` -- the same two-filter-object pair as stream's
+  stress fixture. Only `target1` is listed in `targets`; the Go test
+  overrides it with all 15 URLs.
 
 ```
 just test-integration-inspect-stress
 ```
 
-Runs `TestInspectStress` (`client/inspect_stress_test.go`). Not part of
-`just test`/`test-integration`/`test-integrations`, and **not run
-automatically in CI**. `just inspect-stress up`/`down` pokes at the stack
-by hand.
+Runs `TestInspectStress`. **Not run in CI**. `just inspect-stress up`/`down`
+for manual poking.
 
 Four scenarios:
 
 - **`ManyTargetsHighVolumeAllLand`** -- hundreds of events across all 15
-  targets at once, where the correctness suite's 3-target version only
-  proves the mechanism, not the scale.
+  targets at once.
 - **`FilterCorrectnessUnderLoad`** -- every target publishes the same
-  4-event inclusion/exclusion mix at once; asserts every matching event
-  lands in the local store *and* every non-matching one never does.
-- **`ConcurrentMultiTargetDisruption`** -- restarts 4 of the 15 targets
-  simultaneously mid-session, production's real flakiness shape.
-- **`ConcurrentMultiTargetStallDoesNotHangSession`** -- pauses 4 targets
-  simultaneously (a silent stall, not a restart). Costs no more wall-clock
-  time than pausing one (all wait out the same 60s default concurrently),
-  so this is the natural place to test *several* stalled targets at once
-  rather than repeating the single-target case at real scale for nothing.
+  4-event mix; asserts matching events land and non-matching ones never do.
+- **`ConcurrentMultiTargetDisruption`** -- 4 of 15 targets restarted
+  simultaneously.
+- **`ConcurrentMultiTargetStallDoesNotHangSession`** -- 4 targets paused
+  simultaneously; costs no more time than pausing one, since all wait out
+  the same default concurrently.

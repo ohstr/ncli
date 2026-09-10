@@ -195,13 +195,13 @@ func publishEventWithRetry(t *testing.T, relayURL string, ev *nip01.Event, timeo
 	t.Fatalf("failed to publish event %s to %s within %s: %v", ev.ID, relayURL, timeout, lastErr)
 }
 
-// fetchEventIDsFromRelay queries relayURL directly for the given IDs,
-// independent of what the client under test believes happened.
-func fetchEventIDsFromRelay(t *testing.T, relayURL string, ids []string) map[string]bool {
-	t.Helper()
+// fetchEventIDsFromRelayErr is fetchEventIDsFromRelay's error-returning
+// core, safe to call from any goroutine and safe to retry on a transient
+// failure (e.g. a single query outrunning its own 5s timeout under load).
+func fetchEventIDsFromRelayErr(relayURL string, ids []string) (map[string]bool, error) {
 	u, err := url.Parse(relayURL)
 	if err != nil {
-		t.Fatalf("invalid relay URL %q: %v", relayURL, err)
+		return nil, fmt.Errorf("invalid relay URL %q: %w", relayURL, err)
 	}
 	filters := nip01.NewSubscriptionFilterGroup()
 	filters.Add(&nip01.SubscriptionFilter{IDs: ids})
@@ -210,23 +210,45 @@ func fetchEventIDsFromRelay(t *testing.T, relayURL string, ids []string) map[str
 	defer cancel()
 	events, err := relayclient.ReadEventsFromRelay(ctx, u, filters)
 	if err != nil {
-		t.Fatalf("failed to query %s for %d event IDs: %v", relayURL, len(ids), err)
+		return nil, fmt.Errorf("failed to query %s for %d event IDs: %w", relayURL, len(ids), err)
 	}
 	found := make(map[string]bool, len(events))
 	for _, ev := range events {
 		found[ev.ID] = true
 	}
+	return found, nil
+}
+
+// fetchEventIDsFromRelay queries relayURL directly for the given IDs,
+// independent of what the client under test believes happened. Fails the
+// test immediately on error -- see waitForEventsAtRelay for the tolerant,
+// retrying counterpart.
+func fetchEventIDsFromRelay(t *testing.T, relayURL string, ids []string) map[string]bool {
+	t.Helper()
+	found, err := fetchEventIDsFromRelayErr(relayURL, ids)
+	if err != nil {
+		t.Fatal(err)
+	}
 	return found
 }
 
 // waitForEventsAtRelay polls relayURL until every ID is retrievable or
-// timeout elapses, returning whatever's still missing.
+// timeout elapses, returning whatever's still missing. A transient query
+// failure (e.g. one query outrunning its own 5s timeout under CI load) is
+// treated as just another empty result to retry, not an immediate fatal --
+// fetchEventIDsFromRelay's t.Fatal-on-error behavior used to short-circuit
+// this loop on the very first hiccup, defeating the whole point of polling
+// up to timeout.
 func waitForEventsAtRelay(t *testing.T, relayURL string, ids []string, timeout time.Duration) []string {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	var missing []string
 	for {
-		found := fetchEventIDsFromRelay(t, relayURL, ids)
+		found, err := fetchEventIDsFromRelayErr(relayURL, ids)
+		if err != nil {
+			t.Logf("waitForEventsAtRelay: query failed, retrying: %v", err)
+			found = nil
+		}
 		missing = nil
 		for _, id := range ids {
 			if !found[id] {

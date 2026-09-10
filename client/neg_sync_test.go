@@ -3,13 +3,18 @@ package client
 import (
 	"context"
 	"fmt"
+	"net/http/httptest"
 	"net/url"
 	"os"
+	"path/filepath"
 	"sort"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/ohstr/ncli/client/tui"
 	"github.com/ohstr/nmilat/nip01"
 	"github.com/ohstr/nmilat/nip11"
 	"github.com/ohstr/nmilat/nip77"
@@ -400,4 +405,126 @@ func timestampsToItems(timestamps []uint64) []nip77.Item {
 		return items[i].Compare(items[j]) < 0
 	})
 	return items
+}
+
+// newPushTestStore opens a fresh local store and seeds it with n events,
+// returning the store, their IDs, and the store's path.
+func newPushTestStore(t *testing.T, n int) (*relay.EventStore, []string) {
+	t.Helper()
+	store, err := relay.NewEventStore(filepath.Join(t.TempDir(), "push.db"), &nip11.Limitation{})
+	if err != nil {
+		t.Fatalf("failed to open store: %v", err)
+	}
+	t.Cleanup(store.Close)
+
+	ids := make([]string, n)
+	events := make([]*nip01.Event, n)
+	for i := 0; i < n; i++ {
+		ev := newRegressionTestEvent(i)
+		ids[i] = ev.ID
+		events[i] = ev
+	}
+	if err := store.InsertEvents(context.Background(), events); err != nil {
+		t.Fatalf("failed to seed store: %v", err)
+	}
+	return store, ids
+}
+
+func connectToMockRelay(t *testing.T, ctx context.Context, server *httptest.Server) *relayclient.Connection {
+	t.Helper()
+	relayURI, err := url.Parse(mockRelayWSURL(server))
+	if err != nil {
+		t.Fatalf("invalid relay URL: %v", err)
+	}
+	conn, err := relayclient.NewConnection(ctx, relayURI, nil)
+	if err != nil {
+		t.Fatalf("failed to connect: %v", err)
+	}
+	t.Cleanup(conn.Close)
+	return conn
+}
+
+// TestSyncPushEventsWaitsForRealAcks is a regression guard: pushEvents used
+// to count an event as pushed the instant conn.Send returned true --  a
+// purely local "did the write call succeed" signal, not "did the remote
+// actually receive it". Against a relay that genuinely accepts every event,
+// pushEvents must still converge and report every event delivered.
+func TestSyncPushEventsWaitsForRealAcks(t *testing.T) {
+	var received atomic.Int32
+	server := newMockRelay(t, mockRelayAccept, &received)
+
+	const n = 5
+	store, haveIDs := newPushTestStore(t, n)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	conn := connectToMockRelay(t, ctx, server)
+
+	s := &SyncModule{spec: &SyncSpec{PullBatchSize: 10}, logger: &tui.FlowLogger{}}
+	s.pushEvents(ctx, conn, store, haveIDs)
+
+	if got := received.Load(); got != n {
+		t.Errorf("mock relay saw %d/%d EVENT frames", got, n)
+	}
+	logs := flattenLoggerText(s.logger)
+	if !strings.Contains(logs, fmt.Sprintf("Pushed %d events", n)) {
+		t.Errorf("expected a summary reporting all %d events pushed, got logs: %v", n, logs)
+	}
+}
+
+// TestSyncPushEventsDoesNotHangOnStalledAcks is the critical regression
+// guard: pushEvents used to have zero awareness of whether the remote was
+// even still there -- a plain `for _, ev := range events { conn.Send(ev) }`
+// loop with no error/timeout handling at all. Against a relay that silently
+// swallows every EVENT frame (a stall, or a relay that's simply gone quiet),
+// pushEvents must still return within its bounded ack-wait window instead of
+// hanging, and must say so rather than silently reporting success.
+func TestSyncPushEventsDoesNotHangOnStalledAcks(t *testing.T) {
+	orig := pushAckTimeout
+	pushAckTimeout = 300 * time.Millisecond
+	t.Cleanup(func() { pushAckTimeout = orig })
+
+	server := newMockRelay(t, mockRelayHang, nil)
+
+	const n = 3
+	store, haveIDs := newPushTestStore(t, n)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	conn := connectToMockRelay(t, ctx, server)
+
+	s := &SyncModule{spec: &SyncSpec{PullBatchSize: 10}, logger: &tui.FlowLogger{}}
+
+	done := make(chan struct{})
+	go func() {
+		s.pushEvents(ctx, conn, store, haveIDs)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("pushEvents hung well past its configured ack-wait timeout instead of giving up on a stalled remote")
+	}
+
+	logs := flattenLoggerText(s.logger)
+	if !strings.Contains(logs, "never got an ack") {
+		t.Errorf("expected a warning that events never got acked, got logs: %v", logs)
+	}
+	if strings.Contains(logs, fmt.Sprintf("Pushed %d events", n)) {
+		t.Errorf("a relay that never acked anything must not be reported as having received all %d events", n)
+	}
+}
+
+// flattenLoggerText joins every log cell logger has recorded so far into one
+// string, for a simple substring check instead of walking [][]string by hand.
+func flattenLoggerText(logger *tui.FlowLogger) string {
+	var sb strings.Builder
+	for _, row := range logger.GetLastLogs() {
+		for _, cell := range row {
+			sb.WriteString(cell)
+			sb.WriteString("\n")
+		}
+	}
+	return sb.String()
 }

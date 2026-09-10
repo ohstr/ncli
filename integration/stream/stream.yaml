@@ -1,0 +1,38 @@
+# Stream spec fixture for the local e2e stack (see compose.yaml). Same
+# schema as examples/apply/stream.yaml, pointed at this stack's ports. The
+# Go test overrides `recovery` (fresh temp dir, short retry interval);
+# everything else is what a user would write. `raw: true` keeps it
+# non-interactive for `just stream up` + `ncli apply -f stream.yaml`.
+kind: stream
+spec:
+  timeouts:
+    handshake: "2s"
+    ping: "2s"
+    pong: "4s"
+    write: "5s"
+
+  # since: 0, not a rolling window, so every published event is in-window.
+  filters:
+    - since: 0
+
+  from:
+    - relay: ws://localhost:45501
+      trusted: true
+    - relay: ws://localhost:45502
+      trusted: true
+    - relay: ws://localhost:45503
+      trusted: true
+
+  to:
+    - relay: ws://localhost:45500
+      trusted: true
+      writeConcurrency: 8
+
+  # Overridden by the Go test; sane defaults for a manual run.
+  recovery:
+    store_path: ./integration/stream/.recovery/stream.db
+    max_retries: 50
+    retry_interval: "1s"
+
+  raw: true
+  strictPow: false

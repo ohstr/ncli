@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/ohstr/nmilat/nip01"
+	relayclient "github.com/ohstr/nmilat/relay/client"
 	"sigs.k8s.io/yaml"
 )
 
@@ -252,6 +253,37 @@ type TimeoutSpec struct {
 	Ping      *string `json:"ping,omitempty"`
 	Pong      *string `json:"pong,omitempty"`
 	Write     *string `json:"write,omitempty"`
+}
+
+// ConnectionConfig converts ts into a relayclient.ConnectionConfig,
+// falling back to relayclient's defaults for any timeout left unset
+// (including a nil ts). Shared by stream and sync.
+func (ts *TimeoutSpec) ConnectionConfig() *relayclient.ConnectionConfig {
+	cfg := relayclient.DefaultConnectionConfig()
+	if ts == nil {
+		return cfg
+	}
+	if ts.Handshake != nil {
+		if d, err := time.ParseDuration(*ts.Handshake); err == nil {
+			cfg.HandshakeTimeout = d
+		}
+	}
+	if ts.Ping != nil {
+		if d, err := time.ParseDuration(*ts.Ping); err == nil {
+			cfg.PingInterval = d
+		}
+	}
+	if ts.Pong != nil {
+		if d, err := time.ParseDuration(*ts.Pong); err == nil {
+			cfg.PongTimeout = d
+		}
+	}
+	if ts.Write != nil {
+		if d, err := time.ParseDuration(*ts.Write); err == nil {
+			cfg.WriteTimeout = d
+		}
+	}
+	return cfg
 }
 
 func (ss *StreamSpec) UnmarshalJSON(data []byte) error {

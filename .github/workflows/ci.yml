@@ -45,6 +45,19 @@ jobs:
       - name: Test
         run: go test -short -race ./...
 
+  integrations:
+    # Hermetic Docker Compose e2e tests -- see integration/README.md.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Integration tests (stream, inspect, sync)
+        run: go test ./client/... -run 'TestStreamIntegration|TestInspectIntegration|TestSyncIntegration' -v -count=1 -timeout 30m
+
   lint:
     runs-on: ubuntu-latest
     steps:

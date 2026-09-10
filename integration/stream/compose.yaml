@@ -1,0 +1,78 @@
+# Local stream e2e stack: 1 destination + 3 sources, real `ncli relay`
+# containers. See integration/stream/README.md. Run by hand via
+# `just stream up`/`down`.
+name: ncli-stream-itest
+
+services:
+  destination:
+    build:
+      context: ../..
+      dockerfile: build/relay/Dockerfile
+    image: ncli:stream-itest
+    command: ["relay", "--config", "/config/relay.yaml"]
+    ports:
+      - "45500:5500"
+    volumes:
+      - ./relay.yaml:/config/relay.yaml:ro
+      - destination-data:/app/ncli/data
+    restart: unless-stopped
+
+  # Only used by MultipleDestinationsBothReceiveEvents.
+  destination2:
+    build:
+      context: ../..
+      dockerfile: build/relay/Dockerfile
+    image: ncli:stream-itest
+    command: ["relay", "--config", "/config/relay.yaml"]
+    ports:
+      - "45505:5500"
+    volumes:
+      - ./relay.yaml:/config/relay.yaml:ro
+      - destination2-data:/app/ncli/data
+    restart: unless-stopped
+
+  source1:
+    build:
+      context: ../..
+      dockerfile: build/relay/Dockerfile
+    image: ncli:stream-itest
+    command: ["relay", "--config", "/config/relay.yaml"]
+    ports:
+      - "45501:5500"
+    volumes:
+      - ./relay.yaml:/config/relay.yaml:ro
+      - source1-data:/app/ncli/data
+    restart: unless-stopped
+
+  source2:
+    build:
+      context: ../..
+      dockerfile: build/relay/Dockerfile
+    image: ncli:stream-itest
+    command: ["relay", "--config", "/config/relay.yaml"]
+    ports:
+      - "45502:5500"
+    volumes:
+      - ./relay.yaml:/config/relay.yaml:ro
+      - source2-data:/app/ncli/data
+    restart: unless-stopped
+
+  source3:
+    build:
+      context: ../..
+      dockerfile: build/relay/Dockerfile
+    image: ncli:stream-itest
+    command: ["relay", "--config", "/config/relay.yaml"]
+    ports:
+      - "45503:5500"
+    volumes:
+      - ./relay.yaml:/config/relay.yaml:ro
+      - source3-data:/app/ncli/data
+    restart: unless-stopped
+
+volumes:
+  destination-data:
+  destination2-data:
+  source1-data:
+  source2-data:
+  source3-data:

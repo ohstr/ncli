@@ -3,6 +3,8 @@ package client
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -11,6 +13,7 @@ import (
 
 	"github.com/ohstr/ncli/client/tui"
 	"github.com/ohstr/nmilat/nip01"
+	relayclient "github.com/ohstr/nmilat/relay/client"
 	"github.com/ohstr/nmilat/wire"
 )
 
@@ -320,15 +323,15 @@ func TestFlowContextPendingDoesNotCrossContaminate(t *testing.T) {
 	}
 }
 
-// TestOutboundMetricsShowsSynced guards against the exact confusion a user
-// hit in practice: re-running a stream against a destination that's already
-// fully synced makes every event land as a duplicate ack, so
-// Events/Failures/Retries all correctly stay at zero -- but if "Synced"
+// TestOutboundMetricsShowsDuplicates guards against the exact confusion a
+// user hit in practice: re-running a stream against a destination that's
+// already fully synced makes every event land as a duplicate ack, so
+// Events/Failures/Retries all correctly stay at zero -- but if "Duplicates"
 // (the destination's "other side already had this" counter) were hidden
 // from destination rows, the panel would look identical to a stuck/broken
-// destination. This asserts the Synced counter is visible and increments in
-// exactly that scenario.
-func TestOutboundMetricsShowsSynced(t *testing.T) {
+// destination. This asserts the Duplicates counter is visible and
+// increments in exactly that scenario.
+func TestOutboundMetricsShowsDuplicates(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -346,11 +349,11 @@ func TestOutboundMetricsShowsSynced(t *testing.T) {
 		Message:  "duplicate: already have this event",
 	})
 
-	const syncedIndex = 3 // [id, events, failures, synced, retries, age] (Pubkeys/Kinds skipped on destinations)
+	const duplicatesIndex = 3 // [id, events, failures, duplicates, retries, age] (Pubkeys/Kinds skipped on destinations)
 	deadline := time.Now().Add(2 * time.Second)
-	for stat.FlatRow()[syncedIndex] < 1 {
+	for stat.FlatRow()[duplicatesIndex] < 1 {
 		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for Synced to increment, row=%v", stat.FlatRow())
+			t.Fatalf("timed out waiting for Duplicates to increment, row=%v", stat.FlatRow())
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -361,12 +364,12 @@ func TestOutboundMetricsShowsSynced(t *testing.T) {
 
 	found := false
 	for _, header := range stat.Columns() {
-		if header.Name == "Synced" {
+		if header.Name == "Duplicates" {
 			found = true
 		}
 	}
 	if !found {
-		t.Error("expected \"Synced\" to be a visible column on destination (OutboundMetrics) rows")
+		t.Error("expected \"Duplicates\" to be a visible column on destination (OutboundMetrics) rows")
 	}
 }
 
@@ -427,5 +430,286 @@ func TestStreamEphemeralAckIsIgnored(t *testing.T) {
 
 	if logs := sc.logger.GetLastLogs(); len(logs) != 0 {
 		t.Errorf("an accepted=true, message=\"ephemeral: ...\" ack should produce no log output at all, got: %v", logs)
+	}
+}
+
+// TestFlowContextReloadResetsAge: Age must reset on every retry, not just
+// track time since the stream started.
+func TestFlowContextReloadResetsAge(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	stat := tui.NewInboundMetrics(1, "flaky-source", func() {})
+	fc := NewFlowContext(nip01.NewSubscriptionFilterGroup(), stat, true, nil)
+
+	// reload() unconditionally schedules a retry via a bare goroutine
+	// (StreamWorker.Retry) that outlives this test; give it a harmless job
+	// instead of leaving worker.task nil, which would panic when that
+	// goroutine eventually fires.
+	worker := NewStreamWorker()
+	worker.SetJob(func(context.Context) {}, ctx)
+	fc.setWorker(worker)
+
+	time.Sleep(1100 * time.Millisecond)
+
+	const ageIndex = 6 // [id, events, pubkeys, kinds, failures, retries, age] on InboundMetrics
+	if age := stat.FlatRow()[ageIndex]; age < 1 {
+		t.Fatalf("expected Age to have accrued at least 1s before reload(), got %d", age)
+	}
+
+	fc.reload()
+
+	if age := stat.FlatRow()[ageIndex]; age != 0 {
+		t.Errorf("expected reload() to reset Age to ~0, got %d seconds -- Age must reset on every retry, not just track time since the stream started", age)
+	}
+}
+
+// TestDeliverToSubscriberSavesToRecoveryWhenPaused: an event routed to a
+// destination between (re)connect cycles must go to recovery, not vanish.
+func TestDeliverToSubscriberSavesToRecoveryWhenPaused(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	storePath := filepath.Join(t.TempDir(), "recovery.db")
+	// retryInterval is deliberately long: this test only cares that the
+	// event lands in recovery, not that a background retry against the
+	// (fake, unresolvable) destination name fires during the test.
+	rm, err := NewRecoveryManager(storePath, 10, time.Minute)
+	if err != nil {
+		t.Fatalf("NewRecoveryManager failed: %v", err)
+	}
+	rm.Start(ctx)
+	defer rm.Stop()
+
+	stat := tui.NewOutboundMetrics(1, "flaky-dest", func() {})
+	fc := NewFlowContext(nip01.NewSubscriptionFilterGroup(), stat, true, rm)
+
+	// Simulate the exact state deliverToSubscriber can observe mid-run:
+	// open() (as handleFlow's entry does every cycle), then pause() (as
+	// handleFlow's defer does on exit) -- without running handleFlow itself,
+	// since only the resulting pauseCh state matters here.
+	fc.open()
+	fc.pause()
+
+	// fc.incomingEvents is a large buffered channel with nothing draining
+	// it, so its send case is *also* always immediately ready -- select
+	// would otherwise pick between it and the (closed, also-ready) paused()
+	// case nondeterministically, defeating the whole point of this test.
+	// Saturate it first so paused() is the only case that can actually fire.
+	for i := 0; i < streamFlowBufferSize; i++ {
+		fc.incomingEvents <- newRegressionTestEvent(1_000_000 + i)
+	}
+
+	ev := newRegressionTestEvent(1)
+	deliverToSubscriber(ctx, fc, ev)
+
+	if _, stillPending := fc.pending.get(ev.ID); stillPending {
+		t.Error("pending entry for a dropped event must be cleared, not left dangling")
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	var recovered *nip01.Event
+	for time.Now().Before(deadline) {
+		if e, err := rm.findEvent(ev.ID); err == nil {
+			recovered = e
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if recovered == nil {
+		t.Fatal("expected an event dropped during a destination's reconnect window to be saved to recovery, but it was never found there")
+	}
+
+	if lost := stat.Lost(); lost != 0 {
+		t.Errorf("event was successfully handed to recovery, should not also count as permanently Lost; got Lost=%d", lost)
+	}
+}
+
+// TestStreamEventHistoryNewGenerationPurgesOnlyStaleDispatched is a
+// regression guard for a real destination-stall bug: pending never used to
+// be cleared across reconnects, so a dead connection's still-unacked sends
+// piled up in it forever. Once enough accumulated (as few as
+// publishConcurrency's worth), maxEventHistorySize's eviction would start
+// hitting genuinely live entries instead, permanently leaking their
+// inFlight slot -- eventually every slot was gone and the destination could
+// never send again, even though its connection had long since recovered.
+// newGeneration must purge only entries dispatched under a now-superseded
+// generation (unrecoverable -- that connection is gone) and must leave
+// alone anything still merely queued (dispatchedGen == 0), since that's
+// still safe to retry as-is on the new connection.
+func TestStreamEventHistoryNewGenerationPurgesOnlyStaleDispatched(t *testing.T) {
+	seh := newStreamEventHistory()
+
+	staleDispatched := newRegressionTestEvent(1)
+	stillQueued := newRegressionTestEvent(2)
+	seh.add(staleDispatched)
+	seh.add(stillQueued)
+
+	seh.newGeneration() // generation 1: the connection these two were added under
+	seh.markDispatched(staleDispatched.ID)
+	// stillQueued is deliberately never dispatched.
+
+	currentDispatched := newRegressionTestEvent(3)
+	seh.newGeneration() // generation 2: staleDispatched's connection is now dead
+	seh.add(currentDispatched)
+	seh.markDispatched(currentDispatched.ID)
+
+	if _, found := seh.get(staleDispatched.ID); found {
+		t.Error("an event dispatched under a superseded generation must be purged -- its connection is gone, no real ACK will ever arrive")
+	}
+	if _, found := seh.get(stillQueued.ID); !found {
+		t.Error("an event that was only ever queued, never dispatched, must survive a reconnect -- it's still safe to retry as-is")
+	}
+	if _, found := seh.get(currentDispatched.ID); !found {
+		t.Error("an event dispatched under the current generation must not be purged")
+	}
+}
+
+// TestFlowContextOpenPurgesZombiesAcrossManyReconnects proves the fix holds
+// over many reconnects, not just one: repeatedly open()ing (as handleFlow
+// does on every (re)connect) with a dispatched-but-never-acked event each
+// time must never let pending grow -- each cycle's zombie must be purged by
+// the next open(), not accumulate toward maxEventHistorySize.
+func TestFlowContextOpenPurgesZombiesAcrossManyReconnects(t *testing.T) {
+	stat := tui.NewOutboundMetrics(1, "dest", func() {})
+	fc := NewFlowContext(nip01.NewSubscriptionFilterGroup(), stat, true, nil)
+
+	const reconnects = 50
+	for i := 0; i < reconnects; i++ {
+		fc.open()
+		ev := newRegressionTestEvent(i)
+		fc.pending.add(ev)
+		fc.pending.markDispatched(ev.ID) // sent on this cycle's connection, never acked before it died
+	}
+	fc.open() // one more reconnect: the last cycle's zombie is now stale too
+
+	if size := fc.pending.size(); size != 0 {
+		t.Errorf("expected every reconnect's dispatched-but-unacked zombie to be purged by the following open(), got %d entries still pending", size)
+	}
+}
+
+// TestSaveToRecoveryOrLoseClearsPendingEntry is a regression guard for a
+// silent event-loss bug: RemoteSubscription.Write used to drop an
+// already-dequeued event outright (no recovery save, no pending cleanup) if
+// its connection died while the event was waiting for a publish slot.
+// saveToRecoveryOrLose must both hand the event to recovery and stop
+// tracking it in pending -- otherwise its dead-connection entry just
+// becomes another zombie for newGeneration to clean up later.
+func TestSaveToRecoveryOrLoseClearsPendingEntry(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	storePath := filepath.Join(t.TempDir(), "recovery.db")
+	rm, err := NewRecoveryManager(storePath, 10, time.Minute)
+	if err != nil {
+		t.Fatalf("NewRecoveryManager failed: %v", err)
+	}
+	rm.Start(ctx)
+	defer rm.Stop()
+
+	stat := tui.NewOutboundMetrics(1, "flaky-dest", func() {})
+	fc := NewFlowContext(nip01.NewSubscriptionFilterGroup(), stat, true, rm)
+	rs := &RemoteSubscription{
+		relay:                     &url.URL{Scheme: "ws", Host: "example.invalid"},
+		recovery:                  rm,
+		ClientSubscriptionContext: &ClientSubscriptionContext{fc: fc},
+	}
+
+	ev := newRegressionTestEvent(1)
+	fc.pending.add(ev)
+
+	rs.saveToRecoveryOrLose(ev, relayclient.ErrConnectionClosed)
+
+	if _, found := fc.pending.get(ev.ID); found {
+		t.Error("saveToRecoveryOrLose must stop tracking the event in pending -- it will never get a real ACK on this dead connection")
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	var recovered *nip01.Event
+	for time.Now().Before(deadline) {
+		if e, err := rm.findEvent(ev.ID); err == nil {
+			recovered = e
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if recovered == nil {
+		t.Fatal("expected an event that died waiting for a publish slot to be saved to recovery, but it was never found there")
+	}
+	if lost := stat.Lost(); lost != 0 {
+		t.Errorf("event was successfully handed to recovery, should not also count as permanently Lost; got Lost=%d", lost)
+	}
+}
+
+// TestReleaseSlotSurvivesPendingEviction is a regression guard for the
+// other half of the destination-stall bug (see
+// TestStreamEventHistoryNewGenerationPurgesOnlyStaleDispatched for the
+// reconnect-driven half): pending is a capped LRU (maxEventHistorySize)
+// that can legitimately evict a still-live, current-generation entry from
+// heavy backlog alone -- no reconnect required, just enough distinct
+// events in flight at once (a large multi-source fan-in against a small
+// publishConcurrency is enough on its own). Before dispatched existed,
+// releaseSlot's correctness depended entirely on pending still holding the
+// entry when its real ACK arrived, so that eviction alone permanently
+// leaked a slot. dispatched is sized by publishConcurrency, never by
+// pending's cap, so releaseSlot must still fire correctly after pending
+// has evicted the entry.
+func TestReleaseSlotSurvivesPendingEviction(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sc := NewStreamChannel(1, nil)
+	stat := tui.NewOutboundMetrics(1, "dest", func() {})
+	fc := NewFlowContext(nip01.NewSubscriptionFilterGroup(), stat, true, nil)
+	fc.setPublishConcurrency(1)
+	sc.addSubscriber(fc)
+	go sc.handleFlow(ctx, fc) // real ack-processing path, incl. open()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for fc.inFlightSlots() == nil {
+		if time.Now().After(deadline) {
+			t.Fatal("timed out waiting for handleFlow's open() to initialize inFlight")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	sem := fc.inFlightSlots()
+
+	// Simulate exactly what RemoteSubscription.Write does on a successful
+	// dispatch: register in pending, mark it, take the slot it now holds.
+	ev := newRegressionTestEvent(1)
+	fc.pending.add(ev)
+	fc.pending.markDispatched(ev.ID)
+	fc.dispatched.add(ev.ID)
+	select {
+	case sem <- struct{}{}:
+	default:
+		t.Fatal("failed to acquire the single publish slot for setup")
+	}
+
+	// Flood pending past its cap with unrelated events -- simulates heavy
+	// backlog alone pushing it over, no reconnect involved.
+	for i := 0; i < maxEventHistorySize+1; i++ {
+		fc.pending.add(newRegressionTestEvent(1_000_000 + i))
+	}
+	if _, found := fc.pending.get(ev.ID); found {
+		t.Fatal("test setup invalid: ev should have been evicted from pending by now")
+	}
+
+	// ev's real ACK, arriving through the actual handleFlow code path --
+	// not a direct releaseSlot() call, so a regression in the real
+	// found-vs-dispatched wiring would be caught here too.
+	fc.receive(&wire.OkSubscriptionResponse{EventID: ev.ID, Accepted: true})
+
+	deadline = time.Now().Add(2 * time.Second)
+	for {
+		select {
+		case sem <- struct{}{}:
+			return // released and immediately reacquired: success
+		default:
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("expected the slot to be released and reacquirable after ev's real ACK -- pending's eviction must not leak it")
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }

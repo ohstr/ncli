@@ -1,0 +1,17 @@
+# Spec fixture for the local inspect e2e stack (see compose.yaml). Same
+# schema as examples/apply/inspect.yaml. Unlike stream, inspect has no
+# `raw: true` escape hatch, so running by hand (`just inspect up` +
+# `ncli apply -f inspect.yaml`) needs a real terminal.
+kind: inspect
+spec:
+  targets:
+    - relay: ws://localhost:45510
+      trusted: true
+    - relay: ws://localhost:45511
+      trusted: true
+    - relay: ws://localhost:45512
+      trusted: true
+
+  # since: 0, not a rolling window, so every published event is in-window.
+  filters:
+    - since: 0

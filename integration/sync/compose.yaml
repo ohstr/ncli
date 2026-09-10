@@ -1,0 +1,20 @@
+# Local sync e2e stack: 1 real `ncli relay` container. See
+# integration/sync/README.md. Run by hand via `just sync up`/`down`.
+name: ncli-sync-itest
+
+services:
+  remote:
+    build:
+      context: ../..
+      dockerfile: build/relay/Dockerfile
+    image: ncli:sync-itest
+    command: ["relay", "--config", "/config/relay.yaml"]
+    ports:
+      - "45520:5500"
+    volumes:
+      - ./relay.yaml:/config/relay.yaml:ro
+      - remote-data:/app/ncli/data
+    restart: unless-stopped
+
+volumes:
+  remote-data:

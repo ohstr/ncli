@@ -38,9 +38,10 @@ type FlowStat interface {
 	IncreaseLost()
 	Lost() int
 	AddEvent(int, string)
-	IncSynced()
+	IncDuplicates()
 	GetAttributes() FlowAttr
 	IncreaseRetries(time.Time)
+	ResetAge()
 	EOSECount() int
 	ResetEOSECounter()
 	SetIndexWidth(int)
@@ -248,16 +249,16 @@ func (fl *FlowLogger) GetLastLogs() [][]string {
 /////////
 
 type FlowMetrics struct {
-	id        int
-	name      string      `header:"Name" sortDefault:"" sortDir:"asc" sortKey:"N"`
-	events    int         `header:"Events" sortKey:"E"`
-	pubkeys   int         `header:"Pubkeys" sortKey:"P"` // running count of unique pubkeys seen, not the pubkeys themselves, so this field stays bounded
-	kinds     map[int]int `header:"Kinds" sortKey:"K"`
-	failures  int         `header:"Failures" sortKey:"F"`
-	synced    int         `header:"Synced" sortKey:"S"`
-	retries   int         `header:"Retries" sortKey:"R"`
-	lost      int         `header:"-"`
-	createdAt time.Time   `header:"Age" sortKey:"A"`
+	id         int
+	name       string      `header:"Name" sortDefault:"" sortDir:"asc" sortKey:"N"`
+	events     int         `header:"Events" sortKey:"E"`
+	pubkeys    int         `header:"Pubkeys" sortKey:"P"` // running count of unique pubkeys seen, not the pubkeys themselves, so this field stays bounded
+	kinds      map[int]int `header:"Kinds" sortKey:"K"`
+	failures   int         `header:"Failures" sortKey:"F"`
+	duplicates int         `header:"Duplicates" sortKey:"D"`
+	retries    int         `header:"Retries" sortKey:"R"`
+	lost       int         `header:"-"`
+	createdAt  time.Time   `header:"Age" sortKey:"A"`
 
 	color       tcell.Color
 	nextRetry   time.Time
@@ -376,8 +377,8 @@ func (fm *FlowMetrics) Row() []string {
 		output = append(output, strconv.Itoa(fm.failures))
 	}
 
-	if !slices.Contains(fm.skipColumns, "Synced") {
-		output = append(output, strconv.Itoa(fm.synced))
+	if !slices.Contains(fm.skipColumns, "Duplicates") {
+		output = append(output, strconv.Itoa(fm.duplicates))
 	}
 
 	nextRetry := time.Until(fm.nextRetry)
@@ -411,8 +412,8 @@ func (fm *FlowMetrics) FlatRow() []int {
 
 	output = append(output, fm.failures)
 
-	if !slices.Contains(fm.skipColumns, "Synced") {
-		output = append(output, fm.synced)
+	if !slices.Contains(fm.skipColumns, "Duplicates") {
+		output = append(output, fm.duplicates)
 	}
 
 	output = append(output, fm.retries)
@@ -457,6 +458,14 @@ func (fm *FlowMetrics) IncreaseRetries(nextRetry time.Time) {
 	fm.nextRetry = nextRetry
 }
 
+// ResetAge restarts the Age column's clock, so a row reports time since its
+// last (re)connect attempt rather than time since the stream itself started.
+func (fm *FlowMetrics) ResetAge() {
+	fm.mu.Lock()
+	defer fm.mu.Unlock()
+	fm.createdAt = time.Now()
+}
+
 func (fm *FlowMetrics) AddEvent(kind int, pubkey string) {
 	fm.mu.Lock()
 	defer fm.mu.Unlock()
@@ -481,10 +490,10 @@ func (fm *FlowMetrics) AddEvent(kind int, pubkey string) {
 	fm.eoseCounter++
 }
 
-func (fm *FlowMetrics) IncSynced() {
+func (fm *FlowMetrics) IncDuplicates() {
 	fm.mu.Lock()
 	defer fm.mu.Unlock()
-	fm.synced++
+	fm.duplicates++
 }
 
 func (fm *FlowMetrics) EOSECount() int {
@@ -565,13 +574,13 @@ type InboundMetrics struct {
 }
 
 func NewInboundMetrics(id int, name string, closeCallback func()) *InboundMetrics {
-	// "Synced" (an event the other side already had) is a destination-only
-	// concept -- a source is only ever read from, so skip the column.
-	// Pubkeys/Kinds diversity is tracked here since each source is a
-	// distinct origin with its own diversity; see NewOutboundMetrics for why
-	// destinations don't track the same thing.
+	// "Duplicates" (an event the other side already had) is a
+	// destination-only concept -- a source is only ever read from, so skip
+	// the column. Pubkeys/Kinds diversity is tracked here since each source
+	// is a distinct origin with its own diversity; see NewOutboundMetrics
+	// for why destinations don't track the same thing.
 	return &InboundMetrics{
-		FlowMetrics: NewFlowMetrics(id, name, ColorSuccess, []string{"Synced"}, true, closeCallback),
+		FlowMetrics: NewFlowMetrics(id, name, ColorSuccess, []string{"Duplicates"}, true, closeCallback),
 	}
 }
 
@@ -582,9 +591,9 @@ type OutboundMetrics struct {
 }
 
 func NewOutboundMetrics(id int, name string, closeCallback func()) *OutboundMetrics {
-	// Keep "Synced": a destination that's already fully synced from an
+	// Keep "Duplicates": a destination that's already fully synced from an
 	// earlier run will show zero for every other counter (nothing new to
-	// write, nothing rejected) -- Synced is the only column that
+	// write, nothing rejected) -- Duplicates is the only column that
 	// distinguishes "caught up" from "stuck."
 	//
 	// Skip Pubkeys/Kinds (and the trackDiversity=false below skips the

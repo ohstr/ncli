@@ -123,7 +123,7 @@ func NewInspector(ctx context.Context, spec *InspectSpec, events *tui.EventTable
 		// read from, never a merged-stream destination, so (unlike Stream's
 		// destinations) each row's Kinds/Pubkeys diversity is genuinely
 		// distinct per target and worth showing -- that's exactly what
-		// NewInboundMetrics tracks. It drops "Synced" instead (an
+		// NewInboundMetrics tracks. It drops "Duplicates" instead (an
 		// ack-from-publish concept Inspector never reaches, since it never
 		// publishes), which would otherwise just sit at 0 for every row.
 		stat := tui.NewInboundMetrics(subID, subscription.Name(), func() {

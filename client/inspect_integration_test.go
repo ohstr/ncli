@@ -203,7 +203,6 @@ func testInspectDuplicateEventAcrossOverlappingTargetsIsNotDoubleStored(t *testi
 	}
 }
 
-// loadTestInspectSpec loads inspect.yaml.
 func loadTestInspectSpec(t *testing.T) *InspectSpec {
 	t.Helper()
 	rs, err := loadSpecFromYaml(inspectIntegrationSpecFile)

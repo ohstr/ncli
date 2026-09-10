@@ -48,8 +48,7 @@ func runCompose(t *testing.T, composeFile string, args ...string) {
 	}
 }
 
-// newIntegrationEventOfKindUnchecked signs an event of the given kind from
-// privKey. Error-returning core, safe to call from any goroutine.
+// Error-returning core, safe to call from any goroutine.
 func newIntegrationEventOfKindUnchecked(kind int, privKey, marker string, tags ...[]string) *nip01.Event {
 	ev := nip01.NewEvent(kind, fmt.Sprintf("ncli itest %s", marker), tags...)
 	if err := ev.Sign(privKey); err != nil {
@@ -58,15 +57,12 @@ func newIntegrationEventOfKindUnchecked(kind int, privKey, marker string, tags .
 	return ev
 }
 
-// newIntegrationEventOfKind signs an event of the given kind from the
-// primary test identity.
 func newIntegrationEventOfKind(t *testing.T, kind int, marker string, tags ...[]string) *nip01.Event {
 	t.Helper()
 	return newIntegrationEventOfKindUnchecked(kind, integrationPrivKey, marker, tags...)
 }
 
-// newIntegrationEventFromAltAuthor is newIntegrationEventOfKind signed by
-// the alt identity instead.
+// newIntegrationEventFromAltAuthor signs with the alt identity instead.
 func newIntegrationEventFromAltAuthor(t *testing.T, kind int, marker string, tags ...[]string) *nip01.Event {
 	t.Helper()
 	return newIntegrationEventOfKindUnchecked(kind, integrationPrivKeyAlt, marker, tags...)
@@ -76,7 +72,7 @@ func newIntegrationEventUnchecked(marker string) *nip01.Event {
 	return newIntegrationEventOfKindUnchecked(1, integrationPrivKey, marker)
 }
 
-// newIntegrationEvent signs a kind:1 event from the primary test identity.
+// newIntegrationEvent defaults to kind:1, primary identity.
 func newIntegrationEvent(t *testing.T, marker string) *nip01.Event {
 	t.Helper()
 	return newIntegrationEventUnchecked(marker)
@@ -101,8 +97,7 @@ func publishEventToRelayErr(relayURL string, ev *nip01.Event) error {
 	return nil
 }
 
-// publishEventToRelay publishes ev to relayURL, failing the test if it's
-// not accepted.
+// publishEventToRelay fails the test if ev isn't accepted.
 func publishEventToRelay(t *testing.T, relayURL string, ev *nip01.Event) {
 	t.Helper()
 	if err := publishEventToRelayErr(relayURL, ev); err != nil {
@@ -245,8 +240,6 @@ func waitForEventsAtRelay(t *testing.T, relayURL string, ids []string, timeout t
 	}
 }
 
-// waitForRelayReady retries a no-op query against relayURL until it
-// succeeds or timeout elapses.
 func waitForRelayReady(t *testing.T, relayURL string, timeout time.Duration) {
 	t.Helper()
 	if err := waitForRelayReadyErr(relayURL, timeout); err != nil {

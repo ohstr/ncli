@@ -47,3 +47,6 @@ vendor/
 
 # Local cache of ohstr/docs-kit, cloned on demand by `just docs-dev`
 /.docs-kit/
+
+# Local scratch drafts, not meant to be tracked
+/.drafts/

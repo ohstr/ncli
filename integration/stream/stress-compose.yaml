@@ -1,24 +1,10 @@
-# Heavier, separate stream stress stack: 20 real source `ncli relay`
-# containers (vs. compose.yaml's 3) + 1 destination, for scenarios that
-# need genuine "many concurrent sources" scale (bug 2's production
-# topology was ~55 sources -> 1 destination) rather than correctness-only
-# coverage. Kept out of compose.yaml/the fast test-integration-stream path
-# entirely -- these containers are only brought up by
-# client/stream_stress_test.go (`just test-integration-stream-stress`),
-# which is heavier/slower and not run in CI by default. See
-# integration/stream/README.md.
-#
-# `name:` pins the Compose project name so this stack's containers/
-# volumes/network never collide with compose.yaml's (`ncli-stream-itest`)
-# even if both happen to be up at once; distinct host port range too
-# (45560-45580 vs. compose.yaml's 45500-45505).
+# Stream stress stack: 20 sources + 1 destination, for real-scale
+# scenarios (compose.yaml's 3 sources only prove the mechanism). Not run
+# in CI -- see integration/stream/README.md's "Stress stack".
 name: ncli-stream-stress-itest
 
-# Reusable service template (Compose's `x-` prefix is reserved for
-# extension fields it never interprets as a service itself) -- every
-# service below merges this in via the `<<:` YAML merge key and then only
-# specifies what's actually unique to it (port, volumes). Cuts ~20 repeats
-# of the identical build/image/command/restart block down to one.
+# Reusable service template (Compose ignores `x-` keys); each service
+# merges this via `<<:` and adds only its own port/volumes.
 x-relay: &relay
   build:
     context: ../..

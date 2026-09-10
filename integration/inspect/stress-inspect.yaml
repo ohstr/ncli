@@ -1,23 +1,11 @@
-# Inspect spec fixture for the stress stack (see stress-compose.yaml and
-# this directory's README). 15 real target relays instead of inspect.yaml's
-# 3, with the same two-filter-object pair as
-# integration/stream/stress-stream.yaml (see that file's header for the
-# full rationale) so filter correctness can be proven under real
-# multi-target load, not just that events arrive at all:
-#
-#   - kind 1, any author            -> matches filter 1 (kinds only)      -> included
-#   - kind 7, integrationPubKey     -> matches filter 2 (kind+author)     -> included
-#   - kind 7, integrationPubKeyAlt  -> matches neither (wrong author)     -> excluded
-#   - kind 3, any author            -> matches neither (wrong kind)       -> excluded
-#
-# integrationPubKey below is client/integrationharness_test.go's fixed
-# primary test identity's public key -- kept in sync by hand, not
-# computed.
-#
-# client/inspect_stress_test.go loads this file the same way `ncli apply`
-# would (loadSpecFromYaml), then overrides `targets` with all 15
-# stress-compose.yaml URLs -- only target1 is listed here so this file
-# stays a valid, hand-runnable spec on its own.
+# Stress stack fixture: 15 targets. Same filter pair as
+# integration/stream/stress-stream.yaml:
+#   kind 1, any author           -> filter 1 -> included
+#   kind 7, integrationPubKey    -> filter 2 -> included
+#   kind 7, integrationPubKeyAlt -> neither   -> excluded
+#   kind 3, any author           -> neither   -> excluded
+# The Go test overrides `targets` with all 15 URLs; only target1 here so
+# this stays a valid standalone spec.
 kind: inspect
 spec:
   targets:

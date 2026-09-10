@@ -46,13 +46,7 @@ jobs:
         run: go test -short -race ./...
 
   integrations:
-    # Hermetic integration tests (client/{stream,inspect,sync}_integration_test.go
-    # -- see integration/README.md): real `ncli relay` containers, no
-    # external network/live-relay dependency, so unlike `just
-    # test-integration` (deliberately excluded from CI -- hits real public
-    # relays) these are deterministic enough to gate merges on. Runs on the
-    # same triggers as `check`; ubuntu-latest ships Docker + Compose
-    # already, no extra setup needed.
+    # Hermetic Docker Compose e2e tests -- see integration/README.md.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

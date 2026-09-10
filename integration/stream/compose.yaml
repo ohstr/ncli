@@ -1,18 +1,6 @@
-# Local stream e2e test stack: one destination + three source `ncli relay`
-# instances, all built from this repo's own source (build/relay/Dockerfile),
-# so the stream client under test talks to real relay server processes over
-# real websocket connections -- not mocks -- without touching production
-# (relay.ohstr.com).
-#
-# Driven by client/stream_integration_test.go (TestStreamIntegration), which manages
-# this stack's lifecycle itself; or run by hand via `just stream up`/`down`
-# to poke at it directly (e.g. `ncli apply -f integration/stream/stream.yaml`
-# against it -- see stream.yaml's own header and this directory's README).
-#
-# `name:` pins the Compose project name regardless of the caller's working
-# directory, so this stack's containers/volumes/network never collide with
-# build/relay/docker-compose.dev.yaml's (fixed `ncli_relay`/`ncli_search`
-# container names) even if both happen to be up at once.
+# Local stream e2e stack: 1 destination + 3 sources, real `ncli relay`
+# containers. See integration/stream/README.md. Run by hand via
+# `just stream up`/`down`.
 name: ncli-stream-itest
 
 services:
@@ -29,10 +17,7 @@ services:
       - destination-data:/app/ncli/data
     restart: unless-stopped
 
-  # Only used by TestStreamIntegration's MultipleDestinationsBothReceiveEvents
-  # subtest (every other subtest sticks to stream.yaml's single checked-in
-  # destination) -- exercises real fan-out to more than one destination,
-  # which no other scenario here does.
+  # Only used by MultipleDestinationsBothReceiveEvents.
   destination2:
     build:
       context: ../..

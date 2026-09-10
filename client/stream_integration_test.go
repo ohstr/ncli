@@ -10,12 +10,8 @@ import (
 	"time"
 )
 
-// See integration/stream/README.md for what this stack is and why the
-// client under test runs in-process here rather than as a compose service.
-// Shared docker-lifecycle/publish/fetch helpers used below (runCompose,
-// newIntegrationEvent, publishEventToRelay, waitForEventsAtRelay, etc.)
-// live in client/integrationharness_test.go, alongside this package's
-// other hermetic integration tests.
+// See integration/stream/README.md. Shared helpers live in
+// client/integrationharness_test.go.
 const (
 	streamIntegrationComposeFile = "../integration/stream/compose.yaml"
 	streamIntegrationSpecFile    = "../integration/stream/stream.yaml"
@@ -29,14 +25,11 @@ var streamIntegrationSourceURLs = []string{
 
 const streamIntegrationDestURL = "ws://localhost:45500"
 
-// streamIntegrationDest2URL is only used by MultipleDestinationsBothReceiveEvents
-// -- see compose.yaml's destination2 service.
+// streamIntegrationDest2URL is used only by MultipleDestinationsBothReceiveEvents.
 const streamIntegrationDest2URL = "ws://localhost:45505"
 
-// TestStreamIntegration brings up integration/stream/compose.yaml's real
-// destination + source `ncli relay` containers once, then runs each
-// scenario as a subtest against that shared stack -- needs Docker, hits no
-// production relay. See `just test-integration-stream`.
+// TestStreamIntegration brings up compose.yaml's real relay containers
+// once, then runs each scenario as a subtest. Needs Docker.
 func TestStreamIntegration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping docker-based stream integration test in short mode")
@@ -71,36 +64,19 @@ func TestStreamIntegration(t *testing.T) {
 	}
 }
 
-// testDestinationDisruptionDoesNotDropEvents is table-driven across the two
-// ways a destination can become unavailable mid-stream:
-//
-//   - "Restart" -- an explicit disconnect (`docker compose restart`), the
-//     original regression test for the bug this harness was built for: a
-//     destination silently dropping events received during its own
-//     reconnect window (client/stream.go's deliverToSubscriber, paused()
-//     case).
-//   - "Stall" -- a *silent* stall (`docker compose pause`): the process is
-//     frozen via the kernel's cgroup freezer, TCP connection still
-//     technically open, no close/reset at all. Detecting this relies
-//     entirely on stream.yaml's configured ping/pong timeouts
-//     (getConnectionConfig, client/stream.go) actually firing -- a
-//     different code path than "Restart"'s explicit-disconnect detection.
-//     Independently confirmed `docker compose pause`/`unpause` actually
-//     works as intended (a paused relay is completely unresponsive to a
-//     fresh connection attempt; an unpaused one responds immediately
-//     again) before relying on it here.
-//
-// Both cases publish known events into the observed `paused()` window (not
-// assumed from timing) and assert every one of them eventually shows up at
-// the destination -- or, short of that, is at least accounted for by the
-// Lost stat, never unaccounted-for.
+// testDestinationDisruptionDoesNotDropEvents covers two ways a destination
+// can go down mid-stream: "Restart" (explicit disconnect) and "Stall"
+// (`docker compose pause` -- process frozen, connection stays open,
+// detected only via ping/pong timeout). Events published into the
+// observed paused() window must arrive once recovered, or at least be
+// counted in Lost -- never silently dropped.
 func testDestinationDisruptionDoesNotDropEvents(t *testing.T) {
 	cases := []struct {
 		name                string
 		cycles              int
-		disrupt             func(t *testing.T) // knocks the destination out of its ready state
-		resolve             func(t *testing.T) // brings it back, if disrupt doesn't self-resolve; called exactly once, in the main flow below
-		cleanupIfUnresolved func()             // best-effort fallback if the test fails/panics before resolve runs; nil if resolve is a no-op anyway
+		disrupt             func(t *testing.T)
+		resolve             func(t *testing.T) // called once in the main flow
+		cleanupIfUnresolved func()             // best-effort fallback if resolve never ran
 	}{
 		{
 			name:    "Restart",
@@ -139,13 +115,8 @@ func testDestinationDisruptionDoesNotDropEvents(t *testing.T) {
 				t.Fatalf("expected %d sources, got %d", len(streamIntegrationSourceURLs), len(downStats))
 			}
 
-			// resolved tracks whether tc.resolve has already run in the main
-			// flow below, so this cleanup -- a best-effort safety net for a
-			// failure/panic partway through a cycle, so later cleanup steps
-			// (stream.Close, `docker compose down`) never get stuck waiting
-			// on a destination this subtest left paused -- doesn't then
-			// also unpause an already-unpaused container and fail an
-			// otherwise-passing test on that alone.
+			// Avoid double-unpausing (fails on "not paused") if resolve
+			// already ran in the main flow below.
 			resolved := false
 			if tc.cleanupIfUnresolved != nil {
 				t.Cleanup(func() {
@@ -155,9 +126,7 @@ func testDestinationDisruptionDoesNotDropEvents(t *testing.T) {
 				})
 			}
 
-			// Let the initial connections establish before doing anything
-			// else.
-			time.Sleep(1 * time.Second)
+			time.Sleep(1 * time.Second) // let initial connections establish
 
 			destFC := destinationFlowContext(t, stream)
 
@@ -174,10 +143,6 @@ func testDestinationDisruptionDoesNotDropEvents(t *testing.T) {
 			for i := 0; i < tc.cycles; i++ {
 				tc.disrupt(t)
 				waitUntilDestinationPaused(t, destFC, 15*time.Second)
-
-				// Still observed paused right now -- this is the exact
-				// window deliverToSubscriber's paused() branch handles, not
-				// a guess based on elapsed time.
 				if !isPaused(destFC) {
 					t.Fatalf("cycle %d: destination un-paused before the race-window publish could happen -- window too short to test reliably", i)
 				}
@@ -189,10 +154,7 @@ func testDestinationDisruptionDoesNotDropEvents(t *testing.T) {
 				time.Sleep(1 * time.Second)
 			}
 
-			// Give the destination time to fully reconnect and the recovery
-			// loop a few ticks to retry anything it queued during the
-			// windows above.
-			time.Sleep(8 * time.Second)
+			time.Sleep(8 * time.Second) // let the destination reconnect and recovery retry
 
 			missing := waitForEventsAtRelay(t, streamIntegrationDestURL, published, 10*time.Second)
 			if len(missing) > 0 {
@@ -205,10 +167,8 @@ func testDestinationDisruptionDoesNotDropEvents(t *testing.T) {
 	}
 }
 
-// testSourceReconnectDoesNotHang covers the general "flaky source relay"
-// mechanism cheaply, against a real relay rather than 55 real public ones:
-// restarting a source mid-stream must not hang or drop the stream, and an
-// event published to that source once it's back up must still be picked up.
+// testSourceReconnectDoesNotHang: restarting a source must not hang or
+// drop the stream, and an event published once it's back must still land.
 func testSourceReconnectDoesNotHang(t *testing.T) {
 	spec := loadTestStreamSpec(t)
 	stream, err := NewStream(spec, false)
@@ -227,16 +187,9 @@ func testSourceReconnectDoesNotHang(t *testing.T) {
 	publishEventToRelay(t, streamIntegrationSourceURLs[0], before)
 
 	runCompose(t, streamIntegrationComposeFile, "restart", "source1")
-
-	// Not required for correctness, just makes sure the next publish
-	// genuinely lands after the restart has taken effect rather than
-	// racing one that hasn't started yet.
 	time.Sleep(2 * time.Second)
 
 	after := newIntegrationEvent(t, "source-reconnect-after")
-	// source1 may still be mid-restart, so retry the publish itself --
-	// what's under test is the stream client's own Read-side reconnect,
-	// not this helper publish's timing.
 	publishEventWithRetry(t, streamIntegrationSourceURLs[0], after, 30*time.Second)
 
 	missing := waitForEventsAtRelay(t, streamIntegrationDestURL, []string{before.ID, after.ID}, 20*time.Second)
@@ -245,15 +198,9 @@ func testSourceReconnectDoesNotHang(t *testing.T) {
 	}
 }
 
-// testHighVolumeBurstAcrossAllSourcesIsNotLost is the e2e regression test
-// PR #45 (fix/apply-stream-publish-concurrency-cap) never got: an unpaced
-// burst from a large `from` pool overwhelming a destination's own
-// concurrency guard, previously fixed only at the unit level (see
-// client/stream_regression_test.go). stream.yaml's destination already
-// sets `writeConcurrency: 8`; this drives real traffic well past that cap
-// (hundreds of events across all 3 sources at once) against a real relay
-// enforcing its own real limits, rather than a mock that can't reject
-// anything.
+// testHighVolumeBurstAcrossAllSourcesIsNotLost: hundreds of events across
+// all sources at once, against the destination's writeConcurrency cap
+// (PR #45), against a real relay.
 func testHighVolumeBurstAcrossAllSourcesIsNotLost(t *testing.T) {
 	spec := loadTestStreamSpec(t)
 	stream, err := NewStream(spec, false)
@@ -276,11 +223,6 @@ func testHighVolumeBurstAcrossAllSourcesIsNotLost(t *testing.T) {
 		wg.Add(1)
 		go func(i int, sourceURL string) {
 			defer wg.Done()
-			// publishManyEventsErr, not publishManyEvents: this runs in a
-			// goroutine that isn't the one running the test, and t.Fatalf
-			// must never be called from anywhere else -- see its doc
-			// comment. Fatal on the aggregated results below instead, back
-			// on this function's own goroutine.
 			idsBySource[i], errsBySource[i] = publishManyEventsErr(sourceURL, perSource, fmt.Sprintf("burst-src%d", i))
 		}(i, sourceURL)
 	}
@@ -304,11 +246,8 @@ func testHighVolumeBurstAcrossAllSourcesIsNotLost(t *testing.T) {
 	}
 }
 
-// testMultipleDestinationsBothReceiveEvents covers real fan-out to more
-// than one destination -- every other scenario in this file sticks to
-// stream.yaml's single checked-in destination, so broadcastEvents'
-// multi-subscriber path (client/stream.go) has otherwise never run against
-// a real relay on each end.
+// testMultipleDestinationsBothReceiveEvents: fan-out to 2 destinations,
+// not stream.yaml's usual 1.
 func testMultipleDestinationsBothReceiveEvents(t *testing.T) {
 	waitForRelayReady(t, streamIntegrationDest2URL, 60*time.Second)
 
@@ -345,12 +284,8 @@ func testMultipleDestinationsBothReceiveEvents(t *testing.T) {
 	}
 }
 
-// loadTestStreamSpec loads integration/stream/stream.yaml the same way
-// `ncli apply` itself does (loadSpecFromYaml), then overrides only the
-// recovery block: a fresh temp-dir store per test and a short retry
-// interval, so this test's own short lifetime can't itself cause
-// RecoveryManager.handleRetryFailure to give up on an event before the
-// test gets a chance to observe it recovered.
+// loadTestStreamSpec loads stream.yaml, overriding the recovery block
+// with a fresh temp-dir store and short retry interval.
 func loadTestStreamSpec(t *testing.T) *StreamSpec {
 	t.Helper()
 	rs, err := loadSpecFromYaml(streamIntegrationSpecFile)
@@ -370,9 +305,6 @@ func loadTestStreamSpec(t *testing.T) *StreamSpec {
 }
 
 // destinationFlowContext returns the (sole) destination's FlowContext.
-// sc.subscribers is populated synchronously within Sync() itself before it
-// returns, and only ever read/written elsewhere under subscribersMu -- see
-// the identical pattern in client/integration_test.go.
 func destinationFlowContext(t *testing.T, stream *Stream) *FlowContext {
 	t.Helper()
 	stream.sc.subscribersMu.RLock()

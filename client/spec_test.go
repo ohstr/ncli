@@ -118,19 +118,11 @@ func TestLooksLikeRelayHost(t *testing.T) {
 	}
 }
 
-// TestTimeoutSpecConnectionConfig is a regression guard for a real bug this
-// caught: SyncModule.execute (client/neg_sync.go) used to build a
-// *relayclient.ConnectionConfig by hand as `&relayclient.ConnectionConfig{}`
-// whenever spec.Timeouts was non-nil -- an all-zero struct, silently
-// discarding every configured handshake/ping/pong/write value, since
-// relayclient.NewConnection backfills any zero field with its own
-// defaults regardless of whether the whole config is nil or just
-// zero-valued. A `sync.yaml` with an explicit `timeouts:` block therefore
-// had no effect at all. Fixed by giving TimeoutSpec a single
-// ConnectionConfig method (this test) that both StreamChannel's and
-// SyncModule's connection setup now share, instead of each hand-rolling
-// (or, in sync's case, failing to hand-roll) the string-to-duration
-// conversion.
+// TestTimeoutSpecConnectionConfig is a regression guard: SyncModule.execute
+// used to build an all-zero ConnectionConfig whenever spec.Timeouts was
+// non-nil, silently discarding every configured value (relayclient
+// backfills zero fields with defaults regardless). A configured
+// `timeouts:` block had no effect at all until this was fixed.
 func TestTimeoutSpecConnectionConfig(t *testing.T) {
 	defaults := relayclient.DefaultConnectionConfig()
 

@@ -15,27 +15,16 @@ import (
 	"github.com/ohstr/nmilat/relay"
 )
 
-// See integration/sync/README.md for what this stack is. Shared
-// docker-lifecycle/publish/fetch helpers used below (runCompose,
-// newIntegrationEvent, publishEventToRelay, waitForRelayReady, etc.) live
-// in client/integrationharness_test.go, alongside
-// client/stream_integration_test.go and client/inspect_integration_test.go.
+// See integration/sync/README.md. Shared helpers live in
+// client/integrationharness_test.go.
 const (
 	syncIntegrationComposeFile = "../integration/sync/compose.yaml"
 	syncIntegrationSpecFile    = "../integration/sync/sync.yaml"
 	syncIntegrationRemoteURL   = "ws://localhost:45520"
 )
 
-// TestSyncIntegration brings up integration/sync/compose.yaml's single real
-// `ncli relay` container once, then runs each scenario as a subtest
-// against it -- needs Docker, hits no production relay. Replaces this
-// package's only prior sync coverage, TestNegSync_Integration
-// (client/neg_sync_test.go), which depends on live wss://relay.ohstr.com
-// negentropy support and one specific pubkey -- fragile and
-// non-deterministic (kept as-is, not deleted: it's still a useful "does
-// this actually interop with a real-world deployed relay" smoke test, just
-// not one this package can gate a regression on with any determinism). See
-// `just test-integration-sync`.
+// TestSyncIntegration brings up compose.yaml's one real relay container
+// once, then runs each scenario as a subtest. Needs Docker.
 func TestSyncIntegration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping docker-based sync integration test in short mode")
@@ -60,19 +49,9 @@ func TestSyncIntegration(t *testing.T) {
 	t.Run("RemoteStallTriggersTimeoutNotHang", testSyncRemoteStallTriggersTimeoutNotHang)
 }
 
-// testSyncReconcileCompleteness is table-driven across data volume: seeds
-// each side of a `direction: both` sync with events the other side doesn't
-// have, then asserts negentropy reconciliation against a real relay
-// carries every one of them the right way -- local-only events get pushed
-// up, remote-only events get pulled down. This is the real-relay analog of
-// the two-endpoint shape `examples/apply/sync.yaml` documents -- unlike
-// stream/inspect, sync is exactly one local store and one remote relay,
-// never a multi-relay fan-in (see SyncSpec.UnmarshalJSON's "only one
-// local/remote flow allowed"). "Large" is the "high input" case: hundreds
-// of events on each side instead of "Small"'s handful, forcing
-// sync.yaml's pullBatchSize (100) into multiple pull batches and giving
-// negentropy a genuinely large diff to reconcile against a real relay, not
-// a mock that can't reject/rate-limit anything.
+// testSyncReconcileCompleteness: seeds each side of a `direction: both`
+// sync with events the other side lacks, asserts both directions land.
+// "Large" forces pullBatchSize into multiple batches.
 func testSyncReconcileCompleteness(t *testing.T) {
 	cases := []struct {
 		name string
@@ -106,9 +85,6 @@ func testSyncReconcileCompleteness(t *testing.T) {
 			}
 			t.Cleanup(sm.Close)
 
-			// Generous enough for both rows -- a ceiling, not an expected
-			// duration, so "Small" isn't slowed down by sharing it with
-			// "Large".
 			ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 			defer cancel()
 
@@ -117,12 +93,7 @@ func testSyncReconcileCompleteness(t *testing.T) {
 				t.Fatalf("sm.Run failed: %v", err)
 			}
 			waitForSyncComplete(t, logger, 90*time.Second)
-
-			// Give the deferred store.Close() inside SyncModule.execute() a
-			// moment to actually run -- "Sync complete" is logged just
-			// before execute() returns, not after, so there's a brief
-			// window where the local store file may still be held.
-			time.Sleep(200 * time.Millisecond)
+			time.Sleep(200 * time.Millisecond) // let deferred store.Close() run
 
 			missingRemote := waitForEventsAtRelay(t, syncIntegrationRemoteURL, localOnly, 20*time.Second)
 			if len(missingRemote) > 0 {
@@ -137,23 +108,9 @@ func testSyncReconcileCompleteness(t *testing.T) {
 }
 
 // testSyncFilterCorrectness proves sync only reconciles events matching
-// its configured filter, in both directions -- deliberately a *single*
-// filter object with multiple `kinds` (1 and 7) scoped to one author,
-// rather than multiple filter objects the way stream/inspect's
-// FilterCorrectnessUnderLoad tests do. That's not a simplification for its
-// own sake: client/neg_sync.go's execute() builds its local negentropy
-// tree from *every* configured filter OR'd together
-// (`for i, f := range s.spec.Filters { ... }`), but sends only
-// `s.spec.Filters[0]` to the remote in NEG-OPEN ("NIP-77 uses a single
-// filter", per that line's own comment) -- so with 2+ filter objects, the
-// two sides would build their negentropy trees over different item sets
-// whenever anything matches a later filter but not the first. That's a
-// real, confirmed gap (documented in integration/sync/README.md), not
-// exercised here since its exact failure shape needs live verification
-// this environment can't give with confidence -- what *is* fully
-// supported and tested here is a single filter matching multiple kinds
-// for one author, which both the local query loop and the remote NEG-OPEN
-// agree on identically.
+// its filter, both directions. A single filter with 2 kinds + 1 author --
+// not multiple filter objects, since only Filters[0] reaches NEG-OPEN
+// (see integration/sync/README.md's "Confirmed gap").
 func testSyncFilterCorrectness(t *testing.T) {
 	spec := loadTestSyncSpec(t)
 	spec.Filters = []*FilterSpec{
@@ -166,8 +123,6 @@ func testSyncFilterCorrectness(t *testing.T) {
 	localPath := filepath.Join(t.TempDir(), "sync.db")
 	spec.GetLocal().Path = localPath
 
-	// Remote-only mix: matching (kind 1 and kind 7, primary author) and
-	// non-matching (kind 7 wrong author; kind 3 -- not in `kinds` at all).
 	matchRemote1 := newIntegrationEventOfKind(t, 1, "filter-remote-match-k1")
 	matchRemote2 := newIntegrationEventOfKind(t, 7, "filter-remote-match-k7")
 	noMatchRemoteAuthor := newIntegrationEventFromAltAuthor(t, 7, "filter-remote-nomatch-author")
@@ -176,7 +131,6 @@ func testSyncFilterCorrectness(t *testing.T) {
 		publishEventToRelay(t, syncIntegrationRemoteURL, ev)
 	}
 
-	// Local-only mix: the same shape.
 	matchLocal1 := newIntegrationEventOfKind(t, 1, "filter-local-match-k1")
 	matchLocal2 := newIntegrationEventOfKind(t, 7, "filter-local-match-k7")
 	noMatchLocalAuthor := newIntegrationEventFromAltAuthor(t, 7, "filter-local-nomatch-author")
@@ -197,7 +151,7 @@ func testSyncFilterCorrectness(t *testing.T) {
 		t.Fatalf("sm.Run failed: %v", err)
 	}
 	waitForSyncComplete(t, logger, 30*time.Second)
-	time.Sleep(200 * time.Millisecond) // let execute()'s deferred store.Close() run
+	time.Sleep(200 * time.Millisecond) // let deferred store.Close() run
 
 	missingRemote := waitForEventsAtRelay(t, syncIntegrationRemoteURL, []string{matchLocal1.ID, matchLocal2.ID}, 10*time.Second)
 	if len(missingRemote) > 0 {
@@ -208,39 +162,23 @@ func testSyncFilterCorrectness(t *testing.T) {
 		t.Errorf("pull: %d filter-matching remote-only event(s) never landed in the local store: %v", len(missingLocal), missingLocal)
 	}
 
-	// Non-matching local-only events must never leak to the remote --
-	// checking exclusion, not just inclusion, which
-	// testSyncReconcileCompleteness never does (everything it seeds
-	// matches its filter by construction).
 	leakedToRemote := fetchEventIDsFromRelay(t, syncIntegrationRemoteURL, []string{noMatchLocalAuthor.ID, noMatchLocalKind.ID})
 	if len(leakedToRemote) > 0 {
 		t.Errorf("%d non-matching local-only event(s) reached the remote relay anyway: %v", len(leakedToRemote), leakedToRemote)
 	}
 
-	// Non-matching remote-only events must never leak into the local
-	// store. Timeout 0: the sync run has already completed (waitForSyncComplete
-	// above), so this is a single snapshot check, not a poll -- and
-	// waitForEventsInLocalStore's return value here means the opposite of
-	// its usual "still missing" sense: every ID passed in is expected to
-	// still be absent, so a non-empty result actually means success, and
-	// anything short of the full set means something leaked.
+	// Timeout 0: single snapshot check (sync already completed above).
+	// stillAbsent's length should equal the input length -- anything less
+	// means something leaked in.
 	stillAbsent := waitForEventsInLocalStore(t, localPath, []string{noMatchRemoteAuthor.ID, noMatchRemoteKind.ID}, 0)
 	if len(stillAbsent) != 2 {
 		t.Errorf("expected both non-matching remote-only events to stay out of the local store, but %d leaked in", 2-len(stillAbsent))
 	}
 }
 
-// testSyncMaxReconcileRoundsTooLowSurfacesCleanly covers the round-cap
-// branch client/neg_sync.go's reconcile loop falls into when
-// nip77.IsComplete never returns true within spec.MaxReconcileRounds --
-// previously reachable only in theory, never actually exercised end to
-// end. With the cap forced down to 1 against a large divergent set, the
-// invariant under test is that this degrades gracefully (logs a warning,
-// syncs whatever partial have/need sets it collected, and still finishes)
-// rather than hanging or crashing -- not a specific round count, since
-// negentropy's actual convergence speed for a given dataset size isn't
-// this test's concern and asserting an exact number would just make it
-// flaky against protocol/library changes.
+// testSyncMaxReconcileRoundsTooLowSurfacesCleanly: forces MaxReconcileRounds
+// to 1 against a large divergent set. Must degrade gracefully (partial
+// sync, no hang), not assert an exact round count.
 func testSyncMaxReconcileRoundsTooLowSurfacesCleanly(t *testing.T) {
 	spec := loadTestSyncSpec(t)
 	spec.MaxReconcileRounds = 1
@@ -295,28 +233,14 @@ func testSyncMaxReconcileRoundsTooLowSurfacesCleanly(t *testing.T) {
 	}
 
 	if !sawMaxRoundsWarning {
-		t.Logf("note: %d fully-divergent items on each side converged within maxReconcileRounds=1 -- negentropy resolved this faster than expected, so this run never actually exercised the round-cap path itself; the important invariant (no hang, clean completion) still held", n)
+		t.Logf("note: %d items converged within maxReconcileRounds=1, faster than expected -- round-cap path not actually exercised this run, but no-hang invariant held", n)
 	}
 }
 
-// testSyncRemoteStallTriggersTimeoutNotHang is sync's analog of
-// client/stream_integration_test.go's DestinationStallTriggersTimeoutNotHang:
-// `docker compose pause` freezes the remote relay's process without
-// touching the already-established TCP connection, simulating a silent
-// stall distinct from an explicit disconnect. This is only meaningful
-// because of the ConnectionConfig fix (client/spec.go's
-// TimeoutSpec.ConnectionConfig, see that commit) -- before it, sync's
-// `timeouts:` block had no effect at all, so a short configured Pong here
-// would have silently used relayclient's 60s default instead, making this
-// test either much slower or unable to reliably distinguish "detected the
-// stall" from "happened to finish first."
-//
-// Unlike stream, sync has no reconnect/retry loop of its own: a stalled
-// connection is simply a failed run that must surface an error and return,
-// not hang -- confirmed here via the "connection error" log line
-// SyncModule.execute logs on exactly this path (client/neg_sync.go's
-// `case err := <-conn.Errors()`), not by expecting "Sync complete" (which
-// this run, by design, never reaches).
+// testSyncRemoteStallTriggersTimeoutNotHang: `docker compose pause` on the
+// remote, with a short configured Pong. Sync has no reconnect loop, so a
+// stalled connection must surface a "connection error" and return, not
+// hang.
 func testSyncRemoteStallTriggersTimeoutNotHang(t *testing.T) {
 	spec := loadTestSyncSpec(t)
 	shortPong := "3s"
@@ -339,10 +263,7 @@ func testSyncRemoteStallTriggersTimeoutNotHang(t *testing.T) {
 		t.Fatalf("sm.Run failed: %v", err)
 	}
 
-	// Let the connection actually establish (handshake + NEG-OPEN) before
-	// stalling it -- what's under test is a silent stall on an established
-	// connection, not a handshake timeout.
-	time.Sleep(1 * time.Second)
+	time.Sleep(1 * time.Second) // let the connection establish before stalling it
 
 	runCompose(t, syncIntegrationComposeFile, "pause", "remote")
 	t.Cleanup(func() {
@@ -367,8 +288,7 @@ func testSyncRemoteStallTriggersTimeoutNotHang(t *testing.T) {
 	}
 }
 
-// loadTestSyncSpec loads integration/sync/sync.yaml the same way `ncli
-// apply` itself would (loadSpecFromYaml).
+// loadTestSyncSpec loads sync.yaml.
 func loadTestSyncSpec(t *testing.T) *SyncSpec {
 	t.Helper()
 	rs, err := loadSpecFromYaml(syncIntegrationSpecFile)
@@ -382,10 +302,8 @@ func loadTestSyncSpec(t *testing.T) *SyncSpec {
 	return spec
 }
 
-// seedLocalSyncStore opens a fresh local EventStore at path, inserts
-// events, and closes it again before returning -- SyncModule.execute()
-// opens its own handle on the same path, and this package's local stores
-// (bbolt-backed) only tolerate one open handle at a time.
+// seedLocalSyncStore opens a fresh local store at path, inserts events,
+// and closes it -- must be closed before SyncModule opens its own handle.
 func seedLocalSyncStore(t *testing.T, path string, events []*nip01.Event) {
 	t.Helper()
 	store, err := relay.NewEventStore(path, &nip11.Limitation{})
@@ -398,10 +316,9 @@ func seedLocalSyncStore(t *testing.T, path string, events []*nip01.Event) {
 	}
 }
 
-// waitForSyncComplete polls logger (the *tui.FlowLogger returned by
-// SyncModule.Run) until its "Sync complete" line appears or timeout
-// elapses. GetLastLogs is a draining read (see tui.FlowLogger), so this
-// must be the only caller polling this particular logger.
+// waitForSyncComplete polls logger until "Sync complete" appears or
+// timeout elapses. GetLastLogs drains as it reads, so this must be the
+// only caller polling this logger.
 func waitForSyncComplete(t *testing.T, logger *tui.FlowLogger, timeout time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
@@ -418,11 +335,9 @@ func waitForSyncComplete(t *testing.T, logger *tui.FlowLogger, timeout time.Dura
 	t.Fatal("sync did not report completion within the timeout")
 }
 
-// waitForEventsInLocalStore polls the local store at path until every ID in
-// ids is present or timeout elapses, returning whatever's still missing at
-// that point (empty on full success). Only safe to call once the sync
-// module that owns path has actually closed its own handle (see
-// waitForSyncComplete's doc comment).
+// waitForEventsInLocalStore polls the local store at path until every ID
+// is present or timeout elapses, returning what's still missing. Only
+// safe once the sync module owning path has closed its handle.
 func waitForEventsInLocalStore(t *testing.T, path string, ids []string, timeout time.Duration) []string {
 	t.Helper()
 	ctx := context.Background()

@@ -256,11 +256,8 @@ type TimeoutSpec struct {
 }
 
 // ConnectionConfig converts ts into a relayclient.ConnectionConfig,
-// falling back to relayclient's own defaults for any timeout left unset
-// (including when ts itself is nil). Shared by every spec kind that embeds
-// a TimeoutSpec (StreamSpec via StreamChannel.getConnectionConfig,
-// SyncSpec via SyncModule.execute) so there's exactly one place that knows
-// how to turn a `timeouts:` YAML block into an actual connection config.
+// falling back to relayclient's defaults for any timeout left unset
+// (including a nil ts). Shared by stream and sync.
 func (ts *TimeoutSpec) ConnectionConfig() *relayclient.ConnectionConfig {
 	cfg := relayclient.DefaultConnectionConfig()
 	if ts == nil {

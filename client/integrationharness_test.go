@@ -1,19 +1,12 @@
 package client
 
-// Shared helpers for this package's Docker-Compose-based hermetic
-// integration tests (client/stream_integration_test.go,
-// client/inspect_integration_test.go, client/sync_integration_test.go,
-// ...): each brings up real `ncli relay` containers (built from this
-// repo's own build/relay/Dockerfile) and drives the client module under
-// test in-process against their published ports, closing the "client says
-// accepted, but did the relay actually get it?" gap by always checking a
-// real relay's own wire protocol independently of whatever the client
-// under test believes happened. See integration/<feature>/README.md for
-// what each individual stack is.
+// Shared helpers for this package's Docker Compose integration tests
+// (stream/inspect/sync _integration_test.go and _stress_test.go). Each
+// brings up real `ncli relay` containers and drives the client under test
+// in-process, verifying results against the relay's own wire protocol
+// rather than trusting the client's self-report.
 //
-// Not part of `just test` (needs Docker), but runs automatically in CI as
-// its own job -- see `just test-integrations` and each feature's own
-// `just test-integration-<feature>` recipe.
+// Needs Docker, not part of `just test`. See `just test-integrations`.
 
 import (
 	"context"
@@ -29,34 +22,22 @@ import (
 	relayclient "github.com/ohstr/nmilat/relay/client"
 )
 
-// integrationPrivKey is an arbitrary, fixed test-only private key, shared
-// by every docker-based e2e test in this package, used only to produce
-// validly-signed synthetic events. Unlike the plain in-memory tests in
-// *_regression_test.go, these events cross a real ncli relay server, which
-// verifies every event's ID/signature unconditionally -- a flow's own
-// `trusted` setting only ever governs what THIS client's read side skips
-// checking, never what a relay server accepts on write.
+// Fixed test-only keypair, shared by every event these tests sign.
 const (
 	integrationPrivKey = "0acd12cbf0fb87cd13b17bc9b57dffd11b3870b407984cec5a4ce2a69b90268c"
-	integrationPubKey  = "3c1db3dd55e2ff09ba5317dd8eec2339797e9e2ddf74591172735c47f3a2ad6e" // derives from integrationPrivKey
+	integrationPubKey  = "3c1db3dd55e2ff09ba5317dd8eec2339797e9e2ddf74591172735c47f3a2ad6e"
 )
 
-// integrationPrivKeyAlt/integrationPubKeyAlt are a second arbitrary, fixed
-// test-only keypair -- distinct from integrationPrivKey/integrationPubKey
-// -- used only by filter-correctness scenarios that need to prove an
-// `authors` filter actually excludes events from the "wrong" author, not
-// just include events from the right one. Everything else in this package
-// shares the one identity; nothing relies on these two ever being
-// confused with each other.
+// Second fixed keypair, used only to prove an `authors` filter excludes
+// the wrong author, not just includes the right one.
 const (
 	integrationPrivKeyAlt = "ad8b71b0611f697ebd0b210ccc70ee3947b85fe59bad0c04f608217553b9c6d4"
-	integrationPubKeyAlt  = "b94c6f8d038e6e9622a530991a189ae5f4a785efb234025e2a99fb3c5516c8b2" // derives from integrationPrivKeyAlt
+	integrationPubKeyAlt  = "b94c6f8d038e6e9622a530991a189ae5f4a785efb234025e2a99fb3c5516c8b2"
 )
 
-// runCompose runs `docker compose -f composeFile <args...>`, failing
-// the test immediately (t.Fatalf) on error. Cleanup teardown steps that
-// must not mask an earlier test failure run their own exec.Command instead
-// (see TestStreamIntegration's t.Cleanup) and log rather than fail.
+// runCompose runs `docker compose -f composeFile <args...>`, failing the
+// test on error. Teardown steps use their own exec.Command instead, so a
+// cleanup failure doesn't mask an earlier test failure.
 func runCompose(t *testing.T, composeFile string, args ...string) {
 	t.Helper()
 	cmdArgs := append([]string{"compose", "-f", composeFile}, args...)
@@ -67,62 +48,42 @@ func runCompose(t *testing.T, composeFile string, args ...string) {
 	}
 }
 
-// newIntegrationEventOfKindUnchecked is newIntegrationEventOfKind's
-// error-returning core -- signing a fixed, valid hex private key cannot
-// actually fail, so this only exists to give publishManyEvents an error to
-// check without calling t.Fatalf from a worker goroutine (see its own doc
-// comment for why that matters). Generalizes newIntegrationEventUnchecked
-// to an arbitrary kind/author/tag set, for filter-correctness scenarios
-// that need to prove NIP-01 matching (kind/author/tag AND-within-a-filter,
-// OR-across-filters) actually holds under real load, not just that events
-// arrive at all.
+// newIntegrationEventOfKindUnchecked signs an event of the given kind from
+// privKey. Error-returning core, safe to call from any goroutine.
 func newIntegrationEventOfKindUnchecked(kind int, privKey, marker string, tags ...[]string) *nip01.Event {
 	ev := nip01.NewEvent(kind, fmt.Sprintf("ncli itest %s", marker), tags...)
 	if err := ev.Sign(privKey); err != nil {
-		// Unreachable in practice (privKey is always one of this file's
-		// fixed, valid keys), but panic rather than silently return an
-		// unsigned event if it ever somehow did fail.
 		panic(fmt.Sprintf("failed to sign synthetic test event: %v", err))
 	}
 	return ev
 }
 
-// newIntegrationEventOfKind signs a small, uniquely-content-tagged event of
-// the given kind (and, optionally, tags) from the primary test identity
-// (integrationPrivKey/integrationPubKey) -- marker only needs to make this
-// call's content distinct from every other call's, which is all that's
-// needed for a distinct event ID.
+// newIntegrationEventOfKind signs an event of the given kind from the
+// primary test identity.
 func newIntegrationEventOfKind(t *testing.T, kind int, marker string, tags ...[]string) *nip01.Event {
 	t.Helper()
 	return newIntegrationEventOfKindUnchecked(kind, integrationPrivKey, marker, tags...)
 }
 
-// newIntegrationEventFromAltAuthor is newIntegrationEventOfKind's sibling,
-// signed by integrationPrivKeyAlt instead -- for scenarios proving an
-// `authors` filter excludes the "wrong" author, not just includes the
-// right one.
+// newIntegrationEventFromAltAuthor is newIntegrationEventOfKind signed by
+// the alt identity instead.
 func newIntegrationEventFromAltAuthor(t *testing.T, kind int, marker string, tags ...[]string) *nip01.Event {
 	t.Helper()
 	return newIntegrationEventOfKindUnchecked(kind, integrationPrivKeyAlt, marker, tags...)
 }
 
-// newIntegrationEventUnchecked is newIntegrationEvent's error-returning
-// core; see newIntegrationEventOfKindUnchecked.
 func newIntegrationEventUnchecked(marker string) *nip01.Event {
 	return newIntegrationEventOfKindUnchecked(1, integrationPrivKey, marker)
 }
 
-// newIntegrationEvent signs a small, uniquely-content-tagged kind:1 event
-// -- marker only needs to make this call's content distinct from every
-// other call's, which is all that's needed for a distinct event ID.
+// newIntegrationEvent signs a kind:1 event from the primary test identity.
 func newIntegrationEvent(t *testing.T, marker string) *nip01.Event {
 	t.Helper()
 	return newIntegrationEventUnchecked(marker)
 }
 
 // publishEventToRelayErr is publishEventToRelay's error-returning core,
-// used directly by publishManyEvents' worker goroutines (which must not
-// call t.Fatalf themselves -- see that function's doc comment).
+// safe to call from any goroutine.
 func publishEventToRelayErr(relayURL string, ev *nip01.Event) error {
 	u, err := url.Parse(relayURL)
 	if err != nil {
@@ -140,8 +101,8 @@ func publishEventToRelayErr(relayURL string, ev *nip01.Event) error {
 	return nil
 }
 
-// publishEventToRelay publishes ev to relayURL and fails the test if the
-// relay doesn't accept it outright.
+// publishEventToRelay publishes ev to relayURL, failing the test if it's
+// not accepted.
 func publishEventToRelay(t *testing.T, relayURL string, ev *nip01.Event) {
 	t.Helper()
 	if err := publishEventToRelayErr(relayURL, ev); err != nil {
@@ -150,12 +111,7 @@ func publishEventToRelay(t *testing.T, relayURL string, ev *nip01.Event) {
 }
 
 // newRemoteFlowSpec builds a valid remote *FlowSpec without going through
-// YAML unmarshalling -- for tests that need to add a flow to a spec
-// already loaded from its fixture (e.g. a second stream destination).
-// Mirrors exactly what FlowSpec.UnmarshalJSON's FlOW_REMOTE case does:
-// relayURI/relayFallbackURI must be resolved via ResolveRelayURL and set
-// directly, or code that reads them (connectRelayWithFallback) would
-// silently treat the flow as having no address at all.
+// YAML, for adding a flow to a spec already loaded from its fixture.
 func newRemoteFlowSpec(t *testing.T, relayURL string, trusted bool, writeConcurrency int) *FlowSpec {
 	t.Helper()
 	u, fallback, err := ResolveRelayURL(relayURL)
@@ -172,24 +128,10 @@ func newRemoteFlowSpec(t *testing.T, relayURL string, trusted bool, writeConcurr
 	}
 }
 
-// publishManyEventsConcurrency bounds how many simultaneous publish
-// connections publishManyEvents opens against one relay -- high enough to
-// make a few hundred events fast, low enough not to itself become the kind
-// of unpaced burst client/stream.go's own write-concurrency cap (PR #45,
-// see client/stream_regression_test.go and this file's high-volume tests)
-// exists to guard against.
 const publishManyEventsConcurrency = 16
 
-// publishManyEventsErr is publishManyEvents' error-returning core --
-// exported (within the package) specifically so callers that need to run
-// several of these concurrently across different relays (e.g. one per
-// source/target, for a burst that actually overlaps in time) can do so
-// safely: spawn goroutines calling *this*, collect `(ids, err)` back
-// through an ordinary channel or slice, and only call t.Fatalf once back
-// on the main test goroutine. Calling the t-based publishManyEvents
-// directly from inside such a goroutine would violate the same rule its
-// own internal workers have to follow -- see publishManyEvents' doc
-// comment.
+// publishManyEventsErr is publishManyEvents' error-returning core, safe to
+// call from any goroutine.
 func publishManyEventsErr(relayURL string, n int, markerPrefix string) ([]string, error) {
 	ids := make([]string, n)
 	errs := make(chan error, n)
@@ -220,16 +162,8 @@ func publishManyEventsErr(relayURL string, n int, markerPrefix string) ([]string
 }
 
 // publishManyEvents signs and publishes n distinct kind:1 events to
-// relayURL, using markerPrefix plus each event's index to keep every one
-// content-distinct (see newIntegrationEvent), and returns their IDs in
-// index order. Used by this package's high-volume-input scenarios to
-// stress a relay/flow with real traffic instead of a handful of events.
-//
-// Only ever call this from the goroutine actually running the test (or a
-// t.Run subtest closure) -- it calls t.Fatalf on failure, which must not
-// happen from another goroutine (see testing.T's docs). If you need
-// several of these running concurrently against different relays at once,
-// use publishManyEventsErr directly instead (see its own doc comment).
+// relayURL, returning their IDs in order. Calls t.Fatalf on failure --
+// call publishManyEventsErr instead from any non-test goroutine.
 func publishManyEvents(t *testing.T, relayURL string, n int, markerPrefix string) []string {
 	t.Helper()
 	ids, err := publishManyEventsErr(relayURL, n, markerPrefix)
@@ -239,9 +173,8 @@ func publishManyEvents(t *testing.T, relayURL string, n int, markerPrefix string
 	return ids
 }
 
-// publishEventWithRetry is publishEventToRelay's tolerant sibling, for the
-// one case where the target relay is expected to be briefly unreachable
-// (right after a forced container restart).
+// publishEventWithRetry is publishEventToRelay's tolerant sibling, for
+// when the target relay may be briefly unreachable (e.g. just restarted).
 func publishEventWithRetry(t *testing.T, relayURL string, ev *nip01.Event, timeout time.Duration) {
 	t.Helper()
 	u, err := url.Parse(relayURL)
@@ -267,10 +200,8 @@ func publishEventWithRetry(t *testing.T, relayURL string, ev *nip01.Event, timeo
 	t.Fatalf("failed to publish event %s to %s within %s: %v", ev.ID, relayURL, timeout, lastErr)
 }
 
-// fetchEventIDsFromRelay queries relayURL directly over the wire for the
-// given event IDs, independent of anything the client under test itself
-// believes -- this is what closes the gap between "client says accepted"
-// and "relay actually has it."
+// fetchEventIDsFromRelay queries relayURL directly for the given IDs,
+// independent of what the client under test believes happened.
 func fetchEventIDsFromRelay(t *testing.T, relayURL string, ids []string) map[string]bool {
 	t.Helper()
 	u, err := url.Parse(relayURL)
@@ -293,9 +224,8 @@ func fetchEventIDsFromRelay(t *testing.T, relayURL string, ids []string) map[str
 	return found
 }
 
-// waitForEventsAtRelay polls relayURL until every ID in ids is retrievable
-// or timeout elapses, returning whatever's still missing at that point
-// (empty on full success).
+// waitForEventsAtRelay polls relayURL until every ID is retrievable or
+// timeout elapses, returning whatever's still missing.
 func waitForEventsAtRelay(t *testing.T, relayURL string, ids []string, timeout time.Duration) []string {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
@@ -316,9 +246,7 @@ func waitForEventsAtRelay(t *testing.T, relayURL string, ids []string, timeout t
 }
 
 // waitForRelayReady retries a no-op query against relayURL until it
-// succeeds (proving the relay is up and speaking the protocol) or timeout
-// elapses -- covers both the container's own startup time and the initial
-// image build.
+// succeeds or timeout elapses.
 func waitForRelayReady(t *testing.T, relayURL string, timeout time.Duration) {
 	t.Helper()
 	if err := waitForRelayReadyErr(relayURL, timeout); err != nil {
@@ -327,7 +255,7 @@ func waitForRelayReady(t *testing.T, relayURL string, timeout time.Duration) {
 }
 
 // waitForRelayReadyErr is waitForRelayReady's error-returning core, safe
-// to call from any goroutine (see waitForAllRelaysReady).
+// to call from any goroutine.
 func waitForRelayReadyErr(relayURL string, timeout time.Duration) error {
 	u, err := url.Parse(relayURL)
 	if err != nil {
@@ -350,12 +278,8 @@ func waitForRelayReadyErr(relayURL string, timeout time.Duration) error {
 	return fmt.Errorf("relay at %s never became ready within %s: %w", relayURL, timeout, lastErr)
 }
 
-// waitForAllRelaysReady waits for every URL in urls concurrently, instead
-// of waitForRelayReady's implied sequential cost -- with a couple dozen
-// containers in a stress stack, waiting up to `timeout` *each* in sequence
-// would dominate the whole test's runtime for no reason, since they're all
-// starting up in parallel anyway. Fails with every URL that timed out, not
-// just the first, so a genuinely broken stack is diagnosable in one shot.
+// waitForAllRelaysReady waits for every URL concurrently instead of
+// sequentially, and reports every URL that failed, not just the first.
 func waitForAllRelaysReady(t *testing.T, urls []string, timeout time.Duration) {
 	t.Helper()
 	errs := make([]error, len(urls))

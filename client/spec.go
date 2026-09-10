@@ -189,7 +189,7 @@ func (ds *FlowSpec) UnmarshalJSON(data []byte) error {
 		ensureNormalized := EnsurePolicy(strings.ToLower(strings.ReplaceAll(string(flowSpec.Ensure), " ", "")))
 
 		if len(ensureNormalized) == 0 {
-			ensureNormalized = EnsureExists
+			ensureNormalized = EnsureCreate
 		} else if !slices.Contains([]EnsurePolicy{EnsureCreate, EnsureExists}, ensureNormalized) {
 			return fmt.Errorf("unknown ensure policy: %s", flowSpec.Ensure)
 		}

@@ -64,8 +64,9 @@ A flow entry is either a bare string or an object:
   value with no fallback.
 - Object: `{relay: "wss://..."}` for remote (same scheme-optional rule
   applies to `relay:`), or `{path: "./data/db.db"}` for local, plus
-  `trusted: true/false` and, for local paths, `ensure: exists` (default —
-  fails to load if the path is missing) or `ensure: create`.
+  `trusted: true/false` and, for local paths, `ensure: create` (default —
+  creates the path if missing) or `ensure: exists` (fails to load if the
+  path is missing).
 
 ## `stream`
 

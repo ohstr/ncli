@@ -162,7 +162,7 @@ func TestSpecTargets(t *testing.T) {
 	}{
 		{"valid, mixed", false, 3, 0},
 		{"local, ensure create, missing path", false, 1, 0},
-		{"local, default ensure, missing path", true, 0, 0},
+		{"local, default ensure, missing path", false, 1, 0},
 		{"nil entry", true, 0, 0},
 		{"malformed entry", true, 0, 0},
 		{"empty relays", false, 0, 0},

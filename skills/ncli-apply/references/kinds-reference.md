@@ -74,7 +74,7 @@ Full object form:
 | `relay` | remote | Relay URL, must be `ws://`/`wss://` with a non-empty host |
 | `path` | local | Filesystem path to a local event store |
 | `trusted` | both | Marks the flow as trusted (skips signature/format validation, and NIP-13 PoW enforcement if `strictPow`/`--strict-pow` is set, on ingested events) |
-| `ensure` | local only | `exists` (default — errors if the path is missing) or `create` (creates it) |
+| `ensure` | local only | `create` (default — creates the path if missing) or `exists` (errors if the path is missing) |
 | `writeConcurrency` | local destination only | int, default `32` — concurrent workers for this flow's writes; has no effect on a flow that's only ever read from |
 
 ## Duration-unit grammar (used inside `filters`)

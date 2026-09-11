@@ -432,7 +432,7 @@ spec:
     - relay: wss://relay.snort.social
       trusted: true  # skip re-verifying this source's signatures (default false)
     - path: ./data/db/notes.db
-      ensure: create # create if missing (default "exists", errors if missing)
+      ensure: create # create if missing (default), or "exists" to error if missing
 
   # filters (optional, omit entirely to match everything): same NIP-01
   # fields as examples/filters.yaml. Multiple filters are OR'd together;

@@ -26,8 +26,7 @@ func addContextCommands(cmd *cobra.Command) {
 		Long: `Bare invocation lists saved relay contexts (name -> config file path),
 marking the current one with "*". A context is what every relay command uses
 when --config is omitted, taking priority over any ncli.yaml/relay.yaml in
-the working directory. See "list", "add", "remove", and "use" to manage
-contexts.`,
+the working directory.`,
 		Example: `  ncli relay context list`,
 		Args:    common.NoArgs,
 		RunE:    runContextList,

@@ -18,7 +18,7 @@ func newMirrorCommand() *cobra.Command {
 (--server, or the configured default list) -- each server fetches
 source-url itself; no bytes pass through ncli. Reports a result per
 server.`,
-		Example: `  ncli blossom mirror https://example.com/file.jpg --identity mylabel`,
+		Example: `  ncli blossom mirror https://example.com/file.jpg --identity satoshi`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {
 				return common.UsageError(cmd, fmt.Errorf("exactly one source URL is required"))

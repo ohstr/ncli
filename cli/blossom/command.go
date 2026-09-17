@@ -23,7 +23,7 @@ per (item, server) pair, and exiting non-zero if any pair failed.
 "download" tries the configured servers in order, stopping at the first
 that answers; "list" queries one server by default, or every server with
 --all.`,
-		Example: `  ncli blossom upload ./photo.jpg --identity mylabel`,
+		Example: `  ncli blossom upload ./photo.jpg --identity satoshi`,
 		RunE:    common.RequireSubcommand,
 	}
 

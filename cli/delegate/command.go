@@ -37,7 +37,7 @@ pubkey, nprofile, or nip-05 address, and must resolve to a private key --
 a pubkey-only identity has nothing to sign or derive a delegatee key from
 and is rejected.`,
 		Example: `  ncli id delegate
-  ncli id delegate --issuer mylabel --delegatee npub1... --kinds 1`,
+  ncli id delegate --issuer satoshi --delegatee npub1... --kinds 1`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// No config reload here: root's InitConfig (cli/ncli/root.go)
 			// already loaded it once via the nearest ancestor's

@@ -23,7 +23,7 @@ var minerCmd = &cobra.Command{
 	Use:     "miner",
 	Short:   "Mine and verify proof-of-work",
 	Long:    `Mine NIP-13 proof-of-work into an unsigned event, or verify PoW on already-mined events.`,
-	Example: `  ncli miner mine -e event.json`,
+	Example: `  ncli miner mine -e event.json -o mined.json`,
 	RunE:    common.RequireSubcommand,
 }
 

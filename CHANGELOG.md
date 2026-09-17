@@ -1,5 +1,42 @@
 # Changelog
 
+## [0.5.0-rc.1]
+
+### Added
+
+- `ncli decode` extended to NIP-CASH tokens (`lokicash1...`, any HRP) and
+  NIP-CW `circlehub1...` connections. A `cashhub1...` Hub connection is
+  recognized and rejected -- no local decoder for that format. The
+  pairing secret embedded in either new format is never surfaced, in any
+  mode. ([#49](https://github.com/ohstr/ncli/pull/49))
+- Every command's `--help` output now includes an onboarding `Example:`
+  field, including pure group commands.
+  ([#51](https://github.com/ohstr/ncli/pull/51))
+
+### Changed
+
+- A local flow's `ensure` policy now defaults to `create` instead of
+  `exists` when omitted, so a missing local store path is created rather
+  than failing to load.
+  ([#50](https://github.com/ohstr/ncli/pull/50))
+- Trimmed redundant/noisy `Long` text and placeholder examples across
+  commands -- text already covered by a flag's own description no
+  longer repeats in the command's `Long`, and the generic `mylabel`
+  placeholder now reads `satoshi`.
+  ([#51](https://github.com/ohstr/ncli/pull/51))
+- Bumped `github.com/ohstr/nmilat` to v0.3.0 -- adds NIP-34/NIP-22
+  support (consumed by the `decode` extension above), fixes
+  `TransferFromSources` reusing a stale wallet-bound client on its
+  second call, and fixes silently-dropped `circle_hub`/`circle_wallet`
+  fee fields on NWC unmarshal.
+  ([#51](https://github.com/ohstr/ncli/pull/51))
+
+### Fixed
+
+- Two `Example:` commands that didn't actually run as written against a
+  real `ncli` binary.
+  ([#51](https://github.com/ohstr/ncli/pull/51))
+
 ## [0.4.9]
 
 ### Fixed

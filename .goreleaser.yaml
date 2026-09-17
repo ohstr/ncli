@@ -44,6 +44,7 @@ dockers:
       - "ghcr.io/ohstr/ncli:latest-amd64"
     build_flag_templates:
       - "--platform=linux/amd64"
+    skip_push: auto
   - id: ncli-arm64
     ids: [ncli]
     goos: linux
@@ -55,16 +56,21 @@ dockers:
       - "ghcr.io/ohstr/ncli:latest-arm64"
     build_flag_templates:
       - "--platform=linux/arm64"
+    skip_push: auto
 
+# skip_push: auto here too -- otherwise a prerelease build would still try
+# to manifest the per-arch tags above, which skip_push: auto never pushed.
 docker_manifests:
   - name_template: "ghcr.io/ohstr/ncli:{{ .Version }}"
     image_templates:
       - "ghcr.io/ohstr/ncli:{{ .Version }}-amd64"
       - "ghcr.io/ohstr/ncli:{{ .Version }}-arm64"
+    skip_push: auto
   - name_template: "ghcr.io/ohstr/ncli:latest"
     image_templates:
       - "ghcr.io/ohstr/ncli:latest-amd64"
       - "ghcr.io/ohstr/ncli:latest-arm64"
+    skip_push: auto
 
 brews:
   - name: ncli
@@ -80,6 +86,7 @@ brews:
       bin.install "ncli"
     test: |
       system "#{bin}/ncli", "version"
+    skip_upload: auto
 
 # No `changelog:` block here, deliberately -- GoReleaser's changelog pipe
 # is also the only place that loads a `--release-notes` file into the
@@ -101,3 +108,4 @@ release:
   # place if a Release for the tag already exists (e.g. from a prior
   # failed/retried run) instead of using --release-notes below.
   mode: replace
+  prerelease: auto

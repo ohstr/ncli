@@ -5,6 +5,13 @@ stdout=result / stderr=narration convention), checked against what it
 actually needs to say. 22 lines across 8 files. Lines not listed here are
 kept as-is (final results, errors, genuine tips).
 
+Reconciled 2026-09-17 against current source: every file below was read in
+full (not re-grepped) and every row cross-checked line-by-line. Result: all
+22 rows below still match source verbatim, zero drift, zero reclassified.
+The reconciliation pass did surface two things the first pass missed — a
+recurring stdout/stderr plumbing bug (see its own section below) and ~38
+files that had never actually been checked (folded into "Clean" below).
+
 ## cli/reindex/command.go — worst offender (8 lines)
 
 Every reindex phase announces its own start, and the search path reports
@@ -53,19 +60,12 @@ its final count twice.
 |---|---|---|
 | 123 | `"Checking connectivity for %d %s"` | removed — the real result is the "%d of %d reachable" summary at line 167 |
 
-Separate plumbing note, not a wording fix: `ping`'s per-relay
-`"connectivity OK"`/`"connectivity check failed"` lines and the final
-`"%d of %d reachable"` summary are `ping`'s actual *result* in text mode,
-but they go out via `log.Info`/`log.Error` (stderr) instead of stdout —
-`cli/ncli/ping.go` itself prints nothing to stdout. Worth revisiting
-separately from this noise pass.
-
 ## cli/ncli/id.go — vault save (3 lines)
 
 | Line | Before | After |
 |---|---|---|
-| 204 | `"unlocking vault..."` | removed — redundant with the "Vault password:" prompt right after |
-| 206 | `"creating vault identity..."` | removed — redundant with the "Set a vault password:" prompt right after |
+| 204 | `"unlocking vault..."` | removed — redundant with the "Vault password:" prompt right after (confirmed live in `cli/keyresolve/resolve.go`) |
+| 206 | `"creating vault identity..."` | removed — redundant with the "Set a vault password:" prompt right after (same) |
 | 223 | `"saving identity..."` | removed — superseded by "identity saved to vault (label: %s)" right after |
 
 ## cli/ncli/miner.go — progress tick (1 line)
@@ -80,11 +80,31 @@ separately from this noise pass.
 |---|---|---|
 | 141 | `"Delegation token generated."` | removed — restates the fields printed right below it |
 
-## Clean (audited, zero noise)
+## Stdout/stderr plumbing gaps (separate issue — not wording)
 
-`cli/blossom` (all), `cli/bunker/command.go`, `cli/relay/context.go` +
-`context_run.go`, `cli/common/errors.go`, `client/publish.go`,
-`client/recovery.go`, `client/stream.go`, `client/miner.go`,
-`cli/ncli/apply.go`, `dump.go`, `find.go`, `ping.go`, `filters.go`,
-`query.go`. `cli/bunker/board.go` and `client/neg_sync.go` are live-TUI
-chrome, out of scope here.
+Three commands report their actual text-mode *result* — not narration —
+through `log.Info`/`log.Error`, which AGENTS.md routes to stderr. Nothing
+wrong with the wording; the fix is which stream it goes to.
+
+| File | Lines | Text | Command affected |
+|---|---|---|---|
+| `client/ping.go` | ~167, ~214–222 | `"%d of %d %s reachable"`, per-relay `"connectivity OK"`/`"connectivity check failed"` | `ping`'s entire text-mode result lives on stderr |
+| `cli/ncli/prefs.go` | 60, 62, 93, 95, 146 | `"added"`, `"already configured"`, `"removed"`, `"not configured"`, `"cleared"` | `prefs relays add`/`remove`/`clear` |
+| `cli/relay/context_run.go` | 146, 189 | `"relay context created"`, `"new identity saved to vault"` | `relay --context <new-name>`'s auto-create path |
+
+## Clean (audited in full, zero noise)
+
+Every file below was read end to end, not sampled by grep.
+
+- **cli/blossom** (all 9): `command.go`, `download.go`, `list.go`, `mirror.go`, `report.go`, `rm.go`, `servers.go`, `shared.go`, `upload.go` — no progress narration anywhere, including upload/download/mirror's transfer loops.
+- **cli/bunker** (all 16 non-TUI files): `client.go`, `clipboard.go`, `command.go`, `daemon.go`, `eventlog.go`, `grantspec.go`, `handler.go`, `identity.go`, `ipc_client.go`, `ipc_server.go`, `policy.go`, `queue.go`, `spawn.go`, `spawn_unix.go`, `spawn_windows.go`, `uri.go`. `daemon.go`'s custom `d.log()` method never reaches CLI stdout/stderr — it only feeds an in-memory TUI log panel or a rotating `daemon.log` file on disk.
+- **cli/relay**: `context.go`, `context_run.go` (noise-wise; see plumbing gap above), `service_membership.go`.
+- **cli/common** (all 10): `errors.go`, `appdir.go`, `args.go`, `auth.go`, `config.go`, `logging.go`, `logging_unix.go`, `logging_windows.go`, `prompt.go`, `version.go`.
+- **cli/keyresolve/resolve.go**, **cli/reindex/state.go**.
+- **cli/ncli** (11): `apply.go`, `decode.go`, `dump.go`, `filters.go`, `find.go`, `id_sign.go`, `ping.go`, `publish.go`, `query.go`, `root.go`, `version.go`. (`prefs.go` has the plumbing gap above instead.)
+- **client/** (12): `decode.go`, `event_export.go`, `identity.go`, `inspect.go`, `inspect_store.go`, `miner.go`, `prefs.go`, `publish.go`, `recovery.go`, `spec.go`, `stream.go`, `vault.go`.
+
+Out of scope, not "clean" — confirmed to have no headless code path at all,
+so there's no console narration to audit: `cli/bunker/board.go` (live TUI
+board) and `client/neg_sync.go` (`Client.init()` rejects a `SyncSpec`
+without a TUI attached).

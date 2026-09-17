@@ -28,33 +28,37 @@ marking the current one with "*". A context is what every relay command uses
 when --config is omitted, taking priority over any ncli.yaml/relay.yaml in
 the working directory. See "list", "add", "remove", and "use" to manage
 contexts.`,
-		Args: common.NoArgs,
-		RunE: runContextList,
+		Example: `  ncli relay context list`,
+		Args:    common.NoArgs,
+		RunE:    runContextList,
 	}
 
 	listCmd := &cobra.Command{
-		Use:   "list",
-		Short: "List saved relay contexts",
-		Long:  `Same as bare "context": lists saved relay contexts, marking the current one with "*".`,
-		Args:  common.NoArgs,
-		RunE:  runContextList,
+		Use:     "list",
+		Short:   "List saved relay contexts",
+		Long:    `Same as bare "context": lists saved relay contexts, marking the current one with "*".`,
+		Example: `  ncli relay context list`,
+		Args:    common.NoArgs,
+		RunE:    runContextList,
 	}
 	contextCmd.AddCommand(listCmd)
 
 	addCmd := &cobra.Command{
-		Use:   "add <name> <config-path>",
-		Short: "Save a named relay context",
-		Long:  `Save name -> config-path in prefs.yaml. config-path must already exist.`,
-		Args:  common.ExactArgs(2),
-		RunE:  runContextAdd,
+		Use:     "add <name> <config-path>",
+		Short:   "Save a named relay context",
+		Long:    `Save name -> config-path in prefs.yaml. config-path must already exist.`,
+		Example: `  ncli relay context add myrelay relay.yaml`,
+		Args:    common.ExactArgs(2),
+		RunE:    runContextAdd,
 	}
 	contextCmd.AddCommand(addCmd)
 
 	removeCmd := &cobra.Command{
-		Use:   "remove <name>",
-		Short: "Remove a saved relay context",
-		Args:  common.ExactArgs(1),
-		RunE:  runContextRemove,
+		Use:     "remove <name>",
+		Short:   "Remove a saved relay context",
+		Example: `  ncli relay context remove myrelay`,
+		Args:    common.ExactArgs(1),
+		RunE:    runContextRemove,
 	}
 	contextCmd.AddCommand(removeCmd)
 
@@ -64,8 +68,9 @@ contexts.`,
 		Long: `Set name as the current relay context -- every relay command uses its
 config file when --config is omitted, even if the working directory has
 its own ncli.yaml/relay.yaml.`,
-		Args: common.ExactArgs(1),
-		RunE: runContextUse,
+		Example: `  ncli relay context use myrelay`,
+		Args:    common.ExactArgs(1),
+		RunE:    runContextUse,
 	}
 	contextCmd.AddCommand(useCmd)
 

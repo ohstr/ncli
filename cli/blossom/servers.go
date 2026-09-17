@@ -18,10 +18,11 @@ import (
 
 func newServersCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "servers",
-		Short: "Manage the default Blossom server list",
-		Long:  `Manage the server list "ncli blossom" commands fall back to when not given explicit --server flags.`,
-		RunE:  common.RequireSubcommand,
+		Use:     "servers",
+		Short:   "Manage the default Blossom server list",
+		Long:    `Manage the server list "ncli blossom" commands fall back to when not given explicit --server flags.`,
+		Example: `  ncli blossom servers list`,
+		RunE:    common.RequireSubcommand,
 	}
 
 	cmd.AddCommand(newServersAddCommand())
@@ -81,8 +82,9 @@ func newServersAddCommand() *cobra.Command {
 	var publish bool
 
 	cmd := &cobra.Command{
-		Use:   "add <server-url>",
-		Short: "Add a server to the default list",
+		Use:     "add <server-url>",
+		Short:   "Add a server to the default list",
+		Example: `  ncli blossom servers add https://blossom.example.com`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {
 				return common.UsageError(cmd, fmt.Errorf("exactly one server url is required"))
@@ -150,8 +152,9 @@ func newServersRemoveCommand() *cobra.Command {
 	var publish bool
 
 	cmd := &cobra.Command{
-		Use:   "remove <server-url>",
-		Short: "Remove a server from the default list",
+		Use:     "remove <server-url>",
+		Short:   "Remove a server from the default list",
+		Example: `  ncli blossom servers remove https://blossom.example.com`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {
 				return common.UsageError(cmd, fmt.Errorf("exactly one server url is required"))
@@ -213,9 +216,10 @@ func newServersRemoveCommand() *cobra.Command {
 
 func newServersListCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "list",
-		Short: "List the default servers",
-		Args:  common.NoArgs,
+		Use:     "list",
+		Short:   "List the default servers",
+		Example: `  ncli blossom servers list`,
+		Args:    common.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			jsonMode, _ := cmd.Flags().GetBool("json")
 
@@ -266,7 +270,8 @@ declares.
 
 Unlike "servers add/remove/list", which manage your own default list,
 this looks up someone else's published servers.`,
-		Args: common.ExactArgs(1),
+		Example: `  ncli blossom servers discover npub1...`,
+		Args:    common.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, cancel := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
 			defer cancel()

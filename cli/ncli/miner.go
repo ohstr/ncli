@@ -20,10 +20,11 @@ import (
 )
 
 var minerCmd = &cobra.Command{
-	Use:   "miner",
-	Short: "Mine and verify proof-of-work",
-	Long:  `Mine NIP-13 proof-of-work into an unsigned event, or verify PoW on already-mined events.`,
-	RunE:  common.RequireSubcommand,
+	Use:     "miner",
+	Short:   "Mine and verify proof-of-work",
+	Long:    `Mine NIP-13 proof-of-work into an unsigned event, or verify PoW on already-mined events.`,
+	Example: `  ncli miner mine -e event.json`,
+	RunE:    common.RequireSubcommand,
 }
 
 var minerMineCmd = &cobra.Command{
@@ -40,6 +41,8 @@ The event comes from --event (a NIP-01 event file), or inline from
 If --identity resolves to a private key, the mined event is signed
 automatically before being written. A pubkey-only identity mines but
 can't sign (logged, not silent).`,
+	Example: `  ncli miner mine -e event.json -o mined.json
+  ncli miner mine -e event.json --in-place --workers 4`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		if err := cmd.ValidateRequiredFlags(); err != nil {
 			return common.UsageError(cmd, err)
@@ -276,6 +279,8 @@ falls back to the relays configured via "ncli prefs relays add".
 --identity further narrows live mode to one identity's own events.
 
 Exits non-zero if any checked event fails.`,
+	Example: `  ncli miner check -e events.json
+  ncli miner check -t targets.yaml`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		if err := cmd.ValidateRequiredFlags(); err != nil {
 			return common.UsageError(cmd, err)

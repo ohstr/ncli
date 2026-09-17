@@ -17,6 +17,7 @@ func newReportCommand() *cobra.Command {
 		Long: `Sign and submit a kind:1984 report event to a server's PUT /report --
 authenticated by its own signature, not a BUD-11 token. Targets one
 server: --server, or the first configured default.`,
+		Example: `  ncli blossom report <hash> --identity mylabel`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {
 				return common.UsageError(cmd, fmt.Errorf("exactly one hash is required"))

@@ -17,6 +17,8 @@ naddr -- into its hex key/ID plus any embedded relay hints, author, or
 kind.
 
 --json switches to structured JSON output on stdout.`,
+	Example: `  ncli decode npub1...
+  ncli decode nevent1...`,
 	Args: common.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		jsonMode, _ := cmd.Flags().GetBool("json")

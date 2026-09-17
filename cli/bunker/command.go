@@ -43,6 +43,8 @@ On Linux/macOS this starts (or reattaches to) a background daemon that
 keeps running after the TUI is closed with "b" or "q" -- reattach any
 time with "ncli bunker attach". On Windows the TUI runs directly with no
 background support.`,
+		Example: `  ncli bunker
+  ncli bunker --relay wss://relay.example.com`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := requireInteractive(cmd); err != nil {
 				return err
@@ -94,6 +96,7 @@ func newAttachCommand() *cobra.Command {
 		Long: `Reconnect the interactive TUI to a bunker daemon already started with
 "ncli bunker" and left running in the background. Never starts one
 itself -- fails if none is running (use "ncli bunker" for that).`,
+		Example: `  ncli bunker attach`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := requireInteractive(cmd); err != nil {
 				return err
@@ -115,8 +118,9 @@ itself -- fails if none is running (use "ncli bunker" for that).`,
 
 func newStatusCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "status",
-		Short: "Show whether a bunker daemon is running",
+		Use:     "status",
+		Short:   "Show whether a bunker daemon is running",
+		Example: `  ncli bunker status`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			jsonMode, _ := cmd.Flags().GetBool("json")
 
@@ -198,8 +202,9 @@ func printIdentityAndRelays(st StatusInfo) {
 
 func newStopCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "stop",
-		Short: "Stop the running bunker daemon",
+		Use:     "stop",
+		Short:   "Stop the running bunker daemon",
+		Example: `  ncli bunker stop`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			jsonMode, _ := cmd.Flags().GetBool("json")
 
@@ -246,14 +251,16 @@ func newStopCommand() *cobra.Command {
 
 func newSessionsCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "sessions",
-		Short: "Manage remembered per-app permissions",
-		RunE:  common.RequireSubcommand,
+		Use:     "sessions",
+		Short:   "Manage remembered per-app permissions",
+		Example: `  ncli bunker sessions list`,
+		RunE:    common.RequireSubcommand,
 	}
 
 	cmd.AddCommand(&cobra.Command{
-		Use:   "list",
-		Short: "List every app with a remembered permission",
+		Use:     "list",
+		Short:   "List every app with a remembered permission",
+		Example: `  ncli bunker sessions list`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			jsonMode, _ := cmd.Flags().GetBool("json")
 
@@ -283,9 +290,10 @@ func newSessionsCommand() *cobra.Command {
 	})
 
 	cmd.AddCommand(&cobra.Command{
-		Use:   "revoke <pubkey>",
-		Short: "Revoke every remembered permission for one app",
-		Args:  common.ExactArgs(1),
+		Use:     "revoke <pubkey>",
+		Short:   "Revoke every remembered permission for one app",
+		Example: `  ncli bunker sessions revoke <pubkey>`,
+		Args:    common.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			jsonMode, _ := cmd.Flags().GetBool("json")
 
@@ -312,9 +320,10 @@ func newSessionsCommand() *cobra.Command {
 	})
 
 	cmd.AddCommand(&cobra.Command{
-		Use:   "rename <pubkey> <name>",
-		Short: "Set (or clear, with \"\") a trusted app's display name",
-		Args:  common.ExactArgs(2),
+		Use:     "rename <pubkey> <name>",
+		Short:   "Set (or clear, with \"\") a trusted app's display name",
+		Example: `  ncli bunker sessions rename <pubkey> "My Wallet"`,
+		Args:    common.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			jsonMode, _ := cmd.Flags().GetBool("json")
 
@@ -341,9 +350,10 @@ func newSessionsCommand() *cobra.Command {
 	})
 
 	cmd.AddCommand(&cobra.Command{
-		Use:   "grants <pubkey>",
-		Short: "List one trusted app's remembered permissions individually",
-		Args:  common.ExactArgs(1),
+		Use:     "grants <pubkey>",
+		Short:   "List one trusted app's remembered permissions individually",
+		Example: `  ncli bunker sessions grants <pubkey>`,
+		Args:    common.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			jsonMode, _ := cmd.Flags().GetBool("json")
 
@@ -384,9 +394,10 @@ func newSessionsCommand() *cobra.Command {
 	})
 
 	revokeGrantCmd := &cobra.Command{
-		Use:   "revoke-grant <pubkey>",
-		Short: "Revoke one remembered permission for an app, leaving the rest",
-		Args:  common.ExactArgs(1),
+		Use:     "revoke-grant <pubkey>",
+		Short:   "Revoke one remembered permission for an app, leaving the rest",
+		Example: `  ncli bunker sessions revoke-grant <pubkey> --method sign_event`,
+		Args:    common.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			jsonMode, _ := cmd.Flags().GetBool("json")
 			method, _ := cmd.Flags().GetString("method")
@@ -434,8 +445,9 @@ func newSessionsCommand() *cobra.Command {
 // "undo a past decision" action to give it a group for.
 func newHistoryCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "history",
-		Short: "List recently resolved requests (approved/rejected/expired)",
+		Use:     "history",
+		Short:   "List recently resolved requests (approved/rejected/expired)",
+		Example: `  ncli bunker history`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			jsonMode, _ := cmd.Flags().GetBool("json")
 
@@ -500,6 +512,9 @@ pairing instead, blocking until the client confirms or it times out.
 declared set of permissions (see examples/bunker/ for the YAML shape),
 instead of prompting interactively on first use. "ncli bunker sessions
 grants <pubkey>" shows what actually landed once paired.`,
+		Example: `  ncli bunker connect
+  ncli bunker connect nostrconnect://...
+  ncli bunker connect --grants grants.yaml`,
 		Args: common.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			jsonMode, _ := cmd.Flags().GetBool("json")

@@ -35,6 +35,9 @@ the relays configured via "ncli prefs relays add".
 
 Always prints a single JSON array to stdout. --quiet also drops the
 progress narration on stderr.`,
+		Example: `  ncli find note1...
+  ncli find npub1...
+  ncli find -t targets.yaml --authors npub1...`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if err := cmd.ValidateRequiredFlags(); err != nil {
 				return common.UsageError(cmd, err)

@@ -14,20 +14,23 @@ var prefsCmd = &cobra.Command{
 	Short: "Manage persistent ncli preferences",
 	Long: `Manage preferences that persist across projects. Currently just the
 default relay list that find, dump, and miner check fall back to.`,
-	RunE: common.RequireSubcommand,
+	Example: `  ncli prefs relays list`,
+	RunE:    common.RequireSubcommand,
 }
 
 var prefsRelaysCmd = &cobra.Command{
-	Use:   "relays",
-	Short: "Manage the default relay list",
-	Long:  `Manage the relay list find, dump, and miner check consult when not given explicit targets.`,
-	RunE:  common.RequireSubcommand,
+	Use:     "relays",
+	Short:   "Manage the default relay list",
+	Long:    `Manage the relay list find, dump, and miner check consult when not given explicit targets.`,
+	Example: `  ncli prefs relays list`,
+	RunE:    common.RequireSubcommand,
 }
 
 var prefsRelaysAddCmd = &cobra.Command{
-	Use:   "add <relay-url>",
-	Short: "Add a relay to the default list",
-	Args:  common.ExactArgs(1),
+	Use:     "add <relay-url>",
+	Short:   "Add a relay to the default list",
+	Example: `  ncli prefs relays add wss://relay.example.com`,
+	Args:    common.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		jsonMode, _ := cmd.Flags().GetBool("json")
 
@@ -66,9 +69,10 @@ var prefsRelaysAddCmd = &cobra.Command{
 }
 
 var prefsRelaysRemoveCmd = &cobra.Command{
-	Use:   "remove <relay-url>",
-	Short: "Remove a relay from the default list",
-	Args:  common.ExactArgs(1),
+	Use:     "remove <relay-url>",
+	Short:   "Remove a relay from the default list",
+	Example: `  ncli prefs relays remove wss://relay.example.com`,
+	Args:    common.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		jsonMode, _ := cmd.Flags().GetBool("json")
 
@@ -99,9 +103,10 @@ var prefsRelaysRemoveCmd = &cobra.Command{
 }
 
 var prefsRelaysListCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List the default relays",
-	Args:  common.NoArgs,
+	Use:     "list",
+	Short:   "List the default relays",
+	Example: `  ncli prefs relays list`,
+	Args:    common.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		jsonMode, _ := cmd.Flags().GetBool("json")
 
@@ -131,9 +136,10 @@ var prefsRelaysListCmd = &cobra.Command{
 }
 
 var prefsRelaysClearCmd = &cobra.Command{
-	Use:   "clear",
-	Short: "Remove all default relays",
-	Args:  common.NoArgs,
+	Use:     "clear",
+	Short:   "Remove all default relays",
+	Example: `  ncli prefs relays clear`,
+	Args:    common.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := client.SavePrefs(&client.Prefs{}); err != nil {
 			return common.RuntimeError(cmd, err)
@@ -149,9 +155,10 @@ var prefsRelaysClearCmd = &cobra.Command{
 }
 
 var prefsPathCmd = &cobra.Command{
-	Use:   "path",
-	Short: "Print the prefs.yaml file path",
-	Args:  common.NoArgs,
+	Use:     "path",
+	Short:   "Print the prefs.yaml file path",
+	Example: `  ncli prefs path`,
+	Args:    common.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		path := client.PrefsPath()
 		if jsonMode, _ := cmd.Flags().GetBool("json"); jsonMode {

@@ -17,6 +17,7 @@ var versionCmd = &cobra.Command{
 reads and writes: the app data directory, prefs file, vault file, and log
 directory. --json prints the same information as structured JSON, for
 scripts or an AI agent.`,
+	Example: `  ncli version`,
 	// version just reads embedded build info, so it skips the root's
 	// PersistentPreRun (config loading, log dir/crash log setup) instead
 	// of inheriting it like every other subcommand.

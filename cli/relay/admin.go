@@ -45,28 +45,31 @@ var (
 // was flattened away: "ncli relay admin stats" -> "ncli relay stats".
 func addRemoteAdminCommands(cmd *cobra.Command) {
 	statsCmd := &cobra.Command{
-		Use:   "stats",
-		Short: "Display live relay metrics and worker status",
-		RunE:  runStats,
+		Use:     "stats",
+		Short:   "Display live relay metrics and worker status",
+		Example: `  ncli relay stats --config relay.yaml`,
+		RunE:    runStats,
 	}
 	cmd.AddCommand(statsCmd)
 
 	reindexCmd := &cobra.Command{
-		Use:   "reindex",
-		Short: "Trigger a reindex on the running relay, without restarting it",
-		RunE:  common.RequireSubcommand,
+		Use:     "reindex",
+		Short:   "Trigger a reindex on the running relay, without restarting it",
+		Example: `  ncli relay reindex search --config relay.yaml`,
+		RunE:    common.RequireSubcommand,
 	}
-	reindexCmd.AddCommand(&cobra.Command{Use: "search", Short: "Reindex profiles to the search index", RunE: runReindexSearch})
-	reindexCmd.AddCommand(&cobra.Command{Use: "zaps", Short: "Reindex zap stats", RunE: runReindexZaps})
+	reindexCmd.AddCommand(&cobra.Command{Use: "search", Short: "Reindex profiles to the search index", Example: `  ncli relay reindex search --config relay.yaml`, RunE: runReindexSearch})
+	reindexCmd.AddCommand(&cobra.Command{Use: "zaps", Short: "Reindex zap stats", Example: `  ncli relay reindex zaps --config relay.yaml`, RunE: runReindexZaps})
 	cmd.AddCommand(reindexCmd)
 
 	clearCmd := &cobra.Command{
-		Use:   "clear",
-		Short: "Clear indexes on the running relay, without restarting it",
-		RunE:  common.RequireSubcommand,
+		Use:     "clear",
+		Short:   "Clear indexes on the running relay, without restarting it",
+		Example: `  ncli relay clear search --config relay.yaml`,
+		RunE:    common.RequireSubcommand,
 	}
-	clearCmd.AddCommand(&cobra.Command{Use: "search", Short: "Delete all profiles from the search index", RunE: runClearSearch})
-	clearCmd.AddCommand(&cobra.Command{Use: "zaps", Short: "Delete all zap counters", RunE: runClearZaps})
+	clearCmd.AddCommand(&cobra.Command{Use: "search", Short: "Delete all profiles from the search index", Example: `  ncli relay clear search --config relay.yaml`, RunE: runClearSearch})
+	clearCmd.AddCommand(&cobra.Command{Use: "zaps", Short: "Delete all zap counters", Example: `  ncli relay clear zaps --config relay.yaml`, RunE: runClearZaps})
 	cmd.AddCommand(clearCmd)
 
 	addMembershipAdminCommands(cmd)
@@ -79,41 +82,50 @@ func addRemoteAdminCommands(cmd *cobra.Command) {
 // the underlying mechanism differs at all.
 func addMembershipAdminCommands(cmd *cobra.Command) {
 	membersCmd := &cobra.Command{
-		Use:   "members",
-		Short: "Manage NIP-43 relay membership",
-		RunE:  common.RequireSubcommand,
+		Use:     "members",
+		Short:   "Manage NIP-43 relay membership",
+		Example: `  ncli relay members list --config relay.yaml`,
+		RunE:    common.RequireSubcommand,
 	}
 	membersCmd.AddCommand(&cobra.Command{
 		Use: "list", Short: "List all members",
-		RunE: runMembersList,
+		Example: `  ncli relay members list --config relay.yaml`,
+		RunE:    runMembersList,
 	})
 	membersCmd.AddCommand(&cobra.Command{
 		Use: "show <pubkey>", Short: "Show one member's record",
-		Args: common.ExactArgs(1), RunE: runMembersShow,
+		Example: `  ncli relay members show <pubkey> --config relay.yaml`,
+		Args:    common.ExactArgs(1), RunE: runMembersShow,
 	})
 	membersAddCmd := &cobra.Command{
 		Use: "add <pubkey>", Short: "Enroll a pubkey as a member",
 		Long: `Enroll a pubkey as a member directly -- bypasses the self-service
 invite-code join flow, no invite claim required.`,
+		Example: `  ncli relay members add <pubkey> --config relay.yaml
+  ncli relay members add <pubkey> --role member --config relay.yaml`,
 		Args: common.ExactArgs(1), RunE: runMembersAdd,
 	}
 	membersAddCmd.Flags().StringArray("role", nil, "role id to assign (repeatable)")
 	membersCmd.AddCommand(membersAddCmd)
 	membersCmd.AddCommand(&cobra.Command{
 		Use: "remove <pubkey>", Short: "Remove a member",
-		Args: common.ExactArgs(1), RunE: runMembersRemove,
+		Example: `  ncli relay members remove <pubkey> --config relay.yaml`,
+		Args:    common.ExactArgs(1), RunE: runMembersRemove,
 	})
 	cmd.AddCommand(membersCmd)
 
 	invitesCmd := &cobra.Command{
-		Use:   "invites",
-		Short: "Manage NIP-43 invite codes",
-		RunE:  common.RequireSubcommand,
+		Use:     "invites",
+		Short:   "Manage NIP-43 invite codes",
+		Example: `  ncli relay invites create --config relay.yaml`,
+		RunE:    common.RequireSubcommand,
 	}
 	invitesCreateCmd := &cobra.Command{
 		Use: "create", Short: "Issue a new invite code",
 		Long: `Issue a new invite code, for handing out out-of-band (a signup email, a
 Discord invite flow) before the invitee has a working Nostr client.`,
+		Example: `  ncli relay invites create --config relay.yaml
+  ncli relay invites create --ttl 24h --max-uses 10 --config relay.yaml`,
 		RunE: runInvitesCreate,
 	}
 	invitesCreateCmd.Flags().Duration("ttl", 0, "how long the code stays valid (default: relay's configured default)")
@@ -122,29 +134,34 @@ Discord invite flow) before the invitee has a working Nostr client.`,
 	invitesCmd.AddCommand(invitesCreateCmd)
 	invitesCmd.AddCommand(&cobra.Command{
 		Use: "list", Short: "List all invite codes",
-		RunE: runInvitesList,
+		Example: `  ncli relay invites list --config relay.yaml`,
+		RunE:    runInvitesList,
 	})
 	invitesCmd.AddCommand(&cobra.Command{
 		Use: "revoke <code>", Short: "Revoke an invite code",
-		Args: common.ExactArgs(1), RunE: runInvitesRevoke,
+		Example: `  ncli relay invites revoke <code> --config relay.yaml`,
+		Args:    common.ExactArgs(1), RunE: runInvitesRevoke,
 	})
 	cmd.AddCommand(invitesCmd)
 
 	rolesCmd := &cobra.Command{
-		Use:   "roles",
-		Short: "Manage NIP-43 role definitions",
-		RunE:  common.RequireSubcommand,
+		Use:     "roles",
+		Short:   "Manage NIP-43 role definitions",
+		Example: `  ncli relay roles list --config relay.yaml`,
+		RunE:    common.RequireSubcommand,
 	}
 	rolesCmd.AddCommand(&cobra.Command{
 		Use: "list", Short: "List all role definitions",
-		RunE: runRolesList,
+		Example: `  ncli relay roles list --config relay.yaml`,
+		RunE:    runRolesList,
 	})
 	rolesCreateCmd := &cobra.Command{
 		Use: "create <id>", Short: "Create a role definition",
 		Long: `NIP-43 defines no "delete" for a role -- once created, an id can only be
 superseded (re-run "create" with the same id and new label/description/
 color/order), never removed.`,
-		Args: common.ExactArgs(1), RunE: runRolesCreate,
+		Example: `  ncli relay roles create moderator --label Moderator --config relay.yaml`,
+		Args:    common.ExactArgs(1), RunE: runRolesCreate,
 	}
 	rolesCreateCmd.Flags().String("label", "", "human-readable role label")
 	rolesCreateCmd.Flags().String("description", "", "role description")

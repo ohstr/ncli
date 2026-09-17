@@ -32,6 +32,8 @@ var RootCmd = &cobra.Command{
 	Use:   "ncli",
 	Short: "Nostr relay & toolkit CLI",
 	Long:  `Run and operate Nostr relays, and manage events: serve, stream, sync, inspect, export, delegate, administer, and mine.`,
+	Example: `  ncli id
+  ncli find npub1...`,
 }
 
 func init() {
@@ -78,11 +80,11 @@ func resolveConfigFile() string {
 
 // InitConfig loads viper config and sets up logging (log dir, crash log
 // path, console+file writers). It's not wired up as a
-// cobra.OnInitialize/PersistentPreRun here because cmd/ncli/main.go
-// reparents RootCmd's subcommands onto its own root command, which would
-// orphan a PersistentPreRun set on RootCmd; the caller is responsible for
-// invoking this from whatever command tree actually gets executed, and for
-// letting individual leaf commands (e.g. version) opt out.
+// cobra.OnInitialize/PersistentPreRun here because cmd/ncli/main.go sets
+// RootCmd.PersistentPreRun itself, once, after also mounting relay/
+// bunker/blossom onto RootCmd -- keeping that assembly in one place. The
+// caller is responsible for letting individual leaf commands (e.g.
+// version) opt out.
 func InitConfig() {
 	if err := common.LoadViperConfig(resolveConfigFile()); err != nil {
 		log.Warn().Err(err).Msg("config error")

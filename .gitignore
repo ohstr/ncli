@@ -50,3 +50,6 @@ vendor/
 
 # Local scratch drafts, not meant to be tracked
 /.drafts/
+
+# Local-only planning/audit docs, not meant to be tracked
+/docs/private/

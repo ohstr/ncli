@@ -27,8 +27,6 @@ identifier is a positional argument:
     other filters given. With no other filters, defaults to just their
     profile (kind 0); pass --kinds to widen it.
 
---authors also accepts nip-05 addresses alongside hex pubkeys.
-
 Targets and filters come from --targets (a YAML file), or --relays plus
 inline filter flags -- pick one, not both. Omitting both falls back to
 the relays configured via "ncli prefs relays add".

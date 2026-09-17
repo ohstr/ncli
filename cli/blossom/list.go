@@ -32,6 +32,8 @@ deduped by hash.
 identifier may be a vault label, nsec, npub, hex pubkey, nprofile, or
 nip-05 address, resolved to a hex pubkey; defaults to --identity's
 resolved pubkey when omitted.`,
+		Example: `  ncli blossom list --identity mylabel
+  ncli blossom list --identity mylabel --all`,
 		Args: common.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, cancel := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)

@@ -11,27 +11,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var rootCmd = &cobra.Command{
-	Use:   "ncli",
-	Short: "Nostr relay & toolkit CLI",
-	Long:  `Run and operate Nostr relays, and manage events: serve, stream, sync, inspect, export, delegate, administer, and mine.`,
-}
-
 func init() {
-	// Flatten ncli subcommands into the root
-	for _, c := range ncli.RootCmd.Commands() {
-		ncli.RootCmd.RemoveCommand(c)
-		rootCmd.AddCommand(c)
-	}
-
-	// Transfer persistent flags (e.g. --config) from ncli root
-	rootCmd.PersistentFlags().AddFlagSet(ncli.RootCmd.PersistentFlags())
-
 	// Config loading and logging setup, for every command except those
 	// (e.g. version) that define their own no-op PersistentPreRun to opt
-	// out. Set here, not on ncli.RootCmd, since its subcommands are
-	// reparented onto rootCmd above and would no longer reach it there.
-	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+	// out.
+	ncli.RootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
 		ncli.InitConfig()
 	}
 
@@ -39,17 +23,17 @@ func init() {
 	// and "clear" as its own children, for operating a relay that's
 	// already running over NIP-98 authenticated HTTP; see NewRelayCommand.
 	// "delegate" is mounted under "id" instead, in cli/ncli/id.go's init().
-	rootCmd.AddCommand(relaycli.NewRelayCommand())
+	ncli.RootCmd.AddCommand(relaycli.NewRelayCommand())
 
 	// Register the NIP-46 remote-signer ("bunker") command -- mounts
 	// "attach"/"status"/"stop"/"sessions"/"connect" as its own children;
 	// see NewBunkerCommand.
-	rootCmd.AddCommand(bunker.NewBunkerCommand())
+	ncli.RootCmd.AddCommand(bunker.NewBunkerCommand())
 
 	// Register the Blossom media-server ("blossom") command -- mounts
 	// "upload"/"download"/"list"/"rm"/"mirror"/"servers"/"report" as its
 	// own children; see NewBlossomCommand.
-	rootCmd.AddCommand(blossom.NewBlossomCommand())
+	ncli.RootCmd.AddCommand(blossom.NewBlossomCommand())
 }
 
 func main() {
@@ -66,7 +50,7 @@ func main() {
 	// resolved subcommand's --json flag -- the single point where every
 	// command's failure is rendered and exited, instead of each command
 	// printing (and exiting) its own way.
-	cmd, err := rootCmd.ExecuteC()
+	cmd, err := ncli.RootCmd.ExecuteC()
 	if err != nil {
 		common.EmitError(cmd, err)
 		os.Exit(common.ExitCode(err))

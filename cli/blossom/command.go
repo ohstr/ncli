@@ -23,7 +23,8 @@ per (item, server) pair, and exiting non-zero if any pair failed.
 "download" tries the configured servers in order, stopping at the first
 that answers; "list" queries one server by default, or every server with
 --all.`,
-		RunE: common.RequireSubcommand,
+		Example: `  ncli blossom upload ./photo.jpg --identity mylabel`,
+		RunE:    common.RequireSubcommand,
 	}
 
 	cmd.PersistentFlags().String("identity", "", "Identity to sign with -- vault label, nsec, npub, hex, nprofile, or nip-05")

@@ -238,6 +238,8 @@ relay that's already running, over NIP-98 authenticated HTTP.
 "relay context"), creating it on the spot -- a minimal config, backed by a
 freshly generated identity under .../relays/<name>/ -- if that name isn't
 saved yet.`,
+		Example: `  ncli relay --config relay.yaml
+  ncli relay --context myrelay`,
 		PreRunE: func(cmd *cobra.Command, args []string) error {
 			ctxName, _ := cmd.Flags().GetString("context")
 			if ctxName != "" {

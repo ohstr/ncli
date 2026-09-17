@@ -23,6 +23,7 @@ shape, so it chains directly into "ncli publish --events <out>" or
 
 Fails if an event already declares a pubkey that conflicts with
 --identity's resolved pubkey, rather than re-signing under a different key.`,
+	Example: `  ncli id sign -e events.json -o signed.json --identity mylabel`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		if err := cmd.ValidateRequiredFlags(); err != nil {
 			return common.UsageError(cmd, err)

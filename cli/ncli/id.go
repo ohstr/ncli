@@ -30,6 +30,8 @@ nip-05 address -- resolves and displays it, plus its vault status.
 from --label, and reads the vault password from NCLI_VAULT_PASSWORD.
 
 See "ncli id delegate" and "ncli id sign" for delegation tokens and signing.`,
+	Example: `  ncli id
+  ncli id mylabel`,
 	Args: common.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
@@ -40,9 +42,10 @@ See "ncli id delegate" and "ncli id sign" for delegation tokens and signing.`,
 }
 
 var idListCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List saved vault identities",
-	Args:  common.NoArgs,
+	Use:     "list",
+	Short:   "List saved vault identities",
+	Example: `  ncli id list`,
+	Args:    common.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runIDList(cmd)
 	},

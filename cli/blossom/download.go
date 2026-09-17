@@ -34,6 +34,8 @@ server URL ending in a hash -- tries the configured servers in order
 
 Writes to --output, or "<hash>.<ext>" in the current directory if
 omitted, or streams to stdout with "-o -" (suppressing the summary line).`,
+		Example: `  ncli blossom download <hash>
+  ncli blossom download <hash> -o -`,
 		Args: common.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, cancel := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)

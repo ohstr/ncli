@@ -24,6 +24,8 @@ var decodeCmd = &cobra.Command{
 
 A pairing secret is never included in the output, for either of the two
 connection shapes. --json switches to structured JSON output on stdout.`,
+	Example: `  ncli decode npub1...
+  ncli decode nevent1...`,
 	Args: common.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		jsonMode, _ := cmd.Flags().GetBool("json")

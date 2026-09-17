@@ -16,6 +16,8 @@ var (
 		Use:   "apply",
 		Short: "Run a client workflow from a config file",
 		Long:  `Run a stream, sync, or inspect workflow defined in a YAML config file.`,
+		Example: `  ncli apply -f sync.yaml
+  ncli apply -f sync.yaml --strict-pow`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if err := cmd.ValidateRequiredFlags(); err != nil {
 				return common.UsageError(cmd, err)

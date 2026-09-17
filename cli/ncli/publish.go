@@ -21,6 +21,8 @@ var publishCmd = &cobra.Command{
 every relay, and the full (event, relay) result is reported. Omitting
 --relays falls back to the relays configured via "ncli prefs relays add".
 Exits non-zero if any pair fails.`,
+	Example: `  ncli publish -e signed.json
+  ncli publish -e signed.json -s wss://relay.example.com`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		if err := cmd.ValidateRequiredFlags(); err != nil {
 			return common.UsageError(cmd, err)

@@ -26,6 +26,8 @@ Results narrate as plain log lines on stderr by default. --tui shows a
 live interactive board instead (requires a real terminal; ignored with
 --json/--quiet). --json prints a structured report to stdout instead of
 narrating. Exits non-zero if any relay was unreachable.`,
+	Example: `  ncli ping wss://relay.example.com
+  ncli ping -t targets.yaml`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		if err := cmd.ValidateRequiredFlags(); err != nil {
 			return common.UsageError(cmd, err)

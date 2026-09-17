@@ -27,14 +27,15 @@ identifier is a positional argument:
     other filters given. With no other filters, defaults to just their
     profile (kind 0); pass --kinds to widen it.
 
---authors also accepts nip-05 addresses alongside hex pubkeys.
-
 Targets and filters come from --targets (a YAML file), or --relays plus
 inline filter flags -- pick one, not both. Omitting both falls back to
 the relays configured via "ncli prefs relays add".
 
 Always prints a single JSON array to stdout. --quiet also drops the
 progress narration on stderr.`,
+		Example: `  ncli find note1...
+  ncli find npub1...
+  ncli find --authors npub1... -s wss://relay.example.com`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if err := cmd.ValidateRequiredFlags(); err != nil {
 				return common.UsageError(cmd, err)

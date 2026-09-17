@@ -28,6 +28,9 @@ func newUploadCommand() *cobra.Command {
 
 Pass --optimize to request server-side transcoding/optimization (BUD-05's
 PUT /media) instead of a byte-for-byte store.`,
+		Example: `  ncli blossom upload ./photo.jpg --identity satoshi
+  ncli blossom upload ./photo.jpg --identity satoshi --optimize
+  ncli blossom upload ./photo.jpg --identity satoshi --server https://blossom.example.com`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
 				return common.UsageError(cmd, fmt.Errorf("at least one file is required"))

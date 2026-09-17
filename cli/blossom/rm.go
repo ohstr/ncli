@@ -23,6 +23,7 @@ func newRmCommand() *cobra.Command {
 		Long: `Sign a hash-scoped BUD-11 authorization and DELETE the blob from every
 target server (--server, or the configured default list), reporting a
 result per server. Requires --yes in a non-interactive session.`,
+		Example: `  ncli blossom rm <hash> --identity satoshi --yes`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {
 				return common.UsageError(cmd, fmt.Errorf("exactly one hash is required"))

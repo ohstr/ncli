@@ -3,17 +3,18 @@ package main
 import (
 	"testing"
 
+	"github.com/ohstr/ncli/cli/ncli"
 	"github.com/spf13/cobra"
 )
 
-// resolve walks rootCmd's tree for args (e.g. "relay", "admin", "stats")
+// resolve walks ncli.RootCmd's tree for args (e.g. "relay", "admin", "stats")
 // without executing anything, and fails the test if it doesn't fully
 // resolve to a command whose own Name() matches the last arg -- guarding
 // against both a missing command and cobra falling back to a shallower
 // partial match.
 func resolve(t *testing.T, args ...string) *cobra.Command {
 	t.Helper()
-	cmd, _, err := rootCmd.Find(args)
+	cmd, _, err := ncli.RootCmd.Find(args)
 	if err != nil {
 		t.Fatalf("Find(%v) returned error: %v", args, err)
 	}
@@ -50,7 +51,7 @@ func TestCommandTree_RelayFlattensAdmin(t *testing.T) {
 // can still resolve, so on an absent "admin" it should stop at "relay"
 // rather than reach an "admin" or "stats" command.
 func TestCommandTree_AdminRemoved(t *testing.T) {
-	cmd, _, err := rootCmd.Find([]string{"relay", "admin", "stats"})
+	cmd, _, err := ncli.RootCmd.Find([]string{"relay", "admin", "stats"})
 	if err != nil {
 		t.Fatalf("Find returned error: %v", err)
 	}
@@ -161,7 +162,7 @@ func TestCommandTree_IDNestsDelegate(t *testing.T) {
 // paths.
 func TestCommandTree_OldFlatPathsRemoved(t *testing.T) {
 	for _, name := range []string{"admin", "reindex", "delegate"} {
-		for _, c := range rootCmd.Commands() {
+		for _, c := range ncli.RootCmd.Commands() {
 			if c.Name() == name {
 				t.Errorf("root command %q still exists as a top-level subcommand; expected it to only exist nested (relay %s / id %s)", name, name, name)
 			}

@@ -24,6 +24,8 @@ by event ID across every target.
 Targets and filters come from --targets (a YAML file), or --relays plus
 inline filter flags -- pick one, not both. Omitting both falls back to
 the relays configured via "ncli prefs relays add".`,
+	Example: `  ncli dump -o events.json
+  ncli dump -t targets.yaml -o events.json`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		if err := cmd.ValidateRequiredFlags(); err != nil {
 			return common.UsageError(cmd, err)

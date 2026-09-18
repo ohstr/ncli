@@ -32,8 +32,15 @@ checksum:
 # pipe (deprecated but battle-tested): each arch gets its own
 # single-platform buildx build, then docker_manifests stitches the two
 # per-arch tags into the multi-arch tag.
+#
+# Each arch is split into a "-versioned" entry (always pushed, so every
+# release -- including an RC -- gets an installable image under its own
+# tag) and a "-latest" entry (skip_push: auto, so only a stable release
+# ever moves the latest-* tags). A single entry can't do both: skip_push
+# applies to every image_template in that entry, so latest can't be
+# pushed if the version tag doesn't push too.
 dockers:
-  - id: ncli-amd64
+  - id: ncli-amd64-versioned
     ids: [ncli]
     goos: linux
     goarch: amd64
@@ -41,11 +48,20 @@ dockers:
     dockerfile: build/relay/Dockerfile.release
     image_templates:
       - "ghcr.io/ohstr/ncli:{{ .Version }}-amd64"
+    build_flag_templates:
+      - "--platform=linux/amd64"
+  - id: ncli-amd64-latest
+    ids: [ncli]
+    goos: linux
+    goarch: amd64
+    use: buildx
+    dockerfile: build/relay/Dockerfile.release
+    image_templates:
       - "ghcr.io/ohstr/ncli:latest-amd64"
     build_flag_templates:
       - "--platform=linux/amd64"
     skip_push: auto
-  - id: ncli-arm64
+  - id: ncli-arm64-versioned
     ids: [ncli]
     goos: linux
     goarch: arm64
@@ -53,25 +69,39 @@ dockers:
     dockerfile: build/relay/Dockerfile.release
     image_templates:
       - "ghcr.io/ohstr/ncli:{{ .Version }}-arm64"
+    build_flag_templates:
+      - "--platform=linux/arm64"
+  - id: ncli-arm64-latest
+    ids: [ncli]
+    goos: linux
+    goarch: arm64
+    use: buildx
+    dockerfile: build/relay/Dockerfile.release
+    image_templates:
       - "ghcr.io/ohstr/ncli:latest-arm64"
     build_flag_templates:
       - "--platform=linux/arm64"
     skip_push: auto
 
-# skip_push: auto here too -- otherwise a prerelease build would still try
-# to manifest the per-arch tags above, which skip_push: auto never pushed.
+# Same split as above, one level up: the versioned manifest always
+# stitches the two versioned per-arch tags; the latest manifest only
+# stitches the two latest-* tags, and only pushes for a stable release.
 docker_manifests:
   - name_template: "ghcr.io/ohstr/ncli:{{ .Version }}"
     image_templates:
       - "ghcr.io/ohstr/ncli:{{ .Version }}-amd64"
       - "ghcr.io/ohstr/ncli:{{ .Version }}-arm64"
-    skip_push: auto
   - name_template: "ghcr.io/ohstr/ncli:latest"
     image_templates:
       - "ghcr.io/ohstr/ncli:latest-amd64"
       - "ghcr.io/ohstr/ncli:latest-arm64"
     skip_push: auto
 
+# brews has no Pro-only "versioned formula" feature (that's cask-only), so
+# an RC gets its own formula name instead: skip_upload is auto (skip on
+# prerelease) for the stable `ncli` formula, and the inverse for `ncli-rc`
+# (skip unless it's a prerelease) so `brew install/upgrade ncli` never
+# resolves to an RC, but `brew install ohstr/tap/ncli-rc` can still try one.
 brews:
   - name: ncli
     repository:
@@ -82,11 +112,27 @@ brews:
     homepage: "https://github.com/ohstr/ncli"
     description: "A single binary for running and operating Nostr relays: serve, stream, sync, inspect, search, export, and mine events."
     license: "Unlicense"
+    conflicts: ["ncli-rc"]
     install: |
       bin.install "ncli"
     test: |
       system "#{bin}/ncli", "version"
     skip_upload: auto
+  - name: ncli-rc
+    repository:
+      owner: ohstr
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/ohstr/ncli"
+    description: "Release-candidate build of ncli -- see the ncli formula for stable installs."
+    license: "Unlicense"
+    conflicts: ["ncli"]
+    install: |
+      bin.install "ncli"
+    test: |
+      system "#{bin}/ncli", "version"
+    skip_upload: '{{ if .Prerelease }}false{{ else }}true{{ end }}'
 
 # No `changelog:` block here, deliberately -- GoReleaser's changelog pipe
 # is also the only place that loads a `--release-notes` file into the

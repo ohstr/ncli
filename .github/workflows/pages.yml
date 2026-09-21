@@ -9,10 +9,16 @@ on:
       - CHANGELOG.md
       - docs/public/**
       - .github/workflows/pages.yml
+  # The header shows the latest release, read at build time. The push build
+  # runs before a release exists, so rebuild once Release finishes.
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
   workflow_dispatch:
 
 jobs:
   docs:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     # Must be granted here, not inside build-docs.yml itself — a reusable
     # workflow can't self-grant pages/id-token when called cross-repo.
     permissions:

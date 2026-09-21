@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- The TUI's Age column now rolls up into days and weeks (`2d4h`,
+  `1w3d`) instead of stopping at hours (`52h0m0s`), and shows two units
+  at most.
+
 ## [0.5.0-rc.1]
 
 ### Added

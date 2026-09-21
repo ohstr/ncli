@@ -388,9 +388,31 @@ func (fm *FlowMetrics) Row() []string {
 		output = append(output, strconv.Itoa(fm.retries))
 	}
 
-	output = append(output, time.Since(fm.createdAt).Truncate(time.Second).String())
+	output = append(output, formatAge(time.Since(fm.createdAt)))
 
 	return output
+}
+
+var ageUnits = [...]struct {
+	suffix string
+	secs   int64
+}{{"w", 7 * 24 * 3600}, {"d", 24 * 3600}, {"h", 3600}, {"m", 60}, {"s", 1}}
+
+// formatAge renders d as its two largest units, weeks at most: "45s", "5m12s",
+// "3h27m", "2d4h", "1w3d". A zero second unit is dropped ("1h", "2w").
+func formatAge(d time.Duration) string {
+	secs := int64(max(d, 0) / time.Second)
+	for i, u := range ageUnits[:len(ageUnits)-1] {
+		if secs < u.secs {
+			continue
+		}
+		out := fmt.Sprintf("%d%s", secs/u.secs, u.suffix)
+		if next := ageUnits[i+1]; secs%u.secs/next.secs > 0 {
+			out += fmt.Sprintf("%d%s", secs%u.secs/next.secs, next.suffix)
+		}
+		return out
+	}
+	return fmt.Sprintf("%ds", secs)
 }
 
 func (fm *FlowMetrics) FlatRow() []int {

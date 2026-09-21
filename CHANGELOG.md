@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.5.0]
+
+### Added
+
+- `ncli decode` reads cash tokens (any HRP, e.g. `lokicash1...`) and
+  `circlehub1...` connections. Pairing secrets are never shown.
+  `cashhub1...` is recognized and rejected.
+- Every command's `--help` has an `Example:`.
+
+### Changed
+
+- A local flow's `ensure` now defaults to `create` (was `exists`), so a
+  missing store path is created instead of failing.
+- The Age column shows days and weeks (`2d4h`, `1w3d`) instead of
+  stopping at hours.
+- Shorter, less repetitive `--help` text.
+- Updated `nmilat` to v0.3.1.
+
+### Fixed
+
+- Wallet transfers reused a stale client on their second call.
+- NWC responses dropped the `circle_hub`/`circle_wallet` fee fields.
+- Two `Example:` commands failed when run as written.
+
 ## [0.5.0-rc.1]
 
 ### Added

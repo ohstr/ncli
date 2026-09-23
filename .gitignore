@@ -45,6 +45,11 @@ vendor/
 # Claude Code agent worktrees (transient per-session checkouts)
 /.claude/worktrees/
 
+# Locally-installed Claude Code skills. The shared source of truth for this
+# repo's own dev skills is .agents/skills/, which reaches teammates via
+# clone; what lands here is each person's installed copy.
+/.claude/skills/
+
 # Local cache of ohstr/docs-kit, cloned on demand by `just docs-dev`
 /.docs-kit/
 

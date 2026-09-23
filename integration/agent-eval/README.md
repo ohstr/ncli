@@ -4,7 +4,7 @@ Tests **ncli as consumed by an agent**, not this repo's source. A fresh
 Claude Code agent, in a container that's never seen this checkout, is
 pointed at `https://ohstr.github.io/ncli/PROMPT.md` and follows it --
 same as any real external user/agent picking `ncli` up for the first
-time. Unlike `.claude/skills/local-verify` (builds from local source to
+time. Unlike `.agents/skills/local-verify` (builds from local source to
 check a change), this installs the **published** image/docs, so it catches
 docs drifting from what's actually shipped.
 

@@ -56,6 +56,13 @@ func WithJSON(enabled bool) LoggingOption {
 // without callers having to remember their own configuration.
 var current loggingConfig
 
+// fileOnly logs to the configured file writer alone, bypassing the console.
+// EmitError needs it because a failure has to land in ncli.log the way every
+// other log record does, while its human-facing line is printed separately in
+// cashctl's "Error: ..." shape rather than zerolog's timestamped console one.
+// Nil until ConfigureLogging is called with WithFileWriter.
+var fileOnly *zerolog.Logger
+
 // ConfigureLogging points the process-global zerolog logger at the writers
 // selected by opts. This is the one place ncli's CLI entrypoints (root,
 // apply, relay, reindex) set up logging, instead of each hand-rolling its
@@ -117,9 +124,13 @@ func RedirectStderrToCrashLog(path string) (restore func(), err error) {
 
 func apply(cfg loggingConfig) {
 	var writers []io.Writer
+	// Console records go through spinnerSafeWriter so that, while a spinner is
+	// animating, each log line wipes the in-flight frame and prints on a clean
+	// line -- the narration and the spinner coexist instead of smearing.
+	console := io.Writer(spinnerSafeWriter{os.Stderr})
 	if cfg.console {
 		if cfg.jsonOutput {
-			writers = append(writers, os.Stderr)
+			writers = append(writers, console)
 		} else {
 			// NoColor is keyed off whether stderr is an actual terminal, not
 			// --json (handled above) -- otherwise a redirected/piped/
@@ -129,14 +140,18 @@ func apply(cfg loggingConfig) {
 			// term.IsTerminal check apply's/ping's own TUI-vs-headless
 			// decision already uses (client/client.go, client/ping.go).
 			writers = append(writers, zerolog.ConsoleWriter{
-				Out:        os.Stderr,
+				Out:        console,
 				TimeFormat: time.RFC3339,
 				NoColor:    !term.IsTerminal(int(os.Stderr.Fd())),
 			})
 		}
 	}
+	fileOnly = nil
 	if cfg.fileWriter != nil {
-		writers = append(writers, zerolog.ConsoleWriter{Out: cfg.fileWriter, TimeFormat: time.RFC3339, NoColor: true})
+		fw := zerolog.ConsoleWriter{Out: cfg.fileWriter, TimeFormat: time.RFC3339, NoColor: true}
+		writers = append(writers, fw)
+		l := zerolog.New(fw).With().Timestamp().Logger()
+		fileOnly = &l
 	}
 	if len(writers) == 0 {
 		return
@@ -147,4 +162,13 @@ func apply(cfg loggingConfig) {
 		w = writers[0]
 	}
 	log.Logger = zerolog.New(w).With().Timestamp().Logger()
+}
+
+// LogFailureToFile records msg at error level in the log file only, printing
+// nothing to the console. A no-op when no file writer is configured.
+func LogFailureToFile(msg string) {
+	if fileOnly == nil {
+		return
+	}
+	fileOnly.Error().Msg(msg)
 }

@@ -230,16 +230,14 @@ func NewRelayCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "relay",
 		Short: "Run the relay server, or operate one that's already running",
-		Long: `Bare invocation runs the Nostr relay server: WebSocket protocol,
-NIP-11 metadata, and optional search. Its subcommands instead operate a
-relay that's already running, over NIP-98 authenticated HTTP.
+		Long: `Bare invocation runs the Nostr relay server. Its subcommands instead
+operate a relay that's already running, over NIP-98 authenticated HTTP.
 
--c/--context <name> runs directly against a named relay context (see
-"relay context"), creating it on the spot -- a minimal config, backed by a
-freshly generated identity under .../relays/<name>/ -- if that name isn't
-saved yet.`,
+-c/--context <name> runs against a named relay context, creating a
+minimal one backed by a fresh identity if that name isn't saved yet.`,
 		Example: `  ncli relay --config relay.yaml
-  ncli relay --context myrelay`,
+  ncli relay --context myrelay
+  ncli relay stats --config relay.yaml`,
 		PreRunE: func(cmd *cobra.Command, args []string) error {
 			ctxName, _ := cmd.Flags().GetString("context")
 			if ctxName != "" {

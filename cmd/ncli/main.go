@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"strings"
 
 	"github.com/ohstr/ncli/cli/blossom"
 	"github.com/ohstr/ncli/cli/bunker"
@@ -52,7 +53,45 @@ func main() {
 	// printing (and exiting) its own way.
 	cmd, err := ncli.RootCmd.ExecuteC()
 	if err != nil {
+		err = classifyRootErr(cmd, err)
 		common.EmitError(cmd, err)
 		os.Exit(common.ExitCode(err))
 	}
+}
+
+// classifyRootErr catches the failures cobra raises inside ExecuteC before
+// any Args validator or RunE runs -- an unknown flag, an unknown command, a
+// required flag left unset on a command that doesn't call
+// ValidateRequiredFlags itself. Left alone these come back as bare errors, so
+// ExitCode fell through to CodeInternal/exit 1 and cobra printed its own
+// report alongside ncli's. Routing them through InvocationError gives them
+// the same "usage", exit 2, Error-then-help shape as every other
+// mis-invocation.
+func classifyRootErr(cmd *cobra.Command, err error) error {
+	if _, ok := err.(*common.CLIError); ok {
+		return err // already classified further down the call stack
+	}
+	// Flag parsing is what failed, so cmd's own --json is unreliable here --
+	// re-scan argv for it, or a script would get a human-shaped line.
+	if cmd != nil && jsonRequested(os.Args[1:]) {
+		_ = cmd.Flags().Set("json", "true")
+	}
+	return common.InvocationError(cmd, err)
+}
+
+// jsonRequested hand-parses --json out of argv, last occurrence winning and
+// stopping at a bare "--". Only used when cobra's own parse already failed.
+func jsonRequested(args []string) bool {
+	found := false
+	for _, a := range args {
+		switch {
+		case a == "--":
+			return found
+		case a == "--json":
+			found = true
+		case strings.HasPrefix(a, "--json="):
+			found = a[len("--json="):] == "true" || a[len("--json="):] == "1"
+		}
+	}
+	return found
 }

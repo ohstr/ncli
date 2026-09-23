@@ -43,7 +43,7 @@ func requirePublishIdentity(cmd *cobra.Command, publish bool) error {
 		return nil
 	}
 	if identity, _ := cmd.Flags().GetString("identity"); identity == "" {
-		return common.UsageError(cmd, fmt.Errorf("--identity is required with --publish"))
+		return common.InvocationError(cmd, fmt.Errorf("--identity is required with --publish"))
 	}
 	return nil
 }
@@ -68,7 +68,12 @@ func publishServerList(ctx context.Context, cmd *cobra.Command, jsonMode bool, i
 	if err != nil {
 		return "", common.NotFoundError(cmd, "", err)
 	}
-	report, err := client.PublishToTargets(ctx, targets, []*nip01.Event{event})
+	var report *client.PublishReport
+	err = common.WithSpinner(cmd, "publishing server list", func() error {
+		var pErr error
+		report, pErr = client.PublishToTargets(ctx, targets, []*nip01.Event{event})
+		return pErr
+	})
 	if err != nil {
 		return "", common.NetworkError(cmd, "", err)
 	}
@@ -87,7 +92,7 @@ func newServersAddCommand() *cobra.Command {
 		Example: `  ncli blossom servers add https://blossom.example.com`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {
-				return common.UsageError(cmd, fmt.Errorf("exactly one server url is required"))
+				return common.InvocationOrHelp(cmd, args, fmt.Errorf("exactly one server url is required"))
 			}
 			return requirePublishIdentity(cmd, publish)
 		},
@@ -157,7 +162,7 @@ func newServersRemoveCommand() *cobra.Command {
 		Example: `  ncli blossom servers remove https://blossom.example.com`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {
-				return common.UsageError(cmd, fmt.Errorf("exactly one server url is required"))
+				return common.InvocationOrHelp(cmd, args, fmt.Errorf("exactly one server url is required"))
 			}
 			return requirePublishIdentity(cmd, publish)
 		},
@@ -262,7 +267,7 @@ func newServersDiscoverCommand() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "discover <identifier>",
-		Short: "Discover another identity's published Blossom server list (BUD-03)",
+		Short: "Discover another identity's published server list (BUD-03)",
 		Long: `Resolves <identifier> (vault label/nsec/npub/hex pubkey/nprofile/nip-05)
 to a pubkey, then queries your configured Nostr relays for that pubkey's
 most recent kind:10063 server-list event, and prints the servers it
@@ -295,7 +300,12 @@ this looks up someone else's published servers.`,
 			})
 
 			timeout, _ := cmd.Flags().GetDuration("timeout")
-			events, err := client.QueryTargets(ctx, targets, filters, timeout)
+			var events []*nip01.Event
+			err = common.WithSpinner(cmd, fmt.Sprintf("discovering server list for %s", resolved.Npub), func() error {
+				var qErr error
+				events, qErr = client.QueryTargets(ctx, targets, filters, timeout)
+				return qErr
+			})
 			if err != nil {
 				if errors.Is(err, client.ErrNoReachableTargets) {
 					return common.NetworkError(cmd, "", err)

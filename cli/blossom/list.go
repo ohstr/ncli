@@ -25,15 +25,14 @@ func newListCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list [identifier]",
 		Short: "List blobs stored under a pubkey",
-		Long: `Query one Blossom server's GET /list/<pubkey> (--server, or the first
-configured server), or every configured server with --all, merged and
-deduped by hash.
+		Long: `List the blobs one pubkey has stored, on the first configured server or
+on every one with --all, merged and deduped by hash.
 
-identifier may be a vault label, nsec, npub, hex pubkey, nprofile, or
-nip-05 address, resolved to a hex pubkey; defaults to --identity's
-resolved pubkey when omitted.`,
+identifier accepts a vault label, npub, hex pubkey, nprofile or nip-05
+address, and defaults to --identity's pubkey when omitted.`,
 		Example: `  ncli blossom list --identity satoshi
-  ncli blossom list --identity satoshi --all`,
+  ncli blossom list --identity satoshi --all
+  ncli blossom list name@example.com`,
 		Args: common.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, cancel := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
@@ -66,7 +65,7 @@ resolved pubkey when omitted.`,
 				}
 			}
 			if pubKeyHex == "" {
-				return common.UsageError(cmd, fmt.Errorf("a pubkey argument or --identity is required"))
+				return common.InvocationOrHelp(cmd, args, fmt.Errorf("a pubkey argument or --identity is required"))
 			}
 
 			servers, err := resolveServers(cmd)
@@ -84,11 +83,20 @@ resolved pubkey when omitted.`,
 			hc := newHTTPClient(timeout)
 
 			var descriptors []nipB7.BlobDescriptor
-			if all, _ := cmd.Flags().GetBool("all"); all {
-				descriptors, err = listAllServers(ctx, hc, servers, pubKeyHex, query, auth)
-			} else {
-				descriptors, err = hc.List(ctx, servers[0], pubKeyHex, query, auth)
+			all, _ := cmd.Flags().GetBool("all")
+			message := fmt.Sprintf("listing blobs on %s", servers[0])
+			if all {
+				message = fmt.Sprintf("listing blobs on %d server(s)", len(servers))
 			}
+			err = common.WithSpinner(cmd, message, func() error {
+				var lErr error
+				if all {
+					descriptors, lErr = listAllServers(ctx, hc, servers, pubKeyHex, query, auth)
+				} else {
+					descriptors, lErr = hc.List(ctx, servers[0], pubKeyHex, query, auth)
+				}
+				return lErr
+			})
 			if err != nil {
 				return classifyListError(cmd, pubKeyHex, err)
 			}

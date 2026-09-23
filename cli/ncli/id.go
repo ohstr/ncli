@@ -24,10 +24,11 @@ var idCmd = &cobra.Command{
 a vault label, npub, hex pubkey, nsec, nprofile, or nip-05 address --
 resolves and displays it instead.
 
---json disables interactive prompts: saves only with --save, labels only
-from --label, and reads the vault password from NCLI_VAULT_PASSWORD.`,
+--json disables interactive prompts and reads the vault password from
+NCLI_VAULT_PASSWORD.`,
 	Example: `  ncli id
-  ncli id satoshi`,
+  ncli id satoshi
+  ncli id --save --label satoshi`,
 	Args: common.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
@@ -81,7 +82,7 @@ func runIDInspect(cmd *cobra.Command, arg string) error {
 
 		password, err := keyresolve.ResolveVaultPassword(jsonMode, "Vault password: ")
 		if err != nil {
-			return common.UsageError(cmd, err)
+			return common.InvocationError(cmd, err)
 		}
 		vaultPrivKeyHex, err := client.UnlockVaultIdentity(password)
 		if err != nil {
@@ -250,7 +251,7 @@ func runIDList(cmd *cobra.Command) error {
 	if reveal && len(entries) > 0 {
 		password, err := keyresolve.ResolveVaultPassword(jsonMode, "Vault password: ")
 		if err != nil {
-			return common.UsageError(cmd, err)
+			return common.InvocationError(cmd, err)
 		}
 		vaultPrivKeyHex, err = client.UnlockVaultIdentity(password)
 		if err != nil {

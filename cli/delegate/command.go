@@ -58,7 +58,7 @@ and is rejected.`,
 				jsonMode, _ := cmd.Flags().GetBool("json")
 				interactive := term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd()))
 				if jsonMode || !interactive {
-					return common.UsageError(cmd, errors.New("--issuer is required (or set NCLI_DELEGATE_ISSUER) when not running interactively"))
+					return common.InvocationError(cmd, errors.New("--issuer is required (or set NCLI_DELEGATE_ISSUER) when not running interactively"))
 				}
 				if err := RunWizard(); err != nil {
 					return common.RuntimeError(cmd, err)
@@ -84,7 +84,7 @@ func runNonInteractive(cmd *cobra.Command, issuer string) error {
 
 	delegatee, _ := cmd.Flags().GetString("delegatee")
 	if delegatee == "" {
-		return common.UsageError(cmd, errors.New("--delegatee is required"))
+		return common.InvocationError(cmd, errors.New("--delegatee is required"))
 	}
 
 	issuerPrivKeyHex, issuerPubHex, err := resolveDelegationKey(cmd, jsonMode, issuer)

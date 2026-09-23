@@ -3,6 +3,7 @@ package blossom
 import (
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/signal"
 	"regexp"
@@ -69,7 +70,13 @@ omitted, or streams to stdout with "-o -" (suppressing the summary line).`,
 			timeout, _ := cmd.Flags().GetDuration("timeout")
 			hc := newHTTPClient(timeout)
 
-			resp, usedServer, err := hc.GetFromServers(ctx, servers, hash, bclient.GetOptions{Ext: ext, Auth: auth})
+			var resp *http.Response
+			var usedServer string
+			err = common.WithSpinner(cmd, fmt.Sprintf("downloading %s", shortHash(hash)), func() error {
+				var gErr error
+				resp, usedServer, gErr = hc.GetFromServers(ctx, servers, hash, bclient.GetOptions{Ext: ext, Auth: auth})
+				return gErr
+			})
 			if err != nil {
 				return classifyHTTPError(cmd, hash, err)
 			}

@@ -20,7 +20,7 @@ var (
   ncli apply -f sync.yaml --strict-pow`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if err := cmd.ValidateRequiredFlags(); err != nil {
-				return common.UsageError(cmd, err)
+				return common.InvocationOrHelp(cmd, args, err)
 			}
 			return nil
 		},

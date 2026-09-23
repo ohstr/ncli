@@ -20,16 +20,16 @@ server: --server, or the first configured default.`,
 		Example: `  ncli blossom report <hash> --identity satoshi`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {
-				return common.UsageError(cmd, fmt.Errorf("exactly one hash is required"))
+				return common.InvocationOrHelp(cmd, args, fmt.Errorf("exactly one hash is required"))
 			}
 			if !nipB7.IsSHA256Hex(args[0]) {
 				return common.InvalidInputError(cmd, args[0], fmt.Errorf("not a valid sha256 hash"))
 			}
 			if err := cmd.ValidateRequiredFlags(); err != nil {
-				return common.UsageError(cmd, err)
+				return common.InvocationOrHelp(cmd, args, err)
 			}
 			if identity, _ := cmd.Flags().GetString("identity"); identity == "" {
-				return common.UsageError(cmd, fmt.Errorf("--identity is required"))
+				return common.InvocationOrHelp(cmd, args, fmt.Errorf("--identity is required"))
 			}
 			return nil
 		},
@@ -65,7 +65,10 @@ server: --server, or the first configured default.`,
 			timeout, _ := cmd.Flags().GetDuration("timeout")
 			hc := newHTTPClient(timeout)
 
-			if err := hc.Report(ctx, server, event); err != nil {
+			err = common.WithSpinner(cmd, fmt.Sprintf("reporting %s to %s", shortHash(hash), server), func() error {
+				return hc.Report(ctx, server, event)
+			})
+			if err != nil {
 				return classifyHTTPError(cmd, server, err)
 			}
 

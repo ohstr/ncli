@@ -34,6 +34,14 @@ var RootCmd = &cobra.Command{
 	Long:  `Run and operate Nostr relays, and manage events: serve, stream, sync, inspect, export, delegate, administer, and mine.`,
 	Example: `  ncli id
   ncli find npub1...`,
+
+	// Cobra prints its own "Error: ..." plus a usage dump for anything it
+	// rejects before a command's Args validator runs -- an unknown flag, an
+	// unknown command -- which stacked a second report on top of the one
+	// EmitError already writes. Silencing both here makes main.go's
+	// classifyRootErr the single sink for those too.
+	SilenceUsage:  true,
+	SilenceErrors: true,
 }
 
 func init() {

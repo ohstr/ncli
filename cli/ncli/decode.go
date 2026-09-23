@@ -11,21 +11,15 @@ import (
 
 var decodeCmd = &cobra.Command{
 	Use:   "decode <entity>",
-	Short: "Decode a NIP-19 entity, cash token, or circlehub1... connection",
-	Long: `Decodes whichever bech32 shape you paste in:
+	Short: "Decode a NIP-19 entity, cash token, or hub connection",
+	Long: `Decodes whichever bech32 shape you paste in -- a NIP-19 entity (npub,
+nsec, note, nprofile, nevent, naddr), a NIP-CASH cash token, or a NIP-CW
+circlehub1... connection -- into its hex keys, relay hints and metadata.
 
-  - a NIP-19 entity -- npub, nsec, note, nprofile, nevent, or naddr --
-    into its hex key/ID plus any embedded relay hints, author, or kind
-  - a NIP-CASH cash-token-family string (lokicash1..., satscash1..., ...)
-    into its wallet pubkey, relay hints, and optional identity-required/
-    mint-provenance fields
-  - a NIP-CW circlehub1... Circle Hub connection into its wallet pubkey,
-    relay hints, and optional label
-
-A pairing secret is never included in the output, for either of the two
-connection shapes. --json switches to structured JSON output on stdout.`,
+A pairing secret is never included in the output.`,
 	Example: `  ncli decode npub1...
-  ncli decode nevent1...`,
+  ncli decode nevent1...
+  ncli decode npub1... --json`,
 	Args: common.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		jsonMode, _ := cmd.Flags().GetBool("json")

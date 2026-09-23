@@ -150,8 +150,10 @@ Full endpoint list and subcommand reference: `references/admin-reindex-reference
 
 - `ncli relay reindex`/`clear`/`members`/`invites`/`roles` invoked with no
   further subcommand (or a misspelled one) is a `code: "usage"` error
-  (exit 2), same as any other invocation mistake -- not a silent help dump
-  with exit 0.
+  (exit 2), same as any other invocation mistake. It prints the group's
+  help on stderr to show you the subcommands, but it still **exits 2** --
+  never a help dump with exit 0. A misspelled subcommand additionally
+  leads with `Error: unknown command "..."`.
 - Every startup failure now goes through the same reporting path (no
   bypass via `log.Fatal`, which used to skip the `--json`/structured-error
   path entirely for the two failures below). Config-validation problems

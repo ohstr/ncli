@@ -17,6 +17,7 @@ events.**
 - [`ncli relay stats/reindex/clear`](#relay-statsreindexclear) — Manage a running relay over NIP-98 HTTP
 - [`ncli apply`](#apply) — Stream, sync, or inspect events, with a live TUI and hot-reloading config
 - [`ncli find`](#find) — Query events
+- [`ncli profile`](#profile) — Look up one identity as a readable card
 - [`ncli ping`](#ping) — Check if relays/targets are reachable
 - [`ncli dump`](#dump) — Export events to JSON
 - [`ncli publish`](#publish) — Publish signed events to one or more relays
@@ -441,6 +442,56 @@ spec:
     - kinds: [1]
       limit: 5
 ```
+
+## `profile`
+
+To look someone *up*, reach for `ncli profile` rather than `find -k 0` —
+one query, four records, printed as a card instead of raw JSON:
+
+```sh
+ncli profile npub1...
+ncli profile jack@primal.net
+ncli profile mykey                 # a vault label works too
+ncli profile npub1... --json       # structured, for scripts
+```
+
+```
+ ncli profile
+
+  jack
+  Bitcoin, Nostr, and open protocols.
+
+  Identity
+    nip-05       ✔ jack@example.com
+    npub         npub1sg6plzptd64u62a878hep2kev88swjh3tw00gjsfl8f237lmu63q0uf63m
+    pubkey       82129f882b6eab9a95d3f8f7c8556c873c1d2bc55cf7a250993e9553efdf3543
+    lightning    ⚡ jack@example.com
+    website      https://example.com
+
+  Following      1,284
+
+  Relays (3)
+    ↕  wss://relay.example.com
+    ↓  wss://read.example.com
+    ↑  wss://write.example.com
+
+  Blossom (2)
+    •  https://blossom.example.com
+    •  https://cdn.example.org
+
+  queried 4 relay(s) · profile updated 2026-09-21
+```
+
+It gathers kind:0 (metadata), kind:3 (contacts → the following count),
+kind:10002 (NIP-65 relays, `↕` read+write / `↓` read / `↑` write) and
+kind:10063 (Blossom servers) in a single subscription, and **aggregates
+across every relay** instead of stopping at the first match the way
+`find` does — a relay list often lives somewhere other than the profile.
+
+The claimed nip-05 is checked against its domain (`✔` verified, `✘`
+mismatch, `⚠` unreachable); `--no-verify` skips that round trip. An
+identity that published nothing still renders, with each section reading
+`not published`, and exits 0.
 
 ## `ping`
 

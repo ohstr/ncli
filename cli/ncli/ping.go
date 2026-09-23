@@ -15,29 +15,26 @@ import (
 var pingCmd = &cobra.Command{
 	Use:   "ping [relay...]",
 	Short: "Test relay connectivity",
-	Long: `Probe reachability of each target relay with a Limit-1 subscription.
-Local store paths in the target list are skipped.
+	Long: `Probe each target relay with a Limit-1 subscription. Exits non-zero if
+any relay was unreachable -- unlike find/dump, which tolerate a dead
+target, reachability is the whole point here.
 
-Give relays as positional arguments, or --targets <file.yaml> for a relay
-list file -- pick one, not both. Omitting both falls back to the relays
-configured via "ncli prefs relays add".
-
-Results narrate as plain log lines on stderr by default. --tui shows a
-live interactive board instead (requires a real terminal; ignored with
---json/--quiet). --json prints a structured report to stdout instead of
-narrating. Exits non-zero if any relay was unreachable.`,
+Give relays as positional arguments, or --targets -- pick one, not both.
+Omitting both falls back to "ncli prefs relays". --tui shows a live
+board instead of log lines.`,
 	Example: `  ncli ping wss://relay.example.com
-  ncli ping -t targets.yaml`,
+  ncli ping -t targets.yaml
+  ncli ping --tui wss://relay.example.com`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		if err := cmd.ValidateRequiredFlags(); err != nil {
-			return common.UsageError(cmd, err)
+			return common.InvocationOrHelp(cmd, args, err)
 		}
 		if cmd.Flags().Changed("targets") && len(args) > 0 {
-			return common.UsageError(cmd, fmt.Errorf("--targets is mutually exclusive with relay arguments; a --targets file already declares its own relays"))
+			return common.InvocationOrHelp(cmd, args, fmt.Errorf("--targets is mutually exclusive with relay arguments; a --targets file already declares its own relays"))
 		}
 		if cmd.Flags().Changed("targets") {
 			if _, err := validateArgFile(cmd, "targets", true, ".yaml", ".yml"); err != nil {
-				return common.UsageError(cmd, err)
+				return common.InvocationOrHelp(cmd, args, err)
 			}
 		}
 		return nil
@@ -78,12 +75,23 @@ narrating. Exits non-zero if any relay was unreachable.`,
 			}
 		}
 
-		report := client.Ping(ctx, targetsSpec, client.PingOptions{
-			JSON:    jsonMode,
-			Quiet:   quiet,
-			TUI:     tuiMode,
-			Timeout: timeout,
-		})
+		var report *client.PingReport
+		runPing := func() error {
+			report = client.Ping(ctx, targetsSpec, client.PingOptions{
+				JSON:    jsonMode,
+				Quiet:   quiet,
+				TUI:     tuiMode,
+				Timeout: timeout,
+			})
+			return nil
+		}
+		// --tui hands the terminal to the ping dashboard, which draws its own
+		// progress; a spinner underneath it would fight for the same screen.
+		if tuiMode {
+			_ = runPing()
+		} else {
+			_ = common.WithSpinner(cmd, targetsMessage("pinging", targetsSpec), runPing)
+		}
 
 		if jsonMode {
 			common.PrintJSON(report)

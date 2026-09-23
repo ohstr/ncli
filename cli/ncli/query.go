@@ -8,6 +8,20 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// targetsMessage builds a spinner label like "querying 3 targets" for the
+// commands that fan out over a TargetsSpec, so find/dump/miner check all
+// phrase the wait the same way.
+func targetsMessage(verb string, targets *client.TargetsSpec) string {
+	n := 0
+	if targets != nil {
+		n = len(targets.Relays)
+	}
+	if n == 1 {
+		return fmt.Sprintf("%s 1 target", verb)
+	}
+	return fmt.Sprintf("%s %d targets", verb, n)
+}
+
 // registerQueryFlags adds the targets+filters query trio shared by find,
 // dump, and miner check's live mode: a combined --targets YAML file
 // (relays and/or filters), --relays as its comma-separated command-line

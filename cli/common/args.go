@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 // silence marks cmd's error as already reported, so cobra doesn't also
@@ -14,21 +15,81 @@ func silence(cmd *cobra.Command) {
 	cmd.SilenceErrors = true
 }
 
-// UsageError marks cmd as badly called -- a missing/conflicting flag, wrong
-// arg count, or similar invocation-shape mistake. It prints cmd's own help
-// immediately in text mode (so the caller sees correct usage without a
-// separate --help run); skipped in --json mode, where cmd.Help()'s default
-// stdout destination would otherwise pollute the stream a script expects to
-// hold nothing but clean data. Returns err unchanged so callers can
-// propagate it from an Args validator -- which cobra runs before
-// PersistentPreRun, so a bad invocation is rejected before config loading
-// or logging setup ever runs.
+// UsageError marks err as carrying the usage code without asking for a help
+// dump -- a refusal that happens to be the caller's fault but that usage text
+// wouldn't explain (a relay answering 501 because membership is switched off,
+// say). For an actual mechanical mis-invocation, reach for InvocationError or
+// HelpError instead, which are the same classification plus help.
+//
+// Returns err unchanged so callers can propagate it from an Args validator --
+// which cobra runs before PersistentPreRun, so a bad invocation is rejected
+// before config loading or logging setup ever runs. Nothing is printed here;
+// EmitError is the single place any of this is rendered.
 func UsageError(cmd *cobra.Command, err error) error {
 	silence(cmd)
-	if jsonMode, _ := cmd.Flags().GetBool("json"); !jsonMode {
-		_ = cmd.Help()
-	}
 	return wrapCLIError(CodeUsage, "", err)
+}
+
+// InvocationError is UsageError for a mistake that is unambiguously
+// mechanical -- a wrong argument count, an unknown flag or subcommand, a
+// missing required flag, two conflicting ways of supplying the same value.
+// The caller supplied *something* and it was wrong, so the report leads with
+// the error and follows it with help.
+func InvocationError(cmd *cobra.Command, err error) error {
+	return withHelp(UsageError(cmd, err), HelpAfterError)
+}
+
+// HelpError is UsageError for a command invoked with nothing of its own --
+// bare "ncli decode", bare "ncli miner". There is no mistake worth narrating,
+// so it prints help alone, with no "Error:" line. The usage code, the exit
+// status (2) and the --json structured error are all unchanged: an agent that
+// mistypes a subcommand still sees a failure, it just isn't shouted at.
+func HelpError(cmd *cobra.Command, err error) error {
+	return withHelp(UsageError(cmd, err), HelpOnly)
+}
+
+// InvocationOrHelp is the shape most Args validators want: the same check
+// fires both when the caller supplied nothing ("ncli find") and when they
+// supplied the wrong thing ("ncli find a b"), and only the second deserves to
+// be called a mistake. Pass the validator's own args; it picks HelpError or
+// InvocationError accordingly.
+func InvocationOrHelp(cmd *cobra.Command, args []string, err error) error {
+	if IsBareInvocation(cmd, args) {
+		return HelpError(cmd, err)
+	}
+	return InvocationError(cmd, err)
+}
+
+// withHelp tags a freshly-classified usage error with mode. Guarded on
+// CodeUsage so an already-classified deeper error -- a not_found surfacing
+// through an outer invocation check, say -- keeps its own classification and
+// doesn't retroactively grow a help dump it never asked for.
+func withHelp(err error, mode HelpMode) error {
+	if ce, ok := err.(*CLIError); ok && ce.Code == CodeUsage {
+		ce.Help = mode
+	}
+	return err
+}
+
+// IsBareInvocation reports whether cmd was called with nothing of its own: no
+// positional arguments and no command-specific flag set. Inherited flags
+// (--json, --quiet, --config) don't count, so "ncli decode --json" is still a
+// bare decode and still answers with help rather than a scolding.
+func IsBareInvocation(cmd *cobra.Command, args []string) bool {
+	if len(args) > 0 {
+		return false
+	}
+	// VisitAll + Changed, not Visit: LocalNonPersistentFlags builds a fresh
+	// FlagSet, and pflag tracks "was set" per FlagSet, so Visit on the copy
+	// sees nothing at all -- which would make every flags-only invocation
+	// look bare.
+	bare := true
+	cmd.LocalNonPersistentFlags().VisitAll(func(f *pflag.Flag) {
+		if f.Changed {
+			bare = false
+		}
+	})
+	return bare
 }
 
 // InvalidInputError marks err as caused by a supplied value that failed
@@ -103,19 +164,27 @@ func UnsupportedError(cmd *cobra.Command, input string, err error) error {
 // full help dump printed on top, a contract violation even under --json
 // (see AGENTS.md's error table and followup issue #1). Use these in place
 // of the cobra.* equivalents on any command's Args field.
+// A command that wants n args and was handed nothing at all hasn't made a
+// mistake worth narrating -- it just hasn't been told what to do yet -- so it
+// answers with HelpError. Anything else supplied the wrong number on purpose
+// and gets InvocationError's "Error: ..." line above the same help.
 func ExactArgs(n int) cobra.PositionalArgs {
 	return func(cmd *cobra.Command, args []string) error {
-		if len(args) != n {
-			return UsageError(cmd, fmt.Errorf("accepts %d arg(s), received %d", n, len(args)))
+		if len(args) == n {
+			return nil
 		}
-		return nil
+		err := fmt.Errorf("accepts %d arg(s), received %d", n, len(args))
+		if n > 0 && IsBareInvocation(cmd, args) {
+			return HelpError(cmd, err)
+		}
+		return InvocationError(cmd, err)
 	}
 }
 
 func MaximumNArgs(n int) cobra.PositionalArgs {
 	return func(cmd *cobra.Command, args []string) error {
 		if len(args) > n {
-			return UsageError(cmd, fmt.Errorf("accepts at most %d arg(s), received %d", n, len(args)))
+			return InvocationError(cmd, fmt.Errorf("accepts at most %d arg(s), received %d", n, len(args)))
 		}
 		return nil
 	}
@@ -123,16 +192,20 @@ func MaximumNArgs(n int) cobra.PositionalArgs {
 
 func MinimumNArgs(n int) cobra.PositionalArgs {
 	return func(cmd *cobra.Command, args []string) error {
-		if len(args) < n {
-			return UsageError(cmd, fmt.Errorf("requires at least %d arg(s), only received %d", n, len(args)))
+		if len(args) >= n {
+			return nil
 		}
-		return nil
+		err := fmt.Errorf("requires at least %d arg(s), only received %d", n, len(args))
+		if n > 0 && IsBareInvocation(cmd, args) {
+			return HelpError(cmd, err)
+		}
+		return InvocationError(cmd, err)
 	}
 }
 
 func NoArgs(cmd *cobra.Command, args []string) error {
 	if len(args) > 0 {
-		return UsageError(cmd, fmt.Errorf("unknown command %q for %q", args[0], cmd.CommandPath()))
+		return InvocationError(cmd, fmt.Errorf("unknown command %q for %q", args[0], cmd.CommandPath()))
 	}
 	return nil
 }
@@ -144,14 +217,18 @@ func NoArgs(cmd *cobra.Command, args []string) error {
 // child, whether that's a bare "ncli relay members" or a typo'd "ncli
 // miner mnie" -- silently treating a missing/misspelled subcommand as
 // success, on stdout, even in --json mode. Wiring this as the group's own
-// RunE routes that same situation through UsageError instead, so it gets
-// exit 2, stderr-only reporting, and a structured error under --json like
-// every other invocation mistake.
+// RunE routes that same situation through the usage classifiers instead, so
+// it gets exit 2, stderr-only reporting, and a structured error under --json
+// like every other invocation mistake.
+//
+// A bare group still prints help -- that's the friendly answer to "ncli
+// miner" -- but it exits 2 rather than 0, so a misspelled subcommand is never
+// mistaken for success. A misspelled one additionally names what went wrong.
 func RequireSubcommand(cmd *cobra.Command, args []string) error {
 	if len(args) > 0 {
-		return UsageError(cmd, fmt.Errorf("unknown command %q for %q", args[0], cmd.CommandPath()))
+		return InvocationError(cmd, fmt.Errorf("unknown command %q for %q", args[0], cmd.CommandPath()))
 	}
-	return UsageError(cmd, fmt.Errorf("%q requires a subcommand", cmd.CommandPath()))
+	return HelpError(cmd, fmt.Errorf("%q requires a subcommand", cmd.CommandPath()))
 }
 
 // RuntimeError is the fallback bucket for a failure that doesn't cleanly

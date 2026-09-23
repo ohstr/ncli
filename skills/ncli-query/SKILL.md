@@ -121,6 +121,42 @@ distinguishable from "queried successfully, found nothing." Test this
 yourself with a bogus host: `ncli find <id> -s relay.invalid.example
 --json` should fail with a network error, not print `[]`.
 
+## `profile`
+
+Looking someone up is `ncli profile`, not `ncli find -k 0`: one query,
+four records, rendered as a readable card instead of raw JSON.
+
+```sh
+ncli profile npub1...
+ncli profile name@example.com
+ncli profile satoshi --json          # a vault label works too
+ncli profile npub1... -s wss://relay.example.com --no-verify
+```
+
+It fetches kind:0 (metadata), kind:3 (contact list → **following**
+count), kind:10002 (NIP-65 **relay list**), and kind:10063 (BUD-03
+**Blossom servers**) in a single subscription, and shows the profile's
+**lightning address** (`lud16`, falling back to `lud06`) when it has one.
+
+Three things worth knowing:
+
+- **It aggregates across every relay** instead of stopping at the first
+  one with a match, the way `find` does. A relay list very often lives on
+  a different relay than the profile, so `find` would miss it.
+- **A missing record is not an error.** An identity that published no
+  kind:0 still renders, with every section reading `not published`, and
+  **exits 0** -- the identity exists, it just published nothing. Don't
+  treat a sparse card as a failed lookup. In `--json`, those fields are
+  absent rather than zero, so `following` being missing is different from
+  `following: 0`.
+- **The claimed nip-05 is verified by default**, with one HTTPS round
+  trip back to the domain. `✔` means it resolves to this pubkey, `✘`
+  means it doesn't, `⚠` means the lookup couldn't complete (which says
+  nothing either way). `--no-verify` skips it.
+
+Relay selection is the same as `find`: `-s/--relays`, else `ncli prefs
+relays`.
+
 ## `ping`
 
 ```sh
@@ -239,8 +275,9 @@ Every subcommand above takes `--json` for scripted/agent use: `add`/
 already in/out of the list, not an error), `list` reports `{"relays": [...]}`
 (`[]`, never `null`, when the list is empty), `clear` reports
 `{"cleared": true}`, and `path` reports `{"path": "..."}`. Bare `ncli prefs`
-or `ncli prefs relays` (no further subcommand) is a `usage` error (exit 2),
-not a silent help dump.
+or `ncli prefs relays` (no further subcommand) is a `usage` error (exit 2):
+it prints the group's help on stderr to show you the subcommands, but
+still exits 2 -- never a help dump with exit 0.
 
 ## Gotchas learned
 

@@ -26,13 +26,13 @@ result per server. Requires --yes in a non-interactive session.`,
 		Example: `  ncli blossom rm <hash> --identity satoshi --yes`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {
-				return common.UsageError(cmd, fmt.Errorf("exactly one hash is required"))
+				return common.InvocationOrHelp(cmd, args, fmt.Errorf("exactly one hash is required"))
 			}
 			if !nipB7.IsSHA256Hex(args[0]) {
 				return common.InvalidInputError(cmd, args[0], fmt.Errorf("not a valid sha256 hash"))
 			}
 			if identity, _ := cmd.Flags().GetString("identity"); identity == "" {
-				return common.UsageError(cmd, fmt.Errorf("--identity is required"))
+				return common.InvocationOrHelp(cmd, args, fmt.Errorf("--identity is required"))
 			}
 			return nil
 		},
@@ -45,7 +45,7 @@ result per server. Requires --yes in a non-interactive session.`,
 
 			if !yes {
 				if !term.IsTerminal(int(os.Stdin.Fd())) {
-					return common.UsageError(cmd, fmt.Errorf("refusing to delete %s without --yes in a non-interactive session", hash))
+					return common.InvocationOrHelp(cmd, args, fmt.Errorf("refusing to delete %s without --yes in a non-interactive session", hash))
 				}
 				if !promptYesNo(bufio.NewReader(os.Stdin), fmt.Sprintf("Delete blob %s from all target servers? [y/N] ", hash)) {
 					return common.RuntimeError(cmd, fmt.Errorf("aborted"))
@@ -69,25 +69,28 @@ result per server. Requires --yes in a non-interactive session.`,
 			hc := newHTTPClient(timeout)
 
 			report := &fanoutReport{}
-			for _, server := range servers {
-				res := serverResult{Item: hash, Server: server}
+			_ = common.WithSpinner(cmd, fmt.Sprintf("deleting %s from %d server(s)", shortHash(hash), len(servers)), func() error {
+				for _, server := range servers {
+					res := serverResult{Item: hash, Server: server}
 
-				// Signed fresh per server, not once for the whole batch --
-				// see the identical comment in upload.go.
-				auth, err := buildAuth(privKeyHex, pubKeyHex, nipB7.VerbDelete, []string{hash}, ttl)
-				if err != nil {
-					res.Error = err.Error()
+					// Signed fresh per server, not once for the whole batch --
+					// see the identical comment in upload.go.
+					auth, err := buildAuth(privKeyHex, pubKeyHex, nipB7.VerbDelete, []string{hash}, ttl)
+					if err != nil {
+						res.Error = err.Error()
+						report.add(res)
+						continue
+					}
+
+					if err := hc.Delete(ctx, server, hash, auth); err != nil {
+						res.Error = describeError(err)
+					} else {
+						res.OK = true
+					}
 					report.add(res)
-					continue
 				}
-
-				if err := hc.Delete(ctx, server, hash, auth); err != nil {
-					res.Error = describeError(err)
-				} else {
-					res.OK = true
-				}
-				report.add(res)
-			}
+				return nil
+			})
 
 			printFanoutReport(jsonMode, report)
 			if !report.allSucceeded() {

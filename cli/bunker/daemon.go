@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/ohstr/ncli/cli/common"
 	"github.com/ohstr/nmilat/nip01"
 	"github.com/ohstr/nmilat/nip04"
 	"github.com/ohstr/nmilat/nip44"
@@ -373,14 +374,8 @@ func (d *Daemon) setProfile(name, nip05 string) {
 	d.profileMu.Unlock()
 }
 
-// profileMetadata is the subset of a kind:0 event's JSON content this
-// cares about for display purposes -- everything else a real profile
-// carries (picture, about, banner, lud16, ...) is irrelevant here.
-type profileMetadata struct {
-	Name        string `json:"name"`
-	DisplayName string `json:"display_name"`
-	Nip05       string `json:"nip05"`
-}
+// The kind:0 content document lives in cli/common as ProfileMetadata, shared
+// with "ncli profile" -- this only reads the display fields from it.
 
 // fetchProfile is a best-effort, one-shot lookup of the signing identity's
 // own kind:0 metadata, run once at startup so the TUI can show a human
@@ -449,8 +444,8 @@ func (d *Daemon) applyProfile(ev *nip01.Event) bool {
 	if ev == nil {
 		return false
 	}
-	var meta profileMetadata
-	if err := json.Unmarshal([]byte(ev.Content), &meta); err != nil {
+	meta, err := common.ParseProfileMetadata(ev.Content)
+	if err != nil {
 		return false
 	}
 	name := meta.DisplayName

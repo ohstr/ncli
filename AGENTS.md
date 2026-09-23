@@ -14,6 +14,7 @@ that priority order.
 | `ncli apply -f <spec.yaml>` | Run a `stream`/`sync`/`inspect` workflow from a YAML spec |
 | `ncli dump -o <out.json>` | Export events to JSON from a relay, `.db` file, or prefs relays |
 | `ncli find <id>` / `-t <targets.yaml>` | Look up events by ID (hex/note/nevent) or author (npub/nprofile/nip-05), and/or filter, across targets |
+| `ncli profile <identifier>` | Readable profile card for one identity — metadata, following count, relay list, Blossom servers, lightning address — aggregated across every relay (not stopping at the first hit like `find`) |
 | `ncli ping <relay...>` / `-t <targets.yaml>` | Probe whether targets are reachable (connect + subscribe), no events fetched |
 | `ncli prefs relays add/list/remove/clear` | Manage the default relay list `find`/`dump`/`ping`/`miner check` fall back to |
 | `ncli relay --config <relay.yaml>` | Run the relay server; `agent_auth` block enables NIP-AA (an agent key gains virtual membership from its owner's NIP-43 membership via a NIP-OA credential, no separate enrollment) |
@@ -68,12 +69,23 @@ means "queried successfully, found nothing," never "couldn't check."
 and logged like it is elsewhere.
 
 **Failures**: exactly one top-level error report, always on stderr, never
-stdout — a plain timestamped line by default, or `{"error", "code",
-"retryable", "input"}` with `--json`:
+stdout. In text mode it takes one of three shapes, and `--json` replaces
+all three with a single `{"error", "code", "retryable", "input"}` line:
+
+| shape | when | looks like |
+|---|---|---|
+| help alone, no error line | the command was invoked bare — no arguments and none of its own flags (`ncli decode`, `ncli miner`) | the command's `--help` text, on stderr |
+| `Error: <msg>`, blank line, then help | something *was* supplied and it was wrong — bad arg count, unknown flag or subcommand, conflicting flags | `Error:` in red on a TTY, then the help |
+| `Error: <msg>` alone | the invocation was fine and the operation failed (`ncli ping` with no relays, a bad identifier) | one line; help wouldn't help |
+
+The first shape still exits non-zero with its usual code — help is shown
+instead of scolding, **not** instead of failing, so a mistyped subcommand
+is never mistaken for success. `Error:` is red only on a real terminal,
+and never when `NO_COLOR` is set or stderr is piped.
 
 | `code` | exit | retryable | meaning |
 |---|---|---|---|
-| `usage` | 2 | no | bad/missing/conflicting flags/args/config, a relay-side feature that isn't turned on (e.g. `relay members ...` against a relay with `membership.enabled: false`), or a group command (`relay members`/`invites`/`roles`/`reindex`/`clear`, `prefs`, `prefs relays`, `miner`) invoked without one of its own subcommands |
+| `usage` | 2 | no | bad/missing/conflicting flags/args/config, a relay-side feature that isn't turned on (e.g. `relay members ...` against a relay with `membership.enabled: false`), or a group command (`relay members`/`invites`/`roles`/`reindex`/`clear`, `prefs`, `prefs relays`, `miner`, `blossom`, `blossom servers`, `bunker sessions`) invoked without one of its own subcommands |
 | `invalid_input` | 3 | no | a supplied value failed validation/parsing (bad identifier, URL, key, duration, kind, ...) |
 | `not_found` | 4 | no | the referenced thing doesn't exist (vault entry, configured relay, ...) |
 | `conflict` | 5 | yes | collides with existing state (vault label taken, reindex already running) |
@@ -88,9 +100,16 @@ omitted when there's no one clean value, or when the value is private-key
 material (never echoed, even malformed). `retryable` lets an agent decide
 whether to back off and retry (`network`/`conflict`) or fix the input and
 try again (everything else) without string-matching the message. No
-command double-reports the same failure in two shapes, and a usage mistake
-in `--json` mode skips the human-readable help dump (which would otherwise
-land on stdout) in favor of the structured error alone.
+command double-reports the same failure in two shapes, and `--json` never
+prints help at all — just the one structured line, whichever of the three
+text shapes the failure would otherwise have taken.
+
+**Waiting**: any command that blocks on the network (`find`, `dump`,
+`ping`, `publish`, `profile`, `miner check`, every `blossom` and `relay`
+admin subcommand) animates a spinner on stderr while it waits, with the
+per-relay progress narration still printed above it. The spinner is off
+under `--json`, under `-q/--quiet`, when `NO_COLOR` is set, and whenever
+stderr isn't a terminal — so captured output is byte-identical to before.
 
 `--json` also switches *every* other stderr log line (progress narration,
 warnings, a partial/recoverable failure like one unreachable target in a

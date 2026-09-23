@@ -8,8 +8,23 @@
   `circlehub1...` connections. Pairing secrets are never shown.
   `cashhub1...` is recognized and rejected.
 - Every command's `--help` has an `Example:`.
+- `ncli profile <identifier>` prints a readable profile card for one
+  identity -- metadata, following count, relay list, Blossom servers and
+  lightning address -- from a single query, aggregated across every relay
+  rather than stopping at the first hit. `--json` for the structured
+  shape; `--no-verify` skips the nip-05 check.
+- A spinner on stderr while any command waits on the network. Off under
+  `--json`, `-q/--quiet`, `NO_COLOR`, and whenever stderr isn't a
+  terminal.
 
 ### Changed
+
+- Failures now read like `cashctl`: a bare invocation prints help with no
+  error line, a wrong one prints `Error: <msg>` (red on a TTY) above the
+  help, and a runtime failure prints the error alone. All three go to
+  **stderr** -- help used to land on stdout -- and exit codes are
+  unchanged, so a bare group command still exits 2, never 0. `--json` is
+  untouched: one structured line, never help.
 
 - A local flow's `ensure` now defaults to `create` (was `exists`), so a
   missing store path is created instead of failing.
@@ -20,6 +35,10 @@
 
 ### Fixed
 
+- An unknown flag was reported twice (cobra's own `Error:` plus ncli's
+  own line) and exited 1 instead of 2.
+- `ncli bunker sessions revoke-grant` with no `--method` exited 1 as
+  `internal` instead of 2 as `usage`.
 - Wallet transfers reused a stale client on their second call.
 - NWC responses dropped the `circle_hub`/`circle_wallet` fee fields.
 - Two `Example:` commands failed when run as written.

@@ -222,8 +222,9 @@ per-event verdicts and summary as plain text on stdout:
 
 ## Exit codes
 
-Bare `ncli miner` (no `mine`/`check`) is a `code: "usage"` error (exit 2),
-not a silent help dump with exit 0.
+Bare `ncli miner` (no `mine`/`check`) is a `code: "usage"` error (exit 2).
+It prints miner's help on stderr so you can see the subcommands, but it
+still exits 2 -- never a help dump with exit 0.
 
 `ncli miner check` exits **non-zero if any checked event fails** PoW
 verification -- safe to use directly in a script or CI/cron check:

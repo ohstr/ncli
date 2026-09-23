@@ -1,5 +1,7 @@
-# Local sync e2e stack: 1 real `ncli relay` container. See
-# integration/sync/README.md. Run by hand via `just sync up`/`down`.
+# Local sync e2e stack: 2 real `ncli relay` containers -- the same relay
+# config run twice, so negentropy can move events from one to the other
+# without a third-party relay. See integration/sync/README.md. Run by hand
+# via `just sync up`/`down`.
 name: ncli-sync-itest
 
 services:
@@ -16,5 +18,21 @@ services:
       - remote-data:/app/ncli/data
     restart: unless-stopped
 
+  # Second instance, empty at startup: the destination the negentropy
+  # propagation scenario syncs into.
+  remote2:
+    build:
+      context: ../..
+      dockerfile: build/relay/Dockerfile
+    image: ncli:sync-itest
+    command: ["relay", "--config", "/config/relay.yaml"]
+    ports:
+      - "45521:5500"
+    volumes:
+      - ./relay.yaml:/config/relay.yaml:ro
+      - remote2-data:/app/ncli/data
+    restart: unless-stopped
+
 volumes:
   remote-data:
+  remote2-data:

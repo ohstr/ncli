@@ -14,7 +14,7 @@ test:
 
 # Run the live-relay integration tests (hits real public Nostr relays; not run in CI)
 test-integration:
-    go test ./client/... -run 'TestMultiRelaySync|TestNegSync_Integration' -v -count=1
+    go test ./client/... -run 'TestMultiRelaySync' -v -count=1
     go test -tags integration ./cli/bunker/... -run Live -v -count=1
 
 # Run the stream integration test (needs Docker; brings up/tears down its

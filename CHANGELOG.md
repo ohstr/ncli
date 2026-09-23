@@ -12,6 +12,11 @@
 - A spinner on stderr while any command waits on the network. Off under
   `--json`, `-q/--quiet`, `NO_COLOR`, and whenever stderr isn't a
   terminal. (#55)
+- `client/vault` and `client/prefs` are importable on their own, for code
+  that wants the vault or the relay list without the rest of `client`.
+  Importing them pulls 10 modules instead of 38 -- no TUI, no viper, no
+  bbolt. `client` re-exports every previous name unchanged, so existing
+  code needs no edits.
 
 ### Changed
 

@@ -1,54 +1,18 @@
 package client
 
 import (
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
-	btcec "github.com/flokiorg/go-flokicoin/crypto"
 	"github.com/ohstr/nmilat/nip05"
 	"github.com/ohstr/nmilat/nip19"
 	"github.com/ohstr/nmilat/utils"
 )
 
 const nip05Timeout = 10 * time.Second
-
-// Identity bundles every representation of a Nostr keypair.
-type Identity struct {
-	PrivKeyHex string
-	PubKeyHex  string
-	Nsec       string
-	Npub       string
-}
-
-// GenerateIdentity mints a brand-new secp256k1 keypair and returns every
-// display form of it. This is the only place a new keypair is ever created.
-func GenerateIdentity() (*Identity, error) {
-	priv, err := btcec.NewPrivateKey()
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate key: %w", err)
-	}
-	privHex := hex.EncodeToString(priv.Serialize())
-
-	pubHex, err := utils.GetPublicKey(privHex)
-	if err != nil {
-		return nil, fmt.Errorf("failed to derive public key: %w", err)
-	}
-
-	nsec, err := nip19.EncodePrivateKey(privHex)
-	if err != nil {
-		return nil, err
-	}
-	npub, err := nip19.EncodePublicKey(pubHex)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Identity{PrivKeyHex: privHex, PubKeyHex: pubHex, Nsec: nsec, Npub: npub}, nil
-}
 
 // IdentityInspection is the read-only result of resolving an identifier
 // (vault label, npub, hex pubkey, nsec, nprofile, or nip-05 address). It is

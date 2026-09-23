@@ -1,30 +1,15 @@
 package common
 
-import (
-	"os"
-	"path/filepath"
-)
+import "github.com/ohstr/ncli/appdir"
+
+// The implementation lives in the leaf package appdir, so the vault and prefs
+// stores can resolve the same directory without importing this package (and
+// with it viper and zerolog). These stay as the CLI's spelling of it.
 
 // AppDirName is ncli's own subdirectory within the OS's per-user
 // application directory.
-const AppDirName = ".ncli"
+const AppDirName = appdir.Name
 
-// AppConfigDir returns the OS-appropriate per-user application directory
-// for ncli -- %AppData% on Windows, ~/Library/Application Support on
-// macOS, $XDG_CONFIG_HOME (or ~/.config) on Linux -- joined with ncli's
-// own .ncli subdirectory. It's the one base directory everything ncli
-// writes outside a project lives under: prefs.yaml, the CLI's log file,
-// and its crash log. Falls back to the home directory, then the working
-// directory, if the platform's config directory can't be determined
-// (e.g. neither $XDG_CONFIG_HOME nor $HOME set).
-func AppConfigDir() string {
-	dir, err := os.UserConfigDir()
-	if err != nil {
-		home, homeErr := os.UserHomeDir()
-		if homeErr != nil {
-			home, _ = os.Getwd()
-		}
-		dir = home
-	}
-	return filepath.Join(dir, AppDirName)
-}
+// AppConfigDir returns the OS-appropriate per-user application directory for
+// ncli. See appdir.Config.
+func AppConfigDir() string { return appdir.Config() }

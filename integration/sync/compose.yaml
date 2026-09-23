@@ -4,34 +4,34 @@
 # via `just sync up`/`down`.
 name: ncli-sync-itest
 
+# Reusable service template (Compose ignores `x-` keys); each service
+# merges this via `<<:` and adds only its own port/volumes.
+x-relay: &relay
+  build:
+    context: ../..
+    dockerfile: build/relay/Dockerfile
+  image: ncli:sync-itest
+  command: ["relay", "--config", "/config/relay.yaml"]
+  restart: unless-stopped
+
 services:
   remote:
-    build:
-      context: ../..
-      dockerfile: build/relay/Dockerfile
-    image: ncli:sync-itest
-    command: ["relay", "--config", "/config/relay.yaml"]
+    <<: *relay
     ports:
       - "45520:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - remote-data:/app/ncli/data
-    restart: unless-stopped
 
   # Second instance, empty at startup: the destination the negentropy
   # propagation scenario syncs into.
   remote2:
-    build:
-      context: ../..
-      dockerfile: build/relay/Dockerfile
-    image: ncli:sync-itest
-    command: ["relay", "--config", "/config/relay.yaml"]
+    <<: *relay
     ports:
       - "45521:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - remote2-data:/app/ncli/data
-    restart: unless-stopped
 
 volumes:
   remote-data:

@@ -24,15 +24,24 @@ See the [README](README.md) for the full `just` command list.
 - Add or update tests for behavior changes.
 
 `just test`/`just check` skip integration tests that hit live relays instead
-of using mocks — `TestMultiRelaySync`/`TestNegSync_Integration` (public
-Nostr relays) and the `cli/bunker` `TestLive_*` suite (`relay.ohstr.com`,
-behind an `integration` build tag). Run them all with `just test-integration`
-when working on relay sync, negentropy, or bunker/NIP-46 code; they're
-excluded from `just check` and CI because their outcome depends on
-third-party relay availability. `TestMultiRelaySync` in particular can
-still fail against live relays even when connectivity is fine, since the
-public firehose it samples sometimes includes spam events with dishonest
-NIP-13 nonce tags that get correctly rejected — that's not a code bug.
+of using mocks — `TestMultiRelaySync` (public Nostr relays) and the
+`cli/bunker` `TestLive_*` suite (`relay.ohstr.com`, behind an `integration`
+build tag). Run them with `just test-integration` when working on relay
+sync or bunker/NIP-46 code; they're excluded from `just check` and CI
+because their outcome depends on third-party relay availability.
+`TestMultiRelaySync` in particular can still fail against live relays even
+when connectivity is fine, since the public firehose it samples sometimes
+includes spam events with dishonest NIP-13 nonce tags that get correctly
+rejected — that's not a code bug.
+
+Negentropy is covered hermetically instead, by `TestSyncIntegration`'s
+`NegentropyPropagatesBetweenRelayInstances` — the sync stack runs the same
+relay config twice and moves a known event set from one instance to the
+other, so no public relay is involved.
+
+`integration/agent-eval` is a separate, manual harness: every round is a
+real, billed Claude Code session. It is never run by `just check` or CI —
+see its README before invoking it.
 
 ## Reporting issues
 

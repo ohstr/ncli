@@ -1,5 +1,30 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- Negentropy coverage no longer depends on a public relay. The sync stack
+  runs two relay instances now, and `TestSyncIntegration`'s
+  `NegentropyPropagatesBetweenRelayInstances` seeds one, reconciles it
+  into a local store, then pushes that store into the other.
+  `TestNegSync_Integration`, which hit `wss://relay.ohstr.com`, is gone.
+- `integration/agent-eval`'s R2 round queries the stack's own seeded relay
+  instead of `wss://relay.ohstr.com`.
+
+### Fixed
+
+- `integration/agent-eval` could report on a previous run's data: rounds
+  write self-reports to a flat path under `report/` that nothing cleared
+  beforehand. Cleared before each round now.
+- `integration/agent-eval` reused a leftover `.env` vault password across
+  runs instead of generating one per run, and never removed it.
+- `integration/agent-eval`'s R6 pre-start discarded its own output, so an
+  identity failure surfaced only as a generic "daemon did not come up"
+  warning 15s later.
+- `integration/agent-eval`'s R8 verifier shared fixed `/tmp` paths between
+  probes and never cleaned them up.
+
 ## [0.6.0]
 
 ### Added

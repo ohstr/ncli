@@ -18,9 +18,13 @@ go build -o bin/ncli ./cmd/ncli
 
 ## Fastest real handle: a live public relay
 
-No need to spin up `ncli relay` or seed a local bbolt store for most
-checks — `wss://relay.ohstr.com` is reachable from this sandbox and has a
-constant stream of real events. `find`/`dump`/`miner check` all take
+A public relay is the quickest handle for a read-path check, but don't
+assume one is up: `wss://relay.ohstr.com` has returned a Cloudflare 404
+(so the websocket upgrade fails with `bad handshake`) while
+`wss://nos.lol` and `wss://relay.primal.net` still served events. Probe
+before trusting a failure, and prefer a local relay you seed yourself
+(see below) for anything you need to be repeatable.
+`find`/`dump`/`miner check` all take
 targets and filters the same two ways: a `--targets`/`-t` YAML file
 declaring both together (see `examples/targets.yaml`), or `--relays`/`-s`
 (comma-separated relay URLs/local `.db` paths) plus inline filter flags —
@@ -54,13 +58,20 @@ network — actual evidence, not a mock.
 just dev relay   # runs `ncli relay --config examples/relay/minimal.yaml`, db: ./data/db/notes.db
 ```
 
-There's no dedicated `ncli publish` command — the checked-in
-`data/db/notes.db` / `build/.dev/db/*.db` files are often empty (dev
-scratch, not fixtures). For read-path checks (`dump`/`find` against
-`.db` files), prefer syncing a few real events down from a public relay
-into a local store first (via `apply` with a `stream` spec, or `dump`
-from `wss://relay.ohstr.com` piped through a small script) rather than
-assuming a checked-in `.db` has data.
+The checked-in `data/db/notes.db` / `build/.dev/db/*.db` files are often
+empty (dev scratch, not fixtures), so don't assume a checked-in `.db` has
+data. To seed a relay yourself, sign events and publish them — no public
+relay needed:
+
+```sh
+ncli id --save --label seed --json                     # needs NCLI_VAULT_PASSWORD
+jq -nc '[range(0;5) | {kind:1, content:("seed " + (.|tostring)), created_at:((now|floor) - .), tags:[]}]' > unsigned.json
+ncli id sign -e unsigned.json -o signed.json --identity seed
+ncli publish -e signed.json -s ws://localhost:5500
+```
+
+For read-path checks (`dump`/`find` against `.db` files), you can also
+sync events down into a local store via `apply` with a `stream` spec.
 
 ## Gotchas learned
 

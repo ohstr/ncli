@@ -182,8 +182,8 @@ inspect-stress cmd="up" *args:
     *) echo "unknown inspect-stress subcommand: {{cmd}} (expected up|down)" >&2 && exit 1 ;;
     esac
 
-# Local sync e2e test stack (one real ncli relay container -- see
-# integration/sync/README.md): [up|down]. The Go test behind
+# Local sync e2e test stack (two real ncli relay containers, 45520 and
+# 45521 -- see integration/sync/README.md): [up|down]. The Go test behind
 # `just test-integration-sync` manages its own compose lifecycle, so this
 # is for poking at the stack by hand.
 sync cmd="up" *args:

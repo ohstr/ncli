@@ -1,8 +1,10 @@
-# Config for compose.yaml's single `remote` service. Same conventions as
-# integration/stream/relay.yaml and integration/inspect/relay.yaml (see
-# either for the rationale) -- only one service here, so there's no
-# multi-service collision to worry about, but the fixed test-only key is
-# kept for consistency with the other two stacks.
+# Shared relay config for both services in compose.yaml -- `remote` and
+# `remote2` use this exact file. Safe for the same reasons as
+# integration/inspect/relay.yaml: each service gets its own named volume at
+# /app/ncli/data, so the identical relative store/logdir paths never
+# collide, and 5500 is only ever the container-internal port (the host-side
+# ports differ, 45520 and 45521). Both instances therefore share one relay
+# identity, which nothing in this harness depends on being distinct.
 port: 5500
 
 nip11:

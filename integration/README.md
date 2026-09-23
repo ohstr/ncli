@@ -47,8 +47,8 @@ conditions (reconnects, timing, fan-in/fan-out).
   body (see `testSyncMaxReconcileRoundsTooLowSurfacesCleanly` vs.
   `testSyncReconcileCompleteness`).
 - **Compose naming**: `name: ncli-<feature>-itest`, a distinct port range
-  per stack (stream 45500s, inspect 45510s, sync 45520, stress stacks
-  45560s/45590s).
+  per stack (stream 45500s, inspect 45510-45512, sync 45520-45521, stress
+  stacks 45560s/45590s).
 - **Real relay images, not mocks** -- built from `build/relay/Dockerfile`.
 - **In-process client, not a compose service** -- same call `ncli apply`
   makes, but white-box.

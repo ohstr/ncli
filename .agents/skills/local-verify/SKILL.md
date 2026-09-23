@@ -16,7 +16,7 @@ binary and run real subcommands against it.
 go build -o bin/ncli ./cmd/ncli
 ```
 
-## Fastest real handle: a live public relay
+## Picking a relay to verify against
 
 A public relay is the quickest handle for a read-path check, but don't
 assume one is up: `wss://relay.ohstr.com` has returned a Cloudflare 404
@@ -24,6 +24,7 @@ assume one is up: `wss://relay.ohstr.com` has returned a Cloudflare 404
 `wss://nos.lol` and `wss://relay.primal.net` still served events. Probe
 before trusting a failure, and prefer a local relay you seed yourself
 (see below) for anything you need to be repeatable.
+
 `find`/`dump`/`miner check` all take
 targets and filters the same two ways: a `--targets`/`-t` YAML file
 declaring both together (see `examples/targets.yaml`), or `--relays`/`-s`
@@ -64,10 +65,10 @@ data. To seed a relay yourself, sign events and publish them — no public
 relay needed:
 
 ```sh
-ncli id --save --label seed --json                     # needs NCLI_VAULT_PASSWORD
+./bin/ncli id --save --label seed --json               # needs NCLI_VAULT_PASSWORD
 jq -nc '[range(0;5) | {kind:1, content:("seed " + (.|tostring)), created_at:((now|floor) - .), tags:[]}]' > unsigned.json
-ncli id sign -e unsigned.json -o signed.json --identity seed
-ncli publish -e signed.json -s ws://localhost:5500
+./bin/ncli id sign -e unsigned.json -o signed.json --identity seed
+./bin/ncli publish -e signed.json -s ws://localhost:5500
 ```
 
 For read-path checks (`dump`/`find` against `.db` files), you can also

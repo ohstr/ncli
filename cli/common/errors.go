@@ -50,14 +50,6 @@ var retryableCodes = map[ErrorCode]bool{
 	CodeNetwork:  true,
 }
 
-// CLIError wraps a command failure with an ErrorCode, and optionally the
-// single input value that caused it, so main.go's single top-level sink
-// (EmitError) can render it consistently -- a styled text line, or
-// structured JSON on stderr when --json is set -- and pick an exit code,
-// instead of every command choosing its own rendering and printing early.
-// Input is left blank when there's no one clean value to echo, or when the
-// value is sensitive (a private key, a vault password) and must not be
-// echoed back at all.
 // HelpMode says how much of a command's own help EmitError prints alongside
 // a failure. The zero value is HelpNone, so an error that was never
 // deliberately classified can't accidentally dump thirty lines of help.
@@ -76,6 +68,14 @@ const (
 	HelpAfterError
 )
 
+// CLIError wraps a command failure with an ErrorCode, and optionally the
+// single input value that caused it, so main.go's single top-level sink
+// (EmitError) can render it consistently -- a styled text line, or
+// structured JSON on stderr when --json is set -- and pick an exit code,
+// instead of every command choosing its own rendering and printing early.
+// Input is left blank when there's no one clean value to echo, or when the
+// value is sensitive (a private key, a vault password) and must not be
+// echoed back at all.
 type CLIError struct {
 	Err   error
 	Code  ErrorCode

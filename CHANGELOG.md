@@ -26,7 +26,7 @@
   **stderr** -- help used to land on stdout -- and exit codes are
   unchanged, so a bare group command still exits 2, never 0. `--json` is
   untouched: one structured line, never help. (#55)
-- Updated `nmilat` to v0.4.0.
+- Updated `nmilat` to v0.4.0. (#58)
 - Rewrote every command's `--help` description in a flatter style: each
   one now states what the command does, with the rules a caller can't
   guess stated plainly, instead of explaining how it works internally.
@@ -46,7 +46,7 @@
 - `ncli relay` could freeze until restarted: a `REQ` held its database
   read open while sending events, so a write that grew the database file
   hung every other `REQ` and `EVENT`, health checks included. Fixed
-  upstream in `nmilat` v0.3.2.
+  upstream in `nmilat` v0.3.2. (#58)
 
 ## [0.5.0]
 

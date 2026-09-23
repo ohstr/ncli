@@ -30,6 +30,7 @@
 - Rewrote every command's `--help` description in a flatter style: each
   one now states what the command does, with the rules a caller can't
   guess stated plainly, instead of explaining the reasoning behind it.
+  (#61)
 
 ### Fixed
 
@@ -41,6 +42,7 @@
   one line and no help. It now prints a short error followed by the
   command's help, which lists the flags and where the config is read
   from. Same for the `relay` admin subcommands missing `nip11.privkey`.
+  (#61)
 - `ncli relay` could freeze until restarted: a `REQ` held its database
   read open while sending events, so a write that grew the database file
   hung every other `REQ` and `EVENT`, health checks included. Fixed

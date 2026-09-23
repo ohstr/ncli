@@ -1,4 +1,4 @@
-package client
+package vault
 
 import (
 	"encoding/hex"
@@ -11,7 +11,8 @@ import (
 
 	btcec "github.com/flokiorg/go-flokicoin/crypto"
 	"github.com/flokiorg/go-flokicoin/crypto/schnorr"
-	"github.com/ohstr/ncli/cli/common"
+	"github.com/ohstr/ncli/appdir"
+	"github.com/ohstr/ncli/client/prefs"
 	"github.com/ohstr/nmilat/nip19"
 	"github.com/ohstr/nmilat/nip44"
 	"github.com/ohstr/nmilat/nip49"
@@ -21,15 +22,15 @@ import (
 
 const vaultFileName = "vault.yaml"
 
-// ErrLabelExists is wrapped into AddVaultEntry's error when label already
+// ErrLabelExists is wrapped into AddEntry's error when label already
 // names a saved entry, so a caller can classify it (e.g. as a conflict)
 // with errors.Is instead of matching on message text.
 var ErrLabelExists = errors.New("vault label already exists")
 
-// VaultEntry is one identity saved in the local vault: label and npub are
+// Entry is one identity saved in the local vault: label and npub are
 // plaintext (so listing/inspecting needs no password), but EncryptedNsec is
 // a NIP-44 payload only the unlocked vault identity can decrypt.
-type VaultEntry struct {
+type Entry struct {
 	Label         string `json:"label" yaml:"label"`
 	Npub          string `json:"npub" yaml:"npub"`
 	EncryptedNsec string `json:"encrypted_nsec" yaml:"encrypted_nsec"`
@@ -38,24 +39,24 @@ type VaultEntry struct {
 
 // vaultFile is the on-disk envelope for vault.yaml.
 type vaultFile struct {
-	Entries []VaultEntry `json:"entries,omitempty" yaml:"entries,omitempty"`
+	Entries []Entry `json:"entries,omitempty" yaml:"entries,omitempty"`
 }
 
 // VaultPath returns the OS-appropriate path to vault.yaml, next to
 // prefs.yaml under ncli's shared app config directory.
-func VaultPath() string {
-	return filepath.Join(common.AppConfigDir(), vaultFileName)
+func Path() string {
+	return filepath.Join(appdir.Config(), vaultFileName)
 }
 
 // VaultExists reports whether the vault identity has been created yet.
 // This is the authoritative check (not vault.yaml's mere presence, which
 // mirrors prefs.yaml's "missing file means empty" convention).
-func VaultExists() (bool, error) {
-	prefs, err := LoadPrefs()
+func Exists() (bool, error) {
+	p, err := prefs.Load()
 	if err != nil {
 		return false, err
 	}
-	return prefs.VaultIdentity != nil, nil
+	return p.VaultIdentity != nil, nil
 }
 
 // CreateVaultIdentity generates the vault's own keypair, encrypts its
@@ -63,12 +64,12 @@ func VaultExists() (bool, error) {
 // prefs.yaml. It returns the plaintext private key hex too, so callers
 // that just created the vault don't need to immediately pay for a second,
 // redundant scrypt-based unlock (NIP-49's scrypt is deliberately slow).
-func CreateVaultIdentity(password string) (npub, privKeyHex string, err error) {
-	prefs, err := LoadPrefs()
+func CreateIdentity(password string) (npub, privKeyHex string, err error) {
+	p, err := prefs.Load()
 	if err != nil {
 		return "", "", err
 	}
-	if prefs.VaultIdentity != nil {
+	if p.VaultIdentity != nil {
 		return "", "", errors.New("vault identity already exists")
 	}
 
@@ -82,24 +83,24 @@ func CreateVaultIdentity(password string) (npub, privKeyHex string, err error) {
 		return "", "", fmt.Errorf("failed to encrypt vault identity key: %w", err)
 	}
 
-	prefs.VaultIdentity = &VaultIdentityRef{Npub: id.Npub, EncryptedNsec: encryptedNsec}
-	if err := SavePrefs(prefs); err != nil {
+	p.VaultIdentity = &prefs.VaultIdentityRef{Npub: id.Npub, EncryptedNsec: encryptedNsec}
+	if err := prefs.Save(p); err != nil {
 		return "", "", err
 	}
 	return id.Npub, id.PrivKeyHex, nil
 }
 
 // UnlockVaultIdentity decrypts the vault's private key with password.
-func UnlockVaultIdentity(password string) (string, error) {
-	prefs, err := LoadPrefs()
+func Unlock(password string) (string, error) {
+	p, err := prefs.Load()
 	if err != nil {
 		return "", err
 	}
-	if prefs.VaultIdentity == nil {
+	if p.VaultIdentity == nil {
 		return "", errors.New("no vault identity yet; save an identity with `ncli id` to create one")
 	}
 
-	privHex, err := nip49.Decrypt(prefs.VaultIdentity.EncryptedNsec, password)
+	privHex, err := nip49.Decrypt(p.VaultIdentity.EncryptedNsec, password)
 	if err != nil {
 		return "", err // "decryption failed (bad password?)" -- already AEAD-authenticated
 	}
@@ -116,7 +117,7 @@ func UnlockVaultIdentity(password string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if npub != prefs.VaultIdentity.Npub {
+	if npub != p.VaultIdentity.Npub {
 		return "", errors.New("vault identity corrupted: decrypted key does not match stored npub")
 	}
 
@@ -125,8 +126,8 @@ func UnlockVaultIdentity(password string) (string, error) {
 
 // LoadVaultEntries reads vault.yaml, returning a nil slice (not an error)
 // if it doesn't exist yet.
-func LoadVaultEntries() ([]VaultEntry, error) {
-	path := VaultPath()
+func LoadEntries() ([]Entry, error) {
+	path := Path()
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
@@ -143,8 +144,8 @@ func LoadVaultEntries() ([]VaultEntry, error) {
 
 // SaveVaultEntries writes entries to vault.yaml, creating its parent
 // directory if needed.
-func SaveVaultEntries(entries []VaultEntry) error {
-	path := VaultPath()
+func SaveEntries(entries []Entry) error {
+	path := Path()
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return err
 	}
@@ -156,12 +157,12 @@ func SaveVaultEntries(entries []VaultEntry) error {
 	return os.WriteFile(path, data, 0600)
 }
 
-// AddVaultEntry encrypts entryPrivKeyHex under a key derived from the
+// AddEntry encrypts entryPrivKeyHex under a key derived from the
 // (already-unlocked) vault private key and that entry's own public key,
 // then appends and saves it as a new vault entry. A blank label defaults
 // to the entry's own npub (guaranteed unique), so leaving the label prompt
 // empty never blocks a save.
-func AddVaultEntry(vaultPrivKeyHex, label, entryPrivKeyHex string) (*VaultEntry, error) {
+func AddEntry(vaultPrivKeyHex, label, entryPrivKeyHex string) (*Entry, error) {
 	entryPubHex, err := utils.GetPublicKey(entryPrivKeyHex)
 	if err != nil {
 		return nil, fmt.Errorf("invalid identity private key: %w", err)
@@ -176,7 +177,7 @@ func AddVaultEntry(vaultPrivKeyHex, label, entryPrivKeyHex string) (*VaultEntry,
 		label = npub
 	}
 
-	entries, err := LoadVaultEntries()
+	entries, err := LoadEntries()
 	if err != nil {
 		return nil, err
 	}
@@ -195,22 +196,22 @@ func AddVaultEntry(vaultPrivKeyHex, label, entryPrivKeyHex string) (*VaultEntry,
 		return nil, fmt.Errorf("failed to encrypt identity key: %w", err)
 	}
 
-	entry := VaultEntry{
+	entry := Entry{
 		Label:         label,
 		Npub:          npub,
 		EncryptedNsec: encryptedNsec,
 		CreatedAt:     time.Now().UTC().Format(time.RFC3339),
 	}
 	entries = append(entries, entry)
-	if err := SaveVaultEntries(entries); err != nil {
+	if err := SaveEntries(entries); err != nil {
 		return nil, err
 	}
 	return &entry, nil
 }
 
-// DecryptVaultEntry reverses AddVaultEntry, given the already-unlocked
+// DecryptEntry reverses AddEntry, given the already-unlocked
 // vault private key.
-func DecryptVaultEntry(vaultPrivKeyHex string, entry VaultEntry) (string, error) {
+func DecryptEntry(vaultPrivKeyHex string, entry Entry) (string, error) {
 	convKey, err := deriveEntryConversationKey(vaultPrivKeyHex, entry.Npub)
 	if err != nil {
 		return "", err
@@ -218,15 +219,15 @@ func DecryptVaultEntry(vaultPrivKeyHex string, entry VaultEntry) (string, error)
 	return nip44.Decrypt(entry.EncryptedNsec, convKey)
 }
 
-// FindVaultEntry looks up a vault entry by exact label (case-insensitive)
+// FindEntry looks up a vault entry by exact label (case-insensitive)
 // first, then by npub or hex pubkey.
-func FindVaultEntry(labelOrNpub string) (*VaultEntry, bool, error) {
+func FindEntry(labelOrNpub string) (*Entry, bool, error) {
 	trimmed := strings.TrimSpace(labelOrNpub)
 	if trimmed == "" {
 		return nil, false, nil
 	}
 
-	entries, err := LoadVaultEntries()
+	entries, err := LoadEntries()
 	if err != nil {
 		return nil, false, err
 	}
@@ -237,7 +238,7 @@ func FindVaultEntry(labelOrNpub string) (*VaultEntry, bool, error) {
 		}
 	}
 
-	targetHex := strings.ToLower(common.NormalizeKey(trimmed))
+	targetHex := strings.ToLower(nip19.NormalizeToHex(trimmed))
 	for i := range entries {
 		entryHex, err := nip19.DecodePublicKey(entries[i].Npub)
 		if err != nil {
@@ -253,8 +254,8 @@ func FindVaultEntry(labelOrNpub string) (*VaultEntry, bool, error) {
 
 // deriveEntryConversationKey computes the NIP-44 conversation key shared by
 // the vault's private key and an entry's own public key. ECDH is
-// symmetric, so this is called identically at encrypt time (AddVaultEntry)
-// and decrypt time (DecryptVaultEntry).
+// symmetric, so this is called identically at encrypt time (AddEntry)
+// and decrypt time (DecryptEntry).
 func deriveEntryConversationKey(vaultPrivKeyHex, entryNpub string) ([]byte, error) {
 	privBytes, err := hex.DecodeString(vaultPrivKeyHex)
 	if err != nil {

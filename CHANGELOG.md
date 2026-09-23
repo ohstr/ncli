@@ -16,7 +16,7 @@
   that wants the vault or the relay list without the rest of `client`.
   Importing them pulls 10 modules instead of 38 -- no TUI, no viper, no
   bbolt. `client` re-exports every previous name unchanged, so existing
-  code needs no edits.
+  code needs no edits. (#60)
 
 ### Changed
 

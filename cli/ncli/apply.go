@@ -14,7 +14,7 @@ var (
 
 	applyCmd = &cobra.Command{
 		Use:   "apply",
-		Short: "Run a client workflow from a config file",
+		Short: "Run a stream, sync, or inspect workflow",
 		Long:  `Run a stream, sync, or inspect workflow defined in a YAML config file.`,
 		Example: `  ncli apply -f sync.yaml
   ncli apply -f sync.yaml --strict-pow`,

@@ -12,11 +12,9 @@ import (
 
 var versionCmd = &cobra.Command{
 	Use:   "version",
-	Short: "Print version and app data location information",
-	Long: `Print build version information along with the on-disk locations ncli
-reads and writes: the app data directory, prefs file, vault file, and log
-directory. --json prints the same information as structured JSON, for
-scripts or an AI agent.`,
+	Short: "Show the version and on-disk paths",
+	Long: `Show build version information and the on-disk locations ncli reads and
+writes: app data directory, prefs file, vault file and log directory.`,
 	Example: `  ncli version`,
 	// version just reads embedded build info, so it skips the root's
 	// PersistentPreRun (config loading, log dir/crash log setup) instead

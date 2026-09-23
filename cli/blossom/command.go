@@ -13,13 +13,12 @@ import (
 func NewBlossomCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "blossom",
-		Short: "Upload, fetch, and manage content on Blossom media servers",
+		Short: "Manage content on Blossom media servers",
 		Long: `A client for the Blossom protocol (BUD-01..12): content-addressed blob
-storage authenticated with a Nostr identity instead of a login.
+storage authenticated with a Nostr identity.
 
-Writes (upload, rm, mirror) fan out to every configured server and exit
-non-zero if any one failed; download tries them in order until one
-answers.`,
+upload, rm and mirror write to every configured server and exit non-zero
+if any fails. download reads from them in order until one answers.`,
 		Example: `  ncli blossom upload ./photo.jpg --identity satoshi
   ncli blossom download <hash> -o photo.jpg
   ncli blossom servers list`,

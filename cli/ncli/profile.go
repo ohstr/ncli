@@ -62,14 +62,10 @@ type nip05Status struct {
 func newProfileCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "profile <identifier>",
-		Short: "Show a readable profile card for an identity",
-		Long: `Looks up one identity's published records in a single query -- profile
-metadata (kind:0), contact list (kind:3), relay list (kind:10002), and
-Blossom server list (kind:10063) -- and prints them as one card.
-
-Unlike "find", this aggregates across every target instead of stopping at
-the first one with a match, since a relay list often lives on a different
-relay than the profile.`,
+		Short: "Display an identity's published profile",
+		Long: `Display the profile metadata, following count, relay list, Blossom
+servers and lightning address published by an identity. Records are
+merged across all targets.`,
 		Example: `  ncli profile npub1...
   ncli profile name@example.com
   ncli profile satoshi --json`,

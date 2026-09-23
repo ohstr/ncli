@@ -10,10 +10,9 @@ import (
 )
 
 var prefsCmd = &cobra.Command{
-	Use:   "prefs",
-	Short: "Manage persistent ncli preferences",
-	Long: `Manage preferences that persist across projects. Currently just the
-default relay list that find, dump, and miner check fall back to.`,
+	Use:     "prefs",
+	Short:   "Manage persistent ncli preferences",
+	Long:    `Manage the preferences ncli persists across projects.`,
 	Example: `  ncli prefs relays list`,
 	RunE:    common.RequireSubcommand,
 }
@@ -21,7 +20,7 @@ default relay list that find, dump, and miner check fall back to.`,
 var prefsRelaysCmd = &cobra.Command{
 	Use:     "relays",
 	Short:   "Manage the default relay list",
-	Long:    `Manage the relay list find, dump, and miner check consult when not given explicit targets.`,
+	Long:    `Manage the relay list used when a command is given no explicit targets.`,
 	Example: `  ncli prefs relays list`,
 	RunE:    common.RequireSubcommand,
 }

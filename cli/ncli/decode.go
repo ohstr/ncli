@@ -12,11 +12,11 @@ import (
 var decodeCmd = &cobra.Command{
 	Use:   "decode <entity>",
 	Short: "Decode a NIP-19 entity, cash token, or hub connection",
-	Long: `Decodes whichever bech32 shape you paste in -- a NIP-19 entity (npub,
-nsec, note, nprofile, nevent, naddr), a NIP-CASH cash token, or a NIP-CW
-circlehub1... connection -- into its hex keys, relay hints and metadata.
+	Long: `Decode a bech32 string -- a NIP-19 entity (npub, nsec, note, nprofile,
+nevent, naddr), a NIP-CASH cash token, or a NIP-CW circlehub1...
+connection -- into its hex keys, relay hints and metadata.
 
-A pairing secret is never included in the output.`,
+Pairing secrets are never printed.`,
 	Example: `  ncli decode npub1...
   ncli decode nevent1...
   ncli decode npub1... --json`,

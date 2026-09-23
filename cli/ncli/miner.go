@@ -32,10 +32,10 @@ var minerMineCmd = &cobra.Command{
 	Short: "Mine proof-of-work into an unsigned event",
 	Long: `Mine NIP-13 proof-of-work for an event across multiple CPU cores.
 
-The event comes from --event, or inline from --content/--content-file --
-pick one, not both. Exactly one of --out or --in-place says where the
-result goes. If --identity resolves to a private key, the mined event is
-signed before it's written.`,
+The event comes from --event, or inline from --content/--content-file;
+these cannot be combined. Exactly one of --out or --in-place is
+required. A mined event is signed if --identity resolves to a private
+key.`,
 	Example: `  ncli miner mine -e event.json -o mined.json
   ncli miner mine -e event.json --in-place --workers 4
   ncli miner mine --content "hello" --identity satoshi -d 20 -o mined.json`,
@@ -266,11 +266,10 @@ var minerCheckCmd = &cobra.Command{
 	Use:   "check",
 	Short: "Verify proof-of-work",
 	Long: `Verify NIP-13 proof-of-work on already-mined events, read from --events
-or fetched live across every target. Exits non-zero if any event fails,
-so it drops straight into CI.
+or fetched live from every target. Exits non-zero if any event fails.
 
-Live mode takes --targets, or --relays plus inline filter flags -- pick
-one, not both. Omitting both falls back to "ncli prefs relays".`,
+--targets cannot be combined with --relays or the inline filter flags.
+Omit both to use the relays from "ncli prefs relays".`,
 	Example: `  ncli miner check -e events.json
   ncli miner check -t targets.yaml`,
 	Args: func(cmd *cobra.Command, args []string) error {

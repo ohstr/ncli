@@ -46,7 +46,7 @@ var (
 func addRemoteAdminCommands(cmd *cobra.Command) {
 	statsCmd := &cobra.Command{
 		Use:     "stats",
-		Short:   "Display live relay metrics and worker status",
+		Short:   "Show live relay metrics and worker status",
 		Example: `  ncli relay stats --config relay.yaml`,
 		RunE:    runStats,
 	}
@@ -99,8 +99,7 @@ func addMembershipAdminCommands(cmd *cobra.Command) {
 	})
 	membersAddCmd := &cobra.Command{
 		Use: "add <pubkey>", Short: "Enroll a pubkey as a member",
-		Long: `Enroll a pubkey as a member directly -- bypasses the self-service
-invite-code join flow, no invite claim required.`,
+		Long: `Enroll a pubkey as a member directly, without an invite code.`,
 		Example: `  ncli relay members add <pubkey> --config relay.yaml
   ncli relay members add <pubkey> --role member --config relay.yaml`,
 		Args: common.ExactArgs(1), RunE: runMembersAdd,
@@ -122,8 +121,8 @@ invite-code join flow, no invite claim required.`,
 	}
 	invitesCreateCmd := &cobra.Command{
 		Use: "create", Short: "Issue a new invite code",
-		Long: `Issue a new invite code, for handing out out-of-band (a signup email, a
-Discord invite flow) before the invitee has a working Nostr client.`,
+		Long: `Issue an invite code to hand out before the invitee has a working Nostr
+client.`,
 		Example: `  ncli relay invites create --config relay.yaml
   ncli relay invites create --ttl 24h --max-uses 10 --config relay.yaml`,
 		RunE: runInvitesCreate,
@@ -157,9 +156,8 @@ Discord invite flow) before the invitee has a working Nostr client.`,
 	})
 	rolesCreateCmd := &cobra.Command{
 		Use: "create <id>", Short: "Create a role definition",
-		Long: `NIP-43 defines no "delete" for a role -- once created, an id can only be
-superseded (re-run "create" with the same id and new label/description/
-color/order), never removed.`,
+		Long: `Create a role definition, or supersede an existing one. NIP-43 has no
+delete: re-run with the same id to replace it.`,
 		Example: `  ncli relay roles create moderator --label Moderator --config relay.yaml`,
 		Args:    common.ExactArgs(1), RunE: runRolesCreate,
 	}
@@ -232,8 +230,9 @@ func adminRequestBody(cmd *cobra.Command, method, path string, body interface{})
 		// nip11.privkey missing from config -- a missing-required-config
 		// mistake, classified here (rather than at each of stats/reindex/
 		// clear's own RunE) since wrapCLIError keeps this code even when
-		// the caller re-wraps it via common.RuntimeError.
-		return nil, &common.CLIError{Err: err, Code: common.CodeUsage}
+		// the caller re-wraps it via common.RuntimeError. Help follows the
+		// error because the fix is a flag the caller can see there.
+		return nil, &common.CLIError{Err: err, Code: common.CodeUsage, Help: common.HelpAfterError}
 	}
 
 	url := fmt.Sprintf("http://localhost:%d%s", port, path)

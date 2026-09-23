@@ -20,9 +20,8 @@ import (
 var idCmd = &cobra.Command{
 	Use:   "id [identifier]",
 	Short: "Generate or inspect a Nostr identity",
-	Long: `With no argument, generates a new Nostr keypair. With an identifier --
-a vault label, npub, hex pubkey, nsec, nprofile, or nip-05 address --
-resolves and displays it instead.
+	Long: `Generate a new keypair, or resolve and display an existing identity
+given a vault label, npub, hex pubkey, nsec, nprofile or nip-05 address.
 
 --json disables interactive prompts and reads the vault password from
 NCLI_VAULT_PASSWORD.`,

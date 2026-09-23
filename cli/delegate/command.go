@@ -28,14 +28,11 @@ func NewDelegateCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delegate",
 		Short: "Generate a NIP-26 delegation token",
-		Long: `Launch an interactive wizard that creates and signs NIP-26 delegation
-tokens. With --issuer set (via flag or NCLI_DELEGATE_ISSUER), skips the
-wizard and generates the token non-interactively instead.
+		Long: `Create and sign a NIP-26 delegation token. Runs an interactive wizard
+unless --issuer is set, via the flag or NCLI_DELEGATE_ISSUER.
 
---issuer and --delegatee both accept a vault label, nsec, npub, hex
-pubkey, nprofile, or nip-05 address, and must resolve to a private key --
-a pubkey-only identity has nothing to sign or derive a delegatee key from
-and is rejected.`,
+--issuer and --delegatee accept a vault label, nsec, npub, hex pubkey,
+nprofile or nip-05 address, and must resolve to a private key.`,
 		Example: `  ncli id delegate
   ncli id delegate --issuer satoshi --delegatee npub1... --kinds 1`,
 		RunE: func(cmd *cobra.Command, args []string) error {

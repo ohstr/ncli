@@ -22,7 +22,7 @@ docs drifting from what's actually shipped.
   `localhost` with no `--url` override.
 
 Nine rounds (`rounds/r0-bootstrap.md` .. `r8-error-contract.md`) cover
-install, identity, public-relay queries, relay admin, publish/apply,
+install, identity, relay queries, relay admin, publish/apply,
 PoW mining, NIP-46 bunker signing, Blossom, and the documented
 error-code contract. Each round is a fresh, non-interactive `claude -p`
 call with no memory of prior rounds, though the container filesystem

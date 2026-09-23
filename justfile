@@ -12,9 +12,8 @@ build:
 test:
     go test -short -race ./...
 
-# Run the live-relay integration tests (hits real public Nostr relays; not run in CI)
+# Run the live-relay integration tests (hits relay.ohstr.com; not run in CI)
 test-integration:
-    go test ./client/... -run 'TestMultiRelaySync|TestNegSync_Integration' -v -count=1
     go test -tags integration ./cli/bunker/... -run Live -v -count=1
 
 # Run the stream integration test (needs Docker; brings up/tears down its
@@ -182,8 +181,8 @@ inspect-stress cmd="up" *args:
     *) echo "unknown inspect-stress subcommand: {{cmd}} (expected up|down)" >&2 && exit 1 ;;
     esac
 
-# Local sync e2e test stack (one real ncli relay container -- see
-# integration/sync/README.md): [up|down]. The Go test behind
+# Local sync e2e test stack (two real ncli relay containers, 45520 and
+# 45521 -- see integration/sync/README.md): [up|down]. The Go test behind
 # `just test-integration-sync` manages its own compose lifecycle, so this
 # is for poking at the stack by hand.
 sync cmd="up" *args:

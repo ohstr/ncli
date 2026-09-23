@@ -47,8 +47,8 @@ conditions (reconnects, timing, fan-in/fan-out).
   body (see `testSyncMaxReconcileRoundsTooLowSurfacesCleanly` vs.
   `testSyncReconcileCompleteness`).
 - **Compose naming**: `name: ncli-<feature>-itest`, a distinct port range
-  per stack (stream 45500s, inspect 45510s, sync 45520, stress stacks
-  45560s/45590s).
+  per stack (stream 45500s, inspect 45510-45512, sync 45520-45521, stress
+  stacks 45560s/45590s).
 - **Real relay images, not mocks** -- built from `build/relay/Dockerfile`.
 - **In-process client, not a compose service** -- same call `ncli apply`
   makes, but white-box.
@@ -61,9 +61,8 @@ conditions (reconnects, timing, fan-in/fan-out).
   client's self-report alone.
 - **Shared harness**: `client/integrationharness_test.go` holds generic
   helpers; each `*_integration_test.go` holds only what's feature-specific.
-- **Skip-gating**: `testing.Short()` + a `docker` PATH check, matching
-  `client/multi_relay_test.go`'s convention (not `cli/bunker`'s
-  `-tags integration`).
+- **Skip-gating**: `testing.Short()` + a `docker` PATH check, rather than
+  `cli/bunker`'s `-tags integration`.
 - **Fixed test-only keys**: `integrationPrivKey`/`integrationPrivKeyAlt` in
   the harness sign every event; no reason to generate fresh ones per run.
 

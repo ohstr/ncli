@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Ground truth for R2: independently re-run the same read-only queries
-# against the real public relay, and confirm the relay list was left
-# clean as the round instructs.
+# against the stack's own relay (seeded by run.sh's prepare_r2), and
+# confirm the relay list was left clean as the round instructs.
 set -uo pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 source bin/lib.sh
@@ -12,18 +12,25 @@ self_report_exists "${RUN_DIR}" "${ROUND}" \
   && add_check "self_report_written" true "present" \
   || add_check "self_report_written" false "missing"
 
-PING="$(agent_exec 'ncli ping wss://relay.ohstr.com --json' 2>/dev/null)"
+PING="$(agent_exec 'ncli ping ws://localhost:5500 --json' 2>/dev/null)"
 if jq -e '.reachable >= 1' >/dev/null 2>&1 <<<"${PING}"; then
-  add_check "public_relay_reachable" true "ncli ping wss://relay.ohstr.com --json -> reachable"
+  add_check "relay_reachable" true "ncli ping ws://localhost:5500 --json -> reachable"
 else
-  add_check "public_relay_reachable" false "ncli ping: ${PING}"
+  add_check "relay_reachable" false "ncli ping: ${PING}"
 fi
 
-FOUND="$(agent_exec 'ncli find --kinds 1 --limit 1 -s wss://relay.ohstr.com' 2>/dev/null)"
-if jq -e 'type == "array" and length >= 1' >/dev/null 2>&1 <<<"${FOUND}"; then
-  add_check "find_returns_real_events" true "find returned $(jq 'length' <<<"${FOUND}") kind:1 event(s)"
+# prepare_r2 seeds exactly this many, all carrying the same content marker.
+# Assert every one came back rather than ">= 1": the harness controls this
+# corpus now, so a half-failed seed must fail here instead of passing on a
+# single survivor. Matching on the marker keeps this correct if the rounds
+# are run in an order that leaves other events on the relay.
+SEEDED_COUNT=8
+FOUND="$(agent_exec 'ncli find --kinds 1 --limit 50 -s ws://localhost:5500' 2>/dev/null)"
+MARKED="$(jq '[.[] | select(.content | startswith("ncli eval seed "))] | length' <<<"${FOUND}" 2>/dev/null || echo 0)"
+if [ "${MARKED}" = "${SEEDED_COUNT}" ]; then
+  add_check "find_returns_seeded_events" true "find returned all ${SEEDED_COUNT} seeded kind:1 event(s)"
 else
-  add_check "find_returns_real_events" false "find did not return a non-empty array: ${FOUND}"
+  add_check "find_returns_seeded_events" false "expected ${SEEDED_COUNT} seeded event(s), got ${MARKED}: ${FOUND}"
 fi
 
 RELAYS="$(agent_exec 'ncli prefs relays list --json' 2>/dev/null)"

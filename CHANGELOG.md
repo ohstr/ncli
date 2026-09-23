@@ -1,5 +1,47 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- `testdata/events.json` -- 339 real, signed events across 10 kinds
+  (metadata, notes, contacts, reposts, reactions, reports, zap receipts,
+  relay lists, blossom servers, long-form), so a test needing a realistic
+  corpus doesn't have to fetch one. The whole set round-trips through
+  `ncli relay` (339/339 stored and read back), and
+  `client/fixtures_test.go` re-verifies every signature and the kind mix on
+  each run, with no network.
+
+### Changed
+
+- Negentropy coverage no longer depends on a public relay. The sync stack
+  runs two relay instances now, and `TestSyncIntegration`'s
+  `NegentropyPropagatesBetweenRelayInstances` seeds one, reconciles it
+  into a local store, then pushes that store into the other.
+  `TestNegSync_Integration`, which hit `wss://relay.ohstr.com`, is gone.
+- `integration/agent-eval`'s R2 round queries the stack's own seeded relay
+  instead of `wss://relay.ohstr.com`.
+- Removed `TestMultiRelaySync`, which streamed from two public relays.
+  `TestStreamIntegration`'s real relay containers already cover multi-source
+  fan-in hermetically, and the live version had accumulated a classifier to
+  excuse its own firehose-dependent failures. `just test-integration` now
+  runs only the `cli/bunker` live suite.
+
+### Fixed
+
+- `integration/agent-eval` could report on a previous run's data: rounds
+  write self-reports to a flat path under `report/` that nothing cleared
+  beforehand. Cleared before each round now.
+- `integration/agent-eval` reused a leftover `.env` vault password across
+  runs instead of generating a fresh one each run. The file itself is
+  still left in place, so a post-mortem `docker compose` in that directory
+  keeps working.
+- `integration/agent-eval`'s R6 pre-start discarded its own output, so an
+  identity failure surfaced only as a generic "daemon did not come up"
+  warning 15s later.
+- `integration/agent-eval`'s R8 verifier shared fixed `/tmp` paths between
+  probes and never cleaned them up.
+
 ## [0.6.0]
 
 ### Added

@@ -44,10 +44,10 @@ func newValidPowTestEvent(t *testing.T) *nip01.Event {
 	return ev
 }
 
-// TestHasValidPow covers neg_sync.go's hasValidPow helper directly (no
-// network involved, unlike TestNegSync_Integration): an event with no nonce
-// tag has nothing to enforce, one with a genuinely mined nonce passes, and
-// one with an unmined/mismatched nonce fails.
+// TestHasValidPow covers neg_sync.go's hasValidPow helper directly, with
+// no relay involved: an event with no nonce tag has nothing to enforce,
+// one with a genuinely mined nonce passes, and one with an
+// unmined/mismatched nonce fails.
 func TestHasValidPow(t *testing.T) {
 	if !hasValidPow(nip01.NewEvent(1, "no nonce")) {
 		t.Fatal("expected an event with no nonce tag to have nothing to enforce")

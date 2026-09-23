@@ -1,18 +1,24 @@
 # Sync e2e integration test stack
 
-One real `ncli relay` container, testing `ncli apply -f sync.yaml`'s
-negentropy two-way reconciliation end-to-end. Replaces the only prior sync
-coverage, `client/neg_sync_test.go`'s `TestNegSync_Integration`, which
-depends on a live public relay -- kept, still a useful smoke test, just
-not one this repo can gate a regression on with any determinism.
+Two real `ncli relay` containers -- the same relay config run twice --
+testing `ncli apply -f sync.yaml`'s negentropy two-way reconciliation
+end-to-end. Replaces the only prior negentropy coverage,
+`client/neg_sync_test.go`'s `TestNegSync_Integration`, which depended on a
+live public relay and has been deleted: once that relay stopped serving
+websockets the test had no way to tell an outage apart from a regression.
 
-Sync is a **two-endpoint** flow, never multi-relay (`SyncSpec.UnmarshalJSON`
-rejects more than one local store or remote relay) -- one relay service,
-not several.
+Sync itself is a **two-endpoint** flow, never multi-relay
+(`SyncSpec.UnmarshalJSON` rejects more than one local store or remote
+relay). The second container isn't a second endpoint for one sync -- it's
+the destination of a *second* sync run, which is how
+`NegentropyPropagatesBetweenRelayInstances` gets events from one relay to
+the other without the two ever talking directly. Relays only answer
+NEG-OPEN; they never initiate reconciliation with each other.
 
 ## What's here
 
-- `compose.yaml` -- one `remote` service (45520), project `ncli-sync-itest`.
+- `compose.yaml` -- `remote` (45520) and `remote2` (45521, empty at
+  startup), project `ncli-sync-itest`.
 - `relay.yaml` -- minimal relay config.
 - `sync.yaml` -- spec fixture, `direction: both`.
 
@@ -24,7 +30,7 @@ just test-integration-sync
 
 Runs `TestSyncIntegration`. Needs Docker; runs automatically in CI.
 
-Four scenarios:
+Five scenarios:
 
 - **`ReconcileCompleteness`** -- `/Small` and `/Large`: seeds each side
   with events the other lacks, asserts both directions land (verified
@@ -39,6 +45,12 @@ Four scenarios:
 - **`FilterCorrectness`** -- a single filter with 2 kinds + 1 author;
   asserts matching events reconcile and non-matching ones stay excluded.
   Not multiple filter objects -- see "Confirmed gap" below.
+- **`NegentropyPropagatesBetweenRelayInstances`** -- seeds `remote` with a
+  known set, reconciles it down into a temp local store, then pushes that
+  store up into the empty `remote2`, asserting every seeded ID arrives.
+  Checks `remote2` is empty first, so the assertion can't pass on
+  pre-existing data. This is the hermetic replacement for the deleted
+  live-relay negentropy test.
 
 ## Confirmed gap: multiple filter objects don't work correctly for sync
 

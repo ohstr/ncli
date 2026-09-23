@@ -21,9 +21,11 @@ const (
 	syncIntegrationComposeFile = "../integration/sync/compose.yaml"
 	syncIntegrationSpecFile    = "../integration/sync/sync.yaml"
 	syncIntegrationRemoteURL   = "ws://localhost:45520"
+	// Second instance of the same relay config, empty at startup.
+	syncIntegrationRemoteBURL = "ws://localhost:45521"
 )
 
-// TestSyncIntegration brings up compose.yaml's one real relay container
+// TestSyncIntegration brings up compose.yaml's two real relay containers
 // once, then runs each scenario as a subtest. Needs Docker.
 func TestSyncIntegration(t *testing.T) {
 	if testing.Short() {
@@ -41,12 +43,13 @@ func TestSyncIntegration(t *testing.T) {
 		}
 	})
 
-	waitForRelayReady(t, syncIntegrationRemoteURL, 60*time.Second)
+	waitForAllRelaysReady(t, []string{syncIntegrationRemoteURL, syncIntegrationRemoteBURL}, 60*time.Second)
 
 	t.Run("ReconcileCompleteness", testSyncReconcileCompleteness)
 	t.Run("FilterCorrectness", testSyncFilterCorrectness)
 	t.Run("MaxReconcileRoundsTooLowSurfacesCleanly", testSyncMaxReconcileRoundsTooLowSurfacesCleanly)
 	t.Run("RemoteStallTriggersTimeoutNotHang", testSyncRemoteStallTriggersTimeoutNotHang)
+	t.Run("NegentropyPropagatesBetweenRelayInstances", testSyncNegentropyPropagatesBetweenRelayInstances)
 }
 
 // testSyncReconcileCompleteness: seeds each side of a `direction: both`
@@ -301,6 +304,87 @@ func testSyncRemoteStallTriggersTimeoutNotHang(t *testing.T) {
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
+}
+
+// testSyncNegentropyPropagatesBetweenRelayInstances runs the same relay
+// config twice and moves a known event set from one instance to the other:
+// seed A, reconcile it down into a local store, then push that store up
+// into the empty B. Replaces the old live-relay negentropy test -- no
+// third-party relay is involved, so the event set is exact rather than
+// whatever a public relay happened to be serving.
+func testSyncNegentropyPropagatesBetweenRelayInstances(t *testing.T) {
+	const n = 25
+
+	// The preceding subtest pauses A's container; don't race its unpause.
+	waitForRelayReady(t, syncIntegrationRemoteURL, 30*time.Second)
+
+	// The earlier subtests left several hundred events on A. Scope both
+	// legs to what this one seeds, or sync.yaml's `since: 0` drags all of
+	// them through the pull and the push -- and grows again every time a
+	// subtest is added above.
+	since := uint64(time.Now().Unix())
+	seeded := publishManyEvents(t, syncIntegrationRemoteURL, n, "negsync")
+	scope := &nip01.SubscriptionFilter{
+		Kinds:   []int{1},
+		Authors: []string{integrationPubKey},
+		Since:   since,
+	}
+
+	// B must not already hold them, or the push assertion proves nothing.
+	if found := fetchEventIDsFromRelay(t, syncIntegrationRemoteBURL, seeded); len(found) > 0 {
+		t.Fatalf("relay B already holds %d/%d seeded event(s) before any sync ran", len(found), n)
+	}
+
+	localPath := filepath.Join(t.TempDir(), "negsync.db")
+
+	runSyncLeg(t, syncIntegrationRemoteURL, localPath, SyncDirectionDown, scope)
+	if missing := waitForEventsInLocalStore(t, localPath, seeded, 20*time.Second); len(missing) > 0 {
+		t.Fatalf("pull from A: %d/%d event(s) never landed in the local store: %v", len(missing), n, missing)
+	}
+
+	runSyncLeg(t, syncIntegrationRemoteBURL, localPath, SyncDirectionUp, scope)
+	if missing := waitForEventsAtRelay(t, syncIntegrationRemoteBURL, seeded, 20*time.Second); len(missing) > 0 {
+		t.Errorf("push to B: %d/%d event(s) never reached the second relay instance: %v", len(missing), n, missing)
+	}
+}
+
+// runSyncLeg runs one direction of a sync between the local store at
+// localPath and relayURL, scoped to filter, then closes the module --
+// bbolt is exclusive, so the handle must be released before the next leg
+// opens the same file.
+func runSyncLeg(t *testing.T, relayURL, localPath, direction string, filter *nip01.SubscriptionFilter) {
+	t.Helper()
+
+	spec := loadTestSyncSpec(t)
+	spec.GetLocal().Path = localPath
+	spec.Direction = direction
+	spec.Filters = []*FilterSpec{NewFilterSpec(filter)}
+
+	// Only the private remote pointer is read from here on -- From and To
+	// are consumed by UnmarshalJSON to populate it. newRemoteFlowSpec
+	// resolves relayURI/relayFallbackURI.
+	spec.remote = newRemoteFlowSpec(t, relayURL, true, 0)
+
+	sm, err := NewSyncModule(spec, nil, false)
+	if err != nil {
+		t.Fatalf("NewSyncModule(%s, %s) failed: %v", relayURL, direction, err)
+	}
+	// Closed explicitly below so the next leg can open the same file;
+	// registered too so a t.Fatal mid-leg still releases it. Both Close
+	// paths are sync.Once-guarded, so the double call is safe.
+	t.Cleanup(sm.Close)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	logger, err := sm.Run(ctx)
+	if err != nil {
+		t.Fatalf("sm.Run(%s, %s) failed: %v", relayURL, direction, err)
+	}
+	waitForSyncComplete(t, logger, 90*time.Second)
+	// EventStore.Close waits on its workers and closes the db inline, so
+	// the handle is gone by the time this returns -- no settling sleep.
+	sm.Close()
 }
 
 func loadTestSyncSpec(t *testing.T) *SyncSpec {

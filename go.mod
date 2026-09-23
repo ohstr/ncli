@@ -68,7 +68,7 @@ require (
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
-	github.com/ohstr/nmilat v0.3.1
+	github.com/ohstr/nmilat v0.4.0
 	github.com/spf13/pflag v1.0.10
 	golang.org/x/sync v0.20.0
 	golang.org/x/sys v0.45.0

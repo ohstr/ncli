@@ -19,11 +19,18 @@ else
   add_check "relay_reachable" false "ncli ping: ${PING}"
 fi
 
-FOUND="$(agent_exec 'ncli find --kinds 1 --limit 1 -s ws://localhost:5500' 2>/dev/null)"
-if jq -e 'type == "array" and length >= 1' >/dev/null 2>&1 <<<"${FOUND}"; then
-  add_check "find_returns_real_events" true "find returned $(jq 'length' <<<"${FOUND}") kind:1 event(s)"
+# prepare_r2 seeds exactly this many, all carrying the same content marker.
+# Assert every one came back rather than ">= 1": the harness controls this
+# corpus now, so a half-failed seed must fail here instead of passing on a
+# single survivor. Matching on the marker keeps this correct if the rounds
+# are run in an order that leaves other events on the relay.
+SEEDED_COUNT=8
+FOUND="$(agent_exec 'ncli find --kinds 1 --limit 50 -s ws://localhost:5500' 2>/dev/null)"
+MARKED="$(jq '[.[] | select(.content | startswith("ncli eval seed "))] | length' <<<"${FOUND}" 2>/dev/null || echo 0)"
+if [ "${MARKED}" = "${SEEDED_COUNT}" ]; then
+  add_check "find_returns_seeded_events" true "find returned all ${SEEDED_COUNT} seeded kind:1 event(s)"
 else
-  add_check "find_returns_real_events" false "find did not return a non-empty array: ${FOUND}"
+  add_check "find_returns_seeded_events" false "expected ${SEEDED_COUNT} seeded event(s), got ${MARKED}: ${FOUND}"
 fi
 
 RELAYS="$(agent_exec 'ncli prefs relays list --json' 2>/dev/null)"

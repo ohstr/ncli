@@ -21,10 +21,11 @@ RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 RUN_DIR="report/${RUN_ID}"
 mkdir -p "${RUN_DIR}"
 mkdir -p report
-# uid 10001 == evaluser in agent/Dockerfile. The container writes its
-# self-reports straight into this bind mount, so it has to own it --
-# narrower than making the directory world-writable.
-chown 10001:10001 report
+# uid 10001 == evaluser in agent/Dockerfile writes its self-reports
+# straight into this bind mount. World-writable rather than chown'd: this
+# directory is tracked (report/.gitkeep), so chown would need root and
+# would leave the developer's own checkout owned by a foreign uid.
+chmod 777 report
 
 echo "==> run ${RUN_ID}: ${ROUNDS[*]}"
 
@@ -52,10 +53,12 @@ echo "NCLI_VAULT_PASSWORD=$(head -c 24 /dev/urandom | base64 | tr -dc 'A-Za-z0-9
 
 cleanup() {
   echo "==> tearing down"
-  # `down` reads .env, so it has to go first.
   docker compose down -v >/dev/null 2>&1 || true
   rm -rf .creds-seed
-  rm -f .env
+  # .env is deliberately left in place: compose reads it, and deleting it
+  # would make a post-mortem `docker compose logs/ps/exec` here run with a
+  # blank vault password. Rewriting it per run (above) is what keeps the
+  # password from going stale.
 }
 trap cleanup EXIT
 
@@ -119,12 +122,14 @@ prepare_r2() {
   if ! docker compose exec -T agent bash -lc '
     set -e
     export PATH="$HOME/.local/bin:$PATH"
+    unsigned=$(mktemp) && signed=$(mktemp)
+    trap "rm -f \"$unsigned\" \"$signed\"" EXIT
     ncli id eval-seed --json >/dev/null 2>&1 || ncli id --save --label eval-seed --json >/dev/null
-    jq -nc "[range(0;8) | {kind:1, content:(\"ncli eval seed \" + (.|tostring)), created_at:((now|floor) - .), tags:[]}]" > /tmp/r2-seed-unsigned.json
-    ncli id sign -e /tmp/r2-seed-unsigned.json -o /tmp/r2-seed.json --identity eval-seed >/dev/null
-    ncli publish -e /tmp/r2-seed.json -s ws://localhost:5500 >/dev/null
+    jq -nc "[range(0;8) | {kind:1, content:(\"ncli eval seed \" + (.|tostring)), created_at:((now|floor) - .), tags:[]}]" > "$unsigned"
+    ncli id sign -e "$unsigned" -o "$signed" --identity eval-seed >/dev/null
+    ncli publish -e "$signed" -s ws://localhost:5500 >/dev/null
   '; then
-    echo "ERROR: [r2-query] could not seed the relay -- R2 will have nothing to query" >&2
+    echo "ERROR: [r2-query] could not seed the relay -- R2 will have nothing to query (ncli is installed by r0-bootstrap; running this round on its own skips that)" >&2
   fi
 }
 

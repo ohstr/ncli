@@ -12,15 +12,11 @@ import (
 
 var idSignCmd = &cobra.Command{
 	Use:   "sign",
-	Short: "Sign one or more unsigned events with a Nostr identity",
-	Long: `Sign an unsigned event (or array of them) with --identity's private key.
+	Short: "Sign unsigned events with a Nostr identity",
+	Long: `Sign an unsigned event, or an array of them, with --identity's private
+key. --out is written in the shape it was read.
 
---events accepts a single event or an array; --out is written in the same
-shape, so it chains directly into "ncli publish --events <out>" or
-"ncli miner check --events <out>".
-
-Fails if an event already declares a pubkey that conflicts with
---identity's resolved pubkey, rather than re-signing under a different key.`,
+Fails if an event already declares a different pubkey.`,
 	Example: `  ncli id sign -e events.json -o signed.json --identity satoshi`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		if err := cmd.ValidateRequiredFlags(); err != nil {

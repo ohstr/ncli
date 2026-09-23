@@ -29,12 +29,12 @@ func newDownloadCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "download <hash|blossom-uri|url>",
 		Short: "Download a blob by hash, blossom: URI, or server URL",
-		Long: `Accepts a bare sha256 hash, a "blossom:<hash>.<ext>" URI (BUD-10), or a
-server URL ending in a hash -- tries the configured servers in order
-(--server, or the default list), stopping at the first that answers.
+		Long: `Download a blob, given a bare sha256 hash, a "blossom:<hash>.<ext>" URI
+(BUD-10), or a server URL ending in a hash. Servers are tried in order
+until one answers.
 
-Writes to --output, or "<hash>.<ext>" in the current directory if
-omitted, or streams to stdout with "-o -" (suppressing the summary line).`,
+Writes to --output, or to "<hash>.<ext>" in the current directory. Use
+"-o -" to stream to stdout.`,
 		Example: `  ncli blossom download <hash>
   ncli blossom download <hash> -o -`,
 		Args: common.ExactArgs(1),

@@ -20,7 +20,7 @@ func newServersCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "servers",
 		Short:   "Manage the default Blossom server list",
-		Long:    `Manage the server list "ncli blossom" commands fall back to when not given explicit --server flags.`,
+		Long:    `Manage the server list used when a command is given no --server flag.`,
 		Example: `  ncli blossom servers list`,
 		RunE:    common.RequireSubcommand,
 	}
@@ -267,14 +267,12 @@ func newServersDiscoverCommand() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "discover <identifier>",
-		Short: "Discover another identity's published server list (BUD-03)",
-		Long: `Resolves <identifier> (vault label/nsec/npub/hex pubkey/nprofile/nip-05)
-to a pubkey, then queries your configured Nostr relays for that pubkey's
-most recent kind:10063 server-list event, and prints the servers it
-declares.
+		Short: "Show another identity's published server list",
+		Long: `Print the Blossom servers another identity has published, from their
+most recent kind:10063 event (BUD-03).
 
-Unlike "servers add/remove/list", which manage your own default list,
-this looks up someone else's published servers.`,
+identifier accepts a vault label, npub, hex pubkey, nprofile or nip-05
+address.`,
 		Example: `  ncli blossom servers discover npub1...`,
 		Args:    common.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {

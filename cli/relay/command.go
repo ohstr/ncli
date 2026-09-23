@@ -77,7 +77,7 @@ var (
 	// say that plainly instead of blaming a specific (nonexistent)
 	// required field. Shared with getAdminConfig in admin.go, which hits
 	// the same situation via a different missing field (nip11.privkey).
-	errNoRelayConfig = errors.New(`no relay config found -- pass --config, run "ncli relay context use <name>", or add ncli.yaml/relay.yaml here`)
+	errNoRelayConfig = errors.New("no relay config found; pass --config <file> or --context <name>")
 )
 
 type RelayConfig struct {
@@ -229,12 +229,14 @@ type AgentAuthConfig struct {
 func NewRelayCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "relay",
-		Short: "Run the relay server, or operate one that's already running",
-		Long: `Bare invocation runs the Nostr relay server. Its subcommands instead
-operate a relay that's already running, over NIP-98 authenticated HTTP.
+		Short: "Run and operate a Nostr relay",
+		Long: `Run the Nostr relay server. The subcommands operate a relay that is
+already running, over NIP-98 authenticated HTTP.
 
--c/--context <name> runs against a named relay context, creating a
-minimal one backed by a fresh identity if that name isn't saved yet.`,
+The config is read from --config, the current relay context, or an
+ncli.yaml or relay.yaml in the working directory, in that order.
+-c/--context runs against a named context, creating a minimal one backed
+by a fresh identity if that name isn't saved yet.`,
 		Example: `  ncli relay --config relay.yaml
   ncli relay --context myrelay
   ncli relay stats --config relay.yaml`,
@@ -285,7 +287,7 @@ func initConfig() error {
 		}
 		ev.Msg("using config file")
 	} else {
-		return &common.CLIError{Err: errNoRelayConfig, Code: common.CodeUsage}
+		return &common.CLIError{Err: errNoRelayConfig, Code: common.CodeUsage, Help: common.HelpAfterError}
 	}
 
 	if err := viper.Unmarshal(&config); err != nil {

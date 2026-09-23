@@ -35,12 +35,11 @@ func NewBunkerCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "bunker",
 		Short: "Run ncli as a NIP-46 remote signer",
-		Long: `Run ncli as a NIP-46 "bunker": listen on relays for other clients'
-signing requests, approve or reject them from a live TUI, and remember
-per-app decisions so you aren't re-prompted every time.
+		Long: `Listen on relays for other clients' NIP-46 signing requests and approve
+or reject them from a TUI. Per-app decisions are remembered.
 
-On Linux/macOS this leaves a background daemon running when the TUI
-closes; reattach with "ncli bunker attach".`,
+On Linux and macOS a background daemon keeps running when the TUI
+closes. Reattach with "ncli bunker attach".`,
 		Example: `  ncli bunker
   ncli bunker --identity satoshi
   ncli bunker attach`,
@@ -92,9 +91,8 @@ func newAttachCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "attach",
 		Short: "Reattach the TUI to a running bunker daemon",
-		Long: `Reconnect the interactive TUI to a bunker daemon already started with
-"ncli bunker" and left running in the background. Never starts one
-itself -- fails if none is running (use "ncli bunker" for that).`,
+		Long: `Reconnect the TUI to a bunker daemon already running in the background.
+Never starts one; fails if none is running.`,
 		Example: `  ncli bunker attach`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := requireInteractive(cmd); err != nil {
@@ -350,7 +348,7 @@ func newSessionsCommand() *cobra.Command {
 
 	cmd.AddCommand(&cobra.Command{
 		Use:     "grants <pubkey>",
-		Short:   "List one trusted app's remembered permissions individually",
+		Short:   "List one app's remembered permissions",
 		Example: `  ncli bunker sessions grants <pubkey>`,
 		Args:    common.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -445,7 +443,7 @@ func newSessionsCommand() *cobra.Command {
 func newHistoryCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:     "history",
-		Short:   "List recently resolved requests (approved/rejected/expired)",
+		Short:   "List recently resolved signing requests",
 		Example: `  ncli bunker history`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			jsonMode, _ := cmd.Flags().GetBool("json")
@@ -502,15 +500,13 @@ func newHistoryCommand() *cobra.Command {
 func newConnectCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "connect [nostrconnect-uri]",
-		Short: "Start a pairing with a running bunker daemon",
-		Long: `With no argument, generates and prints a fresh bunker:// URI for another
-Nostr app to connect to. Given a nostrconnect:// URI, initiates that
-pairing instead, blocking until the client confirms or it times out.
+		Short: "Pair an app with a running bunker daemon",
+		Long: `Print a fresh bunker:// URI for another Nostr app to connect to. Given a
+nostrconnect:// URI, start that pairing instead and block until the
+client confirms or it times out.
 
---grants <file> pre-authorizes the app that completes this pairing with a
-declared set of permissions (see examples/bunker/ for the YAML shape),
-instead of prompting interactively on first use. "ncli bunker sessions
-grants <pubkey>" shows what actually landed once paired.`,
+--grants pre-authorizes the paired app from a YAML permission file
+instead of prompting on first use.`,
 		Example: `  ncli bunker connect
   ncli bunker connect nostrconnect://...
   ncli bunker connect --grants grants.yaml`,

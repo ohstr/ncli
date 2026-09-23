@@ -30,8 +30,8 @@ var (
 
 var RootCmd = &cobra.Command{
 	Use:   "ncli",
-	Short: "Nostr relay & toolkit CLI",
-	Long:  `Run and operate Nostr relays, and manage events: serve, stream, sync, inspect, export, delegate, administer, and mine.`,
+	Short: "A CLI for the Nostr protocol",
+	Long:  `Run a relay, stream and sync events, manage keys, and mine proof-of-work.`,
 	Example: `  ncli id
   ncli find npub1...`,
 

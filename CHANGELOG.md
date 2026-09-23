@@ -27,6 +27,9 @@
   unchanged, so a bare group command still exits 2, never 0. `--json` is
   untouched: one structured line, never help. (#55)
 - Updated `nmilat` to v0.4.0.
+- Rewrote every command's `--help` description in a flatter style: each
+  one now states what the command does, with the rules a caller can't
+  guess stated plainly, instead of explaining the reasoning behind it.
 
 ### Fixed
 
@@ -34,6 +37,10 @@
   own line) and exited 1 instead of 2. (#55)
 - `ncli bunker sessions revoke-grant` with no `--method` exited 1 as
   `internal` instead of 2 as `usage`. (#55)
+- `ncli relay` with no config reported three alternatives crammed into
+  one line and no help. It now prints a short error followed by the
+  command's help, which lists the flags and where the config is read
+  from. Same for the `relay` admin subcommands missing `nip11.privkey`.
 - `ncli relay` could freeze until restarted: a `REQ` held its database
   read open while sending events, so a write that grew the database file
   hung every other `REQ` and `EVENT`, health checks included. Fixed

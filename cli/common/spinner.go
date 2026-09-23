@@ -35,7 +35,7 @@ func withStderrLock(fn func()) {
 	spinnerState.mu.Lock()
 	defer spinnerState.mu.Unlock()
 	if spinnerState.active && spinnerState.out != nil {
-		fmt.Fprint(spinnerState.out, eraseLine)
+		_, _ = fmt.Fprint(spinnerState.out, eraseLine)
 	}
 	fn()
 }
@@ -105,7 +105,7 @@ func withSpinner(w io.Writer, animate bool, message string, fn func() error) err
 		frame := 0
 		draw := func() {
 			withStderrLock(func() {
-				fmt.Fprintf(w, "\r%s %s", spinnerFrames[frame%len(spinnerFrames)], message)
+				_, _ = fmt.Fprintf(w, "\r%s %s", spinnerFrames[frame%len(spinnerFrames)], message)
 			})
 		}
 		draw()
@@ -131,7 +131,7 @@ func withSpinner(w io.Writer, animate bool, message string, fn func() error) err
 	spinnerState.mu.Lock()
 	spinnerState.active = false
 	spinnerState.out = nil
-	fmt.Fprint(w, eraseLine)
+	_, _ = fmt.Fprint(w, eraseLine)
 	spinnerState.mu.Unlock()
 
 	return err

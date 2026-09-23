@@ -30,22 +30,18 @@ var minerCmd = &cobra.Command{
 var minerMineCmd = &cobra.Command{
 	Use:   "mine",
 	Short: "Mine proof-of-work into an unsigned event",
-	Long: `Mine proof-of-work (NIP-13) for an event, writing the result to --out (or
-back to --event with --in-place). Runs across multiple CPU cores by
-default (see --workers).
+	Long: `Mine NIP-13 proof-of-work for an event across multiple CPU cores.
 
-The event comes from --event (a NIP-01 event file), or inline from
---content/--content-file plus --kind/--tag -- pick one, not both.
---content/--content-file mode fills in created_at and kind (default 1).
-
-If --identity resolves to a private key, the mined event is signed
-automatically before being written. A pubkey-only identity mines but
-can't sign (logged, not silent).`,
+The event comes from --event, or inline from --content/--content-file --
+pick one, not both. Exactly one of --out or --in-place says where the
+result goes. If --identity resolves to a private key, the mined event is
+signed before it's written.`,
 	Example: `  ncli miner mine -e event.json -o mined.json
-  ncli miner mine -e event.json --in-place --workers 4`,
+  ncli miner mine -e event.json --in-place --workers 4
+  ncli miner mine --content "hello" --identity satoshi -d 20 -o mined.json`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		if err := cmd.ValidateRequiredFlags(); err != nil {
-			return common.UsageError(cmd, err)
+			return common.InvocationOrHelp(cmd, args, err)
 		}
 
 		hasEvent := cmd.Flags().Changed("event")
@@ -54,27 +50,27 @@ can't sign (logged, not silent).`,
 
 		switch {
 		case hasEvent && (hasContent || hasContentFile):
-			return common.UsageError(cmd, fmt.Errorf("--event is mutually exclusive with --content/--content-file; a structured event file already declares kind/content/tags"))
+			return common.InvocationOrHelp(cmd, args, fmt.Errorf("--event is mutually exclusive with --content/--content-file; a structured event file already declares kind/content/tags"))
 		case hasContent && hasContentFile:
-			return common.UsageError(cmd, fmt.Errorf("--content and --content-file are mutually exclusive"))
+			return common.InvocationOrHelp(cmd, args, fmt.Errorf("--content and --content-file are mutually exclusive"))
 		case !hasEvent && !hasContent && !hasContentFile:
-			return common.UsageError(cmd, fmt.Errorf("specify --event, or --content/--content-file to author a draft inline"))
+			return common.InvocationOrHelp(cmd, args, fmt.Errorf("specify --event, or --content/--content-file to author a draft inline"))
 		}
 		if hasEvent && cmd.Flags().Changed("kind") {
-			return common.UsageError(cmd, fmt.Errorf("--kind only applies to --content/--content-file mode; --event's file already declares kind"))
+			return common.InvocationOrHelp(cmd, args, fmt.Errorf("--kind only applies to --content/--content-file mode; --event's file already declares kind"))
 		}
 		if hasEvent && cmd.Flags().Changed("tag") {
-			return common.UsageError(cmd, fmt.Errorf("--tag only applies to --content/--content-file mode; --event's file already declares tags"))
+			return common.InvocationOrHelp(cmd, args, fmt.Errorf("--tag only applies to --content/--content-file mode; --event's file already declares tags"))
 		}
 
 		if hasEvent {
 			if _, err := validateArgFile(cmd, "event", true, ".json", ".jsonp", ".yaml", ".yml"); err != nil {
-				return common.UsageError(cmd, err)
+				return common.InvocationOrHelp(cmd, args, err)
 			}
 		}
 		if hasContentFile {
 			if _, err := validateArgFile(cmd, "content-file", true, ".txt"); err != nil {
-				return common.UsageError(cmd, err)
+				return common.InvocationOrHelp(cmd, args, err)
 			}
 		}
 
@@ -82,15 +78,15 @@ can't sign (logged, not silent).`,
 		inPlace, _ := cmd.Flags().GetBool("in-place")
 		switch {
 		case out == "" && !inPlace:
-			return common.UsageError(cmd, fmt.Errorf("exactly one of --out or --in-place is required"))
+			return common.InvocationOrHelp(cmd, args, fmt.Errorf("exactly one of --out or --in-place is required"))
 		case out != "" && inPlace:
-			return common.UsageError(cmd, fmt.Errorf("--out and --in-place are mutually exclusive"))
+			return common.InvocationOrHelp(cmd, args, fmt.Errorf("--out and --in-place are mutually exclusive"))
 		case inPlace && !hasEvent:
-			return common.UsageError(cmd, fmt.Errorf("--in-place requires --event; --content/--content-file mode has no input file to overwrite"))
+			return common.InvocationOrHelp(cmd, args, fmt.Errorf("--in-place requires --event; --content/--content-file mode has no input file to overwrite"))
 		}
 		if out != "" {
 			if _, err := validateArgFile(cmd, "out", false, ".json", ".jsonp", ".yaml", ".yml"); err != nil {
-				return common.UsageError(cmd, err)
+				return common.InvocationOrHelp(cmd, args, err)
 			}
 		}
 		return nil
@@ -164,7 +160,7 @@ can't sign (logged, not silent).`,
 		}
 
 		if draft.PubKey == "" && opts.IdentityPubKeyHex == "" {
-			return common.UsageError(cmd, fmt.Errorf("--content/--content-file mode has no pubkey source other than --identity; pass --identity <vault-label|npub|hex|nsec|nprofile|nip-05>"))
+			return common.InvocationOrHelp(cmd, args, fmt.Errorf("--content/--content-file mode has no pubkey source other than --identity; pass --identity <vault-label|npub|hex|nsec|nprofile|nip-05>"))
 		}
 
 		// Progress is periodic log narration, not a prompt -- but it's still
@@ -269,21 +265,17 @@ func parseTagFlags(pairs []string) ([][]string, error) {
 var minerCheckCmd = &cobra.Command{
 	Use:   "check",
 	Short: "Verify proof-of-work",
-	Long: `Verify proof-of-work (NIP-13) on already-mined events, sourced from a
-JSON file (--events, e.g. from "ncli dump") or fetched live, merged
-across every target.
+	Long: `Verify NIP-13 proof-of-work on already-mined events, read from --events
+or fetched live across every target. Exits non-zero if any event fails,
+so it drops straight into CI.
 
-Live mode's targets and filters come from --targets (a YAML file), or
---relays plus inline filter flags -- pick one, not both. Omitting both
-falls back to the relays configured via "ncli prefs relays add".
---identity further narrows live mode to one identity's own events.
-
-Exits non-zero if any checked event fails.`,
+Live mode takes --targets, or --relays plus inline filter flags -- pick
+one, not both. Omitting both falls back to "ncli prefs relays".`,
 	Example: `  ncli miner check -e events.json
   ncli miner check -t targets.yaml`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		if err := cmd.ValidateRequiredFlags(); err != nil {
-			return common.UsageError(cmd, err)
+			return common.InvocationOrHelp(cmd, args, err)
 		}
 
 		fileMode := cmd.Flags().Changed("events")
@@ -291,23 +283,23 @@ Exits non-zero if any checked event fails.`,
 
 		switch {
 		case fileMode && liveMode:
-			return common.UsageError(cmd, fmt.Errorf("--events (file mode) cannot be combined with --targets/--relays/--identity/inline filter flags (live mode); use one or the other"))
+			return common.InvocationOrHelp(cmd, args, fmt.Errorf("--events (file mode) cannot be combined with --targets/--relays/--identity/inline filter flags (live mode); use one or the other"))
 		case !fileMode && !liveMode:
-			return common.UsageError(cmd, fmt.Errorf("specify --events for file mode, or --targets/--relays/--identity/an inline filter flag for live mode"))
+			return common.InvocationOrHelp(cmd, args, fmt.Errorf("specify --events for file mode, or --targets/--relays/--identity/an inline filter flag for live mode"))
 		}
 
 		if err := queryMutualExclusionCheck(cmd); err != nil {
-			return common.UsageError(cmd, err)
+			return common.InvocationOrHelp(cmd, args, err)
 		}
 
 		if fileMode {
 			if _, err := validateArgFile(cmd, "events", true, ".json", ".jsonp"); err != nil {
-				return common.UsageError(cmd, err)
+				return common.InvocationOrHelp(cmd, args, err)
 			}
 		}
 		if cmd.Flags().Changed("targets") {
 			if _, err := validateArgFile(cmd, "targets", true, ".yaml", ".yml"); err != nil {
-				return common.UsageError(cmd, err)
+				return common.InvocationOrHelp(cmd, args, err)
 			}
 		}
 		return nil
@@ -348,7 +340,11 @@ Exits non-zero if any checked event fails.`,
 				}
 			}
 
-			report, err = client.CheckPOWLive(ctx, targetsSpec, filtersSpec)
+			err = common.WithSpinner(cmd, targetsMessage("checking proof-of-work across", targetsSpec), func() error {
+				var cErr error
+				report, cErr = client.CheckPOWLive(ctx, targetsSpec, filtersSpec)
+				return cErr
+			})
 		}
 
 		if err != nil {

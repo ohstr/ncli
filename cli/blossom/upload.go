@@ -33,10 +33,10 @@ PUT /media) instead of a byte-for-byte store.`,
   ncli blossom upload ./photo.jpg --identity satoshi --server https://blossom.example.com`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
-				return common.UsageError(cmd, fmt.Errorf("at least one file is required"))
+				return common.InvocationOrHelp(cmd, args, fmt.Errorf("at least one file is required"))
 			}
 			if identity, _ := cmd.Flags().GetString("identity"); identity == "" {
-				return common.UsageError(cmd, fmt.Errorf("--identity is required"))
+				return common.InvocationOrHelp(cmd, args, fmt.Errorf("--identity is required"))
 			}
 			for _, path := range args {
 				info, err := os.Stat(path)
@@ -76,30 +76,33 @@ PUT /media) instead of a byte-for-byte store.`,
 			hc := newHTTPClient(timeout)
 
 			report := &fanoutReport{}
-			for _, path := range args {
-				contentType, err := detectContentType(path)
-				if err != nil {
-					for _, server := range servers {
-						report.add(serverResult{Item: path, Server: server, Error: err.Error()})
-					}
-					continue
-				}
-
-				for _, server := range servers {
-					// Signed fresh for every (file, server) pair rather
-					// than once for the whole batch: a large upload can
-					// take longer than one token's TTL, and a token
-					// signed at the start would then expire partway
-					// through instead of every request getting a full
-					// fresh window.
-					auth, err := buildAuth(privKeyHex, pubKeyHex, verb, nil, ttl)
+			_ = common.WithSpinner(cmd, fmt.Sprintf("uploading %d file(s) to %d server(s)", len(args), len(servers)), func() error {
+				for _, path := range args {
+					contentType, err := detectContentType(path)
 					if err != nil {
-						report.add(serverResult{Item: path, Server: server, Error: err.Error()})
+						for _, server := range servers {
+							report.add(serverResult{Item: path, Server: server, Error: err.Error()})
+						}
 						continue
 					}
-					report.add(uploadOne(ctx, hc, server, path, contentType, auth, optimize))
+
+					for _, server := range servers {
+						// Signed fresh for every (file, server) pair rather
+						// than once for the whole batch: a large upload can
+						// take longer than one token's TTL, and a token
+						// signed at the start would then expire partway
+						// through instead of every request getting a full
+						// fresh window.
+						auth, err := buildAuth(privKeyHex, pubKeyHex, verb, nil, ttl)
+						if err != nil {
+							report.add(serverResult{Item: path, Server: server, Error: err.Error()})
+							continue
+						}
+						report.add(uploadOne(ctx, hc, server, path, contentType, auth, optimize))
+					}
 				}
-			}
+				return nil
+			})
 
 			printFanoutReport(jsonMode, report)
 			if !report.allSucceeded() {

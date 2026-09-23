@@ -38,7 +38,7 @@ const relaysDirName = "relays"
 // resolveConfigFile already loaded.
 func runOrCreateRelayContext(cmd *cobra.Command, name string) error {
 	if cfgFile, _ := cmd.Flags().GetString("config"); cfgFile != "" {
-		return common.UsageError(cmd, errors.New("--config and --context/-c are mutually exclusive"))
+		return common.InvocationError(cmd, errors.New("--config and --context/-c are mutually exclusive"))
 	}
 	if !validRelayContextName(name) {
 		return common.InvalidInputError(cmd, name, fmt.Errorf("relay context name %q must not be empty, \".\", \"..\", or contain a path separator", name))

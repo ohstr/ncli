@@ -17,14 +17,13 @@ func NewBlossomCommand() *cobra.Command {
 		Long: `A client for the Blossom protocol (BUD-01..12): content-addressed blob
 storage authenticated with a Nostr identity instead of a login.
 
-Every write (upload, rm, mirror) targets every server from --server, or
-the default list from "ncli blossom servers add" -- reporting a result
-per (item, server) pair, and exiting non-zero if any pair failed.
-"download" tries the configured servers in order, stopping at the first
-that answers; "list" queries one server by default, or every server with
---all.`,
-		Example: `  ncli blossom upload ./photo.jpg --identity satoshi`,
-		RunE:    common.RequireSubcommand,
+Writes (upload, rm, mirror) fan out to every configured server and exit
+non-zero if any one failed; download tries them in order until one
+answers.`,
+		Example: `  ncli blossom upload ./photo.jpg --identity satoshi
+  ncli blossom download <hash> -o photo.jpg
+  ncli blossom servers list`,
+		RunE: common.RequireSubcommand,
 	}
 
 	cmd.PersistentFlags().String("identity", "", "Identity to sign with -- vault label, nsec, npub, hex, nprofile, or nip-05")

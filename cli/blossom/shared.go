@@ -37,6 +37,15 @@ func newHTTPClient(timeout time.Duration) *bclient.Client {
 	return &bclient.Client{HTTPClient: &http.Client{Timeout: timeout}}
 }
 
+// shortHash abbreviates a sha256 for a progress message, where the full 64
+// characters would push everything else off the line.
+func shortHash(h string) string {
+	if len(h) <= 12 {
+		return h
+	}
+	return h[:8] + "…"
+}
+
 // resolveServers returns the server list a subcommand should operate
 // against: explicit --server flags if any were given, else the configured
 // default list from prefs.yaml.

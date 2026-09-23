@@ -13,7 +13,7 @@ import (
 func newMirrorCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "mirror <source-url>",
-		Short: "Ask your Blossom server(s) to fetch and store a blob from a URL",
+		Short: "Mirror a blob from a URL onto your Blossom server(s)",
 		Long: `Sign a BUD-11 authorization and PUT /mirror to every target server
 (--server, or the configured default list) -- each server fetches
 source-url itself; no bytes pass through ncli. Reports a result per
@@ -21,10 +21,10 @@ server.`,
 		Example: `  ncli blossom mirror https://example.com/file.jpg --identity satoshi`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {
-				return common.UsageError(cmd, fmt.Errorf("exactly one source URL is required"))
+				return common.InvocationOrHelp(cmd, args, fmt.Errorf("exactly one source URL is required"))
 			}
 			if identity, _ := cmd.Flags().GetString("identity"); identity == "" {
-				return common.UsageError(cmd, fmt.Errorf("--identity is required"))
+				return common.InvocationOrHelp(cmd, args, fmt.Errorf("--identity is required"))
 			}
 			return nil
 		},
@@ -67,30 +67,33 @@ server.`,
 			hc := newHTTPClient(timeout)
 
 			report := &fanoutReport{}
-			for _, server := range servers {
-				res := serverResult{Item: sourceURL, Server: server}
+			_ = common.WithSpinner(cmd, fmt.Sprintf("mirroring to %d server(s)", len(servers)), func() error {
+				for _, server := range servers {
+					res := serverResult{Item: sourceURL, Server: server}
 
-				// Signed fresh per server, not once for the whole batch --
-				// see the identical comment in upload.go.
-				auth, err := buildAuth(privKeyHex, pubKeyHex, nipB7.VerbUpload, hashes, ttl)
-				if err != nil {
-					res.Error = err.Error()
+					// Signed fresh per server, not once for the whole batch --
+					// see the identical comment in upload.go.
+					auth, err := buildAuth(privKeyHex, pubKeyHex, nipB7.VerbUpload, hashes, ttl)
+					if err != nil {
+						res.Error = err.Error()
+						report.add(res)
+						continue
+					}
+
+					descriptor, err := hc.Mirror(ctx, server, sourceURL, auth)
+					if err != nil {
+						res.Error = describeError(err) + uploadErrorHint
+					} else {
+						res.OK = true
+						res.URL = descriptor.URL
+						res.Sha256 = descriptor.Sha256
+						res.Size = descriptor.Size
+						res.Type = descriptor.Type
+					}
 					report.add(res)
-					continue
 				}
-
-				descriptor, err := hc.Mirror(ctx, server, sourceURL, auth)
-				if err != nil {
-					res.Error = describeError(err) + uploadErrorHint
-				} else {
-					res.OK = true
-					res.URL = descriptor.URL
-					res.Sha256 = descriptor.Sha256
-					res.Size = descriptor.Size
-					res.Type = descriptor.Type
-				}
-				report.add(res)
-			}
+				return nil
+			})
 
 			printFanoutReport(jsonMode, report)
 			if !report.allSucceeded() {

@@ -39,11 +39,11 @@ func ResolveSignerKey(cmd *cobra.Command, jsonMode bool, identityFlag string) (p
 		}
 		switch len(entries) {
 		case 0:
-			return "", "", "", common.UsageError(cmd, fmt.Errorf("--identity is required (or set NCLI_BUNKER_IDENTITY/bunker.identity): no vault identity to fall back to"))
+			return "", "", "", common.InvocationError(cmd, fmt.Errorf("--identity is required (or set NCLI_BUNKER_IDENTITY/bunker.identity): no vault identity to fall back to"))
 		case 1:
 			identity = entries[0].Label
 		default:
-			return "", "", "", common.UsageError(cmd, fmt.Errorf("--identity is required (or set NCLI_BUNKER_IDENTITY/bunker.identity): the vault has %d saved identities, none chosen by default", len(entries)))
+			return "", "", "", common.InvocationError(cmd, fmt.Errorf("--identity is required (or set NCLI_BUNKER_IDENTITY/bunker.identity): the vault has %d saved identities, none chosen by default", len(entries)))
 		}
 	}
 

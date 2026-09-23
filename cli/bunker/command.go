@@ -35,16 +35,15 @@ func NewBunkerCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "bunker",
 		Short: "Run ncli as a NIP-46 remote signer",
-		Long: `Run ncli as a NIP-46 "bunker": listen on one or more relays for signing
-requests from other Nostr clients, approve or reject them from a live
-TUI, and remember per-app decisions so you aren't re-prompted every time.
+		Long: `Run ncli as a NIP-46 "bunker": listen on relays for other clients'
+signing requests, approve or reject them from a live TUI, and remember
+per-app decisions so you aren't re-prompted every time.
 
-On Linux/macOS this starts (or reattaches to) a background daemon that
-keeps running after the TUI is closed with "b" or "q" -- reattach any
-time with "ncli bunker attach". On Windows the TUI runs directly with no
-background support.`,
+On Linux/macOS this leaves a background daemon running when the TUI
+closes; reattach with "ncli bunker attach".`,
 		Example: `  ncli bunker
-  ncli bunker --relay wss://relay.example.com`,
+  ncli bunker --identity satoshi
+  ncli bunker attach`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := requireInteractive(cmd); err != nil {
 				return err
@@ -92,7 +91,7 @@ func requireInteractive(cmd *cobra.Command) error {
 func newAttachCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "attach",
-		Short: "Reattach the TUI to an already-running background bunker daemon",
+		Short: "Reattach the TUI to a running bunker daemon",
 		Long: `Reconnect the interactive TUI to a bunker daemon already started with
 "ncli bunker" and left running in the background. Never starts one
 itself -- fails if none is running (use "ncli bunker" for that).`,
@@ -395,7 +394,7 @@ func newSessionsCommand() *cobra.Command {
 
 	revokeGrantCmd := &cobra.Command{
 		Use:     "revoke-grant <pubkey>",
-		Short:   "Revoke one remembered permission for an app, leaving the rest",
+		Short:   "Revoke one remembered permission, leaving the rest",
 		Example: `  ncli bunker sessions revoke-grant <pubkey> --method sign_event`,
 		Args:    common.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {

@@ -21,24 +21,25 @@ var dumpCmd = &cobra.Command{
 	Long: `Export events matching a filter to a JSON file, merged and deduplicated
 by event ID across every target.
 
-Targets and filters come from --targets (a YAML file), or --relays plus
-inline filter flags -- pick one, not both. Omitting both falls back to
-the relays configured via "ncli prefs relays add".`,
+Targets and filters come from --targets, or --relays plus inline filter
+flags -- pick one, not both. Omitting both falls back to "ncli prefs
+relays".`,
 	Example: `  ncli dump -o events.json
-  ncli dump -t targets.yaml -o events.json`,
+  ncli dump -t targets.yaml -o events.json
+  ncli dump -s wss://relay.example.com -k 1 --since 24h -o recent.json`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		if err := cmd.ValidateRequiredFlags(); err != nil {
-			return common.UsageError(cmd, err)
+			return common.InvocationOrHelp(cmd, args, err)
 		}
 		if err := queryMutualExclusionCheck(cmd); err != nil {
-			return common.UsageError(cmd, err)
+			return common.InvocationOrHelp(cmd, args, err)
 		}
 		if _, err := validateArgFile(cmd, "out", false, ".json", ".jsonp"); err != nil {
-			return common.UsageError(cmd, err)
+			return common.InvocationOrHelp(cmd, args, err)
 		}
 		if cmd.Flags().Changed("targets") {
 			if _, err := validateArgFile(cmd, "targets", true, ".yaml", ".yml"); err != nil {
-				return common.UsageError(cmd, err)
+				return common.InvocationOrHelp(cmd, args, err)
 			}
 		}
 		return nil
@@ -63,7 +64,10 @@ the relays configured via "ncli prefs relays add".`,
 			return common.NetworkError(cmd, "", err)
 		}
 
-		if err := client.DumpFromTargets(ctx, targetsSpec, outFile, filtersSpec, timeout); err != nil {
+		err = common.WithSpinner(cmd, targetsMessage("exporting from", targetsSpec), func() error {
+			return client.DumpFromTargets(ctx, targetsSpec, outFile, filtersSpec, timeout)
+		})
+		if err != nil {
 			if errors.Is(err, client.ErrNoReachableTargets) {
 				return common.NetworkError(cmd, "", err)
 			}

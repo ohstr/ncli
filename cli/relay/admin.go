@@ -54,7 +54,7 @@ func addRemoteAdminCommands(cmd *cobra.Command) {
 
 	reindexCmd := &cobra.Command{
 		Use:     "reindex",
-		Short:   "Trigger a reindex on the running relay, without restarting it",
+		Short:   "Reindex a running relay without restarting it",
 		Example: `  ncli relay reindex search --config relay.yaml`,
 		RunE:    common.RequireSubcommand,
 	}
@@ -64,7 +64,7 @@ func addRemoteAdminCommands(cmd *cobra.Command) {
 
 	clearCmd := &cobra.Command{
 		Use:     "clear",
-		Short:   "Clear indexes on the running relay, without restarting it",
+		Short:   "Clear a running relay's indexes without restarting it",
 		Example: `  ncli relay clear search --config relay.yaml`,
 		RunE:    common.RequireSubcommand,
 	}
@@ -216,8 +216,8 @@ func getAdminConfig() (string, int, string, error) {
 
 // adminRequest issues a NIP-98-authenticated admin HTTP request with no
 // body -- the shape every pre-existing stats/reindex/clear caller needs.
-func adminRequest(method, path string) (map[string]interface{}, error) {
-	return adminRequestBody(method, path, nil)
+func adminRequest(cmd *cobra.Command, method, path string) (map[string]interface{}, error) {
+	return adminRequestBody(cmd, method, path, nil)
 }
 
 // adminRequestBody is adminRequest's superset: body, if non-nil, is
@@ -226,7 +226,7 @@ func adminRequest(method, path string) (map[string]interface{}, error) {
 // function rather than a second HTTP client -- every admin command, with or
 // without a body, shares the same signing/timeout/error-classification
 // path.
-func adminRequestBody(method, path string, body interface{}) (map[string]interface{}, error) {
+func adminRequestBody(cmd *cobra.Command, method, path string, body interface{}) (map[string]interface{}, error) {
 	privKey, port, _, err := getAdminConfig()
 	if err != nil {
 		// nip11.privkey missing from config -- a missing-required-config
@@ -264,7 +264,12 @@ func adminRequestBody(method, path string, body interface{}) (map[string]interfa
 	}
 
 	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
+	var resp *http.Response
+	err = common.WithSpinner(cmd, fmt.Sprintf("contacting relay on port %d", port), func() error {
+		var dErr error
+		resp, dErr = client.Do(req)
+		return dErr
+	})
 	if err != nil {
 		return nil, &common.CLIError{
 			Err:   fmt.Errorf("request failed (is the relay running on port %d?): %w", port, err),
@@ -315,7 +320,7 @@ func adminRequestBody(method, path string, body interface{}) (map[string]interfa
 func runStats(cmd *cobra.Command, args []string) error {
 	jsonMode, _ := cmd.Flags().GetBool("json")
 
-	stats, err := adminRequest("GET", "/admin/worker/stats")
+	stats, err := adminRequest(cmd, "GET", "/admin/worker/stats")
 	if err != nil {
 		return common.RuntimeError(cmd, err)
 	}
@@ -382,7 +387,7 @@ func renderReindexStats(label string, data interface{}) {
 
 func runReindexSearch(cmd *cobra.Command, args []string) error {
 	jsonMode, _ := cmd.Flags().GetBool("json")
-	resp, err := adminRequest("POST", "/admin/reindex/search")
+	resp, err := adminRequest(cmd, "POST", "/admin/reindex/search")
 	if err != nil {
 		return common.RuntimeError(cmd, err)
 	}
@@ -398,7 +403,7 @@ func runReindexSearch(cmd *cobra.Command, args []string) error {
 
 func runReindexZaps(cmd *cobra.Command, args []string) error {
 	jsonMode, _ := cmd.Flags().GetBool("json")
-	resp, err := adminRequest("POST", "/admin/reindex/zaps")
+	resp, err := adminRequest(cmd, "POST", "/admin/reindex/zaps")
 	if err != nil {
 		return common.RuntimeError(cmd, err)
 	}
@@ -414,7 +419,7 @@ func runReindexZaps(cmd *cobra.Command, args []string) error {
 
 func runClearSearch(cmd *cobra.Command, args []string) error {
 	jsonMode, _ := cmd.Flags().GetBool("json")
-	resp, err := adminRequest("DELETE", "/admin/search")
+	resp, err := adminRequest(cmd, "DELETE", "/admin/search")
 	if err != nil {
 		return common.RuntimeError(cmd, err)
 	}
@@ -429,7 +434,7 @@ func runClearSearch(cmd *cobra.Command, args []string) error {
 
 func runClearZaps(cmd *cobra.Command, args []string) error {
 	jsonMode, _ := cmd.Flags().GetBool("json")
-	resp, err := adminRequest("DELETE", "/admin/zaps")
+	resp, err := adminRequest(cmd, "DELETE", "/admin/zaps")
 	if err != nil {
 		return common.RuntimeError(cmd, err)
 	}
@@ -538,7 +543,7 @@ func joinOrDash(items []string) string {
 
 func runMembersList(cmd *cobra.Command, args []string) error {
 	jsonMode, _ := cmd.Flags().GetBool("json")
-	resp, err := adminRequest("GET", "/admin/membership/members")
+	resp, err := adminRequest(cmd, "GET", "/admin/membership/members")
 	if err != nil {
 		return common.RuntimeError(cmd, err)
 	}
@@ -570,7 +575,7 @@ func runMembersList(cmd *cobra.Command, args []string) error {
 func runMembersShow(cmd *cobra.Command, args []string) error {
 	jsonMode, _ := cmd.Flags().GetBool("json")
 	pubkey := args[0]
-	resp, err := adminRequest("GET", "/admin/membership/members/"+pubkey)
+	resp, err := adminRequest(cmd, "GET", "/admin/membership/members/"+pubkey)
 	if err != nil {
 		return common.RuntimeError(cmd, err)
 	}
@@ -591,7 +596,7 @@ func runMembersAdd(cmd *cobra.Command, args []string) error {
 	pubkey := args[0]
 	roles, _ := cmd.Flags().GetStringArray("role")
 
-	resp, err := adminRequestBody("POST", "/admin/membership/members", map[string]interface{}{"pubkey": pubkey, "roles": roles})
+	resp, err := adminRequestBody(cmd, "POST", "/admin/membership/members", map[string]interface{}{"pubkey": pubkey, "roles": roles})
 	if err != nil {
 		return common.RuntimeError(cmd, err)
 	}
@@ -612,7 +617,7 @@ func runMembersAdd(cmd *cobra.Command, args []string) error {
 func runMembersRemove(cmd *cobra.Command, args []string) error {
 	jsonMode, _ := cmd.Flags().GetBool("json")
 	pubkey := args[0]
-	resp, err := adminRequest("DELETE", "/admin/membership/members/"+pubkey)
+	resp, err := adminRequest(cmd, "DELETE", "/admin/membership/members/"+pubkey)
 	if err != nil {
 		return common.RuntimeError(cmd, err)
 	}
@@ -640,7 +645,7 @@ func runInvitesCreate(cmd *cobra.Command, args []string) error {
 		body["ttl"] = ttl.String()
 	}
 
-	resp, err := adminRequestBody("POST", "/admin/membership/invites", body)
+	resp, err := adminRequestBody(cmd, "POST", "/admin/membership/invites", body)
 	if err != nil {
 		return common.RuntimeError(cmd, err)
 	}
@@ -666,7 +671,7 @@ func runInvitesCreate(cmd *cobra.Command, args []string) error {
 
 func runInvitesList(cmd *cobra.Command, args []string) error {
 	jsonMode, _ := cmd.Flags().GetBool("json")
-	resp, err := adminRequest("GET", "/admin/membership/invites")
+	resp, err := adminRequest(cmd, "GET", "/admin/membership/invites")
 	if err != nil {
 		return common.RuntimeError(cmd, err)
 	}
@@ -703,7 +708,7 @@ func runInvitesList(cmd *cobra.Command, args []string) error {
 func runInvitesRevoke(cmd *cobra.Command, args []string) error {
 	jsonMode, _ := cmd.Flags().GetBool("json")
 	code := args[0]
-	resp, err := adminRequest("DELETE", "/admin/membership/invites/"+code)
+	resp, err := adminRequest(cmd, "DELETE", "/admin/membership/invites/"+code)
 	if err != nil {
 		return common.RuntimeError(cmd, err)
 	}
@@ -722,7 +727,7 @@ func runInvitesRevoke(cmd *cobra.Command, args []string) error {
 
 func runRolesList(cmd *cobra.Command, args []string) error {
 	jsonMode, _ := cmd.Flags().GetBool("json")
-	resp, err := adminRequest("GET", "/admin/membership/roles")
+	resp, err := adminRequest(cmd, "GET", "/admin/membership/roles")
 	if err != nil {
 		return common.RuntimeError(cmd, err)
 	}
@@ -774,7 +779,7 @@ func runRolesCreate(cmd *cobra.Command, args []string) error {
 		body.Order = &o
 	}
 
-	resp, err := adminRequestBody("POST", "/admin/membership/roles", body)
+	resp, err := adminRequestBody(cmd, "POST", "/admin/membership/roles", body)
 	if err != nil {
 		return common.RuntimeError(cmd, err)
 	}

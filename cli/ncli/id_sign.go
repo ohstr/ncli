@@ -24,13 +24,13 @@ Fails if an event already declares a pubkey that conflicts with
 	Example: `  ncli id sign -e events.json -o signed.json --identity satoshi`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		if err := cmd.ValidateRequiredFlags(); err != nil {
-			return common.UsageError(cmd, err)
+			return common.InvocationOrHelp(cmd, args, err)
 		}
 		if _, err := validateArgFile(cmd, "events", true, ".json", ".jsonp", ".yaml", ".yml"); err != nil {
-			return common.UsageError(cmd, err)
+			return common.InvocationOrHelp(cmd, args, err)
 		}
 		if _, err := validateArgFile(cmd, "out", false, ".json", ".jsonp", ".yaml", ".yml"); err != nil {
-			return common.UsageError(cmd, err)
+			return common.InvocationOrHelp(cmd, args, err)
 		}
 		return nil
 	},

@@ -18,45 +18,37 @@ var (
 	findCmd = &cobra.Command{
 		Use:   "find [identifier]",
 		Short: "Query events by ID and/or filter",
-		Long: `Look up events by ID and/or filter across one or more relays or local
-stores, stopping at the first target with a match.
+		Long: `Look up events by ID and/or filter across relays or local stores,
+stopping at the first target with a match. An npub or nip-05 identifier
+defaults to that author's profile (kind 0); pass --kinds to widen it.
 
-identifier is a positional argument:
-  - event: a hex event ID, or note1.../nevent1...
-  - author: npub1.../nprofile1..., or a nip-05 address -- ANDed with any
-    other filters given. With no other filters, defaults to just their
-    profile (kind 0); pass --kinds to widen it.
-
-Targets and filters come from --targets (a YAML file), or --relays plus
-inline filter flags -- pick one, not both. Omitting both falls back to
-the relays configured via "ncli prefs relays add".
-
-Always prints a single JSON array to stdout. --quiet also drops the
-progress narration on stderr.`,
+Targets and filters come from --targets, or --relays plus inline filter
+flags -- pick one, not both. Omitting both falls back to "ncli prefs
+relays". Always prints a single JSON array to stdout.`,
 		Example: `  ncli find note1...
   ncli find npub1...
-  ncli find --authors npub1... -s wss://relay.example.com`,
+  ncli find --authors npub1... --kinds 1 -s wss://relay.example.com`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if err := cmd.ValidateRequiredFlags(); err != nil {
-				return common.UsageError(cmd, err)
+				return common.InvocationOrHelp(cmd, args, err)
 			}
 			if err := queryMutualExclusionCheck(cmd); err != nil {
-				return common.UsageError(cmd, err)
+				return common.InvocationOrHelp(cmd, args, err)
 			}
 			if len(args) > 1 {
-				return common.UsageError(cmd, fmt.Errorf("at most one identifier argument is allowed"))
+				return common.InvocationOrHelp(cmd, args, fmt.Errorf("at most one identifier argument is allowed"))
 			}
 			if !cmd.Flags().Changed("targets") && len(args) == 0 && !inlineFilterFlagsChanged(cmd) {
-				return common.UsageError(cmd, fmt.Errorf("at least one of an identifier argument, an inline filter flag, or --targets is required"))
+				return common.InvocationOrHelp(cmd, args, fmt.Errorf("at least one of an identifier argument, an inline filter flag, or --targets is required"))
 			}
 			if cmd.Flags().Changed("targets") {
 				if _, err := validateArgFile(cmd, "targets", true, ".yaml", ".yml"); err != nil {
-					return common.UsageError(cmd, err)
+					return common.InvocationOrHelp(cmd, args, err)
 				}
 			}
 			if cmd.Flags().Changed("out") {
 				if _, err := validateArgFile(cmd, "out", false, ".json", ".jsonp"); err != nil {
-					return common.UsageError(cmd, err)
+					return common.InvocationOrHelp(cmd, args, err)
 				}
 			}
 			return nil
@@ -95,7 +87,10 @@ progress narration on stderr.`,
 				}
 			}
 
-			if err := client.Find(ctx, idFilter, filtersSpec, targetsSpec, outPath, timeout); err != nil {
+			err = common.WithSpinner(cmd, targetsMessage("querying", targetsSpec), func() error {
+				return client.Find(ctx, idFilter, filtersSpec, targetsSpec, outPath, timeout)
+			})
+			if err != nil {
 				if errors.Is(err, client.ErrNoReachableTargets) {
 					return common.NetworkError(cmd, "", err)
 				}

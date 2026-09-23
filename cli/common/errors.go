@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 // ErrorCode classifies a CLIError so an agent can branch on failure kind
@@ -58,10 +58,29 @@ var retryableCodes = map[ErrorCode]bool{
 // Input is left blank when there's no one clean value to echo, or when the
 // value is sensitive (a private key, a vault password) and must not be
 // echoed back at all.
+// HelpMode says how much of a command's own help EmitError prints alongside
+// a failure. The zero value is HelpNone, so an error that was never
+// deliberately classified can't accidentally dump thirty lines of help.
+type HelpMode uint8
+
+const (
+	// HelpNone prints the error line alone -- the invocation was fine, the
+	// operation failed, and repeating usage wouldn't tell the caller anything.
+	HelpNone HelpMode = iota
+	// HelpOnly prints help and no error line: nothing was supplied, so there's
+	// no mistake to narrate, just a command that needs to be told what to do.
+	// The exit code and the --json structured error are unaffected.
+	HelpOnly
+	// HelpAfterError prints the error line, a blank line, then help --
+	// something *was* supplied and it was wrong.
+	HelpAfterError
+)
+
 type CLIError struct {
 	Err   error
 	Code  ErrorCode
 	Input string
+	Help  HelpMode
 }
 
 func (e *CLIError) Error() string { return e.Err.Error() }
@@ -129,7 +148,52 @@ func EmitError(cmd *cobra.Command, err error) {
 		return
 	}
 
-	log.Error().Msg(err.Error())
+	// The file log still gets the failure as an ordinary record, exactly as it
+	// did when this printed through zerolog -- only the human-facing console
+	// line changes shape.
+	LogFailureToFile(err.Error())
+
+	mode := HelpNone
+	if ce, ok := err.(*CLIError); ok {
+		mode = ce.Help
+	}
+
+	if mode != HelpOnly {
+		fmt.Fprintf(os.Stderr, "%s %s\n", errorPrefix(isColorTerminal(os.Stderr)), err.Error())
+	}
+	if mode == HelpNone || cmd == nil {
+		return
+	}
+	if mode == HelpAfterError {
+		fmt.Fprintln(os.Stderr)
+	}
+	// Reuse cobra's own help template rather than hand-rolling one, pointed at
+	// stderr: stdout carries a command's result and nothing else. A plain
+	// `--help` run (exit 0, not a failure) never comes through here, so it
+	// still prints to stdout as usual.
+	cmd.SetOut(os.Stderr)
+	cmd.SetErr(os.Stderr)
+	_ = cmd.Help()
+}
+
+// errorPrefix returns "Error:", in ANSI red when colored -- split out from
+// EmitError so the wrapping stays testable without a real terminal.
+func errorPrefix(colored bool) string {
+	if !colored {
+		return "Error:"
+	}
+	return "\x1b[31mError:\x1b[0m"
+}
+
+// isColorTerminal reports whether w is a real terminal that should receive
+// ANSI color -- false when output is piped, redirected, or NO_COLOR is set
+// (https://no-color.org), so anything capturing ncli's stderr gets plain text
+// rather than escape codes mixed into what it parses.
+func isColorTerminal(w *os.File) bool {
+	if os.Getenv("NO_COLOR") != "" {
+		return false
+	}
+	return term.IsTerminal(int(w.Fd()))
 }
 
 // ExitCode picks the process exit code for err from its ErrorCode (see

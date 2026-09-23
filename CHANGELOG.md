@@ -1,13 +1,9 @@
 # Changelog
 
-## [0.5.0]
+## [0.6.0]
 
 ### Added
 
-- `ncli decode` reads cash tokens (any HRP, e.g. `lokicash1...`) and
-  `circlehub1...` connections. Pairing secrets are never shown.
-  `cashhub1...` is recognized and rejected.
-- Every command's `--help` has an `Example:`.
 - `ncli profile <identifier>` prints a readable profile card for one
   identity -- metadata, following count, relay list, Blossom servers and
   lightning address -- from a single query, aggregated across every relay
@@ -25,6 +21,25 @@
   **stderr** -- help used to land on stdout -- and exit codes are
   unchanged, so a bare group command still exits 2, never 0. `--json` is
   untouched: one structured line, never help. (#55)
+
+### Fixed
+
+- An unknown flag was reported twice (cobra's own `Error:` plus ncli's
+  own line) and exited 1 instead of 2. (#55)
+- `ncli bunker sessions revoke-grant` with no `--method` exited 1 as
+  `internal` instead of 2 as `usage`. (#55)
+
+## [0.5.0]
+
+### Added
+
+- `ncli decode` reads cash tokens (any HRP, e.g. `lokicash1...`) and
+  `circlehub1...` connections. Pairing secrets are never shown.
+  `cashhub1...` is recognized and rejected.
+- Every command's `--help` has an `Example:`.
+
+### Changed
+
 - A local flow's `ensure` now defaults to `create` (was `exists`), so a
   missing store path is created instead of failing.
 - The Age column shows days and weeks (`2d4h`, `1w3d`) instead of
@@ -34,10 +49,6 @@
 
 ### Fixed
 
-- An unknown flag was reported twice (cobra's own `Error:` plus ncli's
-  own line) and exited 1 instead of 2. (#55)
-- `ncli bunker sessions revoke-grant` with no `--method` exited 1 as
-  `internal` instead of 2 as `usage`. (#55)
 - Wallet transfers reused a stale client on their second call.
 - NWC responses dropped the `circle_hub`/`circle_wallet` fee fields.
 - Two `Example:` commands failed when run as written.

@@ -56,5 +56,11 @@ vendor/
 # Local scratch drafts, not meant to be tracked
 /.drafts/
 
+# Go workspace files. A local go.work silently overrides the nmilat version
+# pinned in go.mod, so builds and CI stop agreeing; keep it out of the repo
+# and use GOWORK=off when verifying a dependency bump.
+/go.work
+/go.work.sum
+
 # Local-only planning/audit docs, not meant to be tracked
 /docs/private/

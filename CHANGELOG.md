@@ -29,8 +29,8 @@
 - Updated `nmilat` to v0.4.0.
 - Rewrote every command's `--help` description in a flatter style: each
   one now states what the command does, with the rules a caller can't
-  guess stated plainly, instead of explaining the reasoning behind it.
-  (#61)
+  guess stated plainly, instead of explaining how it works internally.
+  (#61, #62)
 
 ### Fixed
 

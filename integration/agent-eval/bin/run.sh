@@ -122,7 +122,10 @@ prepare_r2() {
   if ! docker compose exec -T agent bash -lc '
     set -e
     export PATH="$HOME/.local/bin:$PATH"
-    unsigned=$(mktemp) && signed=$(mktemp)
+    # The .json suffix is load-bearing: ncli rejects an --events path whose
+    # extension is not one of .json/.jsonp/.yaml/.yml, and a bare mktemp
+    # name has none.
+    unsigned=$(mktemp --suffix=.json) && signed=$(mktemp --suffix=.json)
     trap "rm -f \"$unsigned\" \"$signed\"" EXIT
     ncli id eval-seed --json >/dev/null 2>&1 || ncli id --save --label eval-seed --json >/dev/null
     jq -nc "[range(0;8) | {kind:1, content:(\"ncli eval seed \" + (.|tostring)), created_at:((now|floor) - .), tags:[]}]" > "$unsigned"
@@ -160,7 +163,13 @@ prepare_r6() {
     fi
     sleep 1
   done
+  # The `|| true` above means a failed `ncli bunker` still exits 0, so the
+  # exit-status check can't see it -- the actual error only ever lands in
+  # the TTY log. Surface it here instead of leaving it to be dug out by
+  # hand (this is how an "invalid MAC" vault failure stayed invisible).
   echo "WARNING: [r6-bunker] bunker daemon did not come up before the round started" >&2
+  docker compose exec -T agent bash -lc \
+    'tail -5 /home/evaluser/work/.r6-daemon-tty.log 2>/dev/null | tr -d "\r"' >&2 || true
 }
 
 run_r6() {

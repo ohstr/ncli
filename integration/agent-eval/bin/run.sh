@@ -21,7 +21,10 @@ RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 RUN_DIR="report/${RUN_ID}"
 mkdir -p "${RUN_DIR}"
 mkdir -p report
-chmod 777 report
+# uid 10001 == evaluser in agent/Dockerfile. The container writes its
+# self-reports straight into this bind mount, so it has to own it --
+# narrower than making the directory world-writable.
+chown 10001:10001 report
 
 echo "==> run ${RUN_ID}: ${ROUNDS[*]}"
 
@@ -43,14 +46,16 @@ chmod 700 .creds-seed
 chmod 600 .creds-seed/*.json
 
 # --- a per-run vault password -- see compose.yaml's own comment ----------
-if [ ! -f .env ]; then
-  echo "NCLI_VAULT_PASSWORD=$(head -c 24 /dev/urandom | base64 | tr -dc 'A-Za-z0-9')" > .env
-fi
+# Rewritten every run, not just when missing: a leftover .env from an
+# earlier run would otherwise pin the same password indefinitely.
+echo "NCLI_VAULT_PASSWORD=$(head -c 24 /dev/urandom | base64 | tr -dc 'A-Za-z0-9')" > .env
 
 cleanup() {
   echo "==> tearing down"
+  # `down` reads .env, so it has to go first.
   docker compose down -v >/dev/null 2>&1 || true
   rm -rf .creds-seed
+  rm -f .env
 }
 trap cleanup EXIT
 
@@ -75,6 +80,20 @@ for _ in $(seq 1 30); do
   sleep 1
 done
 
+# Rounds write these into the /report mount root, and they're only copied
+# into ${RUN_DIR} afterwards -- so without clearing them first, a round can
+# read the previous run's file and report on stale data. Called from the
+# round loop rather than run_round(), because run_r6 backgrounds run_round
+# and polls for r6-bunker-uri.txt: clearing inside the background job would
+# race that poll onto a stale URI.
+clear_flat_artifacts() {
+  local round="$1"
+  rm -f "report/${round}.self-report.json"
+  case "${round}" in
+    r6-bunker) rm -f "report/r6-bunker-uri.txt" ;;
+  esac
+}
+
 run_round() {
   local round="$1"
   local prompt
@@ -90,6 +109,25 @@ run_round() {
   return ${status}
 }
 
+# R2 queries the stack's own relay, which starts empty -- seed it with a
+# handful of kind:1 events so the round has something real to ping, find
+# and dump. Keeps the round hermetic: no public relay involved.
+prepare_r2() {
+  echo "==> [r2-query] seeding the stack's relay"
+  # Only stdout is silenced, so a failing step's own stderr reaches the
+  # run log instead of being swallowed.
+  if ! docker compose exec -T agent bash -lc '
+    set -e
+    export PATH="$HOME/.local/bin:$PATH"
+    ncli id eval-seed --json >/dev/null 2>&1 || ncli id --save --label eval-seed --json >/dev/null
+    jq -nc "[range(0;8) | {kind:1, content:(\"ncli eval seed \" + (.|tostring)), created_at:((now|floor) - .), tags:[]}]" > /tmp/r2-seed-unsigned.json
+    ncli id sign -e /tmp/r2-seed-unsigned.json -o /tmp/r2-seed.json --identity eval-seed >/dev/null
+    ncli publish -e /tmp/r2-seed.json -s ws://localhost:5500 >/dev/null
+  '; then
+    echo "ERROR: [r2-query] could not seed the relay -- R2 will have nothing to query" >&2
+  fi
+}
+
 # R6 needs its bunker daemon pre-started outside the round (starting it
 # needs a real TTY -- see rounds/r6-bunker.md) and its NIP-46 counterparty
 # fixture run against whatever pairing URI the round produces, from
@@ -97,12 +135,19 @@ run_round() {
 # pairing to land.
 prepare_r6() {
   echo "==> [r6-bunker] pre-starting bunker daemon"
-  docker compose exec -T agent bash -lc '
+  # The identity step's failure used to be invisible -- most often a wrong
+  # vault password -- surfacing only 15s later as the generic "daemon did
+  # not come up" warning. Check it and name the cause. Not captured via
+  # $(...): this spawns a detached daemon, and command substitution would
+  # block until every writer to the pipe closed.
+  if ! docker compose exec -T agent bash -lc '
     set -e
     export PATH="$HOME/.local/bin:$PATH"
     ncli id eval-agent --json >/dev/null 2>&1 || ncli id --save --label eval-agent --json >/dev/null
     script -qec "ncli bunker --identity eval-agent --relay ws://localhost:5500" /home/evaluser/work/.r6-daemon-tty.log >/dev/null 2>&1 || true
-  '
+  '; then
+    echo "ERROR: [r6-bunker] could not create the eval-agent identity or start the daemon" >&2
+  fi
   for _ in $(seq 1 15); do
     if docker compose exec -T agent bash -lc 'export PATH="$HOME/.local/bin:$PATH"; ncli bunker status --json' 2>/dev/null \
         | grep -q '"running": *true'; then
@@ -114,7 +159,6 @@ prepare_r6() {
 }
 
 run_r6() {
-  rm -f "report/r6-bunker-uri.txt"
   run_round r6-bunker &
   local claude_pid=$!
   local paired=0
@@ -136,7 +180,12 @@ run_r6() {
 }
 
 for round in "${ROUNDS[@]}"; do
+  clear_flat_artifacts "${round}"
   case "${round}" in
+    r2-query)
+      prepare_r2
+      run_round "${round}" || echo "WARNING: [${round}] claude invocation exited non-zero" >&2
+      ;;
     r6-bunker)
       prepare_r6
       run_r6

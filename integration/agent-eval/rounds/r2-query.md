@@ -1,7 +1,7 @@
-# Round R2 -- Query a real public relay
+# Round R2 -- Query a relay
 
-`wss://relay.ohstr.com` is a real, live public Nostr relay reachable from
-this machine. Use it as your target for this round.
+`ws://localhost:5500` is a Nostr relay running alongside you, already
+seeded with kind:1 events. Use it as your target for this round.
 
 1. Add it as a default relay: `ncli prefs relays add`.
 2. `ncli ping` it and confirm it reports reachable.

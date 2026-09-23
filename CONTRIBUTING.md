@@ -23,21 +23,23 @@ See the [README](README.md) for the full `just` command list.
 - Keep changes focused; unrelated formatting/refactors make review harder.
 - Add or update tests for behavior changes.
 
-`just test`/`just check` skip integration tests that hit live relays instead
-of using mocks — `TestMultiRelaySync` (public Nostr relays) and the
-`cli/bunker` `TestLive_*` suite (`relay.ohstr.com`, behind an `integration`
-build tag). Run them with `just test-integration` when working on relay
-sync or bunker/NIP-46 code; they're excluded from `just check` and CI
-because their outcome depends on third-party relay availability.
-`TestMultiRelaySync` in particular can still fail against live relays even
-when connectivity is fine, since the public firehose it samples sometimes
-includes spam events with dishonest NIP-13 nonce tags that get correctly
-rejected — that's not a code bug.
+One suite still hits a live relay: `cli/bunker`'s `TestLive_*`
+(`relay.ohstr.com`, behind an `integration` build tag). Run it with `just
+test-integration` when working on bunker/NIP-46 code. It's excluded from
+`just check` and CI because its outcome depends on third-party relay
+availability, and it skips itself when that relay is unreachable.
 
-Negentropy is covered hermetically instead, by `TestSyncIntegration`'s
-`NegentropyPropagatesBetweenRelayInstances` — the sync stack runs the same
-relay config twice and moves a known event set from one instance to the
-other, so no public relay is involved.
+Everything else is hermetic. Streaming and fan-in are covered by
+`TestStreamIntegration`'s real relay containers, and negentropy by
+`TestSyncIntegration`'s `NegentropyPropagatesBetweenRelayInstances`, which
+runs the same relay config twice and moves a known event set from one
+instance to the other. `TestMultiRelaySync` used to stream from public
+relays; it was removed as redundant with the container-based coverage and
+unreliable against a live firehose.
+
+Tests needing a realistic corpus should use `testdata/events.json` (339
+signed events across 10 kinds) rather than fetching from a relay — see
+`testdata/README.md`.
 
 `integration/agent-eval` is a separate, manual harness: every round is a
 real, billed Claude Code session. It is never run by `just check` or CI —

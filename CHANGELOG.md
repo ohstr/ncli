@@ -4,10 +4,13 @@
 
 ### Added
 
-- `testdata/events.json` -- 100 real, signed kind:1 events dumped from a
-  public relay, so a test needing a realistic event set doesn't have to
-  fetch one. `client/fixtures_test.go` re-verifies every signature on each
-  run, with no network.
+- `testdata/events.json` -- 339 real, signed events across 10 kinds
+  (metadata, notes, contacts, reposts, reactions, reports, zap receipts,
+  relay lists, blossom servers, long-form), so a test needing a realistic
+  corpus doesn't have to fetch one. The whole set round-trips through
+  `ncli relay` (339/339 stored and read back), and
+  `client/fixtures_test.go` re-verifies every signature and the kind mix on
+  each run, with no network.
 
 ### Changed
 
@@ -18,6 +21,11 @@
   `TestNegSync_Integration`, which hit `wss://relay.ohstr.com`, is gone.
 - `integration/agent-eval`'s R2 round queries the stack's own seeded relay
   instead of `wss://relay.ohstr.com`.
+- Removed `TestMultiRelaySync`, which streamed from two public relays.
+  `TestStreamIntegration`'s real relay containers already cover multi-source
+  fan-in hermetically, and the live version had accumulated a classifier to
+  excuse its own firehose-dependent failures. `just test-integration` now
+  runs only the `cli/bunker` live suite.
 
 ### Fixed
 

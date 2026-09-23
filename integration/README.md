@@ -61,9 +61,8 @@ conditions (reconnects, timing, fan-in/fan-out).
   client's self-report alone.
 - **Shared harness**: `client/integrationharness_test.go` holds generic
   helpers; each `*_integration_test.go` holds only what's feature-specific.
-- **Skip-gating**: `testing.Short()` + a `docker` PATH check, matching
-  `client/multi_relay_test.go`'s convention (not `cli/bunker`'s
-  `-tags integration`).
+- **Skip-gating**: `testing.Short()` + a `docker` PATH check, rather than
+  `cli/bunker`'s `-tags integration`.
 - **Fixed test-only keys**: `integrationPrivKey`/`integrationPrivKeyAlt` in
   the harness sign every event; no reason to generate fresh ones per run.
 

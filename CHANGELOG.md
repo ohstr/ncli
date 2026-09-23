@@ -33,7 +33,9 @@
   write self-reports to a flat path under `report/` that nothing cleared
   beforehand. Cleared before each round now.
 - `integration/agent-eval` reused a leftover `.env` vault password across
-  runs instead of generating one per run, and never removed it.
+  runs instead of generating a fresh one each run. The file itself is
+  still left in place, so a post-mortem `docker compose` in that directory
+  keeps working.
 - `integration/agent-eval`'s R6 pre-start discarded its own output, so an
   identity failure surfaced only as a generic "daemon did not come up"
   warning 15s later.

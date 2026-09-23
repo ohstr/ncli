@@ -12,10 +12,10 @@
   identity -- metadata, following count, relay list, Blossom servers and
   lightning address -- from a single query, aggregated across every relay
   rather than stopping at the first hit. `--json` for the structured
-  shape; `--no-verify` skips the nip-05 check.
+  shape; `--no-verify` skips the nip-05 check. (#55)
 - A spinner on stderr while any command waits on the network. Off under
   `--json`, `-q/--quiet`, `NO_COLOR`, and whenever stderr isn't a
-  terminal.
+  terminal. (#55)
 
 ### Changed
 
@@ -24,8 +24,7 @@
   help, and a runtime failure prints the error alone. All three go to
   **stderr** -- help used to land on stdout -- and exit codes are
   unchanged, so a bare group command still exits 2, never 0. `--json` is
-  untouched: one structured line, never help.
-
+  untouched: one structured line, never help. (#55)
 - A local flow's `ensure` now defaults to `create` (was `exists`), so a
   missing store path is created instead of failing.
 - The Age column shows days and weeks (`2d4h`, `1w3d`) instead of
@@ -36,9 +35,9 @@
 ### Fixed
 
 - An unknown flag was reported twice (cobra's own `Error:` plus ncli's
-  own line) and exited 1 instead of 2.
+  own line) and exited 1 instead of 2. (#55)
 - `ncli bunker sessions revoke-grant` with no `--method` exited 1 as
-  `internal` instead of 2 as `usage`.
+  `internal` instead of 2 as `usage`. (#55)
 - Wallet transfers reused a stale client on their second call.
 - NWC responses dropped the `circle_hub`/`circle_wallet` fee fields.
 - Two `Example:` commands failed when run as written.

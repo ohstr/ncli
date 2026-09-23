@@ -25,10 +25,7 @@ func newListCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list [identifier]",
 		Short: "List blobs stored under a pubkey",
-		Long: `List the blobs a pubkey has stored on the first configured server, or on
-every server with --all, merged and deduplicated by hash.
-
-identifier accepts a vault label, npub, hex pubkey, nprofile or nip-05
+		Long: `identifier accepts a vault label, npub, hex pubkey, nprofile or nip-05
 address, and defaults to --identity's pubkey.`,
 		Example: `  ncli blossom list --identity satoshi
   ncli blossom list --identity satoshi --all

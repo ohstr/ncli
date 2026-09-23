@@ -12,7 +12,6 @@ import (
 var prefsCmd = &cobra.Command{
 	Use:     "prefs",
 	Short:   "Manage persistent ncli preferences",
-	Long:    `Manage the preferences ncli persists across projects.`,
 	Example: `  ncli prefs relays list`,
 	RunE:    common.RequireSubcommand,
 }
@@ -20,7 +19,6 @@ var prefsCmd = &cobra.Command{
 var prefsRelaysCmd = &cobra.Command{
 	Use:     "relays",
 	Short:   "Manage the default relay list",
-	Long:    `Manage the relay list used when a command is given no explicit targets.`,
 	Example: `  ncli prefs relays list`,
 	RunE:    common.RequireSubcommand,
 }

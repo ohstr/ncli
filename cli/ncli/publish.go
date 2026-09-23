@@ -14,11 +14,10 @@ import (
 var publishCmd = &cobra.Command{
 	Use:   "publish",
 	Short: "Publish signed events to one or more relays",
-	Long: `Send already-signed events to every target relay and wait for each
-relay's OK. --events accepts a single event or an array.
+	Long: `--events accepts a single event or an array. Exits non-zero if any
+event fails on any relay.
 
-Omit --relays to use the relays from "ncli prefs relays". Exits non-zero
-if any event fails on any relay.`,
+Omit --relays to use the relays from "ncli prefs relays".`,
 	Example: `  ncli publish -e signed.json
   ncli publish -e signed.json -s wss://relay.example.com`,
 	Args: func(cmd *cobra.Command, args []string) error {

@@ -18,10 +18,9 @@ func newRmCommand() *cobra.Command {
 	var yes bool
 
 	cmd := &cobra.Command{
-		Use:   "rm <hash>",
-		Short: "Delete a blob from your Blossom servers",
-		Long: `Delete a blob from every target server. Requires --yes in a
-non-interactive session.`,
+		Use:     "rm <hash>",
+		Short:   "Delete a blob from your Blossom servers",
+		Long:    `Requires --yes in a non-interactive session.`,
 		Example: `  ncli blossom rm <hash> --identity satoshi --yes`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {

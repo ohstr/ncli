@@ -63,9 +63,8 @@ func newProfileCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "profile <identifier>",
 		Short: "Display an identity's published profile",
-		Long: `Display the profile metadata, following count, relay list, Blossom
-servers and lightning address published by an identity. Records are
-merged across all targets.`,
+		Long: `Shows the profile metadata, following count, relay list, Blossom
+servers and lightning address an identity has published.`,
 		Example: `  ncli profile npub1...
   ncli profile name@example.com
   ncli profile satoshi --json`,

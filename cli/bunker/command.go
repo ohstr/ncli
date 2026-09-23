@@ -34,12 +34,12 @@ func NewBunkerCommand() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "bunker",
-		Short: "Run ncli as a NIP-46 remote signer",
-		Long: `Listen on relays for other clients' NIP-46 signing requests and approve
-or reject them from a TUI. Per-app decisions are remembered.
+		Short: "Sign other apps' events as a NIP-46 signer",
+		Long: `Approve or reject other clients' signing requests as they arrive.
+Per-app decisions are remembered.
 
-On Linux and macOS a background daemon keeps running when the TUI
-closes. Reattach with "ncli bunker attach".`,
+The signer keeps running after you close it. Reattach with
+"ncli bunker attach".`,
 		Example: `  ncli bunker
   ncli bunker --identity satoshi
   ncli bunker attach`,
@@ -89,10 +89,9 @@ func requireInteractive(cmd *cobra.Command) error {
 
 func newAttachCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "attach",
-		Short: "Reattach the TUI to a running bunker daemon",
-		Long: `Reconnect the TUI to a bunker daemon already running in the background.
-Never starts one; fails if none is running.`,
+		Use:     "attach",
+		Short:   "Reattach to a running bunker",
+		Long:    `Fails if no bunker is running; never starts one.`,
 		Example: `  ncli bunker attach`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := requireInteractive(cmd); err != nil {
@@ -116,7 +115,7 @@ Never starts one; fails if none is running.`,
 func newStatusCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:     "status",
-		Short:   "Show whether a bunker daemon is running",
+		Short:   "Show whether a bunker is running",
 		Example: `  ncli bunker status`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			jsonMode, _ := cmd.Flags().GetBool("json")
@@ -200,7 +199,7 @@ func printIdentityAndRelays(st StatusInfo) {
 func newStopCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:     "stop",
-		Short:   "Stop the running bunker daemon",
+		Short:   "Stop the running bunker",
 		Example: `  ncli bunker stop`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			jsonMode, _ := cmd.Flags().GetBool("json")
@@ -256,7 +255,7 @@ func newSessionsCommand() *cobra.Command {
 
 	cmd.AddCommand(&cobra.Command{
 		Use:     "list",
-		Short:   "List every app with a remembered permission",
+		Short:   "List apps with remembered permissions",
 		Example: `  ncli bunker sessions list`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			jsonMode, _ := cmd.Flags().GetBool("json")
@@ -288,7 +287,7 @@ func newSessionsCommand() *cobra.Command {
 
 	cmd.AddCommand(&cobra.Command{
 		Use:     "revoke <pubkey>",
-		Short:   "Revoke every remembered permission for one app",
+		Short:   "Revoke all of an app's permissions",
 		Example: `  ncli bunker sessions revoke <pubkey>`,
 		Args:    common.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -318,7 +317,8 @@ func newSessionsCommand() *cobra.Command {
 
 	cmd.AddCommand(&cobra.Command{
 		Use:     "rename <pubkey> <name>",
-		Short:   "Set (or clear, with \"\") a trusted app's display name",
+		Short:   "Rename a trusted app",
+		Long:    `Pass an empty name to clear it.`,
 		Example: `  ncli bunker sessions rename <pubkey> "My Wallet"`,
 		Args:    common.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -392,7 +392,7 @@ func newSessionsCommand() *cobra.Command {
 
 	revokeGrantCmd := &cobra.Command{
 		Use:     "revoke-grant <pubkey>",
-		Short:   "Revoke one remembered permission, leaving the rest",
+		Short:   "Revoke one of an app's permissions",
 		Example: `  ncli bunker sessions revoke-grant <pubkey> --method sign_event`,
 		Args:    common.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -500,10 +500,9 @@ func newHistoryCommand() *cobra.Command {
 func newConnectCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "connect [nostrconnect-uri]",
-		Short: "Pair an app with a running bunker daemon",
-		Long: `Print a fresh bunker:// URI for another Nostr app to connect to. Given a
-nostrconnect:// URI, start that pairing instead and block until the
-client confirms or it times out.
+		Short: "Pair an app with a running bunker",
+		Long: `With no argument, prints a bunker:// URI for another app to connect to.
+Given a nostrconnect:// URI, pairs with that app instead.
 
 --grants pre-authorizes the paired app from a YAML permission file
 instead of prompting on first use.`,

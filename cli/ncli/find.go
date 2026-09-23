@@ -18,9 +18,9 @@ var (
 	findCmd = &cobra.Command{
 		Use:   "find [identifier]",
 		Short: "Query events by ID and/or filter",
-		Long: `Query events across relays and local stores, stopping at the first
-target with a match. An npub or nip-05 identifier returns that author's
-profile unless --kinds widens it. Prints a single JSON array.
+		Long: `Returns the first target's matches as a single JSON array. An npub or
+nip-05 identifier returns that author's profile unless --kinds widens
+it.
 
 --targets cannot be combined with --relays or the inline filter flags.
 Omit both to use the relays from "ncli prefs relays".`,

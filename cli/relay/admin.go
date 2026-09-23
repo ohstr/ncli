@@ -46,7 +46,7 @@ var (
 func addRemoteAdminCommands(cmd *cobra.Command) {
 	statsCmd := &cobra.Command{
 		Use:     "stats",
-		Short:   "Show live relay metrics and worker status",
+		Short:   "Show live relay metrics",
 		Example: `  ncli relay stats --config relay.yaml`,
 		RunE:    runStats,
 	}
@@ -54,7 +54,7 @@ func addRemoteAdminCommands(cmd *cobra.Command) {
 
 	reindexCmd := &cobra.Command{
 		Use:     "reindex",
-		Short:   "Reindex a running relay without restarting it",
+		Short:   "Rebuild a relay's indexes while it runs",
 		Example: `  ncli relay reindex search --config relay.yaml`,
 		RunE:    common.RequireSubcommand,
 	}
@@ -64,7 +64,7 @@ func addRemoteAdminCommands(cmd *cobra.Command) {
 
 	clearCmd := &cobra.Command{
 		Use:     "clear",
-		Short:   "Clear a running relay's indexes without restarting it",
+		Short:   "Delete a relay's indexes while it runs",
 		Example: `  ncli relay clear search --config relay.yaml`,
 		RunE:    common.RequireSubcommand,
 	}
@@ -99,7 +99,7 @@ func addMembershipAdminCommands(cmd *cobra.Command) {
 	})
 	membersAddCmd := &cobra.Command{
 		Use: "add <pubkey>", Short: "Enroll a pubkey as a member",
-		Long: `Enroll a pubkey as a member directly, without an invite code.`,
+		Long: `No invite code required.`,
 		Example: `  ncli relay members add <pubkey> --config relay.yaml
   ncli relay members add <pubkey> --role member --config relay.yaml`,
 		Args: common.ExactArgs(1), RunE: runMembersAdd,
@@ -121,8 +121,7 @@ func addMembershipAdminCommands(cmd *cobra.Command) {
 	}
 	invitesCreateCmd := &cobra.Command{
 		Use: "create", Short: "Issue a new invite code",
-		Long: `Issue an invite code to hand out before the invitee has a working Nostr
-client.`,
+		Long: `For handing out before the invitee has a working Nostr client.`,
 		Example: `  ncli relay invites create --config relay.yaml
   ncli relay invites create --ttl 24h --max-uses 10 --config relay.yaml`,
 		RunE: runInvitesCreate,
@@ -156,8 +155,8 @@ client.`,
 	})
 	rolesCreateCmd := &cobra.Command{
 		Use: "create <id>", Short: "Create a role definition",
-		Long: `Create a role definition, or supersede an existing one. NIP-43 has no
-delete: re-run with the same id to replace it.`,
+		Long: `NIP-43 has no delete for roles: re-run with the same id to replace
+one.`,
 		Example: `  ncli relay roles create moderator --label Moderator --config relay.yaml`,
 		Args:    common.ExactArgs(1), RunE: runRolesCreate,
 	}

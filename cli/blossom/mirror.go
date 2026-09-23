@@ -12,10 +12,8 @@ import (
 
 func newMirrorCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "mirror <source-url>",
-		Short: "Mirror a blob from a URL to your Blossom servers",
-		Long: `Ask every target server to fetch and store a blob from source-url. Each
-server downloads it directly; no bytes pass through ncli.`,
+		Use:     "mirror <source-url>",
+		Short:   "Mirror a blob from a URL to your Blossom servers",
 		Example: `  ncli blossom mirror https://example.com/file.jpg --identity satoshi`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {

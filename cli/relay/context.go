@@ -22,12 +22,9 @@ import (
 func addContextCommands(cmd *cobra.Command) {
 	contextCmd := &cobra.Command{
 		Use:   "context",
-		Short: "List or switch the current relay config context",
+		Short: "List or switch the current relay context",
 		Long: `List saved relay contexts (name -> config file path), marking the
-current one with "*".
-
-A relay command uses the current context when --config is omitted, in
-preference to any ncli.yaml or relay.yaml in the working directory.`,
+current one with "*".`,
 		Example: `  ncli relay context list`,
 		Args:    common.NoArgs,
 		RunE:    runContextList,
@@ -63,10 +60,9 @@ preference to any ncli.yaml or relay.yaml in the working directory.`,
 	contextCmd.AddCommand(removeCmd)
 
 	useCmd := &cobra.Command{
-		Use:   "use <name>",
-		Short: "Switch the current relay context",
-		Long: `Set name as the current relay context. Relay commands use its config
-file whenever --config is omitted.`,
+		Use:     "use <name>",
+		Short:   "Switch the current relay context",
+		Long:    `Relay commands use the current context whenever --config is omitted.`,
 		Example: `  ncli relay context use myrelay`,
 		Args:    common.ExactArgs(1),
 		RunE:    runContextUse,

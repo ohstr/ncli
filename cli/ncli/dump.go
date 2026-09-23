@@ -18,10 +18,7 @@ import (
 var dumpCmd = &cobra.Command{
 	Use:   "dump",
 	Short: "Export events to JSON",
-	Long: `Export events matching a filter to a JSON file, merged and deduplicated
-by event ID across all targets.
-
---targets cannot be combined with --relays or the inline filter flags.
+	Long: `--targets cannot be combined with --relays or the inline filter flags.
 Omit both to use the relays from "ncli prefs relays".`,
 	Example: `  ncli dump -o events.json
   ncli dump -t targets.yaml -o events.json

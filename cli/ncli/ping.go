@@ -15,11 +15,11 @@ import (
 var pingCmd = &cobra.Command{
 	Use:   "ping [relay...]",
 	Short: "Test relay connectivity",
-	Long: `Probe each relay with a Limit-1 subscription. Local store paths are
-skipped. Exits non-zero if any relay is unreachable.
+	Long: `Exits non-zero if any relay is unreachable. Local store paths are
+skipped.
 
 --targets cannot be combined with relay arguments. Omit both to use the
-relays from "ncli prefs relays". --tui shows a live board.`,
+relays from "ncli prefs relays".`,
 	Example: `  ncli ping wss://relay.example.com
   ncli ping -t targets.yaml
   ncli ping --tui wss://relay.example.com`,

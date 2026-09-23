@@ -230,11 +230,6 @@ func NewRelayCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "relay",
 		Short: "Run and operate a Nostr relay",
-		Long: `Run the Nostr relay server. Subcommands operate an already-running relay
-over NIP-98 authenticated HTTP.
-
-Config is read from --config, the current relay context, then ncli.yaml
-or relay.yaml in the working directory.`,
 		Example: `  ncli relay --config relay.yaml
   ncli relay --context myrelay
   ncli relay stats --config relay.yaml`,

@@ -22,8 +22,7 @@ func newUploadCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "upload <file> [file...]",
 		Short: "Upload files to your Blossom servers",
-		Long: `Upload each file to every target server, reporting a result per (file,
-server) pair. Exits non-zero if any pair fails.
+		Long: `Exits non-zero if any file fails on any server.
 
 --optimize requests server-side transcoding (BUD-05) instead of storing
 the bytes as-is.`,

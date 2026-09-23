@@ -29,7 +29,7 @@ var minerCmd = &cobra.Command{
 
 var minerMineCmd = &cobra.Command{
 	Use:   "mine",
-	Short: "Mine proof-of-work into an unsigned event",
+	Short: "Mine proof-of-work into an event",
 	Long: `Mine NIP-13 proof-of-work for an event across multiple CPU cores.
 
 The event comes from --event, or inline from --content/--content-file;
@@ -265,8 +265,8 @@ func parseTagFlags(pairs []string) ([][]string, error) {
 var minerCheckCmd = &cobra.Command{
 	Use:   "check",
 	Short: "Verify proof-of-work",
-	Long: `Verify NIP-13 proof-of-work on already-mined events, read from --events
-or fetched live from every target. Exits non-zero if any event fails.
+	Long: `Checks events from --events, or fetched live. Exits non-zero if any
+event fails.
 
 --targets cannot be combined with --relays or the inline filter flags.
 Omit both to use the relays from "ncli prefs relays".`,

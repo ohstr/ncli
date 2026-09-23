@@ -46,7 +46,7 @@ var (
 func addRemoteAdminCommands(cmd *cobra.Command) {
 	statsCmd := &cobra.Command{
 		Use:     "stats",
-		Short:   "Show live relay metrics and worker status",
+		Short:   "Show live relay metrics",
 		Example: `  ncli relay stats --config relay.yaml`,
 		RunE:    runStats,
 	}
@@ -54,7 +54,7 @@ func addRemoteAdminCommands(cmd *cobra.Command) {
 
 	reindexCmd := &cobra.Command{
 		Use:     "reindex",
-		Short:   "Reindex a running relay without restarting it",
+		Short:   "Rebuild a relay's indexes while it runs",
 		Example: `  ncli relay reindex search --config relay.yaml`,
 		RunE:    common.RequireSubcommand,
 	}
@@ -64,7 +64,7 @@ func addRemoteAdminCommands(cmd *cobra.Command) {
 
 	clearCmd := &cobra.Command{
 		Use:     "clear",
-		Short:   "Clear a running relay's indexes without restarting it",
+		Short:   "Delete a relay's indexes while it runs",
 		Example: `  ncli relay clear search --config relay.yaml`,
 		RunE:    common.RequireSubcommand,
 	}

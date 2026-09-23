@@ -12,10 +12,8 @@ import (
 
 func newReportCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "report <hash>",
-		Short: "Report a blob to a Blossom server",
-		Long: `Submit a signed kind:1984 report event for a blob (BUD-09). Targets a
-single server: --server, or the first configured one.`,
+		Use:     "report <hash>",
+		Short:   "Report a blob to a Blossom server",
 		Example: `  ncli blossom report <hash> --identity satoshi`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {

@@ -35,10 +35,10 @@ func NewBunkerCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "bunker",
 		Short: "Sign other apps' events as a NIP-46 signer",
-		Long: `Approve or reject other clients' signing requests from a TUI. Per-app
-decisions are remembered.
+		Long: `Approve or reject other clients' signing requests as they arrive.
+Per-app decisions are remembered.
 
-The signer keeps running when the TUI closes. Reattach with
+The signer keeps running after you close it. Reattach with
 "ncli bunker attach".`,
 		Example: `  ncli bunker
   ncli bunker --identity satoshi

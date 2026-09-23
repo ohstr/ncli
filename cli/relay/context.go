@@ -33,7 +33,7 @@ current one with "*".`,
 	listCmd := &cobra.Command{
 		Use:     "list",
 		Short:   "List saved relay contexts",
-		Long:    `List saved relay contexts, marking the current one with "*".`,
+		Long:    `Marks the current context with "*".`,
 		Example: `  ncli relay context list`,
 		Args:    common.NoArgs,
 		RunE:    runContextList,

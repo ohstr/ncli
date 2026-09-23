@@ -22,7 +22,6 @@ import (
 var minerCmd = &cobra.Command{
 	Use:     "miner",
 	Short:   "Mine and verify proof-of-work",
-	Long:    `Mine NIP-13 proof-of-work into an unsigned event, or verify PoW on already-mined events.`,
 	Example: `  ncli miner mine -e event.json -o mined.json`,
 	RunE:    common.RequireSubcommand,
 }
@@ -30,9 +29,7 @@ var minerCmd = &cobra.Command{
 var minerMineCmd = &cobra.Command{
 	Use:   "mine",
 	Short: "Mine proof-of-work into an event",
-	Long: `Mine NIP-13 proof-of-work for an event across multiple CPU cores.
-
-The event comes from --event, or inline from --content/--content-file;
+	Long: `The event comes from --event, or inline from --content/--content-file;
 these cannot be combined. Exactly one of --out or --in-place is
 required. A mined event is signed if --identity resolves to a private
 key.`,

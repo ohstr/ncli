@@ -28,8 +28,8 @@ func NewDelegateCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delegate",
 		Short: "Generate a NIP-26 delegation token",
-		Long: `Create and sign a NIP-26 delegation token. Runs an interactive wizard
-unless --issuer is set, via the flag or NCLI_DELEGATE_ISSUER.
+		Long: `Runs an interactive wizard unless --issuer is set, via the flag or
+NCLI_DELEGATE_ISSUER.
 
 --issuer and --delegatee accept a vault label, nsec, npub, hex pubkey,
 nprofile or nip-05 address, and must resolve to a private key.`,

@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Added
+
+- `testdata/events.json` -- 100 real, signed kind:1 events dumped from a
+  public relay, so a test needing a realistic event set doesn't have to
+  fetch one. `client/fixtures_test.go` re-verifies every signature on each
+  run, with no network.
+
 ### Changed
 
 - Negentropy coverage no longer depends on a public relay. The sync stack

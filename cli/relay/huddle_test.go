@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -271,4 +272,27 @@ func TestHuddleRoomsAreEndedOnShutdown(t *testing.T) {
 	// Idempotent: a second Stop must not panic.
 	endHuddleRooms(rooms)
 	endHuddleRooms(nil)
+}
+
+// TestHuddleNIPsAreDeclared guards the blank imports in command.go. Registration
+// is by linkage: a relayreg package declares its NIP and registers its event
+// validators from init(), so forgetting the import leaves the relay silently not
+// advertising the NIP and not validating its kinds -- with nothing failing.
+func TestHuddleNIPsAreDeclared(t *testing.T) {
+	declared := map[string]bool{}
+	for _, id := range relay.RegisteredNIPs() {
+		declared[id.String()] = true
+	}
+
+	// The room model and the media kinds a huddle-hosting relay ingests.
+	for _, want := range []string{"29", "53", "71", "A0"} {
+		if !declared[want] {
+			var have []string
+			for id := range declared {
+				have = append(have, id)
+			}
+			sort.Strings(have)
+			t.Errorf("NIP-%s is not declared; blank-import its relayreg in command.go. Declared: %v", want, have)
+		}
+	}
 }

@@ -32,7 +32,7 @@ import (
 	"sync"
 
 	"github.com/ohstr/nmilat/huddle/room"
-	"github.com/pion/rtp/v2"
+	"github.com/pion/rtp"
 )
 
 // OpusPayloadType is the dynamic payload type WebRTC conventionally negotiates
@@ -48,9 +48,14 @@ const DefaultQueueDepth = 8
 // ErrNoTrackFactory is returned by New when Config has no NewTrack.
 var ErrNoTrackFactory = errors.New("huddlertp: Config.NewTrack is required")
 
-// PacketWriter receives the RTP packets built for one speaker. pion's
-// TrackLocalStaticRTP already has this shape, so an SFU can pass one directly;
+// PacketWriter receives the RTP packets built for one speaker.
+// *webrtc.TrackLocalStaticRTP satisfies it, so an SFU passes one directly;
 // tests pass a recorder.
+//
+// The rtp import must stay on the same major version pion/webrtc uses (v1).
+// pion/rtp/v2 exists and is newer, but a v2 *rtp.Packet is a different type, so
+// building on it makes this interface unsatisfiable by pion's own track. There
+// is a compile-time assertion in the tests pinning that.
 type PacketWriter interface {
 	WriteRTP(*rtp.Packet) error
 }

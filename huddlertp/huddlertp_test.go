@@ -9,11 +9,19 @@ import (
 
 	"github.com/ohstr/nmilat/huddle/room"
 	"github.com/ohstr/nmilat/huddle/wire"
-	"github.com/pion/rtp/v2"
+	"github.com/pion/rtp"
+	"github.com/pion/webrtc/v4"
 )
 
 // A Sink must satisfy room.Sink, or the room cannot deliver to it at all.
 var _ room.Sink = (*Sink)(nil)
+
+// A real pion track must satisfy PacketWriter, or the SFU cannot hand one to a
+// Sink. This is the assertion that catches an rtp major-version drift between
+// this package and pion/webrtc: pion/webrtc/v4 builds on pion/rtp v1, and a v2
+// *rtp.Packet is a different type, so importing rtp/v2 here makes this line fail
+// to compile rather than failing silently at the integration point.
+var _ PacketWriter = (*webrtc.TrackLocalStaticRTP)(nil)
 
 const recvWindow = 5 * time.Second
 

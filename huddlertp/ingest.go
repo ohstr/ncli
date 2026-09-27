@@ -2,7 +2,7 @@ package huddlertp
 
 import (
 	"github.com/ohstr/nmilat/huddle/wire"
-	"github.com/pion/rtp/v2"
+	"github.com/pion/rtp"
 )
 
 // AudioLevelExtensionURI is the RTP header extension a WebRTC peer negotiates to

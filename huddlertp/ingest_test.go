@@ -6,7 +6,7 @@ import (
 
 	"github.com/ohstr/nmilat/huddle/room"
 	"github.com/ohstr/nmilat/huddle/wire"
-	"github.com/pion/rtp/v2"
+	"github.com/pion/rtp"
 )
 
 const audioLevelExtID uint8 = 1
@@ -26,6 +26,15 @@ func rtpPacket(t *testing.T, seq uint16, ts uint32, payload []byte, level *byte)
 }
 
 func bptr(b byte) *byte { return &b }
+
+// levelExt builds an RFC 6464 extension byte: bit 7 is voice activity, bits 0-6
+// carry the level as a magnitude in -dBov.
+func levelExt(voice bool, magnitude byte) byte {
+	if voice {
+		return 0x80 | magnitude
+	}
+	return magnitude
+}
 
 // The whole point of the bridge: a WebSocket peer's frame reaches a WebRTC peer
 // and back again with the Opus untouched. This drives the real Sink in one
@@ -92,7 +101,7 @@ func TestFrameFromRTPWithoutTheExtension(t *testing.T) {
 		extID uint8
 		level *byte
 	}{
-		{name: "extension not negotiated", extID: 0, level: bptr(0x80 | 10)},
+		{name: "extension not negotiated", extID: 0, level: bptr(levelExt(true, 10))},
 		{name: "negotiated but absent on this packet", extID: audioLevelExtID, level: nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -120,12 +129,12 @@ func TestFrameFromRTPReadsTheAudioLevel(t *testing.T) {
 		wantDTX   bool
 	}{
 		// bit 7 = voice activity, bits 0-6 = level magnitude in -dBov.
-		{name: "loudest with voice", ext: 0x80 | 0, wantLevel: 0, wantDTX: false},
-		{name: "moderate with voice", ext: 0x80 | 30, wantLevel: -30, wantDTX: false},
-		{name: "quietest with voice", ext: 0x80 | 127, wantLevel: -127, wantDTX: false},
+		{name: "loudest with voice", ext: levelExt(true, 0), wantLevel: 0, wantDTX: false},
+		{name: "moderate with voice", ext: levelExt(true, 30), wantLevel: -30, wantDTX: false},
+		{name: "quietest with voice", ext: levelExt(true, 127), wantLevel: -127, wantDTX: false},
 		// No voice activity is comfort noise, which is what DTX means.
-		{name: "no voice activity", ext: 0 | 60, wantLevel: -60, wantDTX: true},
-		{name: "silence, no voice", ext: 0 | 127, wantLevel: -127, wantDTX: true},
+		{name: "no voice activity", ext: levelExt(false, 60), wantLevel: -60, wantDTX: true},
+		{name: "silence, no voice", ext: levelExt(false, 127), wantLevel: -127, wantDTX: true},
 	}
 
 	for _, tc := range tests {
@@ -147,7 +156,7 @@ func TestFrameFromRTPReadsTheAudioLevel(t *testing.T) {
 }
 
 func TestAudioLevelAccessor(t *testing.T) {
-	p := rtpPacket(t, 1, 960, []byte{0x01}, bptr(0x80|25))
+	p := rtpPacket(t, 1, 960, []byte{0x01}, bptr(levelExt(true, 25)))
 
 	level, voice, present := AudioLevel(p, audioLevelExtID)
 	if !present || level != -25 || !voice {
@@ -174,7 +183,7 @@ func TestFrameFromRTPRejectsNothingToCarry(t *testing.T) {
 // A frame built from RTP must be acceptable to the room it is bound for,
 // otherwise the relay would reject the browser's own audio.
 func TestFrameFromRTPProducesAFrameTheRoomAccepts(t *testing.T) {
-	p := rtpPacket(t, 7, 960, []byte{0xFC, 0x01}, bptr(0x80|20))
+	p := rtpPacket(t, 7, 960, []byte{0xFC, 0x01}, bptr(levelExt(true, 20)))
 	frameBytes, ok := FrameFromRTP(p, audioLevelExtID)
 	if !ok {
 		t.Fatal("ok = false")

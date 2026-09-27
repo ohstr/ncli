@@ -50,7 +50,6 @@ require (
 	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
 	github.com/pion/randutil v0.1.0 // indirect
-	github.com/pion/rtp/v2 v2.0.0 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/sagikazarmark/locafero v0.7.0 // indirect
@@ -71,6 +70,7 @@ require (
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/ohstr/nmilat v0.5.0-rc.1
+	github.com/pion/rtp/v2 v2.0.0
 	github.com/spf13/pflag v1.0.10
 	golang.org/x/sync v0.20.0
 	golang.org/x/sys v0.45.0

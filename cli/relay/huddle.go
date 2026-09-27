@@ -9,9 +9,11 @@ import (
 
 	"github.com/ohstr/ncli/cli/common"
 
+	"github.com/ohstr/ncli/huddlesfu"
 	"github.com/ohstr/nmilat/huddle/room"
 	"github.com/ohstr/nmilat/huddle/wsaudio"
 	"github.com/ohstr/nmilat/relay"
+	"github.com/pion/webrtc/v4"
 	"github.com/rs/zerolog/log"
 )
 
@@ -57,6 +59,27 @@ type HuddleConfig struct {
 	// stops answering is dropped rather than left holding a routing identity.
 	// Empty uses the SDK default.
 	PingInterval string `mapstructure:"pingInterval"`
+
+	// RTC additionally mounts /huddle/{id}/rtc, a WebRTC endpoint, so a browser
+	// can join the same rooms. Both endpoints share one set of rooms: a browser
+	// and a WebSocket client using the same room id are in the same call.
+	RTC bool `mapstructure:"rtc"`
+
+	// ICEServers are the STUN/TURN servers offered to WebRTC clients. Without at
+	// least a STUN server only peers on the same network will connect, and TURN
+	// is what carries peers behind symmetric NAT. Ignored unless RTC is set.
+	ICEServers []ICEServerConfig `mapstructure:"iceServers"`
+}
+
+// ICEServerConfig is one STUN or TURN server, mirroring the WebRTC
+// RTCIceServer shape.
+type ICEServerConfig struct {
+	// URLs is one or more stun:/turn:/turns: URLs for the same server.
+	URLs []string `mapstructure:"urls"`
+	// Username and Credential are TURN's long-term credentials. STUN needs
+	// neither.
+	Username   string `mapstructure:"username"`
+	Credential string `mapstructure:"credential"`
 }
 
 // huddleEnabled reports whether the config asks for the endpoint.
@@ -115,7 +138,42 @@ func registerHuddleRoutes(mux *http.ServeMux, wsHandler *relay.SessionHandler, c
 		Int("maxRooms", cfg.MaxRooms).
 		Msg("huddle audio endpoint mounted at /huddle/{id}/audio")
 
+	if cfg.RTC {
+		// The same rooms manager on purpose: a browser and a WebSocket client
+		// using one room id must end up in one call, not two.
+		mux.Handle("/huddle/{id}/rtc", huddlesfu.NewHandler(huddlesfu.Config{
+			Enabled:        true,
+			RelayURL:       relayURL,
+			Rooms:          rooms,
+			Authorize:      handlerConfig.Authorize,
+			AllowedOrigins: cfg.AllowedOrigins,
+			ICEServers:     iceServers(cfg.ICEServers),
+			AuthTimeout:    handlerConfig.AuthTimeout,
+			Logger:         log.Logger,
+		}))
+		log.Info().
+			Int("iceServers", len(cfg.ICEServers)).
+			Msg("huddle WebRTC endpoint mounted at /huddle/{id}/rtc")
+	}
+
 	return rooms
+}
+
+// iceServers converts the config shape into pion's.
+func iceServers(configured []ICEServerConfig) []webrtc.ICEServer {
+	servers := make([]webrtc.ICEServer, 0, len(configured))
+	for _, c := range configured {
+		if len(c.URLs) == 0 {
+			continue
+		}
+		server := webrtc.ICEServer{URLs: c.URLs}
+		if c.Username != "" {
+			server.Username = c.Username
+			server.Credential = c.Credential
+		}
+		servers = append(servers, server)
+	}
+	return servers
 }
 
 // endHuddleRooms ends every live call. http.Server.Shutdown never waits on

@@ -1119,6 +1119,9 @@ func TestHuddleExampleConfigMatchesTheStruct(t *testing.T) {
 	require.False(t, cfg.Huddle.RequireMembership)
 	require.Equal(t, "5s", cfg.Huddle.AuthTimeout, "huddle.authTimeout did not bind")
 	require.Equal(t, "30s", cfg.Huddle.PingInterval, "huddle.pingInterval did not bind")
+	require.True(t, cfg.Huddle.RTC, "huddle.rtc did not bind")
+	require.Len(t, cfg.Huddle.ICEServers, 1, "huddle.iceServers did not bind")
+	require.Equal(t, []string{"stun:stun.l.google.com:19302"}, cfg.Huddle.ICEServers[0].URLs)
 	require.NotEmpty(t, cfg.Nip11.URL, "the example must set nip11.url, which huddle.enabled requires")
 	require.NoError(t, checkHuddleConfig(&cfg), "the shipped example must be a valid config")
 }

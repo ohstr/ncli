@@ -4,6 +4,14 @@
 
 ### Added
 
+- `huddle.rtc` mounts a WebRTC endpoint at `/huddle/{id}/rtc`, so a browser
+  can join the same voice rooms as a client on the WebSocket endpoint. Both
+  share one set of rooms: the same room id is the same call, not two. A
+  speaker's Opus is repacketized between RTP and huddle frames and never
+  decoded, so the relay still links no codec.
+- `huddle.iceServers` configures STUN/TURN for those clients. With none, only
+  peers on the same network connect; TURN is what carries peers behind
+  symmetric NAT.
 - `ncli relay` can host real-time voice. A new `huddle:` config block mounts
   an audio endpoint at `/huddle/{id}/audio`, where peers authenticate with
   NIP-42 and relay Opus frames to each other. Audio gets its own WebSocket

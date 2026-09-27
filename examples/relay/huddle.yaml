@@ -53,3 +53,22 @@ huddle:
   # Heartbeat period. A peer that stops answering pings is disconnected rather
   # than left holding a routing identity in the room.
   pingInterval: "30s"
+
+  # Also mount /huddle/{id}/rtc, a WebRTC endpoint, so a browser can join the
+  # same rooms. Both endpoints share one set of rooms: a browser and a buzz
+  # client using the same room id are in the same call, not two.
+  #
+  # WebRTC is what makes video and screen share possible at all -- the
+  # WebSocket endpoint carries audio only.
+  rtc: true
+
+  # STUN/TURN offered to WebRTC clients. With none, only peers on the same
+  # network will connect. STUN gets most peers through NAT; TURN is what
+  # carries the ones behind symmetric NAT, and needs credentials.
+  iceServers:
+    - urls:
+        - "stun:stun.l.google.com:19302"
+    # - urls:
+    #     - "turn:turn.example.com:3478"
+    #   username: "relay"
+    #   credential: "a-long-random-secret"

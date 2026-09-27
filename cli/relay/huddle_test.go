@@ -77,11 +77,18 @@ func readControl(t *testing.T, conn *websocket.Conn) huddleControl {
 	return msg
 }
 
-// handshake runs challenge -> signed auth -> joined against the huddle endpoint.
+// handshake runs challenge -> signed auth -> joined against the audio endpoint.
 func handshake(t *testing.T, ts *httptest.Server, roomID, privKey string) (*websocket.Conn, huddleControl) {
+	return handshakeOn(t, ts, "audio", roomID, privKey)
+}
+
+// handshakeOn is handshake against a named endpoint ("audio" or "rtc"). Both
+// admit a peer to the room during the handshake, before any media negotiation,
+// so this is enough to put either kind of peer in a room.
+func handshakeOn(t *testing.T, ts *httptest.Server, endpoint, roomID, privKey string) (*websocket.Conn, huddleControl) {
 	t.Helper()
 
-	wsURL := "ws" + strings.TrimPrefix(ts.URL, "http") + "/huddle/" + roomID + "/audio"
+	wsURL := "ws" + strings.TrimPrefix(ts.URL, "http") + "/huddle/" + roomID + "/" + endpoint
 	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.Close() })
@@ -295,4 +302,79 @@ func TestHuddleNIPsAreDeclared(t *testing.T) {
 			t.Errorf("NIP-%s is not declared; blank-import its relayreg in command.go. Declared: %v", want, have)
 		}
 	}
+}
+
+// TestWebSocketAndWebRTCPeersShareARoom is why both endpoints are handed the same
+// room manager: a browser and a buzz client using one room id have to end up in
+// one call. Give them separate managers and each would sit alone in its own room,
+// hearing nothing, with no error anywhere to say why.
+func TestWebSocketAndWebRTCPeersShareARoom(t *testing.T) {
+	store := newHuddleStore(t)
+	t.Cleanup(store.Close)
+
+	metadata := &nip11.Metadata{PubKey: huddleRelayPub, PrivKey: huddleRelayPriv, URL: huddleRelayURL}
+	wsHandler := relay.NewSessionHandler(store, metadata, nil)
+
+	mux := http.NewServeMux()
+	rooms := registerHuddleRoutes(mux, wsHandler, &HuddleConfig{Enabled: true, RTC: true}, huddleRelayURL)
+	require.NotNil(t, rooms)
+	t.Cleanup(func() { endHuddleRooms(rooms) })
+
+	ts := httptest.NewServer(mux)
+	t.Cleanup(ts.Close)
+
+	// A buzz-style client on the WebSocket endpoint.
+	wsConn, wsPeer := handshakeOn(t, ts, "audio", "room-1", alicePriv)
+	require.Equal(t, "joined", wsPeer.Type)
+
+	// A browser on the WebRTC endpoint, same room id.
+	_, rtcPeer := handshakeOn(t, ts, "rtc", "room-1", bobPriv)
+	require.Equal(t, "joined", rtcPeer.Type, "got %+v", rtcPeer)
+
+	// One room, two occupants -- not two rooms of one.
+	require.Eventually(t, func() bool { return rooms.Occupancy()["room-1"] == 2 },
+		10*time.Second, 10*time.Millisecond, "occupancy = %v, want room-1 with 2", rooms.Occupancy())
+	require.Equal(t, 1, rooms.Len(), "the two peers landed in separate rooms")
+
+	// They have distinct routing identities within that one room.
+	require.NotEqual(t, wsPeer.PeerIndex, rtcPeer.PeerIndex, "both peers share a routing index")
+
+	// And the WebSocket peer is told the browser joined, over the shared control
+	// plane -- proof they are in one room's roster, not merely one manager.
+	notice := readControl(t, wsConn)
+	require.Equal(t, "joined", notice.Type, "got %+v", notice)
+	require.Equal(t, rtcPeer.Pubkey, notice.Pubkey)
+}
+
+func TestHuddleRTCEndpointOnlyWhenEnabled(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		rtc        bool
+		wantStatus int
+	}{
+		{name: "rtc enabled", rtc: true, wantStatus: http.StatusBadRequest}, // upgrade required, not 404
+		{name: "rtc disabled", rtc: false, wantStatus: http.StatusNotFound},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ts := bootRelay(t, &HuddleConfig{Enabled: true, RTC: tc.rtc}, huddleRelayURL)
+
+			resp, err := http.Get(ts.URL + "/huddle/room-1/rtc")
+			require.NoError(t, err)
+			defer func() { _ = resp.Body.Close() }()
+			require.Equal(t, tc.wantStatus, resp.StatusCode)
+		})
+	}
+}
+
+func TestICEServersConversion(t *testing.T) {
+	got := iceServers([]ICEServerConfig{
+		{URLs: []string{"stun:stun.example:3478"}},
+		{URLs: []string{"turn:turn.example:3478"}, Username: "u", Credential: "p"},
+		{URLs: nil}, // dropped: a server with no URL is not a server
+	})
+	require.Len(t, got, 2)
+	require.Equal(t, []string{"stun:stun.example:3478"}, got[0].URLs)
+	require.Empty(t, got[0].Username, "STUN needs no credentials")
+	require.Equal(t, "u", got[1].Username)
+	require.Equal(t, "p", got[1].Credential)
 }

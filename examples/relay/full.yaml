@@ -178,3 +178,8 @@ huddle:
   # startup error rather than a silent fallback.
   authTimeout: "5s"
   pingInterval: "30s"
+  # Mount /huddle/{id}/rtc too, sharing the same rooms, so browsers can join.
+  # Required for video and screen share; the WebSocket endpoint is audio-only.
+  rtc: false
+  # STUN/TURN for WebRTC clients; TURN needs username/credential.
+  iceServers: []

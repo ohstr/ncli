@@ -4,6 +4,17 @@
 
 ### Added
 
+- WebRTC peers in a huddle now exchange **video and screen share**, which the
+  WebSocket transport cannot carry. A publisher's track ids come through
+  unchanged, so a receiver tells a camera from a screen share exactly as the
+  publisher labelled them, and a peer may publish both at once.
+- Video takes a separate path from audio on purpose. Audio goes through the
+  huddle room, which is what lets a WebSocket peer hear the call; video is
+  forwarded only among the WebRTC peers. So a buzz client in a screen-share
+  call hears the call and misses only the picture, rather than being sent
+  bytes it has no way to use.
+- A subscriber joining mid-stream is sent a keyframe request, so video appears
+  at once instead of waiting out the publisher's next natural keyframe.
 - `huddle.rtc` mounts a WebRTC endpoint at `/huddle/{id}/rtc`, so a browser
   can join the same voice rooms as a client on the WebSocket endpoint. Both
   share one set of rooms: the same room id is the same call, not two. A

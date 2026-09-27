@@ -116,11 +116,14 @@ func (c Config) writeTimeout() time.Duration {
 type Handler struct {
 	cfg      Config
 	upgrader websocket.Upgrader
+	// hub is shared by every session this handler serves, which is what lets two
+	// browsers in one room see each other's video.
+	hub *videoHub
 }
 
 // NewHandler returns a Handler for cfg.
 func NewHandler(cfg Config) *Handler {
-	h := &Handler{cfg: cfg}
+	h := &Handler{cfg: cfg, hub: newVideoHub()}
 	h.upgrader = websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
@@ -167,6 +170,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		cfg:    h.cfg,
 		conn:   conn,
 		roomID: roomID,
+		hub:    h.hub,
 		log:    h.cfg.Logger.With().Str("room", roomID).Str("transport", "rtc").Logger(),
 	}
 	s.run(r.Context())

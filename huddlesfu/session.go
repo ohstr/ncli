@@ -31,6 +31,14 @@ type session struct {
 	sink    *huddlertp.Sink
 	pc      *webrtc.PeerConnection
 
+	// hub carries video between the WebRTC peers of a room. Audio does not use
+	// it -- that goes through the room, which is what lets a WebSocket peer hear
+	// the call.
+	hub *videoHub
+	// videoTracks are this subscriber's outbound tracks, keyed by publication.
+	videoMu     sync.Mutex
+	videoTracks map[string]*webrtc.TrackLocalStaticRTP
+
 	// writeMu serialises websocket writes. Signalling originates from three
 	// places -- the read loop, ICE gathering, and renegotiation when a speaker
 	// joins -- and gorilla allows only one writer at a time.
@@ -56,6 +64,7 @@ type session struct {
 func (s *session) run(ctx context.Context) {
 	defer func() { _ = s.conn.Close() }()
 	s.done = make(chan struct{})
+	s.videoTracks = make(map[string]*webrtc.TrackLocalStaticRTP)
 	s.conn.SetReadLimit(wire.MaxControlBytes * 16) // SDP is far larger than a huddle control frame
 
 	if !s.cfg.Enabled {
@@ -135,6 +144,7 @@ func (s *session) handshake(ctx context.Context) bool {
 	}
 	s.room, s.peer = joinedRoom, peer
 	s.log = s.log.With().Str("pubkey", s.pubkey).Uint8("peer_index", peer.Index).Logger()
+	s.hub.join(s.roomID, s)
 
 	if err := s.write(signal{
 		Type: "joined", Revision: roster.Revision, Pubkey: s.pubkey,
@@ -189,11 +199,10 @@ func (s *session) wirePeerConnection() {
 	})
 
 	s.pc.OnTrack(func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
-		if track.Kind() != webrtc.RTPCodecTypeAudio {
-			// Video arrives here too once a client publishes camera or screen.
-			// Forwarding it is a separate concern: a WebSocket peer is audio-only,
-			// so video must only reach other WebRTC subscribers.
-			s.log.Debug().Str("kind", track.Kind().String()).Msg("ignoring a non-audio track for now")
+		if track.Kind() == webrtc.RTPCodecTypeVideo {
+			// Camera or screen share. Forwarded only among WebRTC peers, since a
+			// WebSocket peer is audio-only.
+			s.forwardVideo(track)
 			return
 		}
 		s.publishInbound(track, receiver)
@@ -321,6 +330,19 @@ func (s *session) handleOffer(sdp string) {
 func (s *session) handleAnswer(sdp string) {
 	if err := s.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeAnswer, SDP: sdp}); err != nil {
 		s.log.Debug().Err(err).Msg("bad answer")
+		return
+	}
+
+	// Signalling is stable again, so anything added while that exchange was in
+	// flight can go out now. Without this a second track -- a screen share
+	// alongside a camera, or a second speaker joining moments after the first --
+	// is added to the peer connection and then never negotiated, so the receiver
+	// never learns it exists.
+	s.negotiateMu.Lock()
+	pending := s.pendingTracks
+	s.negotiateMu.Unlock()
+	if pending {
+		s.renegotiate()
 	}
 }
 
@@ -399,6 +421,7 @@ func (s *session) announceJoin(roster room.Roster) {
 
 func (s *session) teardown() {
 	s.shutdown()
+	s.hub.leave(s.roomID, s)
 	if s.sink != nil {
 		s.sink.Close()
 	}

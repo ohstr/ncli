@@ -386,10 +386,18 @@ type browser struct {
 	connected chan struct{}
 }
 
-// connectBrowser authenticates, publishes one Opus track, and completes the
-// WebRTC handshake. publish is nil when the caller only wants to receive.
+// connectBrowser authenticates, publishes what opts asks for, and completes the
+// WebRTC handshake.
 func connectBrowser(t *testing.T, h *harness, roomID, privKey string, publish bool) (*browser, *webrtc.TrackLocalStaticRTP) {
+	b, audio, _ := connectBrowserWith(t, h, roomID, privKey, publish, nil)
+	return b, audio
+}
+
+// connectBrowserWith additionally publishes one video track per id in videoIDs,
+// which is how a client offers a camera and a screen share at once.
+func connectBrowserWith(t *testing.T, h *harness, roomID, privKey string, publishAudio bool, videoIDs []string) (*browser, *webrtc.TrackLocalStaticRTP, map[string]*webrtc.TrackLocalStaticRTP) {
 	t.Helper()
+	videos := map[string]*webrtc.TrackLocalStaticRTP{}
 
 	conn := h.dial(roomID)
 	if joined := authenticate(t, conn, privKey, relayURL); joined.Type != "joined" {
@@ -405,7 +413,7 @@ func connectBrowser(t *testing.T, h *harness, roomID, privKey string, publish bo
 	b := &browser{pc: pc, conn: conn, connected: make(chan struct{})}
 
 	var track *webrtc.TrackLocalStaticRTP
-	if publish {
+	if publishAudio {
 		// Channels is 2 because that is the SDP codec parameter for Opus, not the
 		// channel count of the audio.
 		track, err = webrtc.NewTrackLocalStaticRTP(
@@ -423,6 +431,18 @@ func connectBrowser(t *testing.T, h *harness, roomID, privKey string, publish bo
 			webrtc.RTPTransceiverInit{Direction: webrtc.RTPTransceiverDirectionRecvonly}); err != nil {
 			t.Fatalf("AddTransceiver: %v", err)
 		}
+	}
+
+	for _, id := range videoIDs {
+		video, err := webrtc.NewTrackLocalStaticRTP(
+			webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8, ClockRate: 90000}, id, "browser")
+		if err != nil {
+			t.Fatalf("video track %q: %v", id, err)
+		}
+		if _, err := pc.AddTrack(video); err != nil {
+			t.Fatalf("AddTrack(%q): %v", id, err)
+		}
+		videos[id] = video
 	}
 
 	var writeMu sync.Mutex
@@ -498,7 +518,7 @@ func connectBrowser(t *testing.T, h *harness, roomID, privKey string, publish bo
 	case <-time.After(window):
 		t.Fatalf("the peer connection never connected (state %s)", pc.ConnectionState())
 	}
-	return b, track
+	return b, track, videos
 }
 
 // TestWebSocketPeerAudioReachesTheBrowser is the other half of the bridge: a peer
@@ -561,5 +581,105 @@ func TestWebSocketPeerAudioReachesTheBrowser(t *testing.T) {
 		}
 	case <-time.After(window):
 		t.Fatal("the browser never received the WebSocket peer's audio")
+	}
+}
+
+// TestVideoAndScreenShareReachTheOtherBrowser is the capability the WebSocket
+// transport cannot provide at all. One browser publishes a camera and a screen
+// share at once; the other must receive both, told apart by the track id the
+// publisher chose. It also pins the graceful degrade: video never enters the
+// room, so a WebSocket peer in the same call hears the audio and simply misses
+// the picture rather than being sent bytes it cannot use.
+func TestVideoAndScreenShareReachTheOtherBrowser(t *testing.T) {
+	h := newHarness(t, nil)
+
+	// A WebSocket-side peer in the same room, to prove video never reaches it.
+	wsSink := room.NewChannelSink()
+	if _, _, _, err := h.rooms.Join("room-1", "ws-peer", 3, wsSink); err != nil {
+		t.Fatalf("ws peer join: %v", err)
+	}
+
+	// The receiving browser joins first so it is already subscribed.
+	receiver, _, _ := connectBrowserWith(t, h, "room-1", bobPriv, false, nil)
+
+	received := make(chan string, 8)
+	payloads := make(chan []byte, 8)
+	receiver.pc.OnTrack(func(track *webrtc.TrackRemote, _ *webrtc.RTPReceiver) {
+		if track.Kind() != webrtc.RTPCodecTypeVideo {
+			return
+		}
+		select {
+		case received <- track.ID():
+		default:
+		}
+		for {
+			packet, _, err := track.ReadRTP()
+			if err != nil {
+				return
+			}
+			select {
+			case payloads <- packet.Payload:
+			default:
+			}
+		}
+	})
+
+	// The publisher offers a camera and a screen share together.
+	_, _, videos := connectBrowserWith(t, h, "room-1", alicePriv, false, []string{"camera", "screen"})
+	h.waitForOccupancy("room-1", 3)
+
+	frame := []byte{0x10, 0xAB, 0xCD, 0xEF}
+	stop := make(chan struct{})
+	defer close(stop)
+	go func() {
+		seq, ts := uint16(1), uint32(3000)
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			for _, track := range videos {
+				_ = track.WriteRTP(&rtp.Packet{
+					Header:  rtp.Header{Version: 2, SequenceNumber: seq, Timestamp: ts, SSRC: 0xCAFE, PayloadType: 96},
+					Payload: frame,
+				})
+			}
+			seq++
+			ts += 3000
+			time.Sleep(20 * time.Millisecond)
+		}
+	}()
+
+	// Both tracks must arrive, distinguishable by the publisher's own labels.
+	seen := map[string]bool{}
+	deadline := time.After(window)
+	for len(seen) < 2 {
+		select {
+		case id := <-received:
+			seen[id] = true
+		case <-deadline:
+			t.Fatalf("only saw video tracks %v, want both camera and screen", seen)
+		}
+	}
+	if !seen["camera"] || !seen["screen"] {
+		t.Errorf("track ids = %v, want camera and screen", seen)
+	}
+
+	select {
+	case payload := <-payloads:
+		if string(payload) != string(frame) {
+			t.Errorf("payload = %x, want the publisher's frame %x", payload, frame)
+		}
+	case <-time.After(window):
+		t.Fatal("no video payload arrived")
+	}
+
+	// The WebSocket peer must have received no media at all: the publishers sent
+	// only video, and video does not go through the room.
+	select {
+	case got := <-wsSink.Audio():
+		t.Errorf("the WebSocket peer was sent %x; video must not enter the room", got)
+	default:
 	}
 }

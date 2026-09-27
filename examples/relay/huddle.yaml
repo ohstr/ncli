@@ -1,0 +1,55 @@
+# Huddle audio: real-time voice rooms served over their own WebSocket at
+# /huddle/{id}/audio. See examples/relay/full.yaml for the complete set of
+# nip11 fields and which ones `ncli relay` honors from config.
+#
+# Audio does not share the Nostr socket. That socket decodes every frame as
+# JSON, so a binary audio frame on it is a parse error that drops the session --
+# hence a separate route, and hence a client connects to both.
+#
+# A joining client authenticates with a NIP-42 kind:22242 event whose `relay`
+# tag names *this relay* (nip11.url below), not the huddle endpoint.
+nip11:
+  name: "ncli Huddle Relay"
+  pubkey: "d3345d36e7885ad6340263309a96e0821b22e176ebc721098492063df5516086"
+  contact: "admin@example.com"
+  # url: required when huddle.enabled is true -- it is what an incoming
+  # NIP-42 auth event's relay tag is validated against.
+  url: "ws://localhost:5502"
+
+logdir: "./data/logs"
+store: "./data/db/huddle.db"
+port: 5502
+
+huddle:
+  # Mounts /huddle/{id}/audio. Omitting this block, or leaving enabled false,
+  # mounts nothing -- a client then sees the same 404 an older relay gives it.
+  enabled: true
+
+  # Cap on concurrent rooms. Rooms are created on the first join and dropped
+  # when the last peer leaves, so this bounds simultaneous calls, not how many
+  # channels may ever host one. 0 uses the SDK default.
+  #
+  # There is deliberately no maxPeers: per-room occupancy is a fixed cap in the
+  # SDK, because fan-out is quadratic and the limit reflects what one process
+  # can carry rather than an operator preference.
+  maxRooms: 64
+
+  # Restrict joining to relay members (NIP-43). Independent of
+  # nip11.limitation.membership_required, which gates the Nostr socket -- a
+  # relay may want open reading and closed calls, or the reverse.
+  requireMembership: false
+
+  # Browser origins allowed to connect. Omit or leave empty to allow any, which
+  # is the sensible default: admission is gated by a signed NIP-42 challenge, so
+  # Origin is not the security boundary here, and restricting it only locks out
+  # web clients while every CLI client keeps working. Set it if you want the
+  # endpoint reachable from your own app and nowhere else.
+  # allowedOrigins:
+  #   - "https://app.example"
+
+  # How long a connection may sit unauthenticated before it is dropped.
+  authTimeout: "5s"
+
+  # Heartbeat period. A peer that stops answering pings is disconnected rather
+  # than left holding a routing identity in the room.
+  pingInterval: "30s"

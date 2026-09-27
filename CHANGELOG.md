@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.7.0]
+
+### Added
+
+- `ncli relay` can host real-time voice. A new `huddle:` config block mounts
+  an audio endpoint at `/huddle/{id}/audio`, where peers authenticate with
+  NIP-42 and relay Opus frames to each other. Audio gets its own WebSocket
+  rather than sharing the Nostr socket, which decodes every frame as JSON and
+  would drop the session on the first binary frame -- so a client connects to
+  both.
+- `huddle.requireMembership` restricts joining to relay members (NIP-43). It is
+  independent of `nip11.limitation.membership_required`, which gates the Nostr
+  socket: a relay may want open reading and closed calls, or the reverse.
+- `huddle.enabled` requires `nip11.url`, since a joining client's NIP-42 event
+  names this relay and the endpoint has to know what to validate against.
+  Omitting the block, or disabling it, mounts nothing -- a client then sees the
+  same 404 an older relay gives it, rather than a huddle-specific error.
+- `huddle.allowedOrigins` restricts browser origins, and is empty by default.
+  Admission is gated by a signed NIP-42 challenge, so Origin is not the security
+  boundary here, and restricting it by default would lock out web clients while
+  every CLI client kept working.
+- `examples/relay/huddle.yaml` documents the block, and a test loads it through
+  the real config loader. Viper silently ignores an unknown key, so a
+  mis-spelled field in the example would otherwise leave the feature quietly off
+  with no error anywhere.
+
+### Fixed
+
+- `ncli relay` now ends live huddles before shutting down.
+  `http.Server.Shutdown` never waits on hijacked WebSocket connections, so
+  without this a restart would sever calls with no notice and leave
+  participants waiting for audio that had simply stopped arriving.
+
 ## [0.6.0]
 
 ### Added

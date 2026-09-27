@@ -92,6 +92,7 @@ type RelayConfig struct {
 	Pow        *PowConfig        `mapstructure:"pow"`
 	Membership *MembershipConfig `mapstructure:"membership"`
 	AgentAuth  *AgentAuthConfig  `mapstructure:"agent_auth"`
+	Huddle     *HuddleConfig     `mapstructure:"huddle"`
 
 	HandshakeTimeout string `mapstructure:"handshakeTimeout"`
 	PingInterval     string `mapstructure:"pingInterval"`
@@ -322,6 +323,24 @@ func initConfig() error {
 	// every AUTH attempt fails closed.
 	if config.Nip11.Limitation.AuthRequired && config.Nip11.URL == "" {
 		return &common.CLIError{Err: errors.New("nip11.limitation.auth_required requires nip11.url"), Code: common.CodeUsage}
+	}
+
+	if config.Huddle != nil && config.Huddle.Enabled {
+		// A joining client authenticates with a NIP-42 event naming this relay,
+		// so with no configured URL there is nothing to validate it against and
+		// every join would fail closed.
+		if config.Nip11.URL == "" {
+			return &common.CLIError{Err: errors.New("huddle.enabled requires nip11.url"), Code: common.CodeUsage}
+		}
+		if config.Huddle.MaxRooms < 0 {
+			return &common.CLIError{Err: errors.New("huddle.maxRooms must be >= 0"), Code: common.CodeInvalidInput}
+		}
+		if err := checkHuddleDuration("huddle.authTimeout", config.Huddle.AuthTimeout); err != nil {
+			return err
+		}
+		if err := checkHuddleDuration("huddle.pingInterval", config.Huddle.PingInterval); err != nil {
+			return err
+		}
 	}
 
 	if config.Pow != nil {

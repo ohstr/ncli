@@ -155,3 +155,26 @@ logs:
   maxBackups: 3
   maxAge: 28 # days
   compress: true
+
+# ---------------------------------------------------------------------------
+# huddle: real-time voice rooms over their own WebSocket at
+# /huddle/{id}/audio. Omit the block, or set enabled: false, and nothing is
+# mounted. See examples/relay/huddle.yaml for a documented preset.
+# ---------------------------------------------------------------------------
+huddle:
+  # Requires nip11.url: a joining client's NIP-42 auth event names this relay,
+  # and the endpoint validates its relay tag against that url.
+  enabled: false
+  # Concurrent-room cap; 0 uses the SDK default. No maxPeers knob exists --
+  # per-room occupancy is a fixed cap in the SDK.
+  maxRooms: 0
+  # Restrict joining to relay members (NIP-43). Independent of
+  # nip11.limitation.membership_required, which gates the Nostr socket.
+  requireMembership: false
+  # Browser origins; empty allows any, which is the default because admission
+  # is gated by a signed challenge rather than by Origin.
+  allowedOrigins: []
+  # Go duration strings. Empty uses the SDK default; an unparseable value is a
+  # startup error rather than a silent fallback.
+  authTimeout: "5s"
+  pingInterval: "30s"

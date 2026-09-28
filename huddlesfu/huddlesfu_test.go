@@ -16,6 +16,7 @@ import (
 	"github.com/ohstr/nmilat/nip01"
 	"github.com/ohstr/nmilat/nip42"
 	"github.com/ohstr/nmilat/utils"
+	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4"
 	"github.com/rs/zerolog"
@@ -395,7 +396,12 @@ func connectBrowser(t *testing.T, h *harness, roomID, privKey string, publish bo
 
 // connectBrowserWith additionally publishes one video track per id in videoIDs,
 // which is how a client offers a camera and a screen share at once.
-func connectBrowserWith(t *testing.T, h *harness, roomID, privKey string, publishAudio bool, videoIDs []string) (*browser, *webrtc.TrackLocalStaticRTP, map[string]*webrtc.TrackLocalStaticRTP) {
+//
+// onTrack is optional and variadic so existing callers stay unchanged. It is
+// registered before the handshake, which matters for a *late* subscriber: the SFU
+// adds its video track on the next packet after it joins, i.e. within one frame
+// interval, so a handler registered after this returns can lose that race.
+func connectBrowserWith(t *testing.T, h *harness, roomID, privKey string, publishAudio bool, videoIDs []string, onTrack ...func(*webrtc.TrackRemote, *webrtc.RTPReceiver)) (*browser, *webrtc.TrackLocalStaticRTP, map[string]*webrtc.TrackLocalStaticRTP) {
 	t.Helper()
 	videos := map[string]*webrtc.TrackLocalStaticRTP{}
 
@@ -411,6 +417,10 @@ func connectBrowserWith(t *testing.T, h *harness, roomID, privKey string, publis
 	t.Cleanup(func() { _ = pc.Close() })
 
 	b := &browser{pc: pc, conn: conn, connected: make(chan struct{})}
+
+	for _, handler := range onTrack {
+		pc.OnTrack(handler)
+	}
 
 	var track *webrtc.TrackLocalStaticRTP
 	if publishAudio {
@@ -681,5 +691,129 @@ func TestVideoAndScreenShareReachTheOtherBrowser(t *testing.T) {
 	case got := <-wsSink.Audio():
 		t.Errorf("the WebSocket peer was sent %x; video must not enter the room", got)
 	default:
+	}
+}
+
+// TestLateSubscriberGetsAKeyframeRequest is the first coverage of the keyframe
+// path, and times it.
+//
+// A subscriber joining mid-stream starts between keyframes, so its decoder has
+// nothing to build on and shows nothing until the publisher's next natural
+// keyframe -- which for a screen share can be many seconds. writeVideo asks the
+// publisher for one the moment it creates a fresh outbound track, which is the
+// difference between video appearing at once and appearing eventually. Nothing
+// verified that the request actually reaches the publisher.
+//
+// This also reports the two latencies a user would feel: time to the first
+// forwarded packet, and time until the keyframe request lands at the publisher.
+// The assertions are loose on purpose -- the value is that the request arrives at
+// all, plus the logged timings.
+//
+// Measured over 3 runs: the keyframe request reaches the publisher in ~20-22 ms
+// and the first forwarded packet arrives in ~40 ms. The request lands *before*
+// the first packet because writeVideo asks the moment it creates the track, then
+// writes -- so a late joiner waits ~40 ms plus the publisher's own response time,
+// not the seconds it would wait for a natural keyframe.
+func TestLateSubscriberGetsAKeyframeRequest(t *testing.T) {
+	h := newHarness(t, nil)
+
+	publisher, _, videos := connectBrowserWith(t, h, "room-1", alicePriv, false, []string{"camera"})
+	camera := videos["camera"]
+
+	// Watch the publisher's own RTCP for the PLI the SFU is supposed to send.
+	pli := make(chan time.Time, 8)
+	watched := 0
+	for _, sender := range publisher.pc.GetSenders() {
+		track := sender.Track()
+		if track == nil || track.ID() != "camera" {
+			continue
+		}
+		watched++
+		go func(s *webrtc.RTPSender) {
+			for {
+				packets, _, err := s.ReadRTCP()
+				if err != nil {
+					return
+				}
+				for _, p := range packets {
+					if _, ok := p.(*rtcp.PictureLossIndication); ok {
+						select {
+						case pli <- time.Now():
+						default:
+						}
+					}
+				}
+			}
+		}(sender)
+	}
+	if watched != 1 {
+		t.Fatalf("expected exactly one camera sender to watch, found %d", watched)
+	}
+
+	stop := make(chan struct{})
+	defer close(stop)
+	go func() {
+		seq, ts := uint16(1), uint32(3000)
+		ticker := time.NewTicker(20 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-ticker.C:
+			}
+			_ = camera.WriteRTP(&rtp.Packet{
+				Header:  rtp.Header{Version: 2, SequenceNumber: seq, Timestamp: ts, SSRC: 0xCAFE, PayloadType: 96},
+				Payload: []byte{0x10, 0xAB, 0xCD, 0xEF},
+			})
+			seq++
+			ts += 3000
+		}
+	}()
+
+	// Let the stream get going, so the subscriber below is genuinely arriving
+	// mid-stream rather than at its start.
+	time.Sleep(500 * time.Millisecond)
+
+	firstPacket := make(chan time.Time, 1)
+	joinedAt := time.Now()
+	connectBrowserWith(t, h, "room-1", bobPriv, false, nil,
+		func(track *webrtc.TrackRemote, _ *webrtc.RTPReceiver) {
+			if track.Kind() != webrtc.RTPCodecTypeVideo {
+				return
+			}
+			for {
+				if _, _, err := track.ReadRTP(); err != nil {
+					return
+				}
+				select {
+				case firstPacket <- time.Now():
+				default:
+				}
+			}
+		})
+
+	var toFirstPacket, toKeyframeRequest time.Duration
+	select {
+	case at := <-firstPacket:
+		toFirstPacket = at.Sub(joinedAt)
+	case <-time.After(20 * time.Second):
+		t.Fatal("the late subscriber never received a forwarded video packet")
+	}
+	select {
+	case at := <-pli:
+		toKeyframeRequest = at.Sub(joinedAt)
+	case <-time.After(20 * time.Second):
+		t.Fatal("no keyframe request ever reached the publisher, so a late joiner would wait for its next natural keyframe")
+	}
+
+	t.Logf("late subscriber: first forwarded packet in %v, keyframe request reached the publisher in %v",
+		toFirstPacket, toKeyframeRequest)
+
+	if toFirstPacket > 15*time.Second {
+		t.Errorf("time to first packet is implausible: %v", toFirstPacket)
+	}
+	if toKeyframeRequest > 15*time.Second {
+		t.Errorf("time to keyframe request is implausible: %v", toKeyframeRequest)
 	}
 }

@@ -15,12 +15,16 @@ import (
 	"github.com/ohstr/ncli/cli/common"
 	"github.com/ohstr/ncli/cli/common/meilisearch"
 	"github.com/ohstr/nmilat/nip11"
+	_ "github.com/ohstr/nmilat/nip29/relayreg"
 	_ "github.com/ohstr/nmilat/nip47/relayreg"
 	_ "github.com/ohstr/nmilat/nip48/relayreg"
+	_ "github.com/ohstr/nmilat/nip53/relayreg"
 	_ "github.com/ohstr/nmilat/nip57/relayreg"
 	_ "github.com/ohstr/nmilat/nip65/relayreg"
+	_ "github.com/ohstr/nmilat/nip71/relayreg"
 	_ "github.com/ohstr/nmilat/nip88/relayreg"
 	_ "github.com/ohstr/nmilat/nip90/relayreg"
+	_ "github.com/ohstr/nmilat/nipA0/relayreg"
 	_ "github.com/ohstr/nmilat/nipAZ/relayreg"
 	_ "github.com/ohstr/nmilat/nipB0/relayreg"
 	_ "github.com/ohstr/nmilat/nipB7/relayreg"
@@ -92,6 +96,7 @@ type RelayConfig struct {
 	Pow        *PowConfig        `mapstructure:"pow"`
 	Membership *MembershipConfig `mapstructure:"membership"`
 	AgentAuth  *AgentAuthConfig  `mapstructure:"agent_auth"`
+	Huddle     *HuddleConfig     `mapstructure:"huddle"`
 
 	HandshakeTimeout string `mapstructure:"handshakeTimeout"`
 	PingInterval     string `mapstructure:"pingInterval"`
@@ -322,6 +327,24 @@ func initConfig() error {
 	// every AUTH attempt fails closed.
 	if config.Nip11.Limitation.AuthRequired && config.Nip11.URL == "" {
 		return &common.CLIError{Err: errors.New("nip11.limitation.auth_required requires nip11.url"), Code: common.CodeUsage}
+	}
+
+	if config.Huddle != nil && config.Huddle.Enabled {
+		// A joining client authenticates with a NIP-42 event naming this relay,
+		// so with no configured URL there is nothing to validate it against and
+		// every join would fail closed.
+		if config.Nip11.URL == "" {
+			return &common.CLIError{Err: errors.New("huddle.enabled requires nip11.url"), Code: common.CodeUsage}
+		}
+		if config.Huddle.MaxRooms < 0 {
+			return &common.CLIError{Err: errors.New("huddle.maxRooms must be >= 0"), Code: common.CodeInvalidInput}
+		}
+		if err := checkHuddleDuration("huddle.authTimeout", config.Huddle.AuthTimeout); err != nil {
+			return err
+		}
+		if err := checkHuddleDuration("huddle.pingInterval", config.Huddle.PingInterval); err != nil {
+			return err
+		}
 	}
 
 	if config.Pow != nil {

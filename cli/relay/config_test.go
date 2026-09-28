@@ -963,3 +963,165 @@ agent_auth:
 		assert.NoError(t, checkAgentAuthRequiresMembershipRequired(&cfg))
 	})
 }
+
+// checkHuddleConfig mirrors the `config.Huddle != nil && config.Huddle.Enabled`
+// guards in initConfig (command.go).
+func checkHuddleConfig(cfg *RelayConfig) error {
+	if cfg.Huddle == nil || !cfg.Huddle.Enabled {
+		return nil
+	}
+	if cfg.Nip11.URL == "" {
+		return errors.New("huddle.enabled requires nip11.url")
+	}
+	if cfg.Huddle.MaxRooms < 0 {
+		return errors.New("huddle.maxRooms must be >= 0")
+	}
+	if err := checkHuddleDuration("huddle.authTimeout", cfg.Huddle.AuthTimeout); err != nil {
+		return err
+	}
+	return checkHuddleDuration("huddle.pingInterval", cfg.Huddle.PingInterval)
+}
+
+func TestHuddleConfig(t *testing.T) {
+	const validPubkey = "bb50e2d89a4ed70663d080659fe0ad4b9bc3e06c17a227433966cb59ceee020d"
+
+	t.Run("omitted: no huddle block at all", func(t *testing.T) {
+		cfg := loadRelayConfigFromYAML(t, `
+nip11:
+  name: test
+  pubkey: `+validPubkey+`
+`)
+		require.Nil(t, cfg.Huddle)
+		require.NoError(t, checkHuddleConfig(&cfg))
+	})
+
+	t.Run("disabled: block present, feature off", func(t *testing.T) {
+		cfg := loadRelayConfigFromYAML(t, `
+nip11:
+  name: test
+  pubkey: `+validPubkey+`
+huddle:
+  enabled: false
+`)
+		require.NotNil(t, cfg.Huddle)
+		require.False(t, cfg.Huddle.Enabled)
+		// Disabled needs no url: nothing is mounted to validate against.
+		require.NoError(t, checkHuddleConfig(&cfg))
+	})
+
+	t.Run("enabled: full block parses", func(t *testing.T) {
+		cfg := loadRelayConfigFromYAML(t, `
+nip11:
+  name: test
+  pubkey: `+validPubkey+`
+  url: wss://relay.example
+huddle:
+  enabled: true
+  maxRooms: 64
+  requireMembership: true
+  allowedOrigins:
+    - https://app.example
+    - https://other.example
+  authTimeout: 5s
+  pingInterval: 30s
+`)
+		require.NoError(t, checkHuddleConfig(&cfg))
+		require.True(t, cfg.Huddle.Enabled)
+		require.Equal(t, 64, cfg.Huddle.MaxRooms)
+		require.True(t, cfg.Huddle.RequireMembership)
+		require.Equal(t, []string{"https://app.example", "https://other.example"}, cfg.Huddle.AllowedOrigins)
+		require.Equal(t, "5s", cfg.Huddle.AuthTimeout)
+		require.Equal(t, "30s", cfg.Huddle.PingInterval)
+	})
+
+	t.Run("enabled without nip11.url is rejected", func(t *testing.T) {
+		cfg := loadRelayConfigFromYAML(t, `
+nip11:
+  name: test
+  pubkey: `+validPubkey+`
+huddle:
+  enabled: true
+`)
+		require.ErrorContains(t, checkHuddleConfig(&cfg), "requires nip11.url")
+	})
+
+	t.Run("negative maxRooms is rejected", func(t *testing.T) {
+		cfg := loadRelayConfigFromYAML(t, `
+nip11:
+  name: test
+  pubkey: `+validPubkey+`
+  url: wss://relay.example
+huddle:
+  enabled: true
+  maxRooms: -1
+`)
+		require.ErrorContains(t, checkHuddleConfig(&cfg), "maxRooms must be >= 0")
+	})
+
+	// An unparseable duration would otherwise fall back to a default and
+	// silently ignore the typo, so it fails at startup instead.
+	t.Run("unparseable durations are rejected", func(t *testing.T) {
+		for _, field := range []string{"authTimeout", "pingInterval"} {
+			cfg := loadRelayConfigFromYAML(t, `
+nip11:
+  name: test
+  pubkey: `+validPubkey+`
+  url: wss://relay.example
+huddle:
+  enabled: true
+  `+field+`: soon
+`)
+			require.ErrorContains(t, checkHuddleConfig(&cfg), field, "field %s", field)
+		}
+	})
+
+	t.Run("non-positive durations are rejected", func(t *testing.T) {
+		cfg := loadRelayConfigFromYAML(t, `
+nip11:
+  name: test
+  pubkey: `+validPubkey+`
+  url: wss://relay.example
+huddle:
+  enabled: true
+  pingInterval: 0s
+`)
+		require.ErrorContains(t, checkHuddleConfig(&cfg), "must be positive")
+	})
+
+	t.Run("maxRooms zero means the SDK default", func(t *testing.T) {
+		cfg := loadRelayConfigFromYAML(t, `
+nip11:
+  name: test
+  pubkey: `+validPubkey+`
+  url: wss://relay.example
+huddle:
+  enabled: true
+`)
+		require.NoError(t, checkHuddleConfig(&cfg))
+		require.Zero(t, cfg.Huddle.MaxRooms)
+	})
+}
+
+// TestHuddleExampleConfigMatchesTheStruct loads the shipped preset through the
+// real loader. This is not redundant with the cases above: viper silently
+// ignores an unknown key, so a mis-spelled field in the example would leave the
+// feature quietly off with no error anywhere. Asserting the parsed values is
+// what catches that.
+func TestHuddleExampleConfigMatchesTheStruct(t *testing.T) {
+	content, err := os.ReadFile(filepath.Join("..", "..", "examples", "relay", "huddle.yaml"))
+	require.NoError(t, err)
+
+	cfg := loadRelayConfigFromYAML(t, string(content))
+
+	require.NotNil(t, cfg.Huddle, "the example's huddle block did not bind to HuddleConfig")
+	require.True(t, cfg.Huddle.Enabled, "huddle.enabled did not bind")
+	require.Equal(t, 64, cfg.Huddle.MaxRooms, "huddle.maxRooms did not bind")
+	require.False(t, cfg.Huddle.RequireMembership)
+	require.Equal(t, "5s", cfg.Huddle.AuthTimeout, "huddle.authTimeout did not bind")
+	require.Equal(t, "30s", cfg.Huddle.PingInterval, "huddle.pingInterval did not bind")
+	require.True(t, cfg.Huddle.RTC, "huddle.rtc did not bind")
+	require.Len(t, cfg.Huddle.ICEServers, 1, "huddle.iceServers did not bind")
+	require.Equal(t, []string{"stun:stun.l.google.com:19302"}, cfg.Huddle.ICEServers[0].URLs)
+	require.NotEmpty(t, cfg.Nip11.URL, "the example must set nip11.url, which huddle.enabled requires")
+	require.NoError(t, checkHuddleConfig(&cfg), "the shipped example must be a valid config")
+}

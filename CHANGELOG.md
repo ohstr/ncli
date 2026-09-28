@@ -1,5 +1,70 @@
 # Changelog
 
+## [0.7.0]
+
+### Added
+
+- `ncli huddle join <room>` joins a relay's voice room and shows a live roster:
+  who is present, who is speaking, and at what level. Speaking is read from the
+  telemetry every audio frame already carries, held briefly so a gap between
+  words does not blink the indicator off, and rows never reorder as people talk.
+  (#66)
+- The view is listen-and-watch only: joining never puts audio into the room.
+  There is no pure-Go microphone capture, and `ncli` ships every target with
+  `CGO_ENABLED=0`, so capture waits for an opt-in build tag. Mute and raise-hand
+  are absent for the same reason rather than present and inert. (#66)
+- A refused join is explained rather than reported as a bare error -- a relay
+  without huddles enabled, a full room, an ended call, or a protocol-version
+  mismatch each say so, and an unrecognized code shows the relay's own message
+  instead of a guess. (#66)
+- WebRTC peers in a huddle now exchange **video and screen share**, which the
+  WebSocket transport cannot carry. A publisher's track ids come through
+  unchanged, so a receiver tells a camera from a screen share exactly as the
+  publisher labelled them, and a peer may publish both at once. (#66)
+- Video takes a separate path from audio on purpose. Audio goes through the
+  huddle room, which is what lets a WebSocket peer hear the call; video is
+  forwarded only among the WebRTC peers. So a buzz client in a screen-share
+  call hears the call and misses only the picture, rather than being sent
+  bytes it has no way to use. (#66)
+- A subscriber joining mid-stream is sent a keyframe request, so video appears
+  at once instead of waiting out the publisher's next natural keyframe. (#66)
+- `huddle.rtc` mounts a WebRTC endpoint at `/huddle/{id}/rtc`, so a browser
+  can join the same voice rooms as a client on the WebSocket endpoint. Both
+  share one set of rooms: the same room id is the same call, not two. A
+  speaker's Opus is repacketized between RTP and huddle frames and never
+  decoded, so the relay still links no codec. (#66)
+- `huddle.iceServers` configures STUN/TURN for those clients. With none, only
+  peers on the same network connect; TURN is what carries peers behind
+  symmetric NAT. (#66)
+- `ncli relay` can host real-time voice. A new `huddle:` config block mounts
+  an audio endpoint at `/huddle/{id}/audio`, where peers authenticate with
+  NIP-42 and relay Opus frames to each other. Audio gets its own WebSocket
+  rather than sharing the Nostr socket, which decodes every frame as JSON and
+  would drop the session on the first binary frame -- so a client connects to
+  both. (#66)
+- `huddle.requireMembership` restricts joining to relay members (NIP-43). It is
+  independent of `nip11.limitation.membership_required`, which gates the Nostr
+  socket: a relay may want open reading and closed calls, or the reverse. (#66)
+- `huddle.enabled` requires `nip11.url`, since a joining client's NIP-42 event
+  names this relay and the endpoint has to know what to validate against.
+  Omitting the block, or disabling it, mounts nothing -- a client then sees the
+  same 404 an older relay gives it, rather than a huddle-specific error. (#66)
+- `huddle.allowedOrigins` restricts browser origins, and is empty by default.
+  Admission is gated by a signed NIP-42 challenge, so Origin is not the security
+  boundary here, and restricting it by default would lock out web clients while
+  every CLI client kept working. (#66)
+- `examples/relay/huddle.yaml` documents the block, and a test loads it through
+  the real config loader. Viper silently ignores an unknown key, so a
+  mis-spelled field in the example would otherwise leave the feature quietly off
+  with no error anywhere. (#66)
+
+### Fixed
+
+- `ncli relay` now ends live huddles before shutting down.
+  `http.Server.Shutdown` never waits on hijacked WebSocket connections, so
+  without this a restart would sever calls with no notice and leave
+  participants waiting for audio that had simply stopped arriving. (#66)
+
 ## [0.6.0]
 
 ### Added

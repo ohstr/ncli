@@ -10,6 +10,7 @@ import (
 
 	"github.com/ohstr/ncli/cli/reindex"
 	"github.com/ohstr/ncli/client"
+	"github.com/ohstr/nmilat/huddle/room"
 	"github.com/ohstr/nmilat/nip11"
 	"github.com/ohstr/nmilat/nip98"
 	"github.com/ohstr/nmilat/relay"
@@ -22,6 +23,9 @@ type Service struct {
 	server             *http.Server
 	store              *relay.EventStore
 	verificationWorker *relay.ProfileVerificationWorker
+	// huddleRooms is nil unless huddle audio is enabled. Held so Stop can end
+	// live calls, which Shutdown cannot do for hijacked WebSocket connections.
+	huddleRooms *room.Manager
 }
 
 func NewServer(store *relay.EventStore, searchService search.Service) *Service {
@@ -215,6 +219,8 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 
 	registerMembershipAdminRoutes(mux, wsHandler, store, adminAuth)
 
+	huddleRooms := registerHuddleRoutes(mux, wsHandler, config.Huddle, config.Nip11.URL)
+
 	mux.HandleFunc("/admin/zaps", adminAuth(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "DELETE" {
 			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
@@ -232,6 +238,7 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 	s := &Service{
 		store:              store,
 		verificationWorker: wsHandler.VerificationWorker,
+		huddleRooms:        huddleRooms,
 		server: &http.Server{
 			Handler: mux,
 			Addr:    fmt.Sprintf(":%d", config.Port),
@@ -264,6 +271,11 @@ const shutdownGracePeriod = 10 * time.Second
 func (s *Service) Stop() {
 
 	log.Info().Msg("stopping server gracefully")
+
+	// Before Shutdown, not after: it never waits on hijacked WebSocket
+	// connections, so a live call would otherwise be severed with no notice and
+	// its participants would sit waiting for audio that had simply stopped.
+	endHuddleRooms(s.huddleRooms)
 
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownGracePeriod)
 	defer cancel()

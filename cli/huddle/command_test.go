@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/ohstr/ncli/huddleclient"
 	"github.com/ohstr/nmilat/huddle/wsaudio"
 	"github.com/spf13/cobra"
@@ -136,5 +137,53 @@ func TestHuddleCommandShape(t *testing.T) {
 	}
 	if err := join.Args(join, []string{"standup"}); err != nil {
 		t.Errorf("join with one room should be accepted: %v", err)
+	}
+}
+
+func TestResolveRelayHonorsTheFlag(t *testing.T) {
+	cmd := newJoinCommand()
+
+	// A bare host is accepted the same bare-host-friendly way every other ncli
+	// relay input is, and defaults to wss.
+	got, err := resolveRelay(cmd, "relay.example")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.String() != "wss://relay.example" {
+		t.Errorf("want wss://relay.example, got %q", got)
+	}
+
+	// An explicit scheme is taken at face value -- ws:// is how a local relay is
+	// reached, and silently upgrading it would break that.
+	got, err = resolveRelay(cmd, "ws://localhost:7777")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.String() != "ws://localhost:7777" {
+		t.Errorf("want ws://localhost:7777, got %q", got)
+	}
+
+	if _, err := resolveRelay(cmd, "http://relay.example"); err == nil {
+		t.Error("a non-ws scheme should be rejected")
+	}
+}
+
+func TestHandleKeyFallsThroughWithoutAnApp(t *testing.T) {
+	fc := newFakeClient()
+	b := NewBoard(nil, fc, "room-1")
+
+	// With no app there is no confirm dialog to show, so the keystroke must pass
+	// on to tview rather than be swallowed and leave the user with a dead key.
+	quit := tcell.NewEventKey(tcell.KeyRune, 'q', tcell.ModNone)
+	if got := b.handleKey(quit); got != quit {
+		t.Error("q should fall through when no app is attached")
+	}
+	// An unrelated key is never claimed.
+	other := tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone)
+	if got := b.handleKey(other); got != other {
+		t.Error("an unhandled rune must be passed on untouched")
+	}
+	if fc.closeCount() != 0 {
+		t.Error("no keystroke here should have closed the call")
 	}
 }

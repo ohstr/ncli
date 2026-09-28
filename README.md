@@ -91,37 +91,37 @@ Run a Nostr relay server.
 
 | NIP | Description |
 |---|---|
-| [01](https://github.com/nostr-protocol/nips/blob/master/01.md) | Core event, filter, and subscription types |
-| [05](https://github.com/nostr-protocol/nips/blob/master/05.md) | NIP-05 identity verification |
-| [09](https://github.com/nostr-protocol/nips/blob/master/09.md) | Event deletion |
-| [11](https://github.com/nostr-protocol/nips/blob/master/11.md) | Relay information document |
-| [13](https://github.com/nostr-protocol/nips/blob/master/13.md) | Proof of work |
-| [16](https://github.com/nostr-protocol/nips/blob/master/16.md) | Event treatment (regular/replaceable/ephemeral kinds) |
-| [19](https://github.com/nostr-protocol/nips/blob/master/19.md) | Bech32-encoded entities: npub, nsec, note, nprofile, nevent, naddr |
-| [26](https://github.com/nostr-protocol/nips/blob/master/26.md) | Event delegation |
-| [29](https://github.com/nostr-protocol/nips/blob/master/29.md) | Relay-based groups |
-| [33](https://github.com/nostr-protocol/nips/blob/master/33.md) | Parameterized replaceable events |
-| [40](https://github.com/nostr-protocol/nips/blob/master/40.md) | Event expiration |
-| [42](https://github.com/nostr-protocol/nips/blob/master/42.md) | Relay authentication |
-| [43](https://github.com/nostr-protocol/nips/blob/master/43.md) | Relay membership — off by default; see [`relay members`](#relay-membersinvitesroles) |
-| [44](https://github.com/nostr-protocol/nips/blob/master/44.md) | Versioned encryption |
+| [01](https://github.com/nostr-protocol/nips/blob/master/01.md) | Basic protocol flow description |
+| [05](https://github.com/nostr-protocol/nips/blob/master/05.md) | Mapping Nostr keys to DNS-based internet identifiers |
+| [09](https://github.com/nostr-protocol/nips/blob/master/09.md) | Event Deletion Request |
+| [11](https://github.com/nostr-protocol/nips/blob/master/11.md) | Relay Information Document |
+| [13](https://github.com/nostr-protocol/nips/blob/master/13.md) | Proof of Work |
+| [16](https://github.com/nostr-protocol/nips/blob/master/16.md) | Event Treatment |
+| [19](https://github.com/nostr-protocol/nips/blob/master/19.md) | bech32-encoded entities |
+| [26](https://github.com/nostr-protocol/nips/blob/master/26.md) | Delegated Event Signing |
+| [29](https://github.com/nostr-protocol/nips/blob/master/29.md) | Relay-based Groups |
+| [33](https://github.com/nostr-protocol/nips/blob/master/33.md) | Parameterized Replaceable Events |
+| [40](https://github.com/nostr-protocol/nips/blob/master/40.md) | Expiration Timestamp |
+| [42](https://github.com/nostr-protocol/nips/blob/master/42.md) | Authentication of clients to relays |
+| [43](https://github.com/nostr-protocol/nips/blob/master/43.md) | Relay Access Metadata and Requests — off by default; see [`relay members`](#relay-membersinvitesroles) |
+| [44](https://github.com/nostr-protocol/nips/blob/master/44.md) | Encrypted Payloads (Versioned) |
 | [47](https://github.com/nostr-protocol/nips/blob/master/47.md) | Nostr Wallet Connect |
-| [48](https://github.com/nostr-protocol/nips/blob/master/48.md) | Proxy tags |
-| [49](https://github.com/nostr-protocol/nips/blob/master/49.md) | Encrypted private key storage |
-| [50](https://github.com/nostr-protocol/nips/blob/master/50.md) | Search — people search, not note content; see below |
-| [53](https://github.com/nostr-protocol/nips/blob/master/53.md) | Live activities and meeting spaces — the room model behind [`huddle`](#huddle) |
-| [57](https://github.com/nostr-protocol/nips/blob/master/57.md) | Lightning zaps |
-| [65](https://github.com/nostr-protocol/nips/blob/master/65.md) | Relay list metadata |
-| [71](https://github.com/nostr-protocol/nips/blob/master/71.md) | Video events |
-| [77](https://github.com/nostr-protocol/nips/blob/master/77.md) | Negentropy sync |
+| [48](https://github.com/nostr-protocol/nips/blob/master/48.md) | Bridged Events |
+| [49](https://github.com/nostr-protocol/nips/blob/master/49.md) | Private Key Encryption (`ncryptsec`) |
+| [50](https://github.com/nostr-protocol/nips/blob/master/50.md) | Search Capability — people search, not note content; see below |
+| [53](https://github.com/nostr-protocol/nips/blob/master/53.md) | Live Streaming and Spaces |
+| [57](https://github.com/nostr-protocol/nips/blob/master/57.md) | Lightning Zaps |
+| [65](https://github.com/nostr-protocol/nips/blob/master/65.md) | Relay List Metadata |
+| [71](https://github.com/nostr-protocol/nips/blob/master/71.md) | Video Events |
+| [77](https://github.com/nostr-protocol/nips/blob/master/77.md) | Negentropy Syncing |
 | [88](https://github.com/nostr-protocol/nips/blob/master/88.md) | Polls |
 | [90](https://github.com/nostr-protocol/nips/blob/master/90.md) | Data Vending Machines |
-| [98](https://github.com/nostr-protocol/nips/blob/master/98.md) | HTTP authentication |
-| [A0](https://github.com/nostr-protocol/nips/blob/master/A0.md) | Voice messages |
+| [98](https://github.com/nostr-protocol/nips/blob/master/98.md) | HTTP Auth |
+| [A0](https://github.com/nostr-protocol/nips/blob/master/A0.md) | Voice Messages |
 | [AA](https://github.com/block/buzz/blob/main/docs/nips/NIP-AA.md) | Agent auth — requires relay membership; see `agent_auth` below |
 | [AZ](https://github.com/ohstr/zapf-nips/blob/main/NIP-AZ.md) | AltZap — zaps for energy-backed coins |
-| [B0](https://github.com/nostr-protocol/nips/blob/master/B0.md) | Web bookmarks |
-| [B7](https://github.com/nostr-protocol/nips/blob/master/B7.md) | Blossom media server lists |
+| [B0](https://github.com/nostr-protocol/nips/blob/master/B0.md) | Web Bookmarks |
+| [B7](https://github.com/nostr-protocol/nips/blob/master/B7.md) | Blossom |
 | [OA](https://github.com/block/buzz/blob/main/docs/nips/NIP-OA.md) | Owner attestation — verified as part of agent auth |
 
 </details>

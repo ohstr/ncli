@@ -11,15 +11,22 @@ source bin/lib.sh
 RUN_DIR="$1"
 ROUND="r8-error-contract"
 
+# Per-invocation scratch files. The probes below used to share fixed
+# /tmp/r8-*.json paths, which concurrent runs would clobber and which
+# nothing ever cleaned up.
+OUT_F="$(mktemp)"
+ERR_F="$(mktemp)"
+trap 'rm -f "${OUT_F}" "${ERR_F}"' EXIT
+
 self_report_exists "${RUN_DIR}" "${ROUND}" \
   && add_check "self_report_written" true "present" \
   || add_check "self_report_written" false "missing"
 
 # --- independent probe 1: usage (exit 2) ---
-agent_exec 'ncli decode --json' >/tmp/r8-out.json 2>/tmp/r8-err.json
+agent_exec 'ncli decode --json' >"${OUT_F}" 2>"${ERR_F}"
 CODE=$?
-ERR="$(cat /tmp/r8-err.json)"
-OUT="$(cat /tmp/r8-out.json)"
+ERR="$(cat "${ERR_F}")"
+OUT="$(cat "${OUT_F}")"
 if [ "${CODE}" = "2" ] && [ -z "${OUT}" ] && jq -e '.code == "usage"' >/dev/null 2>&1 <<<"${ERR}"; then
   add_check "usage_error_matches_table" true "missing arg -> exit 2, code=usage, empty stdout"
 else
@@ -27,11 +34,10 @@ else
 fi
 
 # --- independent probe 2: invalid_input (exit 3) ---
-set +e
-agent_exec 'ncli decode not-a-real-bech32-string --json' >/tmp/r8-out.json 2>/tmp/r8-err.json
+agent_exec 'ncli decode not-a-real-bech32-string --json' >"${OUT_F}" 2>"${ERR_F}"
 CODE=$?
-ERR="$(cat /tmp/r8-err.json)"
-OUT="$(cat /tmp/r8-out.json)"
+ERR="$(cat "${ERR_F}")"
+OUT="$(cat "${OUT_F}")"
 if [ "${CODE}" = "3" ] && [ -z "${OUT}" ] && jq -e '.code == "invalid_input"' >/dev/null 2>&1 <<<"${ERR}"; then
   add_check "invalid_input_error_matches_table" true "malformed bech32 -> exit 3, code=invalid_input, empty stdout"
 else
@@ -41,10 +47,10 @@ fi
 # --- independent probe 3: network (exit 6, retryable) -- via `find`,
 # NOT `ping`: AGENTS.md documents ping's own unreachable-target failure
 # as a deliberate `internal`/exit-1 exception (checked separately below).
-agent_exec 'ncli find --kinds 1 -s ws://nonexistent.invalid --json' >/tmp/r8-out.json 2>/tmp/r8-err.json
+agent_exec 'ncli find --kinds 1 -s ws://nonexistent.invalid --json' >"${OUT_F}" 2>"${ERR_F}"
 CODE=$?
-ERR="$(cat /tmp/r8-err.json)"
-OUT="$(cat /tmp/r8-out.json)"
+ERR="$(cat "${ERR_F}")"
+OUT="$(cat "${OUT_F}")"
 if [ "${CODE}" = "6" ] && [ -z "${OUT}" ] && jq -e '.code == "network" and .retryable == true' >/dev/null 2>&1 <<<"${ERR}"; then
   add_check "network_error_matches_table" true "find, every target unreachable -> exit 6, code=network, retryable=true"
 else
@@ -52,9 +58,9 @@ else
 fi
 
 # --- independent probe 3b: ping's documented exception (internal, exit 1) ---
-agent_exec 'ncli ping ws://nonexistent.invalid --json' >/tmp/r8-out.json 2>/tmp/r8-err.json
+agent_exec 'ncli ping ws://nonexistent.invalid --json' >"${OUT_F}" 2>"${ERR_F}"
 CODE=$?
-ERR="$(cat /tmp/r8-err.json)"
+ERR="$(cat "${ERR_F}")"
 if [ "${CODE}" = "1" ] && jq -e '.code == "internal"' >/dev/null 2>&1 <<<"${ERR}"; then
   add_check "ping_unreachable_exception_matches_table" true "ping, unreachable target -> exit 1, code=internal (AGENTS.md's documented exception)"
 else

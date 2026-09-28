@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.7.0]
+## [0.7.0-rc.1]
 
 ### Added
 
@@ -17,16 +17,15 @@
 - The mix sums in 32-bit and clamps, so several loud speakers at once clip instead
   of wrapping. A wrap would turn a loud moment into a loud click, which is far
   more noticeable. (#76)
-
 - `ncli huddle join <room>` joins a relay's voice room and shows a live roster:
   who is present, who is speaking, and at what level. Speaking is read from the
   telemetry every audio frame already carries, held briefly so a gap between
   words does not blink the indicator off, and rows never reorder as people talk.
   (#66)
-- The view is listen-and-watch only: joining never puts audio into the room.
-  There is no pure-Go microphone capture, and `ncli` ships every target with
-  `CGO_ENABLED=0`, so capture waits for an opt-in build tag. Mute and raise-hand
-  are absent for the same reason rather than present and inert. (#66)
+- Joining never captures a microphone, so it puts no audio into the room. There
+  is no pure-Go capture library, and `ncli` ships every target with
+  `CGO_ENABLED=0`, so capture waits for an opt-in build tag of its own. Mute and
+  raise-hand are absent for the same reason rather than present and inert. (#66)
 - A refused join is explained rather than reported as a bare error -- a relay
   without huddles enabled, a full room, an ended call, or a protocol-version
   mismatch each say so, and an unrecognized code shows the relay's own message
@@ -67,10 +66,8 @@
   Admission is gated by a signed NIP-42 challenge, so Origin is not the security
   boundary here, and restricting it by default would lock out web clients while
   every CLI client kept working. (#66)
-- `examples/relay/huddle.yaml` documents the block, and a test loads it through
-  the real config loader. Viper silently ignores an unknown key, so a
-  mis-spelled field in the example would otherwise leave the feature quietly off
-  with no error anywhere. (#66)
+- `examples/relay/huddle.yaml` documents every field of the block, as a preset to
+  copy from. (#66)
 
 ### Fixed
 

@@ -47,8 +47,15 @@ conditions (reconnects, timing, fan-in/fan-out).
   body (see `testSyncMaxReconcileRoundsTooLowSurfacesCleanly` vs.
   `testSyncReconcileCompleteness`).
 - **Compose naming**: `name: ncli-<feature>-itest`, a distinct port range
-  per stack (stream 45500s, inspect 45510s, sync 45520, stress stacks
-  45560s/45590s).
+  per stack (stream 21500s, inspect 21510s, sync 21520, stress stacks
+  21560s/21590s).
+- **Published ports stay below 32768**, Linux's default ephemeral floor
+  (`net.ipv4.ip_local_port_range`, 32768-60999). A published port inside
+  that range can be handed out as the local port of an *outbound*
+  connection, and Docker then cannot bind it: `failed to bind host port
+  for 0.0.0.0:<port>: address already in use`. These stacks open thousands
+  of WebSocket connections, so the chance is real and it lands on whichever
+  stack runs last -- a flake with no connection to the code under test.
 - **Real relay images, not mocks** -- built from `build/relay/Dockerfile`.
 - **In-process client, not a compose service** -- same call `ncli apply`
   makes, but white-box.
@@ -69,7 +76,8 @@ conditions (reconnects, timing, fan-in/fan-out).
 
 ### Adding a new feature's stack
 
-1. `integration/<feature>/` files, an unused port range.
+1. `integration/<feature>/` files, an unused port range below 32768 (see
+   the ephemeral-floor note above).
 2. `client/<feature>_integration_test.go` -- `Test<Feature>Integration`,
    reusing the shared harness.
 3. `justfile` -- `test-integration-<feature>` recipe, add to

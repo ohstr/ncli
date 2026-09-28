@@ -11,7 +11,7 @@ services:
     image: ncli:stream-itest
     command: ["relay", "--config", "/config/relay.yaml"]
     ports:
-      - "45500:5500"
+      - "21500:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - destination-data:/app/ncli/data
@@ -25,7 +25,7 @@ services:
     image: ncli:stream-itest
     command: ["relay", "--config", "/config/relay.yaml"]
     ports:
-      - "45505:5500"
+      - "21505:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - destination2-data:/app/ncli/data
@@ -38,7 +38,7 @@ services:
     image: ncli:stream-itest
     command: ["relay", "--config", "/config/relay.yaml"]
     ports:
-      - "45501:5500"
+      - "21501:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - source1-data:/app/ncli/data
@@ -51,7 +51,7 @@ services:
     image: ncli:stream-itest
     command: ["relay", "--config", "/config/relay.yaml"]
     ports:
-      - "45502:5500"
+      - "21502:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - source2-data:/app/ncli/data
@@ -64,7 +64,7 @@ services:
     image: ncli:stream-itest
     command: ["relay", "--config", "/config/relay.yaml"]
     ports:
-      - "45503:5500"
+      - "21503:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - source3-data:/app/ncli/data

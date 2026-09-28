@@ -12,7 +12,7 @@ not several.
 
 ## What's here
 
-- `compose.yaml` -- one `remote` service (45520), project `ncli-sync-itest`.
+- `compose.yaml` -- one `remote` service (21520), project `ncli-sync-itest`.
 - `relay.yaml` -- minimal relay config.
 - `sync.yaml` -- spec fixture, `direction: both`.
 

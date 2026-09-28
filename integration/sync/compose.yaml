@@ -10,7 +10,7 @@ services:
     image: ncli:sync-itest
     command: ["relay", "--config", "/config/relay.yaml"]
     ports:
-      - "45520:5500"
+      - "21520:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - remote-data:/app/ncli/data

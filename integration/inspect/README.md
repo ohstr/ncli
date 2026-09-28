@@ -8,7 +8,7 @@ local store).
 
 ## What's here
 
-- `compose.yaml` -- `target1-3` (45510-45512), project `ncli-inspect-itest`.
+- `compose.yaml` -- `target1-3` (21510-21512), project `ncli-inspect-itest`.
 - `relay.yaml` -- shared minimal relay config.
 - `inspect.yaml` -- spec fixture pointed at this stack's ports.
 
@@ -60,7 +60,7 @@ Needs a real terminal, per the limitation above.
 
 Mirrors `integration/stream/`'s stress stack for real scale:
 
-- `stress-compose.yaml` -- 15 targets (45590-45604), same YAML-anchor
+- `stress-compose.yaml` -- 15 targets (21590-21604), same YAML-anchor
   pattern, project `ncli-inspect-stress-itest`.
 - `stress-inspect.yaml` -- the same two-filter-object pair as stream's
   stress fixture. Only `target1` is listed in `targets`; the Go test

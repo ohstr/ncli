@@ -22,7 +22,7 @@ const (
 func inspectStressTargetURLs() []string {
 	urls := make([]string, inspectStressTargetCount)
 	for i := 0; i < inspectStressTargetCount; i++ {
-		urls[i] = fmt.Sprintf("ws://localhost:%d", 45590+i)
+		urls[i] = fmt.Sprintf("ws://localhost:%d", 21590+i)
 	}
 	return urls
 }

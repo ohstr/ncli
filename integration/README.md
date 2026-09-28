@@ -48,8 +48,8 @@ conditions (reconnects, timing, fan-in/fan-out).
   body (see `testSyncMaxReconcileRoundsTooLowSurfacesCleanly` vs.
   `testSyncReconcileCompleteness`).
 - **Compose naming**: `name: ncli-<feature>-itest`, a distinct port range
-  per stack (stream 21500s, inspect 21510s, sync 21520, huddle 21530,
-  stress stacks 21540, 21560s/21590s).
+  per stack (stream 21500s, inspect 21510-21512, sync 21520-21521, huddle
+  21530, stress stacks 21540, 21560s/21590s).
 - **Published ports stay below 32768**, Linux's default ephemeral floor
   (`net.ipv4.ip_local_port_range`, 32768-60999). A published port inside
   that range can be handed out as the local port of an *outbound*
@@ -69,9 +69,8 @@ conditions (reconnects, timing, fan-in/fan-out).
   client's self-report alone.
 - **Shared harness**: `client/integrationharness_test.go` holds generic
   helpers; each `*_integration_test.go` holds only what's feature-specific.
-- **Skip-gating**: `testing.Short()` + a `docker` PATH check, matching
-  `client/multi_relay_test.go`'s convention (not `cli/bunker`'s
-  `-tags integration`).
+- **Skip-gating**: `testing.Short()` + a `docker` PATH check, rather than
+  `cli/bunker`'s `-tags integration`.
 - **Fixed test-only keys**: `integrationPrivKey`/`integrationPrivKeyAlt` in
   the harness sign every event; no reason to generate fresh ones per run.
 

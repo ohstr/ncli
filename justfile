@@ -59,6 +59,15 @@ test-integration-sync:
 test-integration-huddle:
     go test ./client/... -run 'TestHuddleIntegration' -v -count=1 -timeout 10m
 
+# Run the huddle *latency soak* (needs Docker; a full 25-peer room at real frame
+# cadence for 60s per scenario, ~2.5 min total -- see integration/huddle/
+# README.md's "Stress stack" section). Heavier/slower, not run automatically in
+# CI -- run explicitly before a release or when touching the fan-out, queue, or
+# WebSocket write path. It reports a latency distribution; read the log output,
+# not just the pass/fail.
+test-integration-huddle-stress:
+    go test ./client/... -run 'TestHuddleStress' -v -count=1 -timeout 20m
+
 # Run every hermetic integration test together (stream + inspect + sync +
 # huddle --
 # needs Docker). This is what .github/workflows/ci.yml's `integrations` job
@@ -213,6 +222,17 @@ huddle cmd="up" *args:
     "up") docker compose -f integration/huddle/compose.yaml up -d --build {{args}} ;;
     "down") docker compose -f integration/huddle/compose.yaml down -v {{args}} ;;
     *) echo "unknown huddle subcommand: {{cmd}} (expected up|down)" >&2 && exit 1 ;;
+    esac
+
+# Local huddle *stress* stack (one relay on its own project/port so it can
+# coexist with `just huddle` -- see integration/huddle/README.md): [up|down].
+huddle-stress cmd="up" *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{cmd}}" in
+    "up") docker compose -f integration/huddle/stress-compose.yaml up -d --build {{args}} ;;
+    "down") docker compose -f integration/huddle/stress-compose.yaml down -v {{args}} ;;
+    *) echo "unknown huddle-stress subcommand: {{cmd}} (expected up|down)" >&2 && exit 1 ;;
     esac
 
 # Run the docs site locally with hot reload -- README.md, AGENTS.md, and

@@ -1,0 +1,25 @@
+# Huddle latency-soak stack: 1 real `ncli relay` container, on its own project
+# and port so it can coexist with compose.yaml's. See integration/huddle/
+# README.md's "Stress stack" section. Run by hand via `just huddle-stress
+# up`/`down`.
+#
+# Only one container: a huddle's load comes from peer *clients*, which run
+# in-process, not from more relays. What scales here is occupancy, not services.
+name: ncli-huddle-stress-itest
+
+services:
+  relay:
+    build:
+      context: ../..
+      dockerfile: build/relay/Dockerfile
+    image: ncli:huddle-stress-itest
+    command: ["relay", "--config", "/config/relay.yaml"]
+    ports:
+      - "21540:5500"
+    volumes:
+      - ./stress-relay.yaml:/config/relay.yaml:ro
+      - relay-data:/app/ncli/data
+    restart: unless-stopped
+
+volumes:
+  relay-data:

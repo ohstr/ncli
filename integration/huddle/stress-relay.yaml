@@ -1,0 +1,18 @@
+# Config for stress-compose.yaml's `relay` service. Same as relay.yaml except
+# nip11.url, which must match this stack's own published port -- a joining
+# client's NIP-42 event names the relay in its `relay` tag and the endpoint
+# validates the tag against nip11.url.
+port: 5500
+
+nip11:
+  name: ncli-huddle-stress-itest-relay
+  privkey: 0acd12cbf0fb87cd13b17bc9b57dffd11b3870b407984cec5a4ce2a69b90268c
+  url: "ws://localhost:21540"
+
+store: ./data/db/notes.db
+logdir: ./data/logs
+
+huddle:
+  enabled: true
+  maxRooms: 8
+  requireMembership: false

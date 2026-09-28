@@ -146,6 +146,30 @@ type control struct {
 	CurrentVersion *uint8 `json:"current_version"`
 }
 
+// DialError reports a WebSocket upgrade that never completed, carrying the HTTP
+// status the relay answered with.
+//
+// The status matters because a relay with huddles switched off does not mount
+// the endpoint at all -- there is no protocol-level refusal to send, just a 404.
+// gorilla flattens that into an opaque "bad handshake", which tells an operator
+// nothing, so the status is kept here for a caller to explain.
+type DialError struct {
+	Endpoint string
+	// Status is the HTTP status of the failed upgrade, or 0 if the connection
+	// never got far enough to receive one.
+	Status int
+	Err    error
+}
+
+func (e *DialError) Error() string {
+	if e.Status != 0 {
+		return fmt.Sprintf("huddleclient: dial %s: HTTP %d: %v", e.Endpoint, e.Status, e.Err)
+	}
+	return fmt.Sprintf("huddleclient: dial %s: %v", e.Endpoint, e.Err)
+}
+
+func (e *DialError) Unwrap() error { return e.Err }
+
 // Dial connects, completes the handshake, and returns a joined client. The
 // returned error is a *RefusedError when the relay answered with a code.
 func Dial(ctx context.Context, cfg Config) (*Client, error) {
@@ -163,9 +187,13 @@ func Dial(ctx context.Context, cfg Config) (*Client, error) {
 	}
 
 	dialer := websocket.Dialer{HandshakeTimeout: cfg.HandshakeTimeout}
-	conn, _, err := dialer.DialContext(ctx, cfg.Endpoint, nil)
+	conn, resp, err := dialer.DialContext(ctx, cfg.Endpoint, nil)
 	if err != nil {
-		return nil, fmt.Errorf("huddleclient: dial %s: %w", cfg.Endpoint, err)
+		dialErr := &DialError{Endpoint: cfg.Endpoint, Err: err}
+		if resp != nil {
+			dialErr.Status = resp.StatusCode
+		}
+		return nil, dialErr
 	}
 
 	c := &Client{

@@ -4,6 +4,18 @@
 
 ### Added
 
+- `ncli huddle join <room>` joins a relay's voice room and shows a live roster:
+  who is present, who is speaking, and at what level. Speaking is read from the
+  telemetry every audio frame already carries, held briefly so a gap between
+  words does not blink the indicator off, and rows never reorder as people talk.
+- The view is listen-and-watch only: joining never puts audio into the room.
+  There is no pure-Go microphone capture, and `ncli` ships every target with
+  `CGO_ENABLED=0`, so capture waits for an opt-in build tag. Mute and raise-hand
+  are absent for the same reason rather than present and inert.
+- A refused join is explained rather than reported as a bare error -- a relay
+  without huddles enabled, a full room, an ended call, or a protocol-version
+  mismatch each say so, and an unrecognized code shows the relay's own message
+  instead of a guess.
 - WebRTC peers in a huddle now exchange **video and screen share**, which the
   WebSocket transport cannot carry. A publisher's track ids come through
   unchanged, so a receiver tells a camera from a screen share exactly as the

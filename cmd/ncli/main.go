@@ -7,6 +7,7 @@ import (
 	"github.com/ohstr/ncli/cli/blossom"
 	"github.com/ohstr/ncli/cli/bunker"
 	"github.com/ohstr/ncli/cli/common"
+	"github.com/ohstr/ncli/cli/huddle"
 	"github.com/ohstr/ncli/cli/ncli"
 	relaycli "github.com/ohstr/ncli/cli/relay"
 	"github.com/spf13/cobra"
@@ -35,6 +36,11 @@ func init() {
 	// "upload"/"download"/"list"/"rm"/"mirror"/"servers"/"report" as its
 	// own children; see NewBlossomCommand.
 	ncli.RootCmd.AddCommand(blossom.NewBlossomCommand())
+
+	// Register the huddle voice-room client ("huddle") -- mounts "join" as
+	// its own child, for joining a voice room on a relay running with
+	// huddles enabled; see NewHuddleCommand.
+	ncli.RootCmd.AddCommand(huddle.NewHuddleCommand())
 }
 
 func main() {

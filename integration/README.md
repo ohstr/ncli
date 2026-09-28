@@ -15,12 +15,13 @@ and sync's `timeouts:` block being silently a no-op (see
 1. **Unit tests** (`client/*_test.go`, `cli/*/*_test.go`) -- mocks/`httptest`,
    fast, run in CI on every push.
 2. **Hermetic Docker Compose e2e tests** (this doc's subject) --
-   `integration/stream/`, `integration/inspect/`, `integration/sync/`. Real
+   `integration/stream/`, `integration/inspect/`, `integration/sync/`,
+   `integration/huddle/`. Real
    `ncli relay` containers; the client under test runs in-process for
    white-box scenario injection (e.g. `FlowContext.paused()`). Needs
    Docker; runs in CI as its own `integrations` job, separate from `check`.
    `just test-integration-<feature>` runs one locally, `just
-   test-integrations` runs all three.
+   test-integrations` runs them all.
 3. **Black-box process-level tests** (`cli/blossom/blackbox_test.go`,
    `cli/ncli/miner_test.go`) -- build the real binary, shell out, assert on
    exit codes/stdout against an in-process fake server. Tests CLI-surface
@@ -47,8 +48,8 @@ conditions (reconnects, timing, fan-in/fan-out).
   body (see `testSyncMaxReconcileRoundsTooLowSurfacesCleanly` vs.
   `testSyncReconcileCompleteness`).
 - **Compose naming**: `name: ncli-<feature>-itest`, a distinct port range
-  per stack (stream 21500s, inspect 21510s, sync 21520, stress stacks
-  21560s/21590s).
+  per stack (stream 21500s, inspect 21510s, sync 21520, huddle 21530,
+  stress stacks 21560s/21590s).
 - **Published ports stay below 32768**, Linux's default ephemeral floor
   (`net.ipv4.ip_local_port_range`, 32768-60999). A published port inside
   that range can be handed out as the local port of an *outbound*
@@ -93,6 +94,7 @@ conditions (reconnects, timing, fan-in/fan-out).
 | `apply -f stream.yaml` | Destination reconnect-drop, source reconnect, destination stall, high-volume burst (PR #45), 2-destination fan-out; stress stack (20 sources): filter correctness, sustained load, concurrent disruption, stall-under-load | Recovery-store replay across a client process restart (not just relay containers); source stall (only restart is covered); still an order of magnitude short of production's ~55 sources | Low |
 | `apply -f inspect.yaml` | Multi-target aggregation, target reconnect/stall, high-volume, duplicate dedup; stress stack (15 targets): filter correctness, concurrent disruption/stall | Mixed remote+local targets in one session; no configurable timeout (forces stall tests to eat the full 60s default) | Low |
 | `apply -f sync.yaml` | Two-way reconcile, large divergent set, `maxReconcileRounds` degradation, remote stall, single-filter multi-kind/author correctness | `direction: up`/`down` in isolation; **confirmed bug**: 2+ filter objects don't reconcile correctly (NEG-OPEN only sends `Filters[0]`) -- see `integration/sync/README.md`'s "Confirmed gap" | Medium (the filter bug), Low otherwise |
+| `huddle` (voice rooms) | Two-peer byte-identical audio, 5-peer attribution, join/leave mid-call, 4-peer talk-over with no sender stall, DTX + reserved flag bits, `room_full` at capacity, wrong-relay auth rejection, version-mismatch refusal | The WebRTC door (`/huddle/{id}/rtc`), video and screen share -- all need a WebRTC peer, and screen share needs a real browser; playback (nothing decodes Opus yet); a real `buzz` client stays a manual acceptance step | Medium (the WebRTC door), Low otherwise |
 | `ncli relay` admin (`stats`/`reindex`/`members`/`invites`/`roles`/`clear`) | None at the docker/real-relay level | A full lifecycle against one container (invite → redeem → role → admin action → reindex/clear) | High -- auth bugs look fine with a mocked auth layer but break for real |
 | `blossom` | `cli/blossom/blackbox_test.go` against a fake server | A docker stack against a real reference server (e.g. `hzrd149/blossom-server`) would catch protocol-conformance gaps a fake can't -- see the mirror BUD-11 bug `integration/agent-eval` already found this way | Medium-High |
 | `bunker` (NIP-46) | `cli/bunker/daemon_integration_test.go`, live `wss://relay.ohstr.com` | A docker-based real-relay equivalent, plus a relay-restart-mid-session scenario | Medium |

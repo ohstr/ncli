@@ -24,6 +24,7 @@ events.**
 - [`ncli prefs`](#prefs) — Set default relays for `find`/`dump`/`miner check`/`publish`
 - [`ncli miner`](#miner) — Mine NIP-13 proof-of-work into an event, or verify it on published events
 - [`ncli bunker`](#bunker) — Run as a NIP-46 remote signer
+- [`ncli huddle`](#huddle) — Join a voice room hosted by a relay
 - [`ncli blossom`](#blossom) — Upload, fetch, and manage content on Blossom media servers
 - [`ncli id`](#id) — Generate or inspect a Nostr keypair
 - [`ncli decode`](#decode) — Decode any NIP-19 bech32 entity (npub/nsec/note/nprofile/nevent/naddr)
@@ -98,6 +99,7 @@ Run a Nostr relay server.
 | [16](https://github.com/nostr-protocol/nips/blob/master/16.md) | Event treatment (regular/replaceable/ephemeral kinds) |
 | [19](https://github.com/nostr-protocol/nips/blob/master/19.md) | Bech32-encoded entities: npub, nsec, note, nprofile, nevent, naddr |
 | [26](https://github.com/nostr-protocol/nips/blob/master/26.md) | Event delegation |
+| [29](https://github.com/nostr-protocol/nips/blob/master/29.md) | Relay-based groups |
 | [33](https://github.com/nostr-protocol/nips/blob/master/33.md) | Parameterized replaceable events |
 | [40](https://github.com/nostr-protocol/nips/blob/master/40.md) | Event expiration |
 | [42](https://github.com/nostr-protocol/nips/blob/master/42.md) | Relay authentication |
@@ -107,12 +109,15 @@ Run a Nostr relay server.
 | [48](https://github.com/nostr-protocol/nips/blob/master/48.md) | Proxy tags |
 | [49](https://github.com/nostr-protocol/nips/blob/master/49.md) | Encrypted private key storage |
 | [50](https://github.com/nostr-protocol/nips/blob/master/50.md) | Search — people search, not note content; see below |
+| [53](https://github.com/nostr-protocol/nips/blob/master/53.md) | Live activities and meeting spaces — the room model behind [`huddle`](#huddle) |
 | [57](https://github.com/nostr-protocol/nips/blob/master/57.md) | Lightning zaps |
 | [65](https://github.com/nostr-protocol/nips/blob/master/65.md) | Relay list metadata |
+| [71](https://github.com/nostr-protocol/nips/blob/master/71.md) | Video events |
 | [77](https://github.com/nostr-protocol/nips/blob/master/77.md) | Negentropy sync |
 | [88](https://github.com/nostr-protocol/nips/blob/master/88.md) | Polls |
 | [90](https://github.com/nostr-protocol/nips/blob/master/90.md) | Data Vending Machines |
 | [98](https://github.com/nostr-protocol/nips/blob/master/98.md) | HTTP authentication |
+| [A0](https://github.com/nostr-protocol/nips/blob/master/A0.md) | Voice messages |
 | [AA](https://github.com/block/buzz/blob/main/docs/nips/NIP-AA.md) | Agent auth — requires relay membership; see `agent_auth` below |
 | [AZ](https://github.com/ohstr/zapf-nips/blob/main/NIP-AZ.md) | AltZap — zaps for energy-backed coins |
 | [B0](https://github.com/nostr-protocol/nips/blob/master/B0.md) | Web bookmarks |
@@ -783,6 +788,41 @@ ncli bunker connect --grants examples/bunker/agent.yaml
 See [`skills/ncli-bunker/SKILL.md`](skills/ncli-bunker/SKILL.md) for the
 full walkthrough, including the Windows platform gap, the grants-spec
 format, and pairing an AI agent for unattended signing.
+
+## `huddle`
+
+Real-time voice rooms hosted by the relay itself. Enable the `huddle:` block
+(shape: [`examples/relay/huddle.yaml`](examples/relay/huddle.yaml)), then join
+from another terminal:
+
+```sh
+ncli huddle join standup --relay wss://relay.example --identity mykey
+```
+
+The view shows who is in the room and who is speaking, read from the level
+telemetry every audio frame already carries. It never captures a microphone, so
+joining puts no audio into the room.
+
+Two endpoints reach the same rooms: `/huddle/{id}/audio` carries Opus over a
+plain WebSocket, and `/huddle/{id}/rtc` is a WebRTC SFU that also carries video
+and screen share. The same room id is the same call through either. The relay
+forwards Opus without decoding it, so it links no codec.
+
+`huddle.enabled` requires `nip11.url` — a joining client's NIP-42 event names
+the relay, and the endpoint validates against it. `huddle.allowedOrigins` is
+empty by default, which locks out browsers until you set it; admission is gated
+by a signed challenge, so `Origin` is not the security boundary.
+
+Hearing the call needs a build with audio output:
+
+```sh
+go build -tags huddleaudio ./cmd/ncli                # macOS, Windows
+CGO_ENABLED=1 go build -tags huddleaudio ./cmd/ncli  # Linux, needs libasound2-dev
+```
+
+Output needs cgo and ALSA on Linux and the release binaries are built without
+cgo, so it is not in the default build. Without the tag the roster still works
+and the status line says `watching only`.
 
 ## `blossom`
 

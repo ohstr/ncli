@@ -259,8 +259,25 @@ pow:
 ```
 
 See [`examples/relay/pow.yaml`](examples/relay/pow.yaml) for a relay with
-this actually enforced (`strict: true`). More presets (auth-required,
-membership, ephemeral, cache+search) live under
+this actually enforced (`strict: true`).
+
+Let people talk to each other through the relay — group voice calls, plus video
+and screen sharing for browsers — with a `huddle:` block. Calls get their own
+WebSocket endpoint, so a client connects to that as well as the Nostr socket:
+
+```yaml
+nip11:
+  url: "wss://relay.example" # required: a joining client's auth event names it
+huddle:
+  enabled: true
+  rtc: true # also serve browsers, which is what carries video and screen sharing
+```
+
+The relay forwards audio without decoding it, so it links no codec. See
+[`examples/relay/huddle.yaml`](examples/relay/huddle.yaml) for the documented
+preset, and [`ncli huddle`](#huddle) for joining a call from a terminal.
+
+More presets (auth-required, membership, ephemeral, cache+search) live under
 [`examples/relay/`](examples/relay/).
 
 ## `relay context`
@@ -810,8 +827,9 @@ forwards Opus without decoding it, so it links no codec.
 
 `huddle.enabled` requires `nip11.url` — a joining client's NIP-42 event names
 the relay, and the endpoint validates against it. `huddle.allowedOrigins` is
-empty by default, which locks out browsers until you set it; admission is gated
-by a signed challenge, so `Origin` is not the security boundary.
+empty by default, which allows any origin: admission is gated by a signed
+challenge, so `Origin` is not the security boundary, and refusing on it would
+only lock out browsers while every CLI client kept working.
 
 Hearing the call needs a build with audio output:
 

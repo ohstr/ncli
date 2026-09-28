@@ -7,8 +7,8 @@ reconnect window (`client/stream.go`'s `deliverToSubscriber`).
 
 ## What's here
 
-- `compose.yaml` -- `destination` (45500) + `source1-3` (45501-45503),
-  plus `destination2` (45505, used only by
+- `compose.yaml` -- `destination` (21500) + `source1-3` (21501-21503),
+  plus `destination2` (21505, used only by
   `MultipleDestinationsBothReceiveEvents`). Project `ncli-stream-itest`.
 - `relay.yaml` -- shared minimal relay config.
 - `stream.yaml` -- spec fixture, usable by the test and by hand.
@@ -53,8 +53,8 @@ The stack above proves the fan-in mechanism generalizes past one source;
 it doesn't stress production's real ~55-source scale. A separate, heavier
 stack does:
 
-- `stress-compose.yaml` -- 20 sources (45561-45580) + 1 destination
-  (45560), project `ncli-stream-stress-itest`. Uses a YAML anchor
+- `stress-compose.yaml` -- 20 sources (21561-21580) + 1 destination
+  (21560), project `ncli-stream-stress-itest`. Uses a YAML anchor
   (`x-relay: &relay`) to avoid repeating the service block 20 times.
 - `stress-stream.yaml` -- two filter objects (`kinds: [1]`, and
   `kinds: [7]` scoped to one author) instead of a catch-all, so filter

@@ -4,7 +4,7 @@
 kind: sync
 spec:
   from:
-    relay: ws://localhost:45520
+    relay: ws://localhost:21520
     trusted: true
 
   to:

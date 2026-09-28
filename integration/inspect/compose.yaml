@@ -10,7 +10,7 @@ services:
     image: ncli:inspect-itest
     command: ["relay", "--config", "/config/relay.yaml"]
     ports:
-      - "45510:5500"
+      - "21510:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - target1-data:/app/ncli/data
@@ -23,7 +23,7 @@ services:
     image: ncli:inspect-itest
     command: ["relay", "--config", "/config/relay.yaml"]
     ports:
-      - "45511:5500"
+      - "21511:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - target2-data:/app/ncli/data
@@ -36,7 +36,7 @@ services:
     image: ncli:inspect-itest
     command: ["relay", "--config", "/config/relay.yaml"]
     ports:
-      - "45512:5500"
+      - "21512:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - target3-data:/app/ncli/data

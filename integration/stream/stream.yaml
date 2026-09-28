@@ -16,15 +16,15 @@ spec:
     - since: 0
 
   from:
-    - relay: ws://localhost:45501
+    - relay: ws://localhost:21501
       trusted: true
-    - relay: ws://localhost:45502
+    - relay: ws://localhost:21502
       trusted: true
-    - relay: ws://localhost:45503
+    - relay: ws://localhost:21503
       trusted: true
 
   to:
-    - relay: ws://localhost:45500
+    - relay: ws://localhost:21500
       trusted: true
       writeConcurrency: 8
 

@@ -17,7 +17,7 @@ services:
   destination:
     <<: *relay
     ports:
-      - "45560:5500"
+      - "21560:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - destination-data:/app/ncli/data
@@ -25,7 +25,7 @@ services:
   source1:
     <<: *relay
     ports:
-      - "45561:5500"
+      - "21561:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - source1-data:/app/ncli/data
@@ -33,7 +33,7 @@ services:
   source2:
     <<: *relay
     ports:
-      - "45562:5500"
+      - "21562:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - source2-data:/app/ncli/data
@@ -41,7 +41,7 @@ services:
   source3:
     <<: *relay
     ports:
-      - "45563:5500"
+      - "21563:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - source3-data:/app/ncli/data
@@ -49,7 +49,7 @@ services:
   source4:
     <<: *relay
     ports:
-      - "45564:5500"
+      - "21564:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - source4-data:/app/ncli/data
@@ -57,7 +57,7 @@ services:
   source5:
     <<: *relay
     ports:
-      - "45565:5500"
+      - "21565:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - source5-data:/app/ncli/data
@@ -65,7 +65,7 @@ services:
   source6:
     <<: *relay
     ports:
-      - "45566:5500"
+      - "21566:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - source6-data:/app/ncli/data
@@ -73,7 +73,7 @@ services:
   source7:
     <<: *relay
     ports:
-      - "45567:5500"
+      - "21567:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - source7-data:/app/ncli/data
@@ -81,7 +81,7 @@ services:
   source8:
     <<: *relay
     ports:
-      - "45568:5500"
+      - "21568:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - source8-data:/app/ncli/data
@@ -89,7 +89,7 @@ services:
   source9:
     <<: *relay
     ports:
-      - "45569:5500"
+      - "21569:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - source9-data:/app/ncli/data
@@ -97,7 +97,7 @@ services:
   source10:
     <<: *relay
     ports:
-      - "45570:5500"
+      - "21570:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - source10-data:/app/ncli/data
@@ -105,7 +105,7 @@ services:
   source11:
     <<: *relay
     ports:
-      - "45571:5500"
+      - "21571:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - source11-data:/app/ncli/data
@@ -113,7 +113,7 @@ services:
   source12:
     <<: *relay
     ports:
-      - "45572:5500"
+      - "21572:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - source12-data:/app/ncli/data
@@ -121,7 +121,7 @@ services:
   source13:
     <<: *relay
     ports:
-      - "45573:5500"
+      - "21573:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - source13-data:/app/ncli/data
@@ -129,7 +129,7 @@ services:
   source14:
     <<: *relay
     ports:
-      - "45574:5500"
+      - "21574:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - source14-data:/app/ncli/data
@@ -137,7 +137,7 @@ services:
   source15:
     <<: *relay
     ports:
-      - "45575:5500"
+      - "21575:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - source15-data:/app/ncli/data
@@ -145,7 +145,7 @@ services:
   source16:
     <<: *relay
     ports:
-      - "45576:5500"
+      - "21576:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - source16-data:/app/ncli/data
@@ -153,7 +153,7 @@ services:
   source17:
     <<: *relay
     ports:
-      - "45577:5500"
+      - "21577:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - source17-data:/app/ncli/data
@@ -161,7 +161,7 @@ services:
   source18:
     <<: *relay
     ports:
-      - "45578:5500"
+      - "21578:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - source18-data:/app/ncli/data
@@ -169,7 +169,7 @@ services:
   source19:
     <<: *relay
     ports:
-      - "45579:5500"
+      - "21579:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - source19-data:/app/ncli/data
@@ -177,7 +177,7 @@ services:
   source20:
     <<: *relay
     ports:
-      - "45580:5500"
+      - "21580:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - source20-data:/app/ncli/data

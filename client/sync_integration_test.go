@@ -20,7 +20,7 @@ import (
 const (
 	syncIntegrationComposeFile = "../integration/sync/compose.yaml"
 	syncIntegrationSpecFile    = "../integration/sync/sync.yaml"
-	syncIntegrationRemoteURL   = "ws://localhost:45520"
+	syncIntegrationRemoteURL   = "ws://localhost:21520"
 )
 
 // TestSyncIntegration brings up compose.yaml's one real relay container

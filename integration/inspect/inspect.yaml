@@ -5,11 +5,11 @@
 kind: inspect
 spec:
   targets:
-    - relay: ws://localhost:45510
+    - relay: ws://localhost:21510
       trusted: true
-    - relay: ws://localhost:45511
+    - relay: ws://localhost:21511
       trusted: true
-    - relay: ws://localhost:45512
+    - relay: ws://localhost:21512
       trusted: true
 
   # since: 0, not a rolling window, so every published event is in-window.

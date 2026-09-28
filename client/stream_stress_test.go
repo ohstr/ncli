@@ -18,13 +18,13 @@ const (
 	streamStressComposeFile = "../integration/stream/stress-compose.yaml"
 	streamStressSpecFile    = "../integration/stream/stress-stream.yaml"
 	streamStressSourceCount = 20
-	streamStressDestURL     = "ws://localhost:45560"
+	streamStressDestURL     = "ws://localhost:21560"
 )
 
 func streamStressSourceURLs() []string {
 	urls := make([]string, streamStressSourceCount)
 	for i := 0; i < streamStressSourceCount; i++ {
-		urls[i] = fmt.Sprintf("ws://localhost:%d", 45560+i+1)
+		urls[i] = fmt.Sprintf("ws://localhost:%d", 21560+i+1)
 	}
 	return urls
 }

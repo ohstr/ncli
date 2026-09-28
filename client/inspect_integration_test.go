@@ -20,9 +20,9 @@ const (
 )
 
 var inspectIntegrationTargetURLs = []string{
-	"ws://localhost:45510",
-	"ws://localhost:45511",
-	"ws://localhost:45512",
+	"ws://localhost:21510",
+	"ws://localhost:21511",
+	"ws://localhost:21512",
 }
 
 // TestInspectIntegration brings up compose.yaml's three real relay

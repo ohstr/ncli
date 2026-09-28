@@ -18,15 +18,15 @@ const (
 )
 
 var streamIntegrationSourceURLs = []string{
-	"ws://localhost:45501",
-	"ws://localhost:45502",
-	"ws://localhost:45503",
+	"ws://localhost:21501",
+	"ws://localhost:21502",
+	"ws://localhost:21503",
 }
 
-const streamIntegrationDestURL = "ws://localhost:45500"
+const streamIntegrationDestURL = "ws://localhost:21500"
 
 // streamIntegrationDest2URL is used only by MultipleDestinationsBothReceiveEvents.
-const streamIntegrationDest2URL = "ws://localhost:45505"
+const streamIntegrationDest2URL = "ws://localhost:21505"
 
 // TestStreamIntegration brings up compose.yaml's real relay containers
 // once, then runs each scenario as a subtest. Needs Docker.

@@ -15,7 +15,7 @@ services:
   target1:
     <<: *relay
     ports:
-      - "45590:5500"
+      - "21590:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - target1-data:/app/ncli/data
@@ -23,7 +23,7 @@ services:
   target2:
     <<: *relay
     ports:
-      - "45591:5500"
+      - "21591:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - target2-data:/app/ncli/data
@@ -31,7 +31,7 @@ services:
   target3:
     <<: *relay
     ports:
-      - "45592:5500"
+      - "21592:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - target3-data:/app/ncli/data
@@ -39,7 +39,7 @@ services:
   target4:
     <<: *relay
     ports:
-      - "45593:5500"
+      - "21593:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - target4-data:/app/ncli/data
@@ -47,7 +47,7 @@ services:
   target5:
     <<: *relay
     ports:
-      - "45594:5500"
+      - "21594:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - target5-data:/app/ncli/data
@@ -55,7 +55,7 @@ services:
   target6:
     <<: *relay
     ports:
-      - "45595:5500"
+      - "21595:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - target6-data:/app/ncli/data
@@ -63,7 +63,7 @@ services:
   target7:
     <<: *relay
     ports:
-      - "45596:5500"
+      - "21596:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - target7-data:/app/ncli/data
@@ -71,7 +71,7 @@ services:
   target8:
     <<: *relay
     ports:
-      - "45597:5500"
+      - "21597:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - target8-data:/app/ncli/data
@@ -79,7 +79,7 @@ services:
   target9:
     <<: *relay
     ports:
-      - "45598:5500"
+      - "21598:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - target9-data:/app/ncli/data
@@ -87,7 +87,7 @@ services:
   target10:
     <<: *relay
     ports:
-      - "45599:5500"
+      - "21599:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - target10-data:/app/ncli/data
@@ -95,7 +95,7 @@ services:
   target11:
     <<: *relay
     ports:
-      - "45600:5500"
+      - "21600:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - target11-data:/app/ncli/data
@@ -103,7 +103,7 @@ services:
   target12:
     <<: *relay
     ports:
-      - "45601:5500"
+      - "21601:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - target12-data:/app/ncli/data
@@ -111,7 +111,7 @@ services:
   target13:
     <<: *relay
     ports:
-      - "45602:5500"
+      - "21602:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - target13-data:/app/ncli/data
@@ -119,7 +119,7 @@ services:
   target14:
     <<: *relay
     ports:
-      - "45603:5500"
+      - "21603:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - target14-data:/app/ncli/data
@@ -127,7 +127,7 @@ services:
   target15:
     <<: *relay
     ports:
-      - "45604:5500"
+      - "21604:5500"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - target15-data:/app/ncli/data

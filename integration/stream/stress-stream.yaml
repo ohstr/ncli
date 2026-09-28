@@ -23,11 +23,11 @@ spec:
   # The Go test overrides `from` with all 20 source URLs; only source1
   # here so this stays a valid standalone spec.
   from:
-    - relay: ws://localhost:45561
+    - relay: ws://localhost:21561
       trusted: true
 
   to:
-    - relay: ws://localhost:45560
+    - relay: ws://localhost:21560
       trusted: true
       writeConcurrency: 32
 

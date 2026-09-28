@@ -9,7 +9,7 @@
 kind: inspect
 spec:
   targets:
-    - relay: ws://localhost:45590
+    - relay: ws://localhost:21590
       trusted: true
 
   filters:

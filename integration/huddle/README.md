@@ -90,3 +90,60 @@ just huddle down
 `ncli huddle join` needs a real terminal (it refuses otherwise). Two
 terminals joining the same room id is the quickest way to watch the roster
 and speaking indicator behave.
+
+## Stress stack: the latency soak
+
+```
+just test-integration-huddle-stress
+```
+
+Runs `TestHuddleStress` against `stress-compose.yaml` — one relay on its own
+compose project and port (21540), so it can run alongside `just huddle`.
+Not in CI: two 60s scenarios plus setup is ~2.5 minutes. Run it before a
+release, or when touching the fan-out, the per-peer queue, or the WebSocket
+write path.
+
+**Read the log output, not just pass/fail.** The assertions are deliberately
+loose — there is no historical baseline, so they catch catastrophe and
+regressions in *shape* (senders stalling, latency drifting upward over the
+minute, corrupted payloads, goroutine leaks). The numbers it prints are the
+actual deliverable.
+
+Two scenarios, both with the room at `room.MaxPeers` (25):
+
+- **`RealisticTwoSpeakers`** — 2 people talking, which is what a meeting looks
+  like, and the case whose latency a participant actually experiences.
+- **`PathologicalEveryoneSpeaks`** — all 25 at once. Delivery is *allowed* to
+  suffer; the per-peer queue drops when full by design. What must hold is that
+  latency does not run away and senders are never blocked.
+
+### How latency is measured
+
+Every peer runs in the test process, so the reader's clock is the sender's
+clock — no clock sync to get wrong. The send time is written into the Opus
+payload, which the relay treats as opaque and forwards untouched, so the
+difference on arrival is a true mouth-to-ear figure for the relay hop.
+
+### First observed run
+
+In-container loopback, AMD EPYC-Genoa:
+
+| scenario | delivery | p50 | p95 | p99 | max | drift (first→last tenth) |
+|---|---|---|---|---|---|---|
+| 2 of 25 speaking | 100.00% | 526µs | 747µs | 938µs | 5.4ms | 531µs → 512µs |
+| 25 of 25 speaking | 65.5% | 976µs | 1.79ms | 2.45ms | 7.2ms | 1.019ms → 1.012ms |
+
+Both paced exactly — senders finished within 1 ms of the 60s target — so the
+queue sheds load rather than blocking, and neither case drifts upward.
+
+**What this does not say.** Peers reach the relay over loopback, so these are
+the relay's *own* latency and shedding behaviour, not end-to-end call latency.
+A real call adds network RTT and a client jitter buffer, both of which dominate
+these figures. Measuring it this way is what isolates the part this repo
+controls: against a ~150 ms mouth-to-ear budget, the relay's contribution in the
+realistic case is well under 1%.
+
+The 34% shed in the saturated case cannot be attributed precisely between the
+relay's 8-frame queue and the test's own readers without server-side
+instrumentation. At 5× the realistic frame rate, either way it is the
+drop-don't-block policy doing its job.

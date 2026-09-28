@@ -112,12 +112,33 @@ state word.
 Keys: `Tab` cycles panels, `q` or `Ctrl+C` asks before leaving. Ctrl+C is
 deliberately confirmed, so one stray keystroke does not drop a call.
 
+### Hearing the call
+
+Playback is compiled in only under a build tag:
+
+```sh
+go build -tags huddleaudio ./cmd/ncli                  # macOS, Windows: still cgo-free
+CGO_ENABLED=1 go build -tags huddleaudio ./cmd/ncli    # Linux, needs libasound2-dev
+```
+
+Decoding is pure Go (`pion/opus`) and builds everywhere. **Output is not**:
+`ebitengine/oto` needs cgo and ALSA on Linux, and `ncli` ships every release
+target with `CGO_ENABLED=0`, so it cannot be in the default build. macOS and
+Windows do build the tagged binary cgo-free.
+
+Without the tag the roster still works and the status line reads `watching only`
+instead of `playing audio` -- otherwise a silent call and a working one look the
+same.
+
+Each speaker gets their own Opus decoder, since a decoder carries stream state
+across frames; the mix sums in 32-bit and clamps, so several loud speakers clip
+rather than wrap into a click.
+
 ### What it does not do
 
-**It is listen-and-watch only: joining never puts audio into the room.** There
-is no established pure-Go microphone capture library, and `ncli` builds with
-`CGO_ENABLED=0` for all six release targets. Mic capture is planned behind an
-opt-in `-tags huddlemic` build.
+**It never captures a microphone, so joining puts no audio into the room.** There
+is no established pure-Go capture library, and the CGO-free default build rules
+out the cgo ones. Mic capture is planned behind its own `-tags huddlemic`.
 
 Consequently there is **no mute control** (there is no microphone to gate) and
 **no raise-hand** (that publishes a NIP-53 kind 10312 with a `hand` tag, which

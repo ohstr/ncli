@@ -77,7 +77,11 @@ func newRoster(self string, hold time.Duration, threshold int8, now func() time.
 // sync replaces presence from the client's roster. Speaking state is keyed by
 // pubkey, not by routing index, so a peer whose index is reassigned keeps their
 // row's state instead of appearing to go silent.
-func (r *roster) sync(peers []huddleclient.Peer) {
+//
+// It reports who left, because anything holding per-peer state keyed off the
+// roster -- an Opus decoder, say -- has to drop it or it accumulates one entry
+// per person who has ever been in the room.
+func (r *roster) sync(peers []huddleclient.Peer) (departed []string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -94,8 +98,10 @@ func (r *roster) sync(peers []huddleclient.Peer) {
 			delete(r.lastLevel, pubkey)
 			delete(r.lastSpoke, pubkey)
 			delete(r.heard, pubkey)
+			departed = append(departed, pubkey)
 		}
 	}
+	return departed
 }
 
 // heardFrame folds one inbound frame into the speaking state. Unattributed

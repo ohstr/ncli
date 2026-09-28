@@ -53,14 +53,21 @@ test-integration-inspect-stress:
 test-integration-sync:
     go test ./client/... -run 'TestSyncIntegration' -v -count=1 -timeout 10m
 
-# Run every hermetic integration test together (stream + inspect + sync --
+# Run the huddle integration test (needs Docker; see
+# integration/huddle/README.md). Runs automatically in CI; not part of
+# `just test`/`test-integration`.
+test-integration-huddle:
+    go test ./client/... -run 'TestHuddleIntegration' -v -count=1 -timeout 10m
+
+# Run every hermetic integration test together (stream + inspect + sync +
+# huddle --
 # needs Docker). This is what .github/workflows/ci.yml's `integrations` job
 # actually runs, so `just test-integrations` reproduces a CI failure
 # locally exactly. Each Test<Feature>Integration brings up/tears down its
 # own compose stack (see each integration/<feature>/README.md), so running
 # them together here is just one `go test` invocation, not a shared stack.
 test-integrations:
-    go test ./client/... -run 'TestStreamIntegration|TestInspectIntegration|TestSyncIntegration' -v -count=1 -timeout 30m
+    go test ./client/... -run 'TestStreamIntegration|TestInspectIntegration|TestSyncIntegration|TestHuddleIntegration' -v -count=1 -timeout 30m
 
 # Run the client package's benchmarks (stream pipeline hot paths)
 bench:
@@ -193,6 +200,19 @@ sync cmd="up" *args:
     "up") docker compose -f integration/sync/compose.yaml up -d --build {{args}} ;;
     "down") docker compose -f integration/sync/compose.yaml down -v {{args}} ;;
     *) echo "unknown sync subcommand: {{cmd}} (expected up|down)" >&2 && exit 1 ;;
+    esac
+
+# Local huddle e2e test stack (one real ncli relay container with huddles
+# enabled -- see integration/huddle/README.md): [up|down]. The Go test behind
+# `just test-integration-huddle` manages its own compose lifecycle, so this
+# is for poking at the stack by hand.
+huddle cmd="up" *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{cmd}}" in
+    "up") docker compose -f integration/huddle/compose.yaml up -d --build {{args}} ;;
+    "down") docker compose -f integration/huddle/compose.yaml down -v {{args}} ;;
+    *) echo "unknown huddle subcommand: {{cmd}} (expected up|down)" >&2 && exit 1 ;;
     esac
 
 # Run the docs site locally with hot reload -- README.md, AGENTS.md, and

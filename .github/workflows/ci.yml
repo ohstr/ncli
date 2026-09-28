@@ -55,8 +55,8 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Integration tests (stream, inspect, sync)
-        run: go test ./client/... -run 'TestStreamIntegration|TestInspectIntegration|TestSyncIntegration' -v -count=1 -timeout 30m
+      - name: Integration tests (stream, inspect, sync, huddle)
+        run: go test ./client/... -run 'TestStreamIntegration|TestInspectIntegration|TestSyncIntegration|TestHuddleIntegration' -v -count=1 -timeout 30m
 
   lint:
     runs-on: ubuntu-latest

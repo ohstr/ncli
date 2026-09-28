@@ -1,0 +1,27 @@
+# Config for compose.yaml's single `relay` service. Same conventions as the
+# other stacks' relay.yaml (see integration/stream/relay.yaml for the
+# rationale behind the fixed test-only key).
+port: 5500
+
+nip11:
+  name: ncli-huddle-itest-relay
+  privkey: 0acd12cbf0fb87cd13b17bc9b57dffd11b3870b407984cec5a4ce2a69b90268c
+  # Required once huddle.enabled is true: a joining client's NIP-42 event names
+  # the relay in its `relay` tag, and the endpoint validates against this. It is
+  # the *published* address the test dials, not the in-container port -- the tag
+  # has to match what the client actually connected to.
+  url: "ws://localhost:21530"
+
+store: ./data/db/notes.db
+logdir: ./data/logs
+
+huddle:
+  enabled: true
+  # Room capacity is fixed in the SDK (room.MaxPeers), so this bounds concurrent
+  # rooms only. Each scenario uses its own room id to stay isolated, and a room
+  # is dropped when its last peer leaves -- but that teardown is not instant, so
+  # this sits comfortably above the scenario count rather than exactly on it.
+  maxRooms: 16
+  # Left false on purpose: the membership gate has unit coverage, and enabling it
+  # here would make every scenario enrol first for no added signal.
+  requireMembership: false

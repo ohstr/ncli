@@ -492,3 +492,130 @@ func TestCloseIsIdempotentAndStopsAccepting(t *testing.T) {
 		t.Fatal("SendFrame blocked after Close")
 	}
 }
+
+// benchOpusBytes is a realistic 20 ms Opus frame at ~64 kbps.
+const benchOpusBytes = 160
+
+// BenchmarkSinkSendFrame measures the room-to-RTP direction, which runs once per
+// frame *per WebRTC subscriber*.
+//
+// Worth measuring separately from the room's own fan-out because the allocation
+// story differs. room.BroadcastFrame builds one relayed buffer and shares it with
+// every recipient, so its allocations are flat in peer count. SendFrame copies the
+// payload per call -- a room.Frame's slices alias the broadcast's buffers and are
+// only valid for that call -- so a room with N WebRTC subscribers pays N copies
+// per frame where the WebSocket side pays one. That is a deliberate trade for
+// correctness, and this is the number that says what it costs.
+//
+// The Sink is built by hand rather than through New so this benchmark owns the
+// draining. New starts a writeLoop that packetizes and writes, which a benchmark
+// producer always outruns; the queue would then fill and the rest of the run would
+// measure the drop path instead of the enqueue path.
+//
+// Measured on an AMD EPYC-Genoa: ~470 ns and 160 B / 1 alloc per call, which is
+// the payload copy. Five WebRTC subscribers at 50 frames a second is 250 calls/s,
+// so ~0.12 ms of CPU and ~40 KB of garbage per second of call. The per-subscriber
+// copy is real but nowhere near mattering at any plausible subscriber count.
+func BenchmarkSinkSendFrame(b *testing.B) {
+	s := &Sink{
+		cfg:    Config{PayloadType: OpusPayloadType},
+		queue:  make(chan queued, 1024),
+		done:   make(chan struct{}),
+		tracks: make(map[string]*track),
+	}
+	drained := make(chan struct{})
+	go func() {
+		defer close(drained)
+		for {
+			select {
+			case <-s.queue:
+			case <-s.done:
+				return
+			}
+		}
+	}()
+	b.Cleanup(func() {
+		close(s.done)
+		<-drained
+	})
+
+	f := frame(alice, wire.FrameHeader{Seq: 1, Ts48k: 960, LevelDbov: -20}, make([]byte, benchOpusBytes))
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	accepted := 0
+	for i := 0; i < b.N; i++ {
+		if s.SendFrame(f) {
+			accepted++
+		}
+	}
+	b.StopTimer()
+
+	// A drop here is the sink working as designed, not a failure -- but if most
+	// sends dropped, this measured the drop path, so say so rather than report a
+	// number that means something else.
+	b.ReportMetric(float64(accepted)/float64(b.N)*100, "%accepted")
+}
+
+// BenchmarkFrameFromRTP measures the RTP-to-room direction: once per inbound
+// packet from a browser, before it reaches the room at all.
+//
+// Measured: ~128 ns and 176 B / 1 alloc, and the same with or without the
+// audio-level extension (129 vs 126 ns). Parsing the extension is free, so there
+// is no reason to skip negotiating it to save work.
+func BenchmarkFrameFromRTP(b *testing.B) {
+	// Both paths matter: the audio-level extension is optional per packet, so a
+	// sender may negotiate it and still omit it, and the no-extension path is
+	// what runs for a sender that never negotiated it at all.
+	for _, tc := range []struct {
+		name  string
+		level *byte
+		id    uint8
+	}{
+		{"with-audio-level", bptr(0x80 | 20), audioLevelExtID},
+		{"without-audio-level", nil, 0},
+	} {
+		b.Run(tc.name, func(b *testing.B) {
+			p := &rtp.Packet{
+				Header:  rtp.Header{Version: 2, SequenceNumber: 42, Timestamp: 960, SSRC: 0x1234},
+				Payload: make([]byte, benchOpusBytes),
+			}
+			if tc.level != nil {
+				if err := p.SetExtension(audioLevelExtID, []byte{*tc.level}); err != nil {
+					b.Fatalf("SetExtension: %v", err)
+				}
+			}
+
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				if _, ok := FrameFromRTP(p, tc.id); !ok {
+					b.Fatal("FrameFromRTP rejected a packet with a payload")
+				}
+			}
+		})
+	}
+}
+
+// BenchmarkAudioLevel measures the RFC 6464 extension parse on its own, since it
+// runs for every inbound packet that carries the extension.
+//
+// Measured: ~2.3 ns, zero allocations. It reads one byte. This is why
+// BenchmarkFrameFromRTP cannot tell the two extension cases apart.
+func BenchmarkAudioLevel(b *testing.B) {
+	p := &rtp.Packet{
+		Header:  rtp.Header{Version: 2, SequenceNumber: 42, Timestamp: 960, SSRC: 0x1234},
+		Payload: make([]byte, benchOpusBytes),
+	}
+	if err := p.SetExtension(audioLevelExtID, []byte{0x80 | 20}); err != nil {
+		b.Fatalf("SetExtension: %v", err)
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, _, present := AudioLevel(p, audioLevelExtID); !present {
+			b.Fatal("AudioLevel did not see the extension it was given")
+		}
+	}
+}

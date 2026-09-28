@@ -15,9 +15,11 @@ import (
 	"github.com/ohstr/ncli/cli/keyresolve"
 	"github.com/ohstr/ncli/client"
 	"github.com/ohstr/ncli/client/tui"
+	"github.com/ohstr/ncli/huddleaudio"
 	"github.com/ohstr/ncli/huddleclient"
 	"github.com/ohstr/nmilat/huddle/wire"
 	"github.com/ohstr/nmilat/huddle/wsaudio"
+	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"golang.org/x/term"
@@ -30,9 +32,14 @@ func NewHuddleCommand() *cobra.Command {
 		Short: "Join a relay's voice rooms",
 		Long: `Join a voice room hosted by a relay running "ncli relay" with huddles enabled.
 
-This is a listen-and-watch client: it shows the live roster and who is
-speaking, drawn from the level telemetry every audio frame already carries. It
-does not capture a microphone, so joining never puts audio into the room.`,
+Shows the live roster and who is speaking, drawn from the level telemetry every
+audio frame already carries. It never captures a microphone, so joining puts no
+audio into the room.
+
+Hearing the call needs a build with audio output: the release binaries are built
+without cgo and the only maintained output library needs it on Linux, so
+playback is compiled in only under "-tags huddleaudio". Without it the roster
+still works and the status line says "watching only".`,
 		Example: `  ncli huddle join standup --relay wss://relay.example
   ncli huddle join standup --relay ws://localhost:7777 --identity satoshi`,
 		RunE: common.RequireSubcommand,
@@ -149,6 +156,18 @@ func runBoard(cmd *cobra.Command, ctx context.Context, hc Client, room string) e
 	}
 
 	board := NewBoard(app, hc, room)
+
+	// Playback is best-effort. A build without the huddleaudio tag, or a machine
+	// with no usable device, still gets the roster view -- which is the whole
+	// command minus the sound, not a failure. The status line says which it is.
+	if player, err := huddleaudio.NewPlayer(); err == nil {
+		board.PlayAudio(player)
+	} else if !errors.Is(err, huddleaudio.ErrPlaybackUnavailable) {
+		// A real device failure is worth a line, unlike the expected
+		// "this build has no audio output".
+		log.Warn().Err(err).Msg("continuing without audio playback")
+	}
+
 	app.Load(board)
 
 	runCtx, cancel := context.WithCancel(ctx)

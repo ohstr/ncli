@@ -4,6 +4,20 @@
 
 ### Added
 
+- `ncli huddle join` can now play the call, decoding Opus with pure Go and mixing
+  every speaker into one stream. Playback is compiled in only under
+  `-tags huddleaudio`: the release binaries are built without cgo and the only
+  maintained pure-Go output library needs cgo and ALSA on Linux. Without the tag
+  the roster still works and the status line says "watching only" rather than
+  leaving a silent call looking like a working one. (#76)
+- Each speaker gets their own Opus decoder, because a decoder carries stream state
+  across frames -- sharing one would corrupt every speaker in the room. A
+  departing peer's decoder is dropped rather than kept for the life of the call.
+  (#76)
+- The mix sums in 32-bit and clamps, so several loud speakers at once clip instead
+  of wrapping. A wrap would turn a loud moment into a loud click, which is far
+  more noticeable. (#76)
+
 - `ncli huddle join <room>` joins a relay's voice room and shows a live roster:
   who is present, who is speaking, and at what level. Speaking is read from the
   telemetry every audio frame already carries, held briefly so a gap between

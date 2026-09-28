@@ -11,6 +11,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/ohstr/ncli/client/tui"
+	"github.com/ohstr/ncli/huddleaudio"
 	"github.com/ohstr/ncli/huddleclient"
 	"github.com/ohstr/nmilat/nip19"
 )
@@ -43,11 +44,15 @@ var _ Client = (*huddleclient.Client)(nil)
 // loudly. It implements tui.ChildProvider, tui.FooterHintsProvider and
 // tui.CtrlCHandler, and is handed to tui.App.Load.
 //
-// It is listen-and-watch only. Mute and raise-hand are deliberately absent
-// rather than present and inert: muting means gating a microphone this build
-// does not have, and raising a hand means publishing a NIP-53 kind 10312 with
-// a `hand` tag, which needs a signer and a relay connection the board is not
-// given. Both arrive with the pieces they depend on.
+// It never captures a microphone, so joining puts no audio into the room. It can
+// play the call when given a player (see PlayAudio), which the default build
+// cannot supply -- see huddleaudio.
+//
+// Mute and raise-hand are deliberately absent rather than present and inert:
+// muting means gating a microphone this build does not have, and raising a hand
+// means publishing a NIP-53 kind 10312 with a `hand` tag, which needs a signer
+// and a relay connection the board is not given. Both arrive with the pieces they
+// depend on.
 type Board struct {
 	*tview.Flex
 
@@ -60,6 +65,10 @@ type Board struct {
 	status *tview.TextView
 
 	room string
+
+	// audio is nil unless this build has playback and a device opened, in which
+	// case the board is no longer listen-only.
+	audio *audioPump
 
 	closeOnce sync.Once
 }
@@ -110,6 +119,13 @@ func NewBoard(app *tui.App, client Client, room string) *Board {
 // can be asserted without a terminal.
 func (b *Board) Participants() []Participant {
 	return b.roster.participants()
+}
+
+// PlayAudio turns the board from watch-only into listen-and-watch, decoding and
+// mixing the call into player. Call it before Run. The board takes ownership of
+// player and closes it on Leave.
+func (b *Board) PlayAudio(player huddleaudio.Player) {
+	b.audio = newAudioPump(player)
 }
 
 // Childs gives the board's focusable panels to tui.App's Tab cycling. Only the
@@ -166,6 +182,9 @@ func (b *Board) confirmLeave() {
 func (b *Board) Leave() {
 	b.closeOnce.Do(func() {
 		_ = b.client.Close()
+		if b.audio != nil {
+			b.audio.close()
+		}
 	})
 	if b.app != nil {
 		b.app.Stop()
@@ -179,6 +198,10 @@ func (b *Board) Leave() {
 func (b *Board) Run(ctx context.Context) {
 	ticker := time.NewTicker(refreshInterval)
 	defer ticker.Stop()
+
+	if b.audio != nil {
+		go b.audio.run(ctx)
+	}
 
 	frames := b.client.Frames()
 	for {
@@ -195,9 +218,17 @@ func (b *Board) Run(ctx context.Context) {
 				return
 			}
 			b.roster.heardFrame(frame)
+			if b.audio != nil {
+				b.audio.add(frame)
+			}
 
 		case <-ticker.C:
-			b.roster.sync(b.client.Roster())
+			departed := b.roster.sync(b.client.Roster())
+			if b.audio != nil {
+				for _, pubkey := range departed {
+					b.audio.forget(pubkey)
+				}
+			}
 			rows := b.roster.participants()
 			b.queueDraw(func() { b.render(rows) })
 		}
@@ -273,12 +304,18 @@ func (b *Board) statusLine(participants int) string {
 	if err := b.client.Err(); err != nil {
 		return fmt.Sprintf(" [%s:-:b]disconnected[%s:-:-] %s", tui.ColorDanger, tui.ColorMuted, err)
 	}
+	// Whether audio is actually playing is the first thing an operator wants to
+	// know, and a silent call is indistinguishable from a working one otherwise.
+	sound := "watching only"
+	if b.audio != nil {
+		sound = "playing audio"
+	}
 	if participants <= 1 {
 		// Worth saying outright: an empty-looking roster is the normal state
 		// for the first person in, not a sign the connection is broken.
-		return fmt.Sprintf(" [%s:-:-]connected, waiting for others to join", tui.ColorMuted)
+		return fmt.Sprintf(" [%s:-:-]connected, waiting for others to join (%s)", tui.ColorMuted, sound)
 	}
-	return fmt.Sprintf(" [%s:-:-]connected", tui.ColorMuted)
+	return fmt.Sprintf(" [%s:-:-]connected (%s)", tui.ColorMuted, sound)
 }
 
 // stateText describes a row in words, for the cases the meter alone cannot

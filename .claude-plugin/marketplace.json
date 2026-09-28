@@ -67,6 +67,15 @@
       "description": "Upload, fetch, and manage content on Blossom media servers with ncli — content-addressed blob storage authenticated with a Nostr identity, including publishing/discovering a server list as a signed kind:10063 event (BUD-03).",
       "license": "Unlicense",
       "keywords": ["ncli", "nostr", "blossom", "bud-01", "bud-03", "media", "blob-storage"]
+    },
+    {
+      "name": "ncli-huddle",
+      "source": "./",
+      "skills": ["./skills/ncli-huddle"],
+      "strict": false,
+      "description": "Host and join real-time voice rooms on an ncli relay — enable the huddle: block (WebSocket Opus audio plus an optional WebRTC endpoint carrying video and screen share), then join from the terminal with ncli huddle join to watch the live roster and who is speaking.",
+      "license": "Unlicense",
+      "keywords": ["ncli", "nostr", "huddle", "voice", "webrtc", "nip-53", "screen-share"]
     }
   ]
 }

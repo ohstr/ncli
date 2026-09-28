@@ -26,6 +26,7 @@ that priority order.
 | `ncli bunker attach/status/stop/sessions/connect` | Reattach to, query, stop, or pair a running bunker daemon without opening the TUI |
 | `ncli blossom upload/download/list/rm/mirror/report` | Client for the Blossom protocol (BUD-01..12): content-addressed blob storage authenticated with a Nostr identity |
 | `ncli blossom servers add/remove/list/discover` | Manage the default Blossom server list, optionally publishing/discovering it as a signed kind:10063 (BUD-03) event |
+| `ncli huddle join <room>` | Join a relay's voice room and watch the live roster and who is speaking (listen-only; no mic capture in a CGO-free build) |
 | `ncli id [identifier]` | Generate or inspect a Nostr keypair (local vault) |
 | `ncli id delegate` | Mint a NIP-26 delegation token |
 | `ncli id sign -e <events.json> -o <signed.json>` | Sign one or more unsigned events with a vault/nsec identity |

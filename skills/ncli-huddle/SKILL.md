@@ -38,7 +38,7 @@ huddle:
   enabled: true
   maxRooms: 100
   requireMembership: false      # true = only NIP-43 relay members may join
-  allowedOrigins: []            # browser origins; empty = none allowed
+  allowedOrigins: []            # browser origins; empty allows any
   authTimeout: 5s
   pingInterval: 30s
   rtc: true                     # also mount /huddle/{id}/rtc
@@ -58,9 +58,10 @@ Things that bite:
   names the relay, and the endpoint has to know what to validate against.
 - **Omit the block and nothing is mounted** -- a client gets the same 404 an
   older relay gives it.
-- **`allowedOrigins` is empty by default**, which locks out browsers while
-  every CLI client keeps working. Set it when a browser needs in. Admission is
-  gated by a signed NIP-42 challenge, so `Origin` is not the security boundary.
+- **`allowedOrigins` is empty by default, which allows any origin.** Admission is
+  gated by a signed NIP-42 challenge, so `Origin` is not the security boundary,
+  and refusing on it would only lock out browsers while every CLI client kept
+  working. Set it to narrow the endpoint to your own app.
 - **`requireMembership` is independent of
   `nip11.limitation.membership_required`**, which gates the Nostr socket. A
   relay can have open reading and closed calls, or the reverse.

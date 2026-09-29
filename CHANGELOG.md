@@ -95,6 +95,8 @@
 - `switch_relays` and `logout` are answered instead of being reported
   unsupported. A compliant client sends `switch_relays` right after every
   pairing, so a signer's own relay list never took effect. (#84)
+- A relay named only by a pairing URI no longer keeps a reconnect loop
+  running for the daemon's lifetime when it never comes up. (#84)
 - The "Paste nostrconnect:// URI" and "Set App Name" dialogs no longer
   stretch to the full width of the terminal with most of their height
   empty. (#84)

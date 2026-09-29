@@ -7,11 +7,11 @@
 - The huddle e2e stack now covers the WebRTC door as well as the WebSocket one:
   browsers and WebSocket clients in one call, camera and screen share, a late
   joiner, and trickled candidates arriving before the offer. Driven by real pion
-  peers, so no browser is needed.
+  peers, so no browser is needed. (#82)
 - `huddle.udpPortRange` pins the UDP ports WebRTC media is carried on, as
   `"min-max"`. Without it the OS picks from the ephemeral range, which a
   container cannot publish and a firewall will not have open -- so signalling
-  succeeds and no audio ever arrives.
+  succeeds and no audio ever arrives. (#82)
 - `ncli huddle join` can now play the call, decoding Opus with pure Go and mixing
   every speaker into one stream. Playback is compiled in only under
   `-tags huddleaudio`: the release binaries are built without cgo and the only
@@ -88,7 +88,7 @@
   logged and discarded rather than held, which cost the fastest paths and, off
   the local network, often every reachable one -- the call then sat in
   `connecting` until ICE gave up. Candidates are now queued in both directions
-  and released once the matching description is in place.
+  and released once the matching description is in place. (#82)
 
 ## [0.6.0]
 

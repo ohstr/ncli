@@ -75,6 +75,28 @@
   `http.Server.Shutdown` never waits on hijacked WebSocket connections, so
   without this a restart would sever calls with no notice and leave
   participants waiting for audio that had simply stopped arriving. (#66)
+- `ncli bunker` could not pair with any real app over `nostrconnect://`.
+  The URI was rejected for lacking a `metadata` param NIP-46 does not
+  define, and past that the handshake ran backwards: ncli sent a `connect`
+  request and waited for the client to echo the secret, where the spec has
+  the signer publish a `connect` response and the client answer nothing.
+  Fixing only the first would have turned the error into a silent timeout.
+- A `nostrconnect://` URI's relays are all used, not just the first. They
+  are dialed in parallel and published to as each connects, so one dead
+  relay at the head of the list neither delays nor fails a pairing the
+  others can carry. Every relay failing is now a `network` error (exit 6,
+  retryable) rather than `invalid_input`.
+- The permissions an app requests in its URI are applied as grants, so a
+  freshly paired app stops prompting on every request. `bunker://` pairings
+  get the same from `connect`'s own params, along with the app's name and
+  URL -- previously dropped, which is why every app paired that way showed
+  as a bare hex key.
+- `switch_relays` and `logout` are answered instead of being reported
+  unsupported. A compliant client sends `switch_relays` right after every
+  pairing, so a signer's own relay list never took effect.
+- The "Paste nostrconnect:// URI" and "Set App Name" dialogs no longer
+  stretch to the full width of the terminal with most of their height
+  empty.
 
 ## [0.6.0]
 

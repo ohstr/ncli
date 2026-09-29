@@ -534,6 +534,13 @@ instead of prompting on first use.`,
 			}
 			result, err := bunkerClient.Connect(uri, spec)
 			if err != nil {
+				// A pairing that could not reach a relay is a network
+				// failure, not a bad URI -- retryable, and exit 6 rather
+				// than 3. See ErrorCode for how the daemon's own
+				// classification survives the IPC socket.
+				if ErrorCode(err) == common.CodeNetwork {
+					return common.NetworkError(cmd, "", err)
+				}
 				return common.InvalidInputError(cmd, "", err)
 			}
 			if jsonMode {

@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -308,5 +309,59 @@ func (s *GrantSpec) Resolve(now time.Time) []Grant {
 			grants = append(grants, g)
 		}
 	}
+	return grants
+}
+
+// parsePerms maps a nostrconnect:// URI's `perms` list onto grants. The
+// format is NIP-46's own: comma-separated `method[:params]`, where the
+// only defined parameter is sign_event's kind number
+// ("nip44_encrypt,sign_event:1").
+//
+// An entry naming a method this signer will not grant, or a sign_event
+// kind that isn't a number, is skipped rather than failing the list. The
+// perms list is a request from an unauthenticated client, not a
+// configuration file an operator wrote: one entry a future NIP adds must
+// not cost the app every permission it asked for alongside it. Store.Decide
+// still applies its own sensitive-kind rules on top, so a grant produced
+// here is a starting position, not a bypass.
+func parsePerms(perms string, now time.Time) []Grant {
+	var grants []Grant
+	seen := map[string]bool{}
+
+	for _, entry := range strings.Split(perms, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+
+		method, param, hasParam := strings.Cut(entry, ":")
+		method = strings.TrimSpace(method)
+		if !grantableMethods[method] {
+			continue
+		}
+
+		var kind *int
+		if hasParam && method == nip46.MethodSignEvent {
+			k, err := strconv.Atoi(strings.TrimSpace(param))
+			if err != nil {
+				continue
+			}
+			kind = &k
+		}
+
+		// A list may name one scope twice ("sign_event:1,sign_event:1");
+		// remembering it once is enough.
+		key := method
+		if kind != nil {
+			key = fmt.Sprintf("%s:%d", method, *kind)
+		}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+
+		grants = append(grants, newGrant(method, Allow, kind, now))
+	}
+
 	return grants
 }

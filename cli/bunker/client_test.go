@@ -10,7 +10,6 @@ import (
 
 	"github.com/ohstr/nmilat/nip01"
 	"github.com/ohstr/nmilat/nip46"
-	relayclient "github.com/ohstr/nmilat/relay/client"
 	"github.com/ohstr/nmilat/utils"
 )
 
@@ -630,36 +629,24 @@ spec:
 }
 
 // TestConnect_WithGrants_NostrconnectDirection mirrors the above for the
-// signer-speaks-first flow (InitiateNostrconnectWithGrants), where the
-// app's pubkey is already known from the nostrconnect:// URI itself, so
-// grants are applied directly rather than staged on the handler -- see
-// that method's own doc comment. Plays the client side by hand (receive
-// the daemon's own "connect" request, echo the secret back), the same
-// technique TestDaemon_NostrconnectFlow (daemon_test.go) already
-// established for this direction.
+// nostrconnect:// flow (InitiateNostrconnectWithGrants), where the app's
+// pubkey is already known from the URI itself, so grants are applied
+// directly rather than staged on the handler -- see that method's own doc
+// comment. The client side is listen-only, the way a real one is: see
+// nostrconnectTestClient (daemon_test.go).
 func TestConnect_WithGrants_NostrconnectDirection(t *testing.T) {
 	relay := newFakeRelay(t)
 
-	daemon, signerPub, clientPub := newTestDaemon(t)
+	daemon, _, clientPub := newTestDaemon(t)
 	client := localClientFor(daemon)
 	daemon.cfg.Relays = []string{relay.url.String()}
+	daemon.cfg.NostrconnectConfirmTimeout = 500 * time.Millisecond
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go func() { _ = daemon.Run(ctx) }()
 
-	clientConn, err := relayclient.Connect(ctx, relay.url)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer clientConn.Close()
-
-	clientSubID := "test-nostrconnect-grants-sub"
-	clientConn.SubscribeWithID(clientSubID, nip01.NewSubscriptionFilterGroup(&nip01.SubscriptionFilter{
-		Kinds: []int{nip46.KindRequest},
-		Tags:  map[string][]string{"p": {clientPub}},
-	}))
-	incoming := clientConn.Events(clientSubID)
+	app := newNostrconnectTestClient(t, ctx, relay.url, testClientPriv, clientPub)
 
 	spec, err := LoadGrantSpec(writeSpecFile(t, `
 kind: bunker
@@ -676,7 +663,7 @@ spec:
 	nostrconnectURI := "nostrconnect://" + clientPub +
 		"?relay=" + url.QueryEscape(relay.url.String()) +
 		"&secret=" + secret +
-		"&metadata=" + url.QueryEscape(`{"name":"Nostrconnect App"}`)
+		"&name=" + url.QueryEscape("Self-Reported Name")
 
 	connectErr := make(chan error, 1)
 	go func() {
@@ -684,25 +671,7 @@ spec:
 		connectErr <- err
 	}()
 
-	select {
-	case ev := <-incoming:
-		req, err := nip46.ParseRequestEvent(ev.Event, testClientPriv)
-		if err != nil {
-			t.Fatalf("client failed to parse the daemon's connect request: %v", err)
-		}
-		respEvent, err := nip46.NewResponseEvent(testClientPriv, signerPub, req.RequestID, secret, nip46.EncryptionNIP44V2)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := respEvent.Sign(testClientPriv); err != nil {
-			t.Fatal(err)
-		}
-		if !clientConn.Send(respEvent) {
-			t.Fatal("failed to send the client's echo response")
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("client never received the daemon's outgoing connect request")
-	}
+	app.awaitConnectResponse(t, secret)
 
 	select {
 	case err := <-connectErr:
@@ -710,12 +679,15 @@ spec:
 			t.Fatalf("Connect() error = %v, want nil", err)
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("Connect never returned after the client's echo response")
+		t.Fatal("Connect never returned")
 	}
 
 	sessions := daemon.cfg.Store.List()
 	if len(sessions) != 1 || sessions[0].Pubkey != clientPub {
 		t.Fatalf("Store.List() = %+v, want one session for %s", sessions, clientPub)
+	}
+	if sessions[0].AppName != "Self-Reported Name" {
+		t.Errorf("AppName = %q, want the URI's own name param", sessions[0].AppName)
 	}
 	if sessions[0].Nickname != "Nostrconnect App" {
 		t.Errorf("Nickname = %q, want %q (spec wins over self-reported metadata)", sessions[0].Nickname, "Nostrconnect App")

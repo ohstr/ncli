@@ -203,6 +203,23 @@ func (h *Handler) Handle(req *nip46.RequestEvent, encryption string) *nip01.Even
 		}
 	}
 
+	// switch_relays and logout manage the client's own session: one asks
+	// which relays to talk on, the other ends the session entirely.
+	// Neither signs anything or exposes the identity key, and a compliant
+	// client fires switch_relays immediately after every connect -- so
+	// routing them through the approval queue would pop a dialog after
+	// every pairing asking a human to decide something they cannot
+	// meaningfully judge. Answered directly for a paired client, refused
+	// for anyone else: neither belongs to a caller with no session. Not
+	// recorded in History, which tracks permission decisions rather than
+	// protocol housekeeping; the daemon's own request log still shows them.
+	if req.Method == nip46.MethodSwitchRelays || req.Method == nip46.MethodLogout {
+		if !h.Store.IsPaired(peer) {
+			return h.errorResponse(peer, req.RequestID, "not paired", encryption)
+		}
+		return h.execute(req, peer, encryption, nil)
+	}
+
 	kind := 0
 	var signEvt *nip01.Event
 	if req.Method == nip46.MethodSignEvent {
@@ -241,14 +258,24 @@ func (h *Handler) Handle(req *nip46.RequestEvent, encryption string) *nip01.Even
 func (h *Handler) execute(req *nip46.RequestEvent, peer, encryption string, signEvt *nip01.Event) *nip01.Event {
 	switch req.Method {
 	case nip46.MethodConnect:
+		// connect's params, per NIP-46:
+		//   [signer-pubkey, secret, perms, client-metadata]
+		// The last two are how a bunker:// pairing -- where the client
+		// speaks first and the signer has no URI to read -- reports who
+		// it is and what it wants. Both are client-supplied and
+		// unauthenticated: the metadata is a display hint only, and the
+		// perms are a request that Store.Decide still rules on.
+		//
 		// Best-effort: a disk hiccup registering this pairing shouldn't
 		// fail the handshake response itself -- see Store.Pair's own doc
-		// comment. "", "" for app name/URL: bunker:// (this direction --
-		// the client speaks first) carries no app-metadata field at the
-		// NIP-46 protocol level at all, unlike nostrconnect:// (see
-		// daemon.go's InitiateNostrconnect) -- there's nothing here to
-		// pass even in principle, not just nothing supplied this time.
-		_ = h.Store.Pair(peer, "", "")
+		// comment.
+		meta := parseConnectMetadata(req.Params)
+		_ = h.Store.Pair(peer, meta.Name, meta.Url)
+		if len(req.Params) > 2 {
+			for _, g := range parsePerms(req.Params[2], time.Now()) {
+				_ = h.Store.Remember(peer, g)
+			}
+		}
 		// Apply whatever `ncli bunker connect --grants <file>` armed
 		// alongside this pairing's own secret (see SetPendingGrants) --
 		// nil (the common, unscripted case) makes this a no-op. Resolved
@@ -276,6 +303,25 @@ func (h *Handler) execute(req *nip46.RequestEvent, peer, encryption string, sign
 	case nip46.MethodGetRelays:
 		return h.okResponse(peer, req.RequestID, h.relaysJSON(), encryption)
 
+	case nip46.MethodSwitchRelays:
+		// A compliant client sends this straight after connecting, so the
+		// signer can move the conversation onto relays it actually
+		// controls -- in the nostrconnect:// direction the client picked
+		// them, and they may be foreign to this signer entirely. Answering
+		// "unsupported method" left ncli's own relay list inert.
+		//
+		// The result is a JSON *array*, unlike get_relays' read/write map
+		// -- two different shapes in one spec, so relaysJSON is
+		// deliberately not reused here.
+		return h.okResponse(peer, req.RequestID, h.switchRelaysJSON(), encryption)
+
+	case nip46.MethodLogout:
+		// Per spec: acknowledge first, then drop the session. A client
+		// that logs out and comes back has to pair again.
+		resp := h.okResponse(peer, req.RequestID, "ack", encryption)
+		_, _ = h.Store.Revoke(peer)
+		return resp
+
 	case nip46.MethodSignEvent:
 		if err := signEvt.Sign(h.IdentityPriv); err != nil {
 			return h.errorResponse(peer, req.RequestID, "sign failed: "+err.Error(), encryption)
@@ -299,6 +345,37 @@ func (h *Handler) execute(req *nip46.RequestEvent, peer, encryption string, sign
 	default:
 		return h.errorResponse(peer, req.RequestID, "unsupported method: "+req.Method, encryption)
 	}
+}
+
+// parseConnectMetadata reads connect's optional_client_metadata (params[3],
+// a JSON-stringified {name,url,image}). Never nil, so a caller can read
+// .Name without a guard. Absent, empty or malformed all yield the zero
+// value: losing a display name is not worth failing a pairing over, and
+// per NIP-46 this is a display hint that MUST NOT feed an authorization
+// decision anyway.
+func parseConnectMetadata(params []string) *nip46.Metadata {
+	meta := &nip46.Metadata{}
+	if len(params) < 4 || params[3] == "" {
+		return meta
+	}
+	if err := json.Unmarshal([]byte(params[3]), meta); err != nil {
+		return &nip46.Metadata{}
+	}
+	return meta
+}
+
+// switchRelaysJSON renders this signer's own relays as switch_relays'
+// result: a JSON array, or "null" when the signer has none to offer, which
+// the spec defines as "nothing to change".
+func (h *Handler) switchRelaysJSON() string {
+	if len(h.Relays) == 0 {
+		return "null"
+	}
+	b, err := json.Marshal(h.Relays)
+	if err != nil {
+		return "null"
+	}
+	return string(b)
 }
 
 func (h *Handler) relaysJSON() string {

@@ -9,11 +9,11 @@ package bunker
 
 import (
 	"context"
-	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -59,6 +59,12 @@ type DaemonConfig struct {
 	// entries are already durably on disk, so replaying them would just
 	// re-append duplicates.
 	InitialHistory []HistoryEntry
+	// NostrconnectConfirmTimeout overrides how long a nostrconnect://
+	// pairing waits for the paired app's first request before reporting
+	// itself unconfirmed. Zero means nostrconnectConfirmTimeout. Only
+	// tests set this, to avoid spending the real wait on a client that
+	// deliberately stays silent.
+	NostrconnectConfirmTimeout time.Duration
 }
 
 // Daemon owns the live relay connections and dispatches incoming NIP-46
@@ -75,8 +81,8 @@ type Daemon struct {
 	attempted map[string]bool                    // by relay URL string -- true once runRelay's first dial for it has resolved (succeeded or failed) at least once; see RelayStatuses
 	wg        sync.WaitGroup
 
-	outMu   sync.Mutex
-	outWait map[string]chan *nip46.Response // by NIP-46 request id, for a request THIS daemon sent (nostrconnect's signer-speaks-first flow) awaiting the client's response
+	pairMu   sync.Mutex
+	pairWait map[string]chan struct{} // by client pubkey -- closed on that client's first request, so InitiateNostrconnect can tell a pairing the app actually picked up from one it only sent
 
 	profileMu    sync.RWMutex
 	profileName  string // display_name, falling back to name, from the identity's own kind:0 -- empty until fetchProfile resolves one
@@ -112,7 +118,7 @@ func NewDaemon(cfg DaemonConfig) *Daemon {
 		cfg:         cfg,
 		conns:       map[string]*relayclient.Connection{},
 		attempted:   map[string]bool{},
-		outWait:     map[string]chan *nip46.Response{},
+		pairWait:    map[string]chan struct{}{},
 		historyTail: cfg.InitialHistory,
 	}
 	d.handler = &Handler{
@@ -717,16 +723,16 @@ func (d *Daemon) handleIncoming(conn *relayclient.Connection, ev *nip01.Event) {
 	// only by which JSON fields the decrypted content has (see nip46.go's
 	// KindRequest doc comment) -- ParseRequestEvent still "succeeds" on a
 	// response's shape, just with an empty Method, since the JSON simply
-	// doesn't have a "method" key. Route those to whichever earlier
-	// sendRequestAndAwait call is still waiting on this request id (the
-	// nostrconnect signer-speaks-first flow's confirmation), rather than
-	// treating an empty method as a request to Handler.
+	// doesn't have a "method" key. This daemon never sends a request of
+	// its own, so nothing is ever waiting on a response: drop it rather
+	// than handing Handler an empty method.
 	if req.Method == "" {
-		if resp, err := nip46.ParseResponseEvent(ev, d.cfg.IdentityPriv); err == nil {
-			d.deliverResponse(resp)
-		}
 		return
 	}
+
+	// Any request at all is proof the client read our connect response and
+	// considers itself paired -- see awaitFirstRequest.
+	d.notifyFirstRequest(ev.PubKey)
 
 	d.log("request method=%s from=%s id=%s", req.Method, d.cfg.Store.Label(ev.PubKey), req.RequestID)
 
@@ -740,50 +746,50 @@ func (d *Daemon) handleIncoming(conn *relayclient.Connection, ev *nip01.Event) {
 	}
 }
 
-// sendRequestAndAwait sends a NIP-46 request this daemon itself
-// originates (only ever "connect", for the nostrconnect signer-speaks-
-// first flow) and waits up to timeout for the matching response.
-func (d *Daemon) sendRequestAndAwait(conn *relayclient.Connection, recipientPub, method string, params []string, encryption string, timeout time.Duration) (*nip46.Response, error) {
-	ev, reqID, err := nip46.NewRequestEvent(d.cfg.IdentityPriv, recipientPub, method, params, encryption)
-	if err != nil {
-		return nil, err
-	}
-	if err := ev.Sign(d.cfg.IdentityPriv); err != nil {
-		return nil, err
-	}
-
-	ch := make(chan *nip46.Response, 1)
-	d.outMu.Lock()
-	d.outWait[reqID] = ch
-	d.outMu.Unlock()
+// awaitFirstRequest blocks until pubkey sends this daemon any NIP-46
+// request, or timeout elapses. It exists because the nostrconnect:// flow
+// has no acknowledgement: the signer sends its connect response and the
+// spec gives the client nothing to send back. A client that accepted the
+// pairing does start using it immediately though -- nostr-tools fires
+// switch_relays the moment fromURI resolves -- so the first request from
+// that pubkey is the closest thing to a delivery receipt available.
+//
+// Reports whether one arrived. False means "unconfirmed", never "failed":
+// the secret has already gone out and the client may well have taken it.
+func (d *Daemon) awaitFirstRequest(ctx context.Context, pubkey string, timeout time.Duration) bool {
+	ch := make(chan struct{})
+	d.pairMu.Lock()
+	d.pairWait[pubkey] = ch
+	d.pairMu.Unlock()
 	defer func() {
-		d.outMu.Lock()
-		delete(d.outWait, reqID)
-		d.outMu.Unlock()
+		d.pairMu.Lock()
+		delete(d.pairWait, pubkey)
+		d.pairMu.Unlock()
 	}()
 
-	if !conn.Send(ev) {
-		return nil, relayclient.ErrConnectionClosed
-	}
-
 	select {
-	case resp := <-ch:
-		return resp, nil
+	case <-ch:
+		return true
 	case <-time.After(timeout):
-		return nil, fmt.Errorf("timed out waiting for a response to %s", method)
+		return false
+	case <-ctx.Done():
+		return false
 	}
 }
 
-func (d *Daemon) deliverResponse(resp *nip46.ResponseEvent) {
-	d.outMu.Lock()
-	ch, ok := d.outWait[resp.RequestID]
-	d.outMu.Unlock()
-	if !ok {
-		return
+// notifyFirstRequest releases whichever awaitFirstRequest is watching
+// pubkey, if any. Closing (rather than sending) makes it idempotent: a
+// client that fires several requests at once still only resolves the one
+// waiter, and a request arriving with nobody waiting is a no-op.
+func (d *Daemon) notifyFirstRequest(pubkey string) {
+	d.pairMu.Lock()
+	ch, ok := d.pairWait[pubkey]
+	if ok {
+		delete(d.pairWait, pubkey)
 	}
-	select {
-	case ch <- &resp.Response:
-	default:
+	d.pairMu.Unlock()
+	if ok {
+		close(ch)
 	}
 }
 
@@ -859,11 +865,21 @@ func (d *Daemon) NewBunkerPairingWithGrants(spec *GrantSpec) (string, error) {
 	return BunkerURI(d.cfg.IdentityPub, secret, d.cfg.Relays), nil
 }
 
-// InitiateNostrconnect implements the nostrconnect:// flow's signer-
-// speaks-first handshake: send a "connect" request to the URI's client
-// pubkey carrying its secret, and wait for the client's response to echo
-// that same secret back (constant-time compared, never `==`) as
-// confirmation.
+// nostrconnectConfirmTimeout bounds how long InitiateNostrconnect waits
+// for the paired app to make its first request. Only a reporting nicety --
+// the pairing is already registered and usable when this elapses (see
+// awaitFirstRequest), so it is deliberately shorter than the old
+// request/echo handshake's 60s, which callers had to block on for a
+// verdict.
+const nostrconnectConfirmTimeout = 30 * time.Second
+
+// InitiateNostrconnect implements the nostrconnect:// flow. Per NIP-46 the
+// signer answers the URI by publishing a connect *response* whose result is
+// the URI's own secret, to the client pubkey, on the relays the URI names.
+// The client recognizes the pairing by that secret and learns the signer's
+// pubkey from the response's author; it sends nothing back, so there is no
+// handshake to await -- see awaitFirstRequest for how this reports whether
+// the app actually picked the pairing up.
 func (d *Daemon) InitiateNostrconnect(ctx context.Context, schema *nip46.NostrconnectSchema) error {
 	return d.InitiateNostrconnectWithGrants(ctx, schema, nil)
 }
@@ -876,47 +892,49 @@ func (d *Daemon) InitiateNostrconnect(ctx context.Context, schema *nip46.Nostrco
 // the existing Store.Pair call below, rather than staged on the handler
 // for a later request to consume.
 func (d *Daemon) InitiateNostrconnectWithGrants(ctx context.Context, schema *nip46.NostrconnectSchema, spec *GrantSpec) error {
-	conn, err := d.connectionFor(ctx, schema.Relay.String())
+	// The response id has no request to correlate with -- this is the one
+	// NIP-46 message that answers a URI rather than an event. The secret
+	// is the only token both sides already share, so it doubles as the id:
+	// clients key off the result field and ignore the id, and it travels
+	// inside the NIP-44 ciphertext either way.
+	ev, err := nip46.NewResponseEvent(d.cfg.IdentityPriv, schema.ClientPublickey,
+		schema.Secret, schema.Secret, nip46.EncryptionNIP44V2)
 	if err != nil {
 		return fmt.Errorf("nostrconnect: %w", err)
 	}
-
-	resp, err := d.sendRequestAndAwait(conn, schema.ClientPublickey, nip46.MethodConnect,
-		[]string{d.cfg.IdentityPub, schema.Secret}, nip46.EncryptionNIP44V2, 60*time.Second)
-	if err != nil {
+	if err := ev.Sign(d.cfg.IdentityPriv); err != nil {
 		return fmt.Errorf("nostrconnect: %w", err)
 	}
-	if resp.Error != "" {
-		return fmt.Errorf("nostrconnect: client rejected pairing: %s", resp.Error)
-	}
-	if subtle.ConstantTimeCompare([]byte(resp.Result), []byte(schema.Secret)) != 1 {
-		return errors.New("nostrconnect: secret confirmation mismatch")
+
+	sent, tried := d.publishConnectResponse(ctx, schema, ev)
+	if sent == 0 {
+		return fmt.Errorf("nostrconnect: none of the URI's relays could be reached (tried %s): %w",
+			strings.Join(tried, ", "), ErrNoRelayReachable)
 	}
 
-	// Register the pairing in Trusted Apps -- this direction never goes
-	// through Handler.Handle (the signer sent the request itself and is
-	// just awaiting the client's echo above), so it's the one path
-	// handler.go's own Store.Pair call on MethodConnect never covers.
-	// schema.Metadata's Name/Url are this app's own self-reported
-	// identity, straight from the nostrconnect:// URI it generated --
-	// ParseNostrconnect (uri.go) requires the metadata query param, so
-	// this is normally non-nil, but nil is handled defensively anyway
-	// (an empty Store.Pair name/URL, same as the bunker:// direction,
-	// rather than a nil-pointer panic on a technicality of that
-	// requirement).
+	// Register the pairing in Trusted Apps. The name/URL are the app's own
+	// self-reported identity, straight from the nostrconnect:// URI it
+	// generated -- unauthenticated, and per NIP-46 a display hint only,
+	// never an input to an authorization decision. ParseNostrconnect
+	// always sets Metadata, but the struct is public and a caller may well
+	// build one by hand, so this doesn't assume it.
 	var appName, appURL string
 	if schema.Metadata != nil {
 		appName, appURL = schema.Metadata.Name, schema.Metadata.Url
 	}
 	_ = d.cfg.Store.Pair(schema.ClientPublickey, appName, appURL)
+
+	// Grants the URI itself asked for, then whatever --grants staged. The
+	// spec file is the operator's own instruction, so it is applied second
+	// and wins where the two overlap.
+	now := time.Now()
+	for _, g := range parsePerms(schema.Perms, now) {
+		_ = d.cfg.Store.Remember(schema.ClientPublickey, g)
+	}
 	// Resolved against time.Now() here, not whenever spec was loaded --
-	// see GrantSpec.Resolve's own doc comment. Unlike the bunker://
-	// direction, there's no gap to worry about in practice (this call
-	// blocks on the client's own echo response immediately above), but
-	// resolving at the same point in both directions keeps one mental
-	// model instead of two.
+	// see GrantSpec.Resolve's own doc comment.
 	if spec != nil {
-		for _, g := range spec.Resolve(time.Now()) {
+		for _, g := range spec.Resolve(now) {
 			_ = d.cfg.Store.Remember(schema.ClientPublickey, g)
 		}
 		// The spec's own nickname wins over the app's self-reported name
@@ -927,8 +945,79 @@ func (d *Daemon) InitiateNostrconnectWithGrants(ctx context.Context, schema *nip
 			_, _ = d.cfg.Store.SetName(schema.ClientPublickey, spec.Nickname)
 		}
 	}
-	d.log("paired with %s via nostrconnect", d.cfg.Store.Label(schema.ClientPublickey))
+
+	confirmTimeout := d.cfg.NostrconnectConfirmTimeout
+	if confirmTimeout <= 0 {
+		confirmTimeout = nostrconnectConfirmTimeout
+	}
+	label := d.cfg.Store.Label(schema.ClientPublickey)
+	if d.awaitFirstRequest(ctx, schema.ClientPublickey, confirmTimeout) {
+		d.log("paired with %s via nostrconnect", label)
+	} else {
+		d.log("sent the nostrconnect pairing to %s; waiting for its first request", label)
+	}
 	return nil
+}
+
+// publishConnectResponse sends ev to every relay the URI names, and
+// reports how many took it along with the full list it tried.
+//
+// Relays are dialed concurrently and each one is published to the moment
+// it comes up, rather than gathering every connection first. connectionFor
+// gives a relay up to five seconds, so waiting for the whole set would
+// make the pairing as slow as its worst relay: a URI listing four, with
+// the first three down, would take fifteen seconds to pair on the fourth,
+// and even one dead relay would delay a pairing the live ones could have
+// completed immediately. This way the client sees the response as soon as
+// the fastest relay is ready.
+//
+// A client subscribes to all the relays it listed and takes whichever copy
+// arrives first, so publishing to all of them is redundancy, not
+// duplication. An unreachable one is logged and skipped, the way every
+// other multi-target operation in ncli treats one; all of them failing is
+// the caller's error to raise.
+func (d *Daemon) publishConnectResponse(ctx context.Context, schema *nip46.NostrconnectSchema, ev *nip01.Event) (sent int, tried []string) {
+	relays := schema.Relays
+	if len(relays) == 0 && schema.Relay != nil {
+		relays = []*url.URL{schema.Relay}
+	}
+
+	seen := map[string]bool{}
+	results := make(chan bool, len(relays))
+	pending := 0
+	for _, relay := range relays {
+		raw := relay.String()
+		// A URI may name the same relay twice; one connection is enough,
+		// and connectionFor would otherwise race itself over d.conns.
+		if seen[raw] {
+			continue
+		}
+		seen[raw] = true
+		tried = append(tried, raw)
+		pending++
+
+		go func() {
+			conn, err := d.connectionFor(ctx, raw)
+			if err != nil {
+				d.log("nostrconnect: relay %s: %v", raw, err)
+				results <- false
+				return
+			}
+			if !conn.Send(ev) {
+				d.log("nostrconnect: relay %s: connection closed before the connect response went out", raw)
+				results <- false
+				return
+			}
+			results <- true
+		}()
+	}
+
+	for range pending {
+		if <-results {
+			sent++
+		}
+	}
+	return sent, tried
 }
 
 // shortHex renders a hex id/pubkey as its first 8 characters -- the same

@@ -3,7 +3,9 @@ package bunker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -14,6 +16,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/ohstr/ncli/cli/common"
 	"github.com/ohstr/nmilat/nip01"
 	"github.com/ohstr/nmilat/nip04"
 	"github.com/ohstr/nmilat/nip44"
@@ -448,90 +451,152 @@ func TestDaemon_SignEventRoundTrip(t *testing.T) {
 	}
 }
 
-// TestDaemon_NostrconnectFlow covers the signer-speaks-first direction
-// (InitiateNostrconnect/sendRequestAndAwait) against the local fake relay
-// -- previously this had zero coverage outside
-// TestLive_BunkerFlow_ConnectAndSignEvent, which is gated behind the
-// "integration" build tag and a real external relay, so it never runs by
-// default. Plays the client side by hand (receive the daemon's own
-// "connect" request, echo the secret back as a response) since this
-// direction is the one place a "client" in these tests must respond
-// rather than initiate.
-func TestDaemon_NostrconnectFlow(t *testing.T) {
-	relay := newFakeRelay(t)
+// nostrconnectTestClient plays the app side of a nostrconnect:// pairing
+// the way a real one does -- see nostr-tools' BunkerSigner.fromURI, which
+// this mirrors deliberately. It only listens: it subscribes for kind:24133
+// addressed to itself and accepts the first event whose decrypted result
+// equals the secret, learning the signer's pubkey from that event's author.
+// It never answers the pairing, because NIP-46 gives it nothing to answer
+// with.
+//
+// Pairing used to be tested with a client that replied to a "connect"
+// request from the signer. That handshake is not the one in the spec, and
+// a test shaped around it passed while no real client could pair at all --
+// which is why this one is written against an actual client's behavior
+// rather than against ncli's.
+type nostrconnectTestClient struct {
+	priv, pub string
+	conn      *relayclient.Connection
+	incoming  <-chan *wire.EventSubscriptionResponse
+}
+
+func newNostrconnectTestClient(t *testing.T, ctx context.Context, relayURL *url.URL, priv, pub string) *nostrconnectTestClient {
+	t.Helper()
+
+	conn, err := relayclient.Connect(ctx, relayURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(conn.Close)
+
+	subID := "nostrconnect-client-" + pub[:8] + "-" + relayURL.Host
+	conn.SubscribeWithID(subID, nip01.NewSubscriptionFilterGroup(&nip01.SubscriptionFilter{
+		Kinds: []int{nip46.KindRequest},
+		Tags:  map[string][]string{"p": {pub}},
+	}))
+
+	return &nostrconnectTestClient{priv: priv, pub: pub, conn: conn, incoming: conn.Events(subID)}
+}
+
+// awaitConnectResponse blocks for the signer's connect response and
+// returns the signer's pubkey. Fails the test if what arrives is a request
+// rather than a response, or carries the wrong secret.
+func (c *nostrconnectTestClient) awaitConnectResponse(t *testing.T, secret string) string {
+	t.Helper()
+
+	for {
+		select {
+		case ev := <-c.incoming:
+			// A request and a response share kind 24133. Reject a request
+			// outright: the spec has the signer answer a nostrconnect://
+			// URI with a response, and accepting either here would let the
+			// inverted handshake back in unnoticed.
+			if req, err := nip46.ParseRequestEvent(ev.Event, c.priv); err == nil && req.Method != "" {
+				t.Fatalf("signer sent a %q request; NIP-46 answers a nostrconnect:// URI with a connect response", req.Method)
+			}
+
+			resp, err := nip46.ParseResponseEvent(ev.Event, c.priv)
+			if err != nil {
+				continue
+			}
+			if resp.Result != secret {
+				t.Fatalf("connect response result = %q, want the URI's own secret %q", resp.Result, secret)
+			}
+			return ev.Event.PubKey
+		case <-time.After(5 * time.Second):
+			t.Fatal("client never received the signer's connect response")
+			return ""
+		}
+	}
+}
+
+// sendRequest fires a request at the signer, the way a real client starts
+// using a pairing the moment it accepts one.
+func (c *nostrconnectTestClient) sendRequest(t *testing.T, signerPub, method string, params []string) {
+	t.Helper()
+
+	ev, _, err := nip46.NewRequestEvent(c.priv, signerPub, method, params, nip46.EncryptionNIP44V2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ev.Sign(c.priv); err != nil {
+		t.Fatal(err)
+	}
+	if !c.conn.Send(ev) {
+		t.Fatal("failed to send the client's request")
+	}
+}
+
+// newNostrconnectDaemon builds a daemon wired to relays, with a short
+// confirmation window so an intentionally-silent client costs the test a
+// moment rather than the real 30s.
+func newNostrconnectDaemon(t *testing.T, ctx context.Context, relays ...string) *Daemon {
+	t.Helper()
 
 	signerPub, err := utils.GetPublicKey(testSignerPriv)
 	if err != nil {
 		t.Fatal(err)
 	}
+	store, err := LoadStore(filepath.Join(t.TempDir(), "sessions.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	daemon := NewDaemon(DaemonConfig{
+		IdentityPriv:               testSignerPriv,
+		IdentityPub:                signerPub,
+		Relays:                     relays,
+		Store:                      store,
+		Queue:                      NewQueue(0, time.Minute),
+		NostrconnectConfirmTimeout: 500 * time.Millisecond,
+	})
+	go func() { _ = daemon.Run(ctx) }()
+	return daemon
+}
+
+// TestDaemon_NostrconnectFlow is the regression guard for the handshake
+// direction: the signer publishes a connect response carrying the URI's
+// secret, and the client -- which sends nothing -- recognizes the pairing
+// from it.
+func TestDaemon_NostrconnectFlow(t *testing.T) {
+	relay := newFakeRelay(t)
+
 	clientPub, err := utils.GetPublicKey(testClientPriv)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	store, err := LoadStore(filepath.Join(t.TempDir(), "sessions.yaml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	daemon := NewDaemon(DaemonConfig{
-		IdentityPriv: testSignerPriv,
-		IdentityPub:  signerPub,
-		Relays:       []string{relay.url.String()},
-		Store:        store,
-		Queue:        NewQueue(0, time.Minute),
-	})
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go func() { _ = daemon.Run(ctx) }()
 
-	// Client side: connect independently and listen for the daemon's own
-	// outgoing "connect" request, addressed to this pubkey.
-	clientConn, err := relayclient.Connect(ctx, relay.url)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer clientConn.Close()
-
-	clientSubID := "test-nostrconnect-sub"
-	clientConn.SubscribeWithID(clientSubID, nip01.NewSubscriptionFilterGroup(&nip01.SubscriptionFilter{
-		Kinds: []int{nip46.KindRequest},
-		Tags:  map[string][]string{"p": {clientPub}},
-	}))
-	incoming := clientConn.Events(clientSubID)
+	daemon := newNostrconnectDaemon(t, ctx, relay.url.String())
+	client := newNostrconnectTestClient(t, ctx, relay.url, testClientPriv, clientPub)
 
 	const secret = "nostrconnect-test-secret"
 	schema := &nip46.NostrconnectSchema{
 		ClientPublickey: clientPub,
 		Relay:           relay.url,
+		Relays:          []*url.URL{relay.url},
 		Secret:          secret,
+		Metadata:        &nip46.Metadata{Name: "Test App", Url: "https://test.example"},
 	}
 
 	initiateErr := make(chan error, 1)
 	go func() { initiateErr <- daemon.InitiateNostrconnect(ctx, schema) }()
 
-	select {
-	case ev := <-incoming:
-		req, err := nip46.ParseRequestEvent(ev.Event, testClientPriv)
-		if err != nil {
-			t.Fatalf("client failed to parse the daemon's connect request: %v", err)
-		}
-		if req.Method != nip46.MethodConnect {
-			t.Fatalf("Method = %q, want connect", req.Method)
-		}
-
-		respEvent, err := nip46.NewResponseEvent(testClientPriv, signerPub, req.RequestID, secret, nip46.EncryptionNIP44V2)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := respEvent.Sign(testClientPriv); err != nil {
-			t.Fatal(err)
-		}
-		if !clientConn.Send(respEvent) {
-			t.Fatal("failed to send the client's echo response")
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("client never received the daemon's outgoing connect request")
+	signerPub := client.awaitConnectResponse(t, secret)
+	if signerPub != daemon.cfg.IdentityPub {
+		t.Errorf("connect response author = %s, want the signer's own pubkey %s", signerPub, daemon.cfg.IdentityPub)
 	}
 
 	select {
@@ -540,8 +605,307 @@ func TestDaemon_NostrconnectFlow(t *testing.T) {
 			t.Errorf("InitiateNostrconnect() error = %v, want nil", err)
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("InitiateNostrconnect never returned after the client's echo response")
+		t.Fatal("InitiateNostrconnect never returned")
 	}
+
+	sessions := daemon.cfg.Store.List()
+	if len(sessions) != 1 || sessions[0].Pubkey != clientPub {
+		t.Fatalf("Store.List() = %+v, want one session for %s", sessions, clientPub)
+	}
+	if sessions[0].AppName != "Test App" {
+		t.Errorf("AppName = %q, want the URI's own name", sessions[0].AppName)
+	}
+}
+
+// A client listing several relays means all of them: the signer publishes
+// its response to each, so the client picks up whichever it sees first.
+func TestDaemon_NostrconnectFlow_PublishesToEveryRelay(t *testing.T) {
+	relayA := newFakeRelay(t)
+	relayB := newFakeRelay(t)
+
+	clientPub, err := utils.GetPublicKey(testClientPriv)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	daemon := newNostrconnectDaemon(t, ctx, relayA.url.String())
+
+	// Two independent client connections, one per relay -- the response
+	// has to show up on both, not just the one the daemon already had open.
+	onA := newNostrconnectTestClient(t, ctx, relayA.url, testClientPriv, clientPub)
+	onB := newNostrconnectTestClient(t, ctx, relayB.url, testClientPriv, clientPub)
+
+	const secret = "multi-relay-secret"
+	schema := &nip46.NostrconnectSchema{
+		ClientPublickey: clientPub,
+		Relay:           relayA.url,
+		Relays:          []*url.URL{relayA.url, relayB.url},
+		Secret:          secret,
+		Metadata:        &nip46.Metadata{},
+	}
+
+	initiateErr := make(chan error, 1)
+	go func() { initiateErr <- daemon.InitiateNostrconnect(ctx, schema) }()
+
+	onA.awaitConnectResponse(t, secret)
+	onB.awaitConnectResponse(t, secret)
+
+	if err := <-initiateErr; err != nil {
+		t.Errorf("InitiateNostrconnect() error = %v, want nil", err)
+	}
+}
+
+// The reproducer's own shape: the first relay in the list is down. Pairing
+// has to ride on the ones that are up rather than failing on the head of
+// the list.
+func TestDaemon_NostrconnectFlow_SurvivesADeadFirstRelay(t *testing.T) {
+	live := newFakeRelay(t)
+
+	clientPub, err := utils.GetPublicKey(testClientPriv)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// A port nothing listens on: reserved by binding and then closing it,
+	// so the URL is well-formed and the dial reliably fails.
+	dead := deadRelayURL(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	daemon := newNostrconnectDaemon(t, ctx, live.url.String())
+	client := newNostrconnectTestClient(t, ctx, live.url, testClientPriv, clientPub)
+
+	const secret = "dead-first-relay-secret"
+	schema := &nip46.NostrconnectSchema{
+		ClientPublickey: clientPub,
+		Relay:           dead,
+		Relays:          []*url.URL{dead, live.url},
+		Secret:          secret,
+		Metadata:        &nip46.Metadata{},
+	}
+
+	initiateErr := make(chan error, 1)
+	go func() { initiateErr <- daemon.InitiateNostrconnect(ctx, schema) }()
+
+	client.awaitConnectResponse(t, secret)
+
+	select {
+	case err := <-initiateErr:
+		if err != nil {
+			t.Errorf("InitiateNostrconnect() error = %v, want the live relay to carry the pairing", err)
+		}
+	case <-time.After(15 * time.Second):
+		t.Fatal("InitiateNostrconnect never returned")
+	}
+}
+
+// Every relay down is a network failure, not an empty success -- and it
+// must say so with the code that marks it retryable.
+func TestDaemon_NostrconnectFlow_AllRelaysDownIsANetworkError(t *testing.T) {
+	clientPub, err := utils.GetPublicKey(testClientPriv)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	daemon := newNostrconnectDaemon(t, ctx)
+
+	dead := deadRelayURL(t)
+	schema := &nip46.NostrconnectSchema{
+		ClientPublickey: clientPub,
+		Relay:           dead,
+		Relays:          []*url.URL{dead},
+		Secret:          "unreachable-secret",
+		Metadata:        &nip46.Metadata{},
+	}
+
+	err = daemon.InitiateNostrconnect(ctx, schema)
+	if err == nil {
+		t.Fatal("InitiateNostrconnect() = nil, want an error when no relay is reachable")
+	}
+	if !errors.Is(err, ErrNoRelayReachable) {
+		t.Errorf("error = %v, want it to wrap ErrNoRelayReachable", err)
+	}
+	if got := ErrorCode(err); got != common.CodeNetwork {
+		t.Errorf("ErrorCode() = %q, want %q (retryable, exit 6)", got, common.CodeNetwork)
+	}
+	if len(daemon.cfg.Store.List()) != 0 {
+		t.Error("a pairing that never went out must not be registered")
+	}
+}
+
+// A URI's perms list is the app saying what it needs. Honoring it is what
+// keeps a freshly-paired app from prompting on every single request.
+func TestDaemon_NostrconnectFlow_AppliesPermsFromTheURI(t *testing.T) {
+	relay := newFakeRelay(t)
+
+	clientPub, err := utils.GetPublicKey(testClientPriv)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	daemon := newNostrconnectDaemon(t, ctx, relay.url.String())
+	client := newNostrconnectTestClient(t, ctx, relay.url, testClientPriv, clientPub)
+
+	const secret = "perms-secret"
+	schema := &nip46.NostrconnectSchema{
+		ClientPublickey: clientPub,
+		Relay:           relay.url,
+		Relays:          []*url.URL{relay.url},
+		Secret:          secret,
+		Perms:           "nip44_encrypt,sign_event:1",
+		Metadata:        &nip46.Metadata{},
+	}
+
+	initiateErr := make(chan error, 1)
+	go func() { initiateErr <- daemon.InitiateNostrconnect(ctx, schema) }()
+
+	client.awaitConnectResponse(t, secret)
+	if err := <-initiateErr; err != nil {
+		t.Fatalf("InitiateNostrconnect() error = %v", err)
+	}
+
+	store := daemon.cfg.Store
+	if got := store.Decide(clientPub, nip46.MethodNIP44Encrypt, 0); got != Allow {
+		t.Errorf("Decide(nip44_encrypt) = %v, want Allow", got)
+	}
+	if got := store.Decide(clientPub, nip46.MethodSignEvent, 1); got != Allow {
+		t.Errorf("Decide(sign_event, kind 1) = %v, want Allow", got)
+	}
+	// The grant was scoped to kind 1, so it must not spill onto others.
+	if got := store.Decide(clientPub, nip46.MethodSignEvent, 4); got == Allow {
+		t.Error("Decide(sign_event, kind 4) = Allow, want the kind:1 grant not to cover it")
+	}
+}
+
+// The confirmation is a delivery receipt, not a handshake: a client that
+// starts using the pairing confirms it, and one that stays quiet leaves it
+// unconfirmed but still paired.
+func TestDaemon_NostrconnectFlow_FirstRequestConfirmsThePairing(t *testing.T) {
+	relay := newFakeRelay(t)
+
+	clientPub, err := utils.GetPublicKey(testClientPriv)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	daemon := newNostrconnectDaemon(t, ctx, relay.url.String())
+	client := newNostrconnectTestClient(t, ctx, relay.url, testClientPriv, clientPub)
+
+	const secret = "confirm-secret"
+	schema := &nip46.NostrconnectSchema{
+		ClientPublickey: clientPub,
+		Relay:           relay.url,
+		Relays:          []*url.URL{relay.url},
+		Secret:          secret,
+		Metadata:        &nip46.Metadata{},
+	}
+
+	initiateErr := make(chan error, 1)
+	go func() { initiateErr <- daemon.InitiateNostrconnect(ctx, schema) }()
+
+	signerPub := client.awaitConnectResponse(t, secret)
+	// What a real client does next -- nostr-tools fires switch_relays the
+	// moment fromURI resolves.
+	client.sendRequest(t, signerPub, nip46.MethodSwitchRelays, []string{})
+
+	select {
+	case err := <-initiateErr:
+		if err != nil {
+			t.Errorf("InitiateNostrconnect() error = %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("InitiateNostrconnect never returned after the client's first request")
+	}
+
+	if !anyLogContains(daemon, "paired with") {
+		t.Error("a client that made a request should be logged as paired, not as unconfirmed")
+	}
+}
+
+func TestDaemon_NostrconnectFlow_SilentClientIsPairedButUnconfirmed(t *testing.T) {
+	relay := newFakeRelay(t)
+
+	clientPub, err := utils.GetPublicKey(testClientPriv)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	daemon := newNostrconnectDaemon(t, ctx, relay.url.String())
+	client := newNostrconnectTestClient(t, ctx, relay.url, testClientPriv, clientPub)
+
+	const secret = "silent-secret"
+	schema := &nip46.NostrconnectSchema{
+		ClientPublickey: clientPub,
+		Relay:           relay.url,
+		Relays:          []*url.URL{relay.url},
+		Secret:          secret,
+		Metadata:        &nip46.Metadata{},
+	}
+
+	initiateErr := make(chan error, 1)
+	go func() { initiateErr <- daemon.InitiateNostrconnect(ctx, schema) }()
+
+	client.awaitConnectResponse(t, secret)
+
+	select {
+	case err := <-initiateErr:
+		// Unconfirmed is not a failure: the secret went out, and the app
+		// may well have taken it.
+		if err != nil {
+			t.Errorf("InitiateNostrconnect() error = %v, want nil for an unconfirmed pairing", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("InitiateNostrconnect never returned")
+	}
+
+	if len(daemon.cfg.Store.List()) != 1 {
+		t.Error("the pairing should be registered even without confirmation")
+	}
+	if !anyLogContains(daemon, "waiting for its first request") {
+		t.Error("an unconfirmed pairing should say so in the log")
+	}
+}
+
+// deadRelayURL returns a ws:// URL for a port nothing is listening on --
+// bound to claim it, then closed, so the dial fails fast and reliably
+// instead of racing an unrelated process on a guessed port.
+func deadRelayURL(t *testing.T) *url.URL {
+	t.Helper()
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := ln.Addr().String()
+	if err := ln.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return &url.URL{Scheme: "ws", Host: addr}
+}
+
+func anyLogContains(d *Daemon, substr string) bool {
+	for _, line := range d.RecentLogs().Lines {
+		if strings.Contains(line, substr) {
+			return true
+		}
+	}
+	return false
 }
 
 // TestDaemon_EncryptionScenarios is the systematic matrix behind

@@ -1,6 +1,7 @@
 package bunker
 
 import (
+	"context"
 	"encoding/json"
 	"net/url"
 	"strings"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ohstr/nmilat/nip46"
+	"github.com/ohstr/nmilat/utils"
 )
 
 // realWorldURI is a URI a shipping Nostr client actually produced, kept
@@ -408,4 +410,61 @@ func TestHandle_SessionMethods_RefusedWhenUnpaired(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A relay named only by a pairing URI is dialed ad hoc. runRelay
+// reconnects with backoff until its context ends, so without a bound a
+// dead entry would keep a goroutine retrying for the daemon's whole life
+// -- once per dead relay, every time a URI is pasted. The reproducer for
+// this change lists four relays, so that is not a hypothetical shape.
+func TestDaemon_NostrconnectFlow_StopsDialingADeadRelay(t *testing.T) {
+	relay := newFakeRelay(t)
+
+	clientPub, err := utils.GetPublicKey(testClientPriv)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	daemon := newNostrconnectDaemon(t, ctx, relay.url.String())
+	client := newNostrconnectTestClient(t, ctx, relay.url, testClientPriv, clientPub)
+
+	dead := deadRelayURL(t)
+	const secret = "dead-relay-cleanup-secret"
+	schema := &nip46.NostrconnectSchema{
+		ClientPublickey: clientPub,
+		Relay:           dead,
+		Relays:          []*url.URL{dead, relay.url},
+		Secret:          secret,
+		Metadata:        &nip46.Metadata{},
+	}
+
+	initiateErr := make(chan error, 1)
+	go func() { initiateErr <- daemon.InitiateNostrconnect(ctx, schema) }()
+
+	client.awaitConnectResponse(t, secret)
+	if err := <-initiateErr; err != nil {
+		t.Fatalf("InitiateNostrconnect() error = %v", err)
+	}
+
+	// Backoff starts at a second and doubles, so anything still retrying
+	// logs again well inside this window.
+	settled := countLogsMentioning(daemon, dead.Host)
+	time.Sleep(2500 * time.Millisecond)
+
+	if grown := countLogsMentioning(daemon, dead.Host) - settled; grown > 0 {
+		t.Errorf("%d further dial attempts against the dead relay after pairing; want the loop stopped", grown)
+	}
+}
+
+func countLogsMentioning(d *Daemon, substr string) int {
+	n := 0
+	for _, line := range d.RecentLogs().Lines {
+		if strings.Contains(line, substr) {
+			n++
+		}
+	}
+	return n
 }

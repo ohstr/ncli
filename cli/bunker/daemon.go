@@ -811,10 +811,28 @@ func (d *Daemon) connectionFor(ctx context.Context, relayURL string) (*relayclie
 		return nil, fmt.Errorf("invalid relay %q: %w", relayURL, err)
 	}
 
+	// The dial gets its own cancellable context. runRelay reconnects with
+	// backoff until its context ends, which is what a configured relay
+	// wants and an ad-hoc one does not: a relay named only by some pairing
+	// URI that never comes up would otherwise keep a goroutine retrying a
+	// dead host for the daemon's whole life. A URI listing four relays
+	// leaves one such loop per dead entry, every time one is pasted.
+	//
+	// Cancelled unless this returns a live connection -- past that point
+	// the relay is a real one the client may send requests on, so its
+	// reconnect loop belongs to the daemon's lifetime like any other.
+	dialCtx, stopDialing := context.WithCancel(ctx)
+	connected := false
+	defer func() {
+		if !connected {
+			stopDialing()
+		}
+	}()
+
 	d.wg.Add(1)
 	go func() {
 		defer d.wg.Done()
-		d.runRelay(ctx, u)
+		d.runRelay(dialCtx, u)
 	}()
 
 	// runRelay registers the connection asynchronously; poll briefly
@@ -826,6 +844,7 @@ func (d *Daemon) connectionFor(ctx context.Context, relayURL string) (*relayclie
 		conn, ok := d.conns[relayURL]
 		d.mu.Unlock()
 		if ok {
+			connected = true
 			return conn, nil
 		}
 		select {

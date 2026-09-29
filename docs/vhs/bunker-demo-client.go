@@ -10,12 +10,15 @@
 //
 // Plays the nostrconnect:// direction specifically -- this "app" generates
 // the connection URI, and the signer (the human, inside the `ncli bunker`
-// TUI) pastes it in; the signer then speaks first at the protocol level
-// (see cli/bunker/daemon.go's InitiateNostrconnectWithGrants), sending the
-// first "connect" request to this client's pubkey and waiting for the
-// secret to be echoed back. That's the reverse of the bunker:// direction
-// (this same file used to play, before bunker.tape switched scenarios),
-// where the client speaks first instead.
+// TUI) pastes it in. The signer then publishes a "connect" response
+// carrying the URI's own secret to this client's pubkey (see NIP-46's
+// "Direct connection initiated by the client", and cli/bunker/daemon.go's
+// InitiateNostrconnectWithGrants); this client recognizes the pairing by
+// that secret and learns the signer's pubkey from the response's author.
+// It answers nothing -- the spec gives it nothing to answer with. That's
+// the reverse of the bunker:// direction (this same file used to play,
+// before bunker.tape switched scenarios), where the client sends a
+// "connect" request instead.
 //
 // The identity/secret below are FIXED, not freshly generated per run, on
 // purpose: bunker.tape's own visible "paste this into the TUI" step has to
@@ -34,7 +37,7 @@
 // Prints its own nostrconnect:// URI to stderr for reference (bunker.tape
 // itself doesn't read this output -- the literal is already baked into the
 // tape to match these same fixed consts), then waits for the signer's
-// "connect" handshake, followed by the same two demo sign_event requests
+// "connect" response, followed by the same two demo sign_event requests
 // this file has always sent: a kind 1 (expected approved, with a
 // remembered "kind 1 only" grant) and, once that's answered, a kind 7
 // (expected *rejected* -- it falls outside the kind-1-only grant just
@@ -79,7 +82,6 @@ const (
 	// behavior wasn't bunker.tape's point either.
 	demoAppName = "Demo App"
 	demoAppURL  = "https://ncli.dev"
-	demoAppDesc = "ncli bunker VHS demo"
 )
 
 func main() {
@@ -104,7 +106,7 @@ func main() {
 	incoming := conn.Events(subID)
 
 	fmt.Fprintln(os.Stderr, "waiting for the signer to paste our URI and connect...")
-	signerPub, err := awaitConnect(ctx, conn, incoming)
+	signerPub, err := awaitConnect(ctx, incoming)
 	must(err)
 	fmt.Fprintln(os.Stderr, "paired with", signerPub, "-- sending a demo sign_event request")
 
@@ -152,55 +154,51 @@ func main() {
 // "Type" step has to match, not something the tape reads at runtime (VHS
 // tapes are static text; there's no way to feed this program's live output
 // back into a keystroke sequence).
+//
+// name/url/perms are NIP-46's own query params. An earlier version packed
+// name and url into a single JSON "metadata" param, which the spec does
+// not define; ncli still reads that form, but emitting it here would make
+// this demo the one client that does.
 func buildNostrconnectURI() string {
-	metadata, err := json.Marshal(struct {
-		Name        string `json:"name"`
-		Url         string `json:"url"`
-		Description string `json:"description"`
-	}{demoAppName, demoAppURL, demoAppDesc})
-	must(err)
-
 	q := url.Values{}
 	q.Set("relay", demoRelay)
 	q.Set("secret", demoSecret)
-	q.Set("metadata", string(metadata))
+	q.Set("name", demoAppName)
+	q.Set("url", demoAppURL)
 
 	u := url.URL{Scheme: "nostrconnect", Host: demoClientPubHex, RawQuery: q.Encode()}
 	return u.String()
 }
 
-// awaitConnect blocks until the signer's own "connect" request (the
-// nostrconnect:// direction's signer-speaks-first handshake -- see
-// daemon.go's InitiateNostrconnectWithGrants) arrives carrying the matching
-// secret, replies with that same secret to complete pairing, and returns
-// the signer's pubkey (the request event's own author) for the two demo
-// sign_event requests that follow.
-func awaitConnect(ctx context.Context, conn *relayclient.Connection, incoming <-chan *wire.EventSubscriptionResponse) (string, error) {
+// awaitConnect blocks until the signer's "connect" response arrives
+// carrying this URI's own secret, and returns the signer's pubkey -- taken
+// from the response event's author, which is how a nostrconnect:// client
+// learns who its signer is -- for the two demo sign_event requests that
+// follow. Nothing is sent back: the pairing is complete on arrival.
+//
+// The secret is compared in constant time. It is the only thing telling
+// the intended signer's response apart from anyone else's who saw the URI
+// on the relay, so a timing side channel here would be a real one.
+func awaitConnect(ctx context.Context, incoming <-chan *wire.EventSubscriptionResponse) (string, error) {
 	for {
 		select {
 		case ev := <-incoming:
-			req, err := nip46.ParseRequestEvent(ev.Event, demoClientPrivHex)
-			if err != nil || req.Method != nip46.MethodConnect {
-				continue
-			}
-			// connect params, per nip46.go's own method-params doc comment:
-			// [signer-pubkey, secret].
-			if len(req.Params) < 2 || subtle.ConstantTimeCompare([]byte(req.Params[1]), []byte(demoSecret)) != 1 {
+			// A request and a response share kind 24133, distinguished
+			// only by their decrypted content -- skip anything that parses
+			// as a request (a "method" field), rather than reading its
+			// absent result as an empty secret.
+			if req, err := nip46.ParseRequestEvent(ev.Event, demoClientPrivHex); err == nil && req.Method != "" {
 				continue
 			}
 
-			signerPub := ev.Event.PubKey
-			resp, err := nip46.NewResponseEvent(demoClientPrivHex, signerPub, req.RequestID, demoSecret, nip46.EncryptionNIP44V2)
+			resp, err := nip46.ParseResponseEvent(ev.Event, demoClientPrivHex)
 			if err != nil {
-				return "", err
+				continue
 			}
-			if err := resp.Sign(demoClientPrivHex); err != nil {
-				return "", err
+			if subtle.ConstantTimeCompare([]byte(resp.Result), []byte(demoSecret)) != 1 {
+				continue
 			}
-			if !conn.Send(resp) {
-				return "", errors.New("failed to send connect response")
-			}
-			return signerPub, nil
+			return ev.Event.PubKey, nil
 		case <-ctx.Done():
 			return "", ctx.Err()
 		}

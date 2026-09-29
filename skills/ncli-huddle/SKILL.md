@@ -47,6 +47,7 @@ huddle:
     - urls: ["turn:turn.example:3478"]
       username: user
       credential: secret
+  udpPortRange: "21600-21650"   # pin media ports; needed in a container
 ```
 
 `examples/relay/huddle.yaml` is a ready-made preset; `examples/relay/full.yaml`
@@ -67,6 +68,10 @@ Things that bite:
   relay can have open reading and closed calls, or the reverse.
 - **TURN matters.** With no `iceServers`, only peers on the same network
   connect; TURN is what carries peers behind symmetric NAT.
+- **In a container, set `udpPortRange` and publish it.** Media does not go over
+  the signalling socket. Without a pinned range the OS picks ephemeral ports,
+  which no `-p` covers, so the call connects as far as signalling and then no
+  audio arrives. Publish the same range as UDP (`-p 21600-21650:21600-21650/udp`).
 
 ## Joining from the terminal
 

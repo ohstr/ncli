@@ -25,6 +25,7 @@ const maxPendingCandidates = 64
 // session is one WebRTC peer's lifetime in a room.
 type session struct {
 	cfg    Config
+	api    *webrtc.API
 	log    zerolog.Logger
 	conn   *websocket.Conn
 	roomID string
@@ -142,7 +143,7 @@ func (s *session) handshake(ctx context.Context) bool {
 
 	// The peer connection must exist before the sink, because the sink's track
 	// factory adds tracks to it.
-	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{ICEServers: s.cfg.ICEServers})
+	pc, err := s.api.NewPeerConnection(webrtc.Configuration{ICEServers: s.cfg.ICEServers})
 	if err != nil {
 		s.log.Warn().Err(err).Msg("could not create a peer connection")
 		s.writeError(CodeNegotiationFailed, "could not create a peer connection", nil)

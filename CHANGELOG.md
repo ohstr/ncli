@@ -4,6 +4,10 @@
 
 ### Added
 
+- `huddle.udpPortRange` pins the UDP ports WebRTC media is carried on, as
+  `"min-max"`. Without it the OS picks from the ephemeral range, which a
+  container cannot publish and a firewall will not have open -- so signalling
+  succeeds and no audio ever arrives.
 - `ncli huddle join` can now play the call, decoding Opus with pure Go and mixing
   every speaker into one stream. Playback is compiled in only under
   `-tags huddleaudio`: the release binaries are built without cgo and the only

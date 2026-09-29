@@ -72,3 +72,12 @@ huddle:
     #     - "turn:turn.example.com:3478"
     #   username: "relay"
     #   credential: "a-long-random-secret"
+
+  # Pin the UDP ports media is carried on. Leave it out on a host with nothing
+  # filtering in the way and the OS picks from the ephemeral range. Set it when
+  # the relay runs in a container or behind a firewall: those ports have to be
+  # published or opened, and without that signalling succeeds and no audio ever
+  # arrives -- the call sits in `connecting` until ICE gives up.
+  #
+  # Size it for the calls you expect to carry, not for one.
+  # udpPortRange: "21600-21650"

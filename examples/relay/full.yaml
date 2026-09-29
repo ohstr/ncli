@@ -183,3 +183,7 @@ huddle:
   rtc: false
   # STUN/TURN for WebRTC clients; TURN needs username/credential.
   iceServers: []
+  # Pin the UDP ports media is carried on, as "min-max". Empty lets the OS pick
+  # from the ephemeral range; a relay in a container or behind a firewall needs
+  # a known range to publish, or no audio arrives despite signalling working.
+  udpPortRange: ""

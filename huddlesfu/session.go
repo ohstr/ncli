@@ -17,6 +17,11 @@ import (
 	"github.com/rs/zerolog"
 )
 
+// maxPendingCandidates caps the candidates held back per direction while the
+// description they belong to is still in flight. A real gathering run is a
+// handful; the cap is only so a peer that never offers cannot grow the queue.
+const maxPendingCandidates = 64
+
 // session is one WebRTC peer's lifetime in a room.
 type session struct {
 	cfg    Config
@@ -56,6 +61,22 @@ type session struct {
 	// sends the client a description identical to the one it just agreed to,
 	// which is at best wasted work and at worst glare.
 	pendingTracks bool
+
+	// pendingRemote holds candidates that arrived before the client's offer.
+	// pion rejects a candidate outright while there is no remote description,
+	// and a browser gathers as soon as it sets its local description -- often
+	// before it sends us the SDP. A dropped candidate can be the only reachable
+	// path. Touched only by the signalling goroutine, so it needs no lock:
+	// renegotiate is the one cross-goroutine caller and reaches neither this nor
+	// the remote description.
+	pendingRemote []webrtc.ICECandidateInit
+
+	// pendingLocal holds our own candidates until the description they belong to
+	// is on the wire, because pion starts gathering inside SetLocalDescription.
+	// A client that receives a candidate first rejects it for the same reason we
+	// would. Guarded by writeMu, which already serialises these two writers.
+	localSent    bool
+	pendingLocal []webrtc.ICECandidateInit
 
 	done      chan struct{}
 	closeOnce sync.Once
@@ -187,6 +208,9 @@ func (s *session) wirePeerConnection() {
 			return
 		}
 		init := c.ToJSON()
+		if !s.queueLocalCandidate(init) {
+			return
+		}
 		_ = s.write(signal{Type: "candidate", Candidate: &init})
 	})
 
@@ -267,7 +291,7 @@ func (s *session) renegotiate() {
 		s.log.Warn().Err(err).Msg("could not set the local description")
 		return
 	}
-	_ = s.write(signal{Type: "offer", SDP: offer.SDP})
+	_ = s.writeDescription("offer", offer.SDP)
 }
 
 func (s *session) signallingLoop() {
@@ -285,9 +309,7 @@ func (s *session) signallingLoop() {
 			s.handleAnswer(msg.SDP)
 		case "candidate":
 			if msg.Candidate != nil {
-				if err := s.pc.AddICECandidate(*msg.Candidate); err != nil {
-					s.log.Debug().Err(err).Msg("could not add an ICE candidate")
-				}
+				s.addRemoteCandidate(*msg.Candidate)
 			}
 		default:
 			s.log.Debug().Str("type", msg.Type).Msg("ignoring an unexpected signalling message")
@@ -301,6 +323,8 @@ func (s *session) handleOffer(sdp string) {
 		s.writeError(CodeNegotiationFailed, "could not accept the offer", nil)
 		return
 	}
+	s.flushRemoteCandidates()
+
 	answer, err := s.pc.CreateAnswer(nil)
 	if err != nil {
 		s.writeError(CodeNegotiationFailed, "could not answer", nil)
@@ -310,7 +334,7 @@ func (s *session) handleOffer(sdp string) {
 		s.writeError(CodeNegotiationFailed, "could not answer", nil)
 		return
 	}
-	if err := s.write(signal{Type: "answer", SDP: answer.SDP}); err != nil {
+	if err := s.writeDescription("answer", answer.SDP); err != nil {
 		return
 	}
 
@@ -332,6 +356,7 @@ func (s *session) handleAnswer(sdp string) {
 		s.log.Debug().Err(err).Msg("bad answer")
 		return
 	}
+	s.flushRemoteCandidates()
 
 	// Signalling is stable again, so anything added while that exchange was in
 	// flight can go out now. Without this a second track -- a screen share
@@ -344,6 +369,68 @@ func (s *session) handleAnswer(sdp string) {
 	if pending {
 		s.renegotiate()
 	}
+}
+
+// addRemoteCandidate applies a trickled candidate, holding it back when the
+// description it belongs to has not arrived yet.
+func (s *session) addRemoteCandidate(candidate webrtc.ICECandidateInit) {
+	if s.pc.RemoteDescription() == nil {
+		if len(s.pendingRemote) >= maxPendingCandidates {
+			s.log.Debug().Msg("dropping an ICE candidate: too many arrived before the offer")
+			return
+		}
+		s.pendingRemote = append(s.pendingRemote, candidate)
+		return
+	}
+	if err := s.pc.AddICECandidate(candidate); err != nil {
+		s.log.Warn().Err(err).Msg("could not add an ICE candidate")
+	}
+}
+
+// flushRemoteCandidates applies whatever arrived before the remote description.
+func (s *session) flushRemoteCandidates() {
+	pending := s.pendingRemote
+	s.pendingRemote = nil
+	for _, candidate := range pending {
+		if err := s.pc.AddICECandidate(candidate); err != nil {
+			s.log.Warn().Err(err).Msg("could not add a queued ICE candidate")
+		}
+	}
+}
+
+// queueLocalCandidate reports whether a gathered candidate may go out now,
+// holding it back until the description it belongs to has been written.
+func (s *session) queueLocalCandidate(candidate webrtc.ICECandidateInit) bool {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	if s.localSent {
+		return true
+	}
+	if len(s.pendingLocal) < maxPendingCandidates {
+		s.pendingLocal = append(s.pendingLocal, candidate)
+	}
+	return false
+}
+
+// writeDescription writes an offer or answer and then releases the candidates
+// gathered while it was being prepared, so the client never sees a candidate
+// before the description it belongs to.
+func (s *session) writeDescription(kind, sdp string) error {
+	s.writeMu.Lock()
+	err := s.writeLocked(signal{Type: kind, SDP: sdp})
+	pending := s.pendingLocal
+	s.pendingLocal, s.localSent = nil, true
+	s.writeMu.Unlock()
+
+	if err != nil {
+		return err
+	}
+	for _, candidate := range pending {
+		if err := s.write(signal{Type: "candidate", Candidate: &candidate}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *session) readAuth() (signal, bool) {
@@ -374,6 +461,11 @@ func (s *session) readJSON(v any) error {
 func (s *session) write(v signal) error {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
+	return s.writeLocked(v)
+}
+
+// writeLocked is write for a caller already holding writeMu.
+func (s *session) writeLocked(v signal) error {
 	if err := s.conn.SetWriteDeadline(time.Now().Add(s.cfg.writeTimeout())); err != nil {
 		return err
 	}

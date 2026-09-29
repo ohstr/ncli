@@ -75,6 +75,12 @@
   `http.Server.Shutdown` never waits on hijacked WebSocket connections, so
   without this a restart would sever calls with no notice and leave
   participants waiting for audio that had simply stopped arriving. (#66)
+- WebRTC huddles no longer fail to connect when trickled ICE candidates arrive
+  before the SDP they belong to. A candidate that outran its description was
+  logged and discarded rather than held, which cost the fastest paths and, off
+  the local network, often every reachable one -- the call then sat in
+  `connecting` until ICE gave up. Candidates are now queued in both directions
+  and released once the matching description is in place.
 
 ## [0.6.0]
 

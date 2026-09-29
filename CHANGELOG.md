@@ -4,6 +4,10 @@
 
 ### Added
 
+- The huddle e2e stack now covers the WebRTC door as well as the WebSocket one:
+  browsers and WebSocket clients in one call, camera and screen share, a late
+  joiner, and trickled candidates arriving before the offer. Driven by real pion
+  peers, so no browser is needed.
 - `huddle.udpPortRange` pins the UDP ports WebRTC media is carried on, as
   `"min-max"`. Without it the OS picks from the ephemeral range, which a
   container cannot publish and a firewall will not have open -- so signalling

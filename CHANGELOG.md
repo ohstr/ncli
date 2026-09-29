@@ -81,22 +81,23 @@
   request and waited for the client to echo the secret, where the spec has
   the signer publish a `connect` response and the client answer nothing.
   Fixing only the first would have turned the error into a silent timeout.
+  (#84)
 - A `nostrconnect://` URI's relays are all used, not just the first. They
   are dialed in parallel and published to as each connects, so one dead
   relay at the head of the list neither delays nor fails a pairing the
   others can carry. Every relay failing is now a `network` error (exit 6,
-  retryable) rather than `invalid_input`.
+  retryable) rather than `invalid_input`. (#84)
 - The permissions an app requests in its URI are applied as grants, so a
   freshly paired app stops prompting on every request. `bunker://` pairings
   get the same from `connect`'s own params, along with the app's name and
   URL -- previously dropped, which is why every app paired that way showed
-  as a bare hex key.
+  as a bare hex key. (#84)
 - `switch_relays` and `logout` are answered instead of being reported
   unsupported. A compliant client sends `switch_relays` right after every
-  pairing, so a signer's own relay list never took effect.
+  pairing, so a signer's own relay list never took effect. (#84)
 - The "Paste nostrconnect:// URI" and "Set App Name" dialogs no longer
   stretch to the full width of the terminal with most of their height
-  empty.
+  empty. (#84)
 
 ## [0.6.0]
 

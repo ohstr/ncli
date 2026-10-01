@@ -6,10 +6,9 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/ohstr/nmilat/huddle/room"
 	"github.com/ohstr/nmilat/nip01"
-	"github.com/ohstr/nmilat/nip43"
 	"github.com/ohstr/nmilat/relay"
-	"github.com/ohstr/nmilat/utils"
 	"github.com/rs/zerolog/log"
 )
 
@@ -21,23 +20,23 @@ const maxAdminBodyBytes = 1 << 20 // 1 MiB
 
 // registerMembershipAdminRoutes adds the NIP-43 membership admin surface
 // (/admin/membership/...) onto mux, backing `ncli relay members/invites/
-// roles`. Every write goes through wsHandler.Membership() (the same
-// MembershipService instance every live Session consults), never store
-// writes directly -- see NIP43_ADMIN_UX.md's "Precedent to follow exactly"
-// for why: a direct store write here would desync the running relay's
-// in-memory membership cache from what admin commands just wrote.
-func registerMembershipAdminRoutes(mux *http.ServeMux, wsHandler *relay.SessionHandler, store *relay.EventStore, adminAuth func(http.HandlerFunc) http.HandlerFunc) {
-	mux.HandleFunc("GET /admin/membership/members", adminAuth(requireMembership(handleMembersList(wsHandler))))
-	mux.HandleFunc("GET /admin/membership/members/{pubkey}", adminAuth(requireMembership(handleMemberShow(wsHandler))))
-	mux.HandleFunc("POST /admin/membership/members", adminAuth(requireMembership(handleMemberAdd(wsHandler, store))))
-	mux.HandleFunc("DELETE /admin/membership/members/{pubkey}", adminAuth(requireMembership(handleMemberRemove(wsHandler, store))))
+// roles`. The handlers are thin: every one of them delegates to
+// membershipAdmin, which NIP-86 calls too, so the two transports cannot
+// answer the same question differently.
+func registerMembershipAdminRoutes(mux *http.ServeMux, wsHandler *relay.SessionHandler, store *relay.EventStore, rooms *room.Manager, adminAuth func(http.HandlerFunc) http.HandlerFunc) {
+	admin := membershipAdmin{ws: wsHandler, store: store, rooms: rooms}
 
-	mux.HandleFunc("POST /admin/membership/invites", adminAuth(requireMembership(handleInviteCreate(wsHandler))))
-	mux.HandleFunc("GET /admin/membership/invites", adminAuth(requireMembership(handleInviteList(store))))
-	mux.HandleFunc("DELETE /admin/membership/invites/{code}", adminAuth(requireMembership(handleInviteRevoke(store))))
+	mux.HandleFunc("GET /admin/membership/members", adminAuth(requireMembership(handleMembersList(admin))))
+	mux.HandleFunc("GET /admin/membership/members/{pubkey}", adminAuth(requireMembership(handleMemberShow(admin))))
+	mux.HandleFunc("POST /admin/membership/members", adminAuth(requireMembership(handleMemberAdd(admin))))
+	mux.HandleFunc("DELETE /admin/membership/members/{pubkey}", adminAuth(requireMembership(handleMemberRemove(admin))))
 
-	mux.HandleFunc("GET /admin/membership/roles", adminAuth(requireMembership(handleRolesList(store))))
-	mux.HandleFunc("POST /admin/membership/roles", adminAuth(requireMembership(handleRoleCreate(store))))
+	mux.HandleFunc("POST /admin/membership/invites", adminAuth(requireMembership(handleInviteCreate(admin))))
+	mux.HandleFunc("GET /admin/membership/invites", adminAuth(requireMembership(handleInviteList(admin))))
+	mux.HandleFunc("DELETE /admin/membership/invites/{code}", adminAuth(requireMembership(handleInviteRevoke(admin))))
+
+	mux.HandleFunc("GET /admin/membership/roles", adminAuth(requireMembership(handleRolesList(admin))))
+	mux.HandleFunc("POST /admin/membership/roles", adminAuth(requireMembership(handleRoleCreate(admin))))
 }
 
 // requireMembership wraps next so every membership admin handler rejects
@@ -76,46 +75,36 @@ func decodeAdminBody(w http.ResponseWriter, r *http.Request, v interface{}) bool
 	return true
 }
 
-// validatePubkey reports whether pubkey is well-formed 64-char hex,
-// writing a 400 response and returning false otherwise -- so a malformed
-// pubkey never silently becomes a "member" that can never actually
-// authenticate as itself, and a mistyped lookup gets a clear reason instead
-// of an ambiguous "not found".
-func validatePubkey(w http.ResponseWriter, pubkey string) bool {
-	if err := utils.Validate32Key(pubkey); err != nil {
-		http.Error(w, "invalid pubkey: "+err.Error(), http.StatusBadRequest)
-		return false
+// writeAdminError maps a core error onto a status code: what the caller sent
+// wrong is a 400, anything else is a 500.
+func writeAdminError(w http.ResponseWriter, err error) {
+	if isBadInput(err) {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
-	return true
+	http.Error(w, err.Error(), http.StatusInternalServerError)
 }
 
 /////////////////////////////////////////////////////////////////////
 // Members
 /////////////////////////////////////////////////////////////////////
 
-func handleMembersList(wsHandler *relay.SessionHandler) http.HandlerFunc {
+func handleMembersList(admin membershipAdmin) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		records, err := wsHandler.Membership().List()
+		records, err := admin.listMembers()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAdminError(w, err)
 			return
-		}
-		if records == nil {
-			records = []*relay.MemberRecord{}
 		}
 		writeJSON(w, http.StatusOK, map[string]interface{}{"members": records})
 	}
 }
 
-func handleMemberShow(wsHandler *relay.SessionHandler) http.HandlerFunc {
+func handleMemberShow(admin membershipAdmin) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		pubkey := r.PathValue("pubkey")
-		if !validatePubkey(w, pubkey) {
-			return
-		}
-		rec, err := wsHandler.Membership().Get(pubkey)
+		rec, err := admin.getMember(r.PathValue("pubkey"))
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAdminError(w, err)
 			return
 		}
 		if rec == nil {
@@ -126,7 +115,7 @@ func handleMemberShow(wsHandler *relay.SessionHandler) http.HandlerFunc {
 	}
 }
 
-func handleMemberAdd(wsHandler *relay.SessionHandler, store *relay.EventStore) http.HandlerFunc {
+func handleMemberAdd(admin membershipAdmin) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Pubkey string   `json:"pubkey"`
@@ -135,44 +124,22 @@ func handleMemberAdd(wsHandler *relay.SessionHandler, store *relay.EventStore) h
 		if !decodeAdminBody(w, r, &body) {
 			return
 		}
-		if !validatePubkey(w, body.Pubkey) {
-			return
-		}
 
-		if err := wsHandler.Membership().Join(body.Pubkey, body.Roles); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		if config.Membership.PublishAddRemoveEvents {
-			publishMembershipAdminEvent(r.Context(), store, nip43.NewAddUser(config.Nip11.PubKey, body.Pubkey))
-		}
-
-		rec, err := wsHandler.Membership().Get(body.Pubkey)
+		rec, err := admin.addMember(r.Context(), body.Pubkey, body.Roles)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAdminError(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, rec)
 	}
 }
 
-func handleMemberRemove(wsHandler *relay.SessionHandler, store *relay.EventStore) http.HandlerFunc {
+func handleMemberRemove(admin membershipAdmin) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		pubkey := r.PathValue("pubkey")
-		if !validatePubkey(w, pubkey) {
+		if err := admin.removeMember(r.Context(), r.PathValue("pubkey")); err != nil {
+			writeAdminError(w, err)
 			return
 		}
-
-		if err := wsHandler.Membership().Leave(pubkey); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		if config.Membership.PublishAddRemoveEvents {
-			publishMembershipAdminEvent(r.Context(), store, nip43.NewRemoveUser(config.Nip11.PubKey, pubkey))
-		}
-
 		writeJSON(w, http.StatusOK, map[string]string{"status": "removed"})
 	}
 }
@@ -200,7 +167,7 @@ func publishMembershipAdminEvent(ctx context.Context, store *relay.EventStore, e
 // Invites
 /////////////////////////////////////////////////////////////////////
 
-func handleInviteCreate(wsHandler *relay.SessionHandler) http.HandlerFunc {
+func handleInviteCreate(admin membershipAdmin) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			TTL     string   `json:"ttl,omitempty"`
@@ -220,43 +187,31 @@ func handleInviteCreate(wsHandler *relay.SessionHandler) http.HandlerFunc {
 			}
 			ttl = parsed
 		}
-		if body.MaxUses < 0 {
-			http.Error(w, "max_uses must be >= 0", http.StatusBadRequest)
-			return
-		}
 
-		claim, err := wsHandler.Membership().IssueInvite(ttl, body.MaxUses, body.Roles)
+		claim, err := admin.issueInvite(ttl, body.MaxUses, body.Roles)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAdminError(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, claim)
 	}
 }
 
-func handleInviteList(store *relay.EventStore) http.HandlerFunc {
+func handleInviteList(admin membershipAdmin) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		claims, err := store.ListInviteClaims()
+		claims, err := admin.listInvites()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAdminError(w, err)
 			return
-		}
-		if claims == nil {
-			claims = []*relay.InviteClaim{}
 		}
 		writeJSON(w, http.StatusOK, map[string]interface{}{"invites": claims})
 	}
 }
 
-func handleInviteRevoke(store *relay.EventStore) http.HandlerFunc {
+func handleInviteRevoke(admin membershipAdmin) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		code := r.PathValue("code")
-		if code == "" {
-			http.Error(w, "invite code is required", http.StatusBadRequest)
-			return
-		}
-		if err := store.DeleteInviteClaim(code); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+		if err := admin.revokeInvite(r.PathValue("code")); err != nil {
+			writeAdminError(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"status": "revoked"})
@@ -279,59 +234,25 @@ type roleJSON struct {
 	Order       *int   `json:"order,omitempty"`
 }
 
-func handleRolesList(store *relay.EventStore) http.HandlerFunc {
+func handleRolesList(admin membershipAdmin) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		events, err := store.QueryEvents(r.Context(), &nip01.SubscriptionFilter{
-			Kinds:   []int{nip43.KindRoleDefinition},
-			Authors: []string{config.Nip11.Self},
-		})
+		roles, err := admin.listRoles(r.Context())
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAdminError(w, err)
 			return
-		}
-
-		roles := make([]roleJSON, 0, len(events))
-		for _, ev := range events {
-			role, err := nip43.ParseRole(ev)
-			if err != nil {
-				log.Warn().Err(err).Str("event_id", ev.ID).Msg("skipping malformed role-definition event")
-				continue
-			}
-			roles = append(roles, roleJSON{ID: role.ID, Label: role.Label, Description: role.Description, Color: role.Color, Order: role.Order})
 		}
 		writeJSON(w, http.StatusOK, map[string]interface{}{"roles": roles})
 	}
 }
 
-func handleRoleCreate(store *relay.EventStore) http.HandlerFunc {
+func handleRoleCreate(admin membershipAdmin) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body roleJSON
 		if !decodeAdminBody(w, r, &body) {
 			return
 		}
-		if body.ID == "" {
-			http.Error(w, "id is required", http.StatusBadRequest)
-			return
-		}
-		if body.Color != nil && (*body.Color < 0 || *body.Color > 360) {
-			http.Error(w, "color must be an integer 0-360", http.StatusBadRequest)
-			return
-		}
-
-		ev := nip43.NewRoleDefinition(nip43.RoleParams{
-			SelfPubkey:  config.Nip11.PubKey,
-			ID:          body.ID,
-			Label:       body.Label,
-			Description: body.Description,
-			Color:       body.Color,
-			Order:       body.Order,
-		})
-		if err := ev.Sign(config.Nip11.PrivKey); err != nil {
-			http.Error(w, "failed to sign role definition: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if err := store.InsertEvents(r.Context(), []*nip01.Event{ev}); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+		if err := admin.putRole(r.Context(), body); err != nil {
+			writeAdminError(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, body)

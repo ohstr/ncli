@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.8.0]
+
+### Added
+
+- `ncli relay` serves NIP-86, the Relay Management API, when a `nip86:` block
+  turns it on: membership administration over HTTP on the relay's own URL, so a
+  host's app can add or remove a guest and mint an invite code without a
+  terminal. It answers the CORS preflight a browser requires, and NIP-11
+  advertises 86 so a client can detect it. `nip86.admins` is what makes this
+  usable from an app -- see below.
+- `nip86.admins` lists pubkeys allowed to administer the relay, alongside
+  `nip11.pubkey`. Until now the relay's own key was the only admin identity, so
+  administering meant holding the relay's secret key; a host can now administer
+  from their own key instead.
+- The NIP-86 surface covers roles too (`createrole`, `editrole`, `deleterole`,
+  `assignrole`, `unassignrole`), mapping onto the kind:33534 definitions
+  `ncli relay roles` already manages.
+
+### Changed
+
+- Removing a member now ends that member's live huddle calls instead of only
+  blocking their next join. The door checks admission once, at join, so a
+  removed guest previously kept hearing a room until they chose to reconnect.
+  The call's other participants are unaffected.
+- Admin HTTP requests bind their body to the NIP-98 signature with a `payload`
+  tag. A captured `Authorization` header was previously good for any body at
+  the same URL and method until it expired, and these routes sit on the public
+  relay port. The relay verifies the tag when a client sends one, so an older
+  `ncli` keeps working.
+
 ## [0.7.0-rc.1]
 
 ### Added

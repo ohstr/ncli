@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ohstr/ncli/cli/common"
@@ -69,6 +71,13 @@ type HuddleConfig struct {
 	// least a STUN server only peers on the same network will connect, and TURN
 	// is what carries peers behind symmetric NAT. Ignored unless RTC is set.
 	ICEServers []ICEServerConfig `mapstructure:"iceServers"`
+
+	// UDPPortRange pins the ports media is carried on, as "min-max" (e.g.
+	// "21600-21650"). Empty lets the OS pick from the ephemeral range, which is
+	// fine on a host with nothing filtering in the way -- but a relay in a
+	// container or behind a firewall needs a known range to publish, or the
+	// signalling succeeds and no audio ever arrives. Ignored unless RTC is set.
+	UDPPortRange string `mapstructure:"udpPortRange"`
 }
 
 // ICEServerConfig is one STUN or TURN server, mirroring the WebRTC
@@ -139,6 +148,10 @@ func registerHuddleRoutes(mux *http.ServeMux, wsHandler *relay.SessionHandler, c
 		Msg("huddle audio endpoint mounted at /huddle/{id}/audio")
 
 	if cfg.RTC {
+		// Already validated at startup, so an error here cannot happen; the
+		// zero values fall back to the ephemeral range either way.
+		udpMin, udpMax, _ := parseUDPPortRange(cfg.UDPPortRange)
+
 		// The same rooms manager on purpose: a browser and a WebSocket client
 		// using one room id must end up in one call, not two.
 		mux.Handle("/huddle/{id}/rtc", huddlesfu.NewHandler(huddlesfu.Config{
@@ -148,11 +161,14 @@ func registerHuddleRoutes(mux *http.ServeMux, wsHandler *relay.SessionHandler, c
 			Authorize:      handlerConfig.Authorize,
 			AllowedOrigins: cfg.AllowedOrigins,
 			ICEServers:     iceServers(cfg.ICEServers),
+			UDPPortMin:     udpMin,
+			UDPPortMax:     udpMax,
 			AuthTimeout:    handlerConfig.AuthTimeout,
 			Logger:         log.Logger,
 		}))
 		log.Info().
 			Int("iceServers", len(cfg.ICEServers)).
+			Str("udpPortRange", cfg.UDPPortRange).
 			Msg("huddle WebRTC endpoint mounted at /huddle/{id}/rtc")
 	}
 
@@ -191,6 +207,45 @@ func endHuddleRooms(rooms *room.Manager) {
 	if len(occupancy) > 0 {
 		log.Info().Int("rooms", len(occupancy)).Msg("ended live huddles on shutdown")
 	}
+}
+
+// parseUDPPortRange reads a "min-max" port range. An empty value is not an
+// error: it means the OS picks from the ephemeral range.
+func parseUDPPortRange(value string) (min, max uint16, err error) {
+	if value == "" {
+		return 0, 0, nil
+	}
+	lo, hi, ok := strings.Cut(value, "-")
+	if !ok {
+		return 0, 0, &common.CLIError{
+			Err:   fmt.Errorf("huddle.udpPortRange %q must look like \"min-max\"", value),
+			Code:  common.CodeInvalidInput,
+			Input: value,
+		}
+	}
+	for _, port := range []struct {
+		field string
+		text  string
+		out   *uint16
+	}{{"min", lo, &min}, {"max", hi, &max}} {
+		n, convErr := strconv.ParseUint(strings.TrimSpace(port.text), 10, 16)
+		if convErr != nil || n == 0 {
+			return 0, 0, &common.CLIError{
+				Err:   fmt.Errorf("huddle.udpPortRange %s must be a port between 1 and 65535, got %q", port.field, port.text),
+				Code:  common.CodeInvalidInput,
+				Input: value,
+			}
+		}
+		*port.out = uint16(n)
+	}
+	if min > max {
+		return 0, 0, &common.CLIError{
+			Err:   fmt.Errorf("huddle.udpPortRange %q has min above max", value),
+			Code:  common.CodeInvalidInput,
+			Input: value,
+		}
+	}
+	return min, max, nil
 }
 
 // checkHuddleDuration rejects a duration string that cannot be parsed. The

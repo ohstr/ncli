@@ -1,6 +1,7 @@
 package huddlesfu_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -41,22 +42,46 @@ type message struct {
 	Candidate *webrtc.ICECandidateInit `json:"candidate"`
 }
 
+// logSink captures the handler's log output so a test can assert on what the
+// server reported. It deliberately does not write into t.Log: a session
+// goroutine can outlive the test, and zerolog into a completed *testing.T would
+// panic.
+type logSink struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (l *logSink) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.buf.Write(p)
+}
+
+func (l *logSink) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.buf.String()
+}
+
 type harness struct {
 	t     *testing.T
 	srv   *httptest.Server
 	rooms *room.Manager
+	sink  *logSink
 }
+
+// logs returns everything the handler has logged so far.
+func (h *harness) logs() string { return h.sink.String() }
 
 func newHarness(t *testing.T, mutate func(*huddlesfu.Config)) *harness {
 	t.Helper()
 	rooms := room.NewManager(0)
+	sink := &logSink{}
 	cfg := huddlesfu.Config{
 		Enabled:  true,
 		RelayURL: relayURL,
 		Rooms:    rooms,
-		// Nop on purpose: a session goroutine can outlive the test, and zerolog
-		// into t.Log would panic a completed *testing.T.
-		Logger: zerolog.Nop(),
+		Logger:   zerolog.New(sink).Level(zerolog.DebugLevel),
 	}
 	if mutate != nil {
 		mutate(&cfg)
@@ -65,7 +90,7 @@ func newHarness(t *testing.T, mutate func(*huddlesfu.Config)) *harness {
 	mux.Handle("/huddle/{id}/rtc", huddlesfu.NewHandler(cfg))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	return &harness{t: t, srv: srv, rooms: cfg.Rooms}
+	return &harness{t: t, srv: srv, rooms: cfg.Rooms, sink: sink}
 }
 
 func (h *harness) dial(roomID string) *websocket.Conn {
@@ -371,6 +396,7 @@ func TestBrowserAudioReachesAWebSocketPeer(t *testing.T) {
 			if header.Ts48k == 0 {
 				t.Error("timestamp did not survive the bridge")
 			}
+			assertNoDroppedCandidates(t, h)
 			return // success
 		case <-deadline:
 			t.Fatal("the WebSocket peer never heard the browser")
@@ -816,4 +842,170 @@ func TestLateSubscriberGetsAKeyframeRequest(t *testing.T) {
 	if toKeyframeRequest > 15*time.Second {
 		t.Errorf("time to keyframe request is implausible: %v", toKeyframeRequest)
 	}
+}
+
+/////////////////////////////////////////////////////////////////////
+// Trickle ICE ordering
+/////////////////////////////////////////////////////////////////////
+
+// assertNoDroppedCandidates fails if the server discarded a trickled candidate.
+// A drop is only ever logged, never surfaced to the peer, so the log is the
+// single place it can be observed.
+func assertNoDroppedCandidates(t *testing.T, h *harness) {
+	t.Helper()
+	if logs := h.logs(); strings.Contains(logs, "could not add an ICE candidate") {
+		t.Fatalf("the server dropped a trickled candidate:\n%s", logs)
+	}
+}
+
+// pumpSignalling answers the server's signalling until the socket closes. It
+// must handle a server-initiated offer: the SFU renegotiates whenever a new
+// speaker's track is added, and a peer that ignores those never hears them.
+func pumpSignalling(conn *websocket.Conn, client *webrtc.PeerConnection, send func(any)) {
+	for {
+		if err := conn.SetReadDeadline(time.Now().Add(window)); err != nil {
+			return
+		}
+		_, data, err := conn.ReadMessage()
+		if err != nil {
+			return
+		}
+		var m message
+		if json.Unmarshal(data, &m) != nil {
+			continue
+		}
+		switch m.Type {
+		case "answer":
+			_ = client.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeAnswer, SDP: m.SDP})
+		case "offer":
+			if client.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeOffer, SDP: m.SDP}) == nil {
+				if answer, err := client.CreateAnswer(nil); err == nil {
+					if client.SetLocalDescription(answer) == nil {
+						send(map[string]any{"type": "answer", "sdp": answer.SDP})
+					}
+				}
+			}
+		case "candidate":
+			if m.Candidate != nil {
+				_ = client.AddICECandidate(*m.Candidate)
+			}
+		}
+	}
+}
+
+// newPublishingClient builds a peer connection with one Opus track, the shape
+// every browser peer here starts from.
+func newPublishingClient(t *testing.T) (*webrtc.PeerConnection, *webrtc.TrackLocalStaticRTP) {
+	t.Helper()
+	client, err := webrtc.NewPeerConnection(webrtc.Configuration{})
+	if err != nil {
+		t.Fatalf("client peer connection: %v", err)
+	}
+	t.Cleanup(func() { _ = client.Close() })
+
+	track, err := webrtc.NewTrackLocalStaticRTP(
+		webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus, ClockRate: 48000, Channels: 2},
+		"mic", "browser",
+	)
+	if err != nil {
+		t.Fatalf("track: %v", err)
+	}
+	if _, err := client.AddTrack(track); err != nil {
+		t.Fatalf("AddTrack: %v", err)
+	}
+	return client, track
+}
+
+// TestCandidatesBeforeTheOfferAreNotDropped sends candidates ahead of the offer,
+// which is what a browser does: it gathers as soon as it sets its local
+// description, before the SDP has been handed to the socket. The server used to
+// reject those outright and never retry them, losing the fastest paths and, off
+// loopback, every reachable one.
+//
+// The log assertion is the real one. Both ends here sit on 127.0.0.1, so ICE
+// still completes off the server's own candidates even when every one of the
+// client's is discarded -- asserting only that the peers connect would pass
+// against the bug.
+func TestCandidatesBeforeTheOfferAreNotDropped(t *testing.T) {
+	h := newHarness(t, nil)
+
+	conn := h.dial("candidates-first")
+	if joined := authenticate(t, conn, alicePriv, relayURL); joined.Type != "joined" {
+		t.Fatalf("got %+v, want joined", joined)
+	}
+
+	client, _ := newPublishingClient(t)
+
+	var writeMu sync.Mutex
+	send := func(v any) {
+		writeMu.Lock()
+		defer writeMu.Unlock()
+		_ = conn.WriteJSON(v)
+	}
+
+	// Hold the gathered candidates back so they can be sent before the offer.
+	var (
+		candMu    sync.Mutex
+		gathered  []webrtc.ICECandidateInit
+		offerSent bool
+	)
+	firstCandidate := make(chan struct{})
+	var gatherOnce sync.Once
+	client.OnICECandidate(func(c *webrtc.ICECandidate) {
+		if c == nil {
+			return
+		}
+		init := c.ToJSON()
+		candMu.Lock()
+		if !offerSent {
+			gathered = append(gathered, init)
+			candMu.Unlock()
+			gatherOnce.Do(func() { close(firstCandidate) })
+			return
+		}
+		candMu.Unlock()
+		send(map[string]any{"type": "candidate", "candidate": init})
+	})
+
+	connected := make(chan struct{})
+	var connectedOnce sync.Once
+	client.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
+		if state == webrtc.PeerConnectionStateConnected {
+			connectedOnce.Do(func() { close(connected) })
+		}
+	})
+
+	offer, err := client.CreateOffer(nil)
+	if err != nil {
+		t.Fatalf("CreateOffer: %v", err)
+	}
+	if err := client.SetLocalDescription(offer); err != nil {
+		t.Fatalf("SetLocalDescription: %v", err)
+	}
+
+	select {
+	case <-firstCandidate:
+	case <-time.After(window):
+		t.Fatal("the client gathered no candidate to trickle")
+	}
+
+	candMu.Lock()
+	early := append([]webrtc.ICECandidateInit(nil), gathered...)
+	gathered, offerSent = nil, true
+	candMu.Unlock()
+
+	// The ordering under test: candidates first, offer second.
+	for _, c := range early {
+		send(map[string]any{"type": "candidate", "candidate": c})
+	}
+	send(map[string]any{"type": "offer", "sdp": offer.SDP})
+
+	go pumpSignalling(conn, client, send)
+
+	select {
+	case <-connected:
+	case <-time.After(window):
+		t.Fatalf("the peer connection never reached connected (state %s)\n%s", client.ConnectionState(), h.logs())
+	}
+	assertNoDroppedCandidates(t, h)
 }

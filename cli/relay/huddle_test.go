@@ -2,6 +2,7 @@ package relay
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/ohstr/ncli/cli/common"
 	"github.com/ohstr/nmilat/huddle/wire"
 	"github.com/ohstr/nmilat/nip11"
 	"github.com/ohstr/nmilat/nip42"
@@ -377,4 +379,53 @@ func TestICEServersConversion(t *testing.T) {
 	require.Empty(t, got[0].Username, "STUN needs no credentials")
 	require.Equal(t, "u", got[1].Username)
 	require.Equal(t, "p", got[1].Credential)
+}
+
+// TestParseUDPPortRange covers the knob that pins where media is carried. A
+// typo has to be caught at startup: the handler falls back to the ephemeral
+// range, so an unnoticed one means signalling succeeds and no audio ever
+// arrives through a published port.
+func TestParseUDPPortRange(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		value    string
+		min, max uint16
+		wantErr  bool
+	}{
+		{name: "empty means the ephemeral range", value: ""},
+		{name: "a range", value: "21600-21650", min: 21600, max: 21650},
+		{name: "a single port", value: "21600-21600", min: 21600, max: 21600},
+		{name: "spaces are tolerated", value: "21600 - 21650", min: 21600, max: 21650},
+		{name: "no separator", value: "21600", wantErr: true},
+		{name: "not a number", value: "lo-hi", wantErr: true},
+		{name: "above the port space", value: "21600-70000", wantErr: true},
+		{name: "zero is not a port", value: "0-21650", wantErr: true},
+		{name: "min above max", value: "21650-21600", wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			min, max, err := parseUDPPortRange(tc.value)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("parseUDPPortRange(%q) = (%d, %d, nil), want an error", tc.value, min, max)
+				}
+				var cliErr *common.CLIError
+				if !errors.As(err, &cliErr) {
+					t.Fatalf("error %v is not a *common.CLIError", err)
+				}
+				if cliErr.Code != common.CodeInvalidInput {
+					t.Errorf("code = %q, want %q", cliErr.Code, common.CodeInvalidInput)
+				}
+				if cliErr.Input != tc.value {
+					t.Errorf("input = %q, want %q", cliErr.Input, tc.value)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parseUDPPortRange(%q): %v", tc.value, err)
+			}
+			if min != tc.min || max != tc.max {
+				t.Errorf("= (%d, %d), want (%d, %d)", min, max, tc.min, tc.max)
+			}
+		})
+	}
 }

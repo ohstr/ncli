@@ -25,3 +25,14 @@ huddle:
   # Left false on purpose: the membership gate has unit coverage, and enabling it
   # here would make every scenario enrol first for no added signal.
   requireMembership: false
+  # The WebRTC door, so the RTC scenarios have something to dial. It shares the
+  # rooms above: a browser peer and a WebSocket peer on one room id are in one
+  # call, which is what the mixed-transport scenario asserts.
+  rtc: true
+  # Media does not travel over the signalling socket, and the OS would otherwise
+  # pick ephemeral ports that compose cannot publish. Pinned here and published
+  # in compose.yaml. Below the ephemeral floor, for the same reason the TCP
+  # ports are.
+  udpPortRange: "21600-21650"
+  # No iceServers on purpose: the test process and the relay can reach each
+  # other directly, so STUN would only add a dependency on a public server.

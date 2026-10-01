@@ -1,8 +1,9 @@
 # Huddle e2e integration test stack
 
-One real `ncli relay` container with `huddle.enabled`, testing the audio
-endpoint end-to-end: `/huddle/{id}/audio`, NIP-42 admission, and frame
-fan-out between real `huddleclient` peers over real WebSockets.
+One real `ncli relay` container with `huddle.enabled`, testing both doors
+end-to-end: `/huddle/{id}/audio` and `/huddle/{id}/rtc`, NIP-42 admission,
+and fan-out between real `huddleclient` peers over real WebSockets and real
+pion peers over real WebRTC.
 
 Unlike the stream/inspect/sync stacks this is **not** an `ncli apply`
 workflow, so there is no spec fixture -- the peers are `huddleclient`
@@ -10,8 +11,16 @@ clients constructed in the test.
 
 ## What's here
 
-- `compose.yaml` -- one `relay` service (21530), project `ncli-huddle-itest`.
-- `relay.yaml` -- relay config with the `huddle:` block enabled.
+- `compose.yaml` -- one `relay` service (21530 TCP for signalling,
+  21600-21650/udp for media), project `ncli-huddle-itest`.
+- `relay.yaml` -- relay config with the `huddle:` block enabled, `rtc: true`,
+  and a pinned `udpPortRange`.
+
+`udpPortRange` is not optional here. Media does not travel over the
+signalling socket, and the ephemeral ports the OS would otherwise pick are
+not ones compose can publish -- so without it every WebRTC scenario
+negotiates fine and then never carries a packet. The range is published in
+`compose.yaml` and has to match.
 
 `nip11.url` must be the **published** address the test dials
 (`ws://localhost:21530`), not the in-container port: a joining client's
@@ -37,7 +46,7 @@ peer out of the next scenario's roster -- and `maxRooms` sits above the
 scenario count rather than exactly on it, because that teardown is not
 instant.
 
-Nine scenarios:
+Fourteen scenarios. The first nine drive the WebSocket door:
 
 - **`TwoPeersHearEachOther`** -- the core guarantee: the Opus payload
   crosses the relay **byte-identical**, attributed to its author, with the
@@ -70,11 +79,59 @@ Nine scenarios:
   `upgrade_required` naming the room's version, rather than silently
   mis-parsing the routing prefix (whose shape differs between v2 and v3).
 
+The remaining five drive the WebRTC door. Each publishing peer sends a
+random payload per track, recorded and matched on arrival, so a crossed
+stream fails rather than a count merely coming out right. The relay never
+decodes any of it, which is what makes byte-identity the assertion:
+
+- **`MixedTransportConversation`** -- 2 WebRTC peers and 2 WebSocket peers in
+  one room, every peer hearing every other, each payload matched to the peer
+  that actually sent it, and nobody hearing themselves. This is the whole
+  point of sharing one `room.Manager` between the two endpoints.
+- **`VideoAndScreenShare`** -- both browsers publish a camera and a screen at
+  once and receive the other's two tracks, told apart by track id.
+- **`WebSocketPeerSeesNoVideo`** -- the documented graceful degrade: a
+  WebSocket peer hears the call and misses only the picture.
+- **`LateJoinerGetsTheLiveCall`** -- a third browser joins a call in progress
+  and receives audio and video sent after it arrived. This is the
+  renegotiation path: the SFU offers the newcomer a track per speaker, and a
+  peer that ignored those offers would sit in a silent room that still looks
+  connected.
+- **`CandidatesBeforeTheOffer`** -- trickled candidates sent ahead of the
+  offer, which is the order a browser actually produces. The relay used to
+  reject and discard them, which cost the call every path it could not
+  rediscover.
+
+Audio and video are labelled differently on the wire, and a peer reading
+them has to know that. An outbound audio track is renamed after its speaker
+(`audio-<pubkey>`, stream id the pubkey) so a receiver can group one
+speaker's streams; a video track keeps the publisher's own id, which is what
+keeps a camera distinguishable from a screen share.
+
+## Running it where Docker is not on this host
+
+The scenarios dial the published port on `localhost` by default. Set
+`NCLI_ITEST_HUDDLE_ENDPOINT` when the daemon runs elsewhere (a
+Docker-out-of-Docker setup, where published ports do not land on localhost)
+and point it at wherever the relay is actually reachable, e.g.
+`ws://172.17.0.8:5500`. Only the dialled address changes: the NIP-42 relay
+tag stays `relay.yaml`'s `nip11.url`, because the endpoint validates the tag
+against its own config rather than against wherever the client connected
+from.
+
+WebRTC needs more than a reachable signalling port, though -- ICE has to
+find a working path between the test process and the container. On an
+ordinary Docker host that is automatic. Where the two sit on networks that
+cannot route to each other, attach the relay to a network the test process
+shares (`docker network connect bridge ncli-huddle-itest-relay-1`) or the
+media scenarios will negotiate and then time out with no packets.
+
 ## Not covered here
 
-- **The WebRTC door** (`/huddle/{id}/rtc`), video and screen share. Those
-  need a WebRTC peer; `huddlesfu`'s own tests cover them in-process, and a
-  browser is the only way to verify screen share for real.
+- **A browser.** pion is a full WebRTC client, so the scenarios above
+  exercise the real wire -- what a browser adds on top is capture and
+  playback, not a different protocol. Confirming the capture UI stays a
+  manual step.
 - **Audio playback.** Nothing in this repo decodes Opus yet.
 - **A real `buzz` client.** Wire compatibility is byte-for-byte by
   construction, but confirming it stays a manual acceptance step.

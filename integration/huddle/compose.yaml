@@ -11,6 +11,9 @@ services:
     command: ["relay", "--config", "/config/relay.yaml"]
     ports:
       - "21530:5500"
+      # Media, matching huddle.udpPortRange in relay.yaml. Without this the
+      # WebRTC scenarios negotiate fine and then never carry a packet.
+      - "21600-21650:21600-21650/udp"
     volumes:
       - ./relay.yaml:/config/relay.yaml:ro
       - relay-data:/app/ncli/data

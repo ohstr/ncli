@@ -373,6 +373,9 @@ func initConfig() error {
 		if err := checkHuddleDuration("huddle.pingInterval", config.Huddle.PingInterval); err != nil {
 			return err
 		}
+		if _, _, err := parseUDPPortRange(config.Huddle.UDPPortRange); err != nil {
+			return err
+		}
 	}
 
 	if config.Pow != nil {

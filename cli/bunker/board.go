@@ -655,27 +655,18 @@ func screenSize(app *tui.App) (width, height int) {
 	return
 }
 
-// positionedOverlayRect computes a centered rect sized to widthPercent/
-// heightPercent of the current screen -- for use with
-// App.ShowPositionedOverlay (a real, board-stays-visible modal), not
-// centerOverlay (a full-screen page whose own margins have to actively
-// stay filled, which is what centerOverlay's own overlaySpacer exists
-// for -- unnecessary here, since a directly-positioned, un-resized page
-// only ever touches its own small rect, leaving everything else exactly
-// as "main" already drew it).
-func positionedOverlayRect(app *tui.App, widthPercent, heightPercent int) (x, y, w, h int) {
-	screenW, screenH := screenSize(app)
-	w = screenW * widthPercent / 100
-	h = screenH * heightPercent / 100
-	x = (screenW - w) / 2
-	y = (screenH - h) / 2
-	return
-}
-
-// positionedOverlayRectFixedHeight is positionedOverlayRect's fixed-row-
-// count counterpart, matching centerOverlayFixedHeight's own reasoning:
-// a short, fixed-content dialog sized by screen percentage inherits a
-// dead gap below its content on any reasonably tall terminal.
+// positionedOverlayRectFixedHeight computes a centered rect widthPercent
+// wide and heightRows tall -- for use with App.ShowPositionedOverlay (a
+// real, board-stays-visible modal), not centerOverlay (a full-screen page
+// whose own margins have to actively stay filled, which is what
+// centerOverlay's own overlaySpacer exists for -- unnecessary here, since
+// a directly-positioned, un-resized page only ever touches its own small
+// rect, leaving everything else exactly as "main" already drew it).
+//
+// A fixed row count rather than a height percentage, matching
+// centerOverlayFixedHeight's own reasoning: a short, fixed-content dialog
+// sized by screen percentage inherits a dead gap below its content on any
+// reasonably tall terminal.
 func positionedOverlayRectFixedHeight(app *tui.App, widthPercent, heightRows int) (x, y, w, h int) {
 	screenW, screenH := screenSize(app)
 	w = screenW * widthPercent / 100

@@ -291,18 +291,6 @@ func (p *rtcPeer) sawAudioFrom(author string, payload []byte) bool {
 	return false
 }
 
-// sawKind reports whether anything at all arrived on kind.
-func (p *rtcPeer) sawKind(kind mediaKind) bool {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	for _, got := range p.inbound {
-		if got.kind == kind {
-			return true
-		}
-	}
-	return false
-}
-
 // randomPayload is a distinct payload per sender and kind, so a crossed stream
 // fails rather than a count merely coming out right. The relay never decodes
 // it, which is what makes byte-identity the assertion.

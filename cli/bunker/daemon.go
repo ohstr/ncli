@@ -997,9 +997,6 @@ func (d *Daemon) InitiateNostrconnectWithGrants(ctx context.Context, schema *nip
 // the caller's error to raise.
 func (d *Daemon) publishConnectResponse(ctx context.Context, schema *nip46.NostrconnectSchema, ev *nip01.Event) (sent int, tried []string) {
 	relays := schema.Relays
-	if len(relays) == 0 && schema.Relay != nil {
-		relays = []*url.URL{schema.Relay}
-	}
 
 	seen := map[string]bool{}
 	results := make(chan bool, len(relays))

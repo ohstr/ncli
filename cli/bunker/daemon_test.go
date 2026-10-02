@@ -585,7 +585,6 @@ func TestDaemon_NostrconnectFlow(t *testing.T) {
 	const secret = "nostrconnect-test-secret"
 	schema := &nip46.NostrconnectSchema{
 		ClientPublickey: clientPub,
-		Relay:           relay.url,
 		Relays:          []*url.URL{relay.url},
 		Secret:          secret,
 		Metadata:        &nip46.Metadata{Name: "Test App", Url: "https://test.example"},
@@ -641,7 +640,6 @@ func TestDaemon_NostrconnectFlow_PublishesToEveryRelay(t *testing.T) {
 	const secret = "multi-relay-secret"
 	schema := &nip46.NostrconnectSchema{
 		ClientPublickey: clientPub,
-		Relay:           relayA.url,
 		Relays:          []*url.URL{relayA.url, relayB.url},
 		Secret:          secret,
 		Metadata:        &nip46.Metadata{},
@@ -682,7 +680,6 @@ func TestDaemon_NostrconnectFlow_SurvivesADeadFirstRelay(t *testing.T) {
 	const secret = "dead-first-relay-secret"
 	schema := &nip46.NostrconnectSchema{
 		ClientPublickey: clientPub,
-		Relay:           dead,
 		Relays:          []*url.URL{dead, live.url},
 		Secret:          secret,
 		Metadata:        &nip46.Metadata{},
@@ -719,7 +716,6 @@ func TestDaemon_NostrconnectFlow_AllRelaysDownIsANetworkError(t *testing.T) {
 	dead := deadRelayURL(t)
 	schema := &nip46.NostrconnectSchema{
 		ClientPublickey: clientPub,
-		Relay:           dead,
 		Relays:          []*url.URL{dead},
 		Secret:          "unreachable-secret",
 		Metadata:        &nip46.Metadata{},
@@ -759,7 +755,6 @@ func TestDaemon_NostrconnectFlow_AppliesPermsFromTheURI(t *testing.T) {
 	const secret = "perms-secret"
 	schema := &nip46.NostrconnectSchema{
 		ClientPublickey: clientPub,
-		Relay:           relay.url,
 		Relays:          []*url.URL{relay.url},
 		Secret:          secret,
 		Perms:           "nip44_encrypt,sign_event:1",
@@ -807,7 +802,6 @@ func TestDaemon_NostrconnectFlow_FirstRequestConfirmsThePairing(t *testing.T) {
 	const secret = "confirm-secret"
 	schema := &nip46.NostrconnectSchema{
 		ClientPublickey: clientPub,
-		Relay:           relay.url,
 		Relays:          []*url.URL{relay.url},
 		Secret:          secret,
 		Metadata:        &nip46.Metadata{},
@@ -852,7 +846,6 @@ func TestDaemon_NostrconnectFlow_SilentClientIsPairedButUnconfirmed(t *testing.T
 	const secret = "silent-secret"
 	schema := &nip46.NostrconnectSchema{
 		ClientPublickey: clientPub,
-		Relay:           relay.url,
 		Relays:          []*url.URL{relay.url},
 		Secret:          secret,
 		Metadata:        &nip46.Metadata{},

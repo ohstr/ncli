@@ -435,7 +435,6 @@ func TestDaemon_NostrconnectFlow_StopsDialingADeadRelay(t *testing.T) {
 	const secret = "dead-relay-cleanup-secret"
 	schema := &nip46.NostrconnectSchema{
 		ClientPublickey: clientPub,
-		Relay:           dead,
 		Relays:          []*url.URL{dead, relay.url},
 		Secret:          secret,
 		Metadata:        &nip46.Metadata{},

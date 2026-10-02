@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.8.0]
+## [0.8.0-rc.1]
 
 ### Added
 
@@ -17,6 +17,10 @@
 - The NIP-86 surface covers roles too (`createrole`, `editrole`, `deleterole`,
   `assignrole`, `unassignrole`), mapping onto the kind:33534 definitions
   `ncli relay roles` already manages.
+- `huddle.udpPortRange` pins the UDP ports WebRTC media is carried on, as
+  `"min-max"`. Without it the OS picks from the ephemeral range, which a
+  container cannot publish and a firewall will not have open -- so signalling
+  succeeds and no audio ever arrives. (#82)
 
 ### Changed
 
@@ -30,18 +34,44 @@
   relay port. The relay verifies the tag when a client sends one, so an older
   `ncli` keeps working.
 
+### Fixed
+
+- WebRTC huddles no longer fail to connect when trickled ICE candidates arrive
+  before the SDP they belong to. A candidate that outran its description was
+  logged and discarded rather than held, which cost the fastest paths and, off
+  the local network, often every reachable one -- the call then sat in
+  `connecting` until ICE gave up. Candidates are now queued in both directions
+  and released once the matching description is in place. (#82)
+- `ncli bunker` could not pair with any real app over `nostrconnect://`.
+  The URI was rejected for lacking a `metadata` param NIP-46 does not
+  define, and past that the handshake ran backwards: ncli sent a `connect`
+  request and waited for the client to echo the secret, where the spec has
+  the signer publish a `connect` response and the client answer nothing.
+  Fixing only the first would have turned the error into a silent timeout.
+  (#84)
+- A `nostrconnect://` URI's relays are all used, not just the first. They
+  are dialed in parallel and published to as each connects, so one dead
+  relay at the head of the list neither delays nor fails a pairing the
+  others can carry. Every relay failing is now a `network` error (exit 6,
+  retryable) rather than `invalid_input`. (#84)
+- The permissions an app requests in its URI are applied as grants, so a
+  freshly paired app stops prompting on every request. `bunker://` pairings
+  get the same from `connect`'s own params, along with the app's name and
+  URL -- previously dropped, which is why every app paired that way showed
+  as a bare hex key. (#84)
+- `switch_relays` and `logout` are answered instead of being reported
+  unsupported. A compliant client sends `switch_relays` right after every
+  pairing, so a signer's own relay list never took effect. (#84)
+- A relay named only by a pairing URI no longer keeps a reconnect loop
+  running for the daemon's lifetime when it never comes up. (#84)
+- The "Paste nostrconnect:// URI" and "Set App Name" dialogs no longer
+  stretch to the full width of the terminal with most of their height
+  empty. (#84)
+
 ## [0.7.0-rc.1]
 
 ### Added
 
-- The huddle e2e stack now covers the WebRTC door as well as the WebSocket one:
-  browsers and WebSocket clients in one call, camera and screen share, a late
-  joiner, and trickled candidates arriving before the offer. Driven by real pion
-  peers, so no browser is needed. (#82)
-- `huddle.udpPortRange` pins the UDP ports WebRTC media is carried on, as
-  `"min-max"`. Without it the OS picks from the ephemeral range, which a
-  container cannot publish and a firewall will not have open -- so signalling
-  succeeds and no audio ever arrives. (#82)
 - `ncli huddle join` can now play the call, decoding Opus with pure Go and mixing
   every speaker into one stream. Playback is compiled in only under
   `-tags huddleaudio`: the release binaries are built without cgo and the only
@@ -113,37 +143,6 @@
   `http.Server.Shutdown` never waits on hijacked WebSocket connections, so
   without this a restart would sever calls with no notice and leave
   participants waiting for audio that had simply stopped arriving. (#66)
-- WebRTC huddles no longer fail to connect when trickled ICE candidates arrive
-  before the SDP they belong to. A candidate that outran its description was
-  logged and discarded rather than held, which cost the fastest paths and, off
-  the local network, often every reachable one -- the call then sat in
-  `connecting` until ICE gave up. Candidates are now queued in both directions
-  and released once the matching description is in place. (#82)
-- `ncli bunker` could not pair with any real app over `nostrconnect://`.
-  The URI was rejected for lacking a `metadata` param NIP-46 does not
-  define, and past that the handshake ran backwards: ncli sent a `connect`
-  request and waited for the client to echo the secret, where the spec has
-  the signer publish a `connect` response and the client answer nothing.
-  Fixing only the first would have turned the error into a silent timeout.
-  (#84)
-- A `nostrconnect://` URI's relays are all used, not just the first. They
-  are dialed in parallel and published to as each connects, so one dead
-  relay at the head of the list neither delays nor fails a pairing the
-  others can carry. Every relay failing is now a `network` error (exit 6,
-  retryable) rather than `invalid_input`. (#84)
-- The permissions an app requests in its URI are applied as grants, so a
-  freshly paired app stops prompting on every request. `bunker://` pairings
-  get the same from `connect`'s own params, along with the app's name and
-  URL -- previously dropped, which is why every app paired that way showed
-  as a bare hex key. (#84)
-- `switch_relays` and `logout` are answered instead of being reported
-  unsupported. A compliant client sends `switch_relays` right after every
-  pairing, so a signer's own relay list never took effect. (#84)
-- A relay named only by a pairing URI no longer keeps a reconnect loop
-  running for the daemon's lifetime when it never comes up. (#84)
-- The "Paste nostrconnect:// URI" and "Set App Name" dialogs no longer
-  stretch to the full width of the terminal with most of their height
-  empty. (#84)
 
 ## [0.6.0]
 

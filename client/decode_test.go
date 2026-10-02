@@ -250,6 +250,7 @@ func TestDecodeEntity_CashTokenWithoutProvenance(t *testing.T) {
 		HRP:          "satscash",
 		WalletPubkey: strings.Repeat("a", 64),
 		Secret:       strings.Repeat("b", 64),
+		RelayURLs:    []string{"wss://relay.example.com"},
 	})
 	if err != nil {
 		t.Fatalf("nipcash.Encode() error = %v", err)

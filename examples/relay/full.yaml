@@ -118,6 +118,28 @@ membership:
   # updating its own internal membership store (authoritative either way).
   publishAddRemoveEvents: false
 
+# NIP-86, the Relay Management API (optional). Requires membership.enabled
+# above -- every method it exposes administers NIP-43 membership, so with
+# membership off this simply does not serve (it is not a startup error).
+# Omitting this block leaves it off.
+nip86:
+  # Serves the API for requests to the relay URL carrying
+  # Content-Type: application/nostr+json+rpc. The WebSocket upgrade and the
+  # NIP-11 document on that same URL are unaffected.
+  enabled: false
+
+  # Hex pubkeys allowed to call it, in addition to nip11.pubkey (always
+  # allowed). This is the point of the block: without it the relay's own key
+  # is the only admin identity, so administering from an app would mean
+  # carrying the relay's secret key on a phone.
+  admins: []
+
+  # CORS allowlist for browser callers. Empty answers any origin, which is
+  # safe here because authorization is a signed NIP-98 header rather than a
+  # cookie, so a hostile page gains nothing from being allowed to send the
+  # request.
+  allowedOrigins: []
+
 # NIP-AA (optional). Requires nip11.limitation.membership_required above
 # (which itself requires membership.enabled and limitation.auth_required)
 # -- enabling this genuinely changes AUTH-time behavior, so it only makes

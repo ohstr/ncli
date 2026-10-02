@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"sync"
 	"testing"
@@ -26,8 +27,21 @@ const (
 // yields as many identities as a scenario needs without a table of literals.
 func huddlePeerKey(i int) string { return fmt.Sprintf("%064x", i+1) }
 
+// huddleIntegrationEndpoint is where the relay container is actually reachable.
+// It is the published port by default. NCLI_ITEST_HUDDLE_ENDPOINT overrides it
+// for a host whose Docker daemon runs elsewhere, where the published port does
+// not land on localhost -- the NIP-42 relay tag stays huddleIntegrationRelayURL
+// either way, because the endpoint validates the tag against its own configured
+// nip11.url rather than against wherever the client happened to dial.
+func huddleIntegrationEndpoint() string {
+	if override := os.Getenv("NCLI_ITEST_HUDDLE_ENDPOINT"); override != "" {
+		return override
+	}
+	return huddleIntegrationRelayURL
+}
+
 func huddleEndpointFor(roomID string) string {
-	return huddleIntegrationRelayURL + "/huddle/" + roomID + "/audio"
+	return huddleIntegrationEndpoint() + "/huddle/" + roomID + "/audio"
 }
 
 // dialHuddlePeer joins roomID as peer i. version 0 means the client's default.
@@ -101,7 +115,7 @@ func TestHuddleIntegration(t *testing.T) {
 		}
 	})
 
-	waitForRelayReady(t, huddleIntegrationRelayURL, 60*time.Second)
+	waitForRelayReady(t, huddleIntegrationEndpoint(), 60*time.Second)
 
 	t.Run("TwoPeersHearEachOther", testHuddleTwoPeersHearEachOther)
 	t.Run("EveryPeerHearsEveryOther", testHuddleEveryPeerHearsEveryOther)
@@ -112,6 +126,15 @@ func TestHuddleIntegration(t *testing.T) {
 	t.Run("RoomFullRefusesBeyondCapacity", testHuddleRoomFullRefusesBeyondCapacity)
 	t.Run("AuthForAnotherRelayIsRejected", testHuddleAuthForAnotherRelayIsRejected)
 	t.Run("VersionMismatchRequiresUpgrade", testHuddleVersionMismatchRequiresUpgrade)
+
+	// The WebRTC door. Same relay, same rooms -- a browser peer and a WebSocket
+	// peer on one room id are in one call, which MixedTransportConversation is
+	// there to prove.
+	t.Run("MixedTransportConversation", testHuddleMixedTransportConversation)
+	t.Run("VideoAndScreenShare", testHuddleVideoAndScreenShare)
+	t.Run("WebSocketPeerSeesNoVideo", testHuddleWebSocketPeerSeesNoVideo)
+	t.Run("LateJoinerGetsTheLiveCall", testHuddleLateJoinerGetsTheLiveCall)
+	t.Run("CandidatesBeforeTheOffer", testHuddleCandidatesBeforeTheOffer)
 }
 
 // testHuddleTwoPeersHearEachOther is the core guarantee: the payload crosses the

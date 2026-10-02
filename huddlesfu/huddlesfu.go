@@ -86,6 +86,13 @@ type Config struct {
 	// what carries the ones behind symmetric NAT.
 	ICEServers []webrtc.ICEServer
 
+	// UDPPortMin and UDPPortMax pin the range media is carried on. Zero lets
+	// the OS pick from the ephemeral range, which is right on a host with no
+	// filtering in the way -- but a relay in a container or behind a firewall
+	// needs a known range to publish. Ignored unless both are set.
+	UDPPortMin uint16
+	UDPPortMax uint16
+
 	// AllowedOrigins restricts browser origins. Empty allows any, for the same
 	// reason as wsaudio: admission is gated by a signed challenge, so Origin is
 	// not the security boundary and refusing on it only breaks web clients.
@@ -115,6 +122,7 @@ func (c Config) writeTimeout() time.Duration {
 // room id as a wildcard, e.g. "/huddle/{id}/rtc".
 type Handler struct {
 	cfg      Config
+	api      *webrtc.API
 	upgrader websocket.Upgrader
 	// hub is shared by every session this handler serves, which is what lets two
 	// browsers in one room see each other's video.
@@ -123,13 +131,29 @@ type Handler struct {
 
 // NewHandler returns a Handler for cfg.
 func NewHandler(cfg Config) *Handler {
-	h := &Handler{cfg: cfg, hub: newVideoHub()}
+	h := &Handler{cfg: cfg, hub: newVideoHub(), api: newAPI(cfg)}
 	h.upgrader = websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
 		CheckOrigin:     h.checkOrigin,
 	}
 	return h
+}
+
+// newAPI builds the WebRTC API every session's peer connection comes from.
+// Only a SettingEngine is passed: pion then fills in the same default media
+// engine and interceptors webrtc.NewPeerConnection would, so nothing about
+// codec or header-extension negotiation changes.
+func newAPI(cfg Config) *webrtc.API {
+	var settings webrtc.SettingEngine
+	if cfg.UDPPortMin > 0 && cfg.UDPPortMax > 0 {
+		if err := settings.SetEphemeralUDPPortRange(cfg.UDPPortMin, cfg.UDPPortMax); err != nil {
+			cfg.Logger.Error().Err(err).
+				Uint16("min", cfg.UDPPortMin).Uint16("max", cfg.UDPPortMax).
+				Msg("ignoring an unusable huddle UDP port range")
+		}
+	}
+	return webrtc.NewAPI(webrtc.WithSettingEngine(settings))
 }
 
 func (h *Handler) checkOrigin(r *http.Request) bool {
@@ -168,6 +192,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	s := &session{
 		cfg:    h.cfg,
+		api:    h.api,
 		conn:   conn,
 		roomID: roomID,
 		hub:    h.hub,

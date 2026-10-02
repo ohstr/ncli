@@ -1,10 +1,12 @@
 package relay
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -12,6 +14,7 @@ import (
 	"github.com/ohstr/ncli/client"
 	"github.com/ohstr/nmilat/huddle/room"
 	"github.com/ohstr/nmilat/nip11"
+	"github.com/ohstr/nmilat/nip86"
 	"github.com/ohstr/nmilat/nip98"
 	"github.com/ohstr/nmilat/relay"
 	"github.com/ohstr/nmilat/search"
@@ -93,6 +96,19 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 	// NIP-98: the admin endpoints below require HTTP auth, a capability
 	// this service adds on top of what the SDK's SessionHandler knows about.
 	supportedNips := wsHandler.SupportedNIPs().With(nip11.NIP(98))
+
+	// Assigned once the huddle rooms exist, below: removing a member has to be
+	// able to end that member's live calls. The root handler closes over the
+	// variable and reads it per request, so the order here does not matter.
+	var nip86Handler *nip86.Handler
+
+	if nip86Enabled() {
+		// Advertised so a client can tell the API is there before trying it.
+		// SupportedNIPs() is computed from wiring and cannot be configured, so
+		// this is the only place it can be added.
+		supportedNips = supportedNips.With(nip11.NIP(86))
+	}
+
 	nip11Handler := nip11.NewHandler(&config.Nip11, supportedNips)
 
 	mux := http.NewServeMux()
@@ -101,9 +117,15 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 			http.NotFound(w, r)
 			return
 		}
-		if r.Header.Get("Accept") == nip11.ContentTypeHeader {
+		// Three protocols share this URL, told apart by headers alone: NIP-86
+		// by its content type, NIP-11 by its Accept, and the WebSocket upgrade
+		// by everything else.
+		switch {
+		case nip86Handler != nil && (nip86.IsManagementRequest(r) || r.Method == http.MethodOptions):
+			nip86Handler.ServeHTTP(w, r)
+		case r.Header.Get("Accept") == nip11.ContentTypeHeader:
 			nip11Handler.ServeHTTP(w, r)
-		} else {
+		default:
 			wsHandler.ServeHTTP(w, r)
 		}
 	}))
@@ -111,7 +133,26 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 	// ADMIN ENDPOINTS
 	adminAuth := func(next http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
-			if err := nip98.VerifyAuthHeader(r, config.Nip11.PubKey); err != nil {
+			// Read the body here so the signature can be checked against it,
+			// then hand it back to the handler untouched. Without this a
+			// captured Authorization header is good for any body at the same
+			// URL and method until it expires.
+			var body []byte
+			if r.Body != nil {
+				read, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxAdminBodyBytes))
+				if err != nil {
+					http.Error(w, "request body too large or unreadable", http.StatusRequestEntityTooLarge)
+					return
+				}
+				body = read
+				r.Body = io.NopCloser(bytes.NewReader(body))
+			}
+			// RequirePayload stays off: a payload tag is verified when present,
+			// so an older client that sends none still works.
+			if _, err := nip98.Verify(r, nip98.Options{
+				AllowedPubkeys: nip86Admins(),
+				Body:           body,
+			}); err != nil {
 				http.Error(w, err.Error(), http.StatusUnauthorized)
 				return
 			}
@@ -217,9 +258,17 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "deleted"})
 	}))
 
-	registerMembershipAdminRoutes(mux, wsHandler, store, adminAuth)
-
+	// Huddle first: both the membership admin routes and NIP-86 need the rooms
+	// manager so removing a member ends that member's live calls.
 	huddleRooms := registerHuddleRoutes(mux, wsHandler, config.Huddle, config.Nip11.URL)
+
+	registerMembershipAdminRoutes(mux, wsHandler, store, huddleRooms, adminAuth)
+
+	handler, err := newNip86Handler(wsHandler, store, huddleRooms)
+	if err != nil {
+		log.Fatal().Err(err).Msg("invalid nip86 configuration")
+	}
+	nip86Handler = handler
 
 	mux.HandleFunc("/admin/zaps", adminAuth(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "DELETE" {

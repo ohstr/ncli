@@ -1,5 +1,73 @@
 # Changelog
 
+## [0.8.0-rc.1]
+
+### Added
+
+- `ncli relay` serves NIP-86, the Relay Management API, when a `nip86:` block
+  turns it on: membership administration over HTTP on the relay's own URL, so a
+  host's app can add or remove a guest and mint an invite code without a
+  terminal. It answers the CORS preflight a browser requires, and NIP-11
+  advertises 86 so a client can detect it. `nip86.admins` is what makes this
+  usable from an app -- see below. (#85)
+- `nip86.admins` lists pubkeys allowed to administer the relay, alongside
+  `nip11.pubkey`. Until now the relay's own key was the only admin identity, so
+  administering meant holding the relay's secret key; a host can now administer
+  from their own key instead. (#85)
+- The NIP-86 surface covers roles too (`createrole`, `editrole`, `deleterole`,
+  `assignrole`, `unassignrole`), mapping onto the kind:33534 definitions
+  `ncli relay roles` already manages. (#85)
+- `huddle.udpPortRange` pins the UDP ports WebRTC media is carried on, as
+  `"min-max"`. Without it the OS picks from the ephemeral range, which a
+  container cannot publish and a firewall will not have open -- so signalling
+  succeeds and no audio ever arrives. (#82)
+
+### Changed
+
+- Removing a member now ends that member's live huddle calls instead of only
+  blocking their next join. The door checks admission once, at join, so a
+  removed guest previously kept hearing a room until they chose to reconnect.
+  The call's other participants are unaffected. (#85)
+- Admin HTTP requests bind their body to the NIP-98 signature with a `payload`
+  tag. A captured `Authorization` header was previously good for any body at
+  the same URL and method until it expired, and these routes sit on the public
+  relay port. The relay verifies the tag when a client sends one, so an older
+  `ncli` keeps working. (#85)
+
+### Fixed
+
+- WebRTC huddles no longer fail to connect when trickled ICE candidates arrive
+  before the SDP they belong to. A candidate that outran its description was
+  logged and discarded rather than held, which cost the fastest paths and, off
+  the local network, often every reachable one -- the call then sat in
+  `connecting` until ICE gave up. Candidates are now queued in both directions
+  and released once the matching description is in place. (#82)
+- `ncli bunker` could not pair with any real app over `nostrconnect://`.
+  The URI was rejected for lacking a `metadata` param NIP-46 does not
+  define, and past that the handshake ran backwards: ncli sent a `connect`
+  request and waited for the client to echo the secret, where the spec has
+  the signer publish a `connect` response and the client answer nothing.
+  Fixing only the first would have turned the error into a silent timeout.
+  (#84)
+- A `nostrconnect://` URI's relays are all used, not just the first. They
+  are dialed in parallel and published to as each connects, so one dead
+  relay at the head of the list neither delays nor fails a pairing the
+  others can carry. Every relay failing is now a `network` error (exit 6,
+  retryable) rather than `invalid_input`. (#84)
+- The permissions an app requests in its URI are applied as grants, so a
+  freshly paired app stops prompting on every request. `bunker://` pairings
+  get the same from `connect`'s own params, along with the app's name and
+  URL -- previously dropped, which is why every app paired that way showed
+  as a bare hex key. (#84)
+- `switch_relays` and `logout` are answered instead of being reported
+  unsupported. A compliant client sends `switch_relays` right after every
+  pairing, so a signer's own relay list never took effect. (#84)
+- A relay named only by a pairing URI no longer keeps a reconnect loop
+  running for the daemon's lifetime when it never comes up. (#84)
+- The "Paste nostrconnect:// URI" and "Set App Name" dialogs no longer
+  stretch to the full width of the terminal with most of their height
+  empty. (#84)
+
 ## [0.7.0-rc.1]
 
 ### Added

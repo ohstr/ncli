@@ -497,14 +497,25 @@ func (t *PendingTable) openNostrconnectInput() {
 		SetBackgroundColor(tcell.ColorDefault)
 
 	// A real modal, not a full-screen page -- see showBunkerURI's own
-	// comment on ShowPositionedOverlay for why. Full width for the same
-	// reason showBunkerURI itself now is: a narrower dialog left a margin
-	// on each side just wide enough for an unreadable fragment of
-	// whatever board table sits underneath to peek through.
-	x, y, w, h := positionedOverlayRect(t.app, 100, 20)
+	// comment on ShowPositionedOverlay for why.
+	//
+	// Sized to its content rather than to the screen. This was 100% wide
+	// and 20% tall, which on a wide terminal drew a full-width box around
+	// a single input line and left most of its height empty below the
+	// buttons. The field still takes a long URI -- it scrolls, and the
+	// text is pasted rather than read.
+	x, y, w, h := positionedOverlayRectCapped(t.app, 90, 100, nostrconnectInputRows)
 	view.SetRect(x, y, w, h)
 	t.app.ShowPositionedOverlay(overlayKey, view, form)
 }
+
+// nostrconnectInputRows is openNostrconnectInput's height: the two border
+// rows plus the five tview.Form needs to lay out one input item and a
+// button row. Measured rather than derived -- Form's internal padding is
+// not part of its API, and six rows clips the buttons off the bottom.
+// TestNostrconnectInputOverlay_IsSizedToItsContent is what catches that,
+// so this can be tightened again if Form's layout ever changes.
+const nostrconnectInputRows = 7
 
 // showConnecting is openNostrconnectInput's submit follow-up: a status
 // overlay for the up-to-a-minute network wait while the client confirms.
@@ -528,7 +539,7 @@ func (t *PendingTable) showConnecting(uri string) {
 	dismiss := func() { t.app.DismissOverlay(overlayKey) }
 
 	status := tview.NewTextView().
-		SetText("Connecting... this can take up to a minute while the client confirms.").
+		SetText("Sending the pairing to the app's relays... an unreachable one is skipped.").
 		SetTextColor(tui.ColorText).
 		SetWordWrap(true)
 
@@ -644,31 +655,57 @@ func screenSize(app *tui.App) (width, height int) {
 	return
 }
 
-// positionedOverlayRect computes a centered rect sized to widthPercent/
-// heightPercent of the current screen -- for use with
-// App.ShowPositionedOverlay (a real, board-stays-visible modal), not
-// centerOverlay (a full-screen page whose own margins have to actively
-// stay filled, which is what centerOverlay's own overlaySpacer exists
-// for -- unnecessary here, since a directly-positioned, un-resized page
-// only ever touches its own small rect, leaving everything else exactly
-// as "main" already drew it).
-func positionedOverlayRect(app *tui.App, widthPercent, heightPercent int) (x, y, w, h int) {
+// positionedOverlayRectFixedHeight computes a centered rect widthPercent
+// wide and heightRows tall -- for use with App.ShowPositionedOverlay (a
+// real, board-stays-visible modal), not centerOverlay (a full-screen page
+// whose own margins have to actively stay filled, which is what
+// centerOverlay's own overlaySpacer exists for -- unnecessary here, since
+// a directly-positioned, un-resized page only ever touches its own small
+// rect, leaving everything else exactly as "main" already drew it).
+//
+// A fixed row count rather than a height percentage, matching
+// centerOverlayFixedHeight's own reasoning: a short, fixed-content dialog
+// sized by screen percentage inherits a dead gap below its content on any
+// reasonably tall terminal.
+func positionedOverlayRectFixedHeight(app *tui.App, widthPercent, heightRows int) (x, y, w, h int) {
 	screenW, screenH := screenSize(app)
 	w = screenW * widthPercent / 100
-	h = screenH * heightPercent / 100
+	h = heightRows
 	x = (screenW - w) / 2
 	y = (screenH - h) / 2
 	return
 }
 
-// positionedOverlayRectFixedHeight is positionedOverlayRect's fixed-row-
-// count counterpart, matching centerOverlayFixedHeight's own reasoning:
-// a short, fixed-content dialog sized by screen percentage inherits a
-// dead gap below its content on any reasonably tall terminal.
-func positionedOverlayRectFixedHeight(app *tui.App, widthPercent, heightRows int) (x, y, w, h int) {
+// overlayMinWidth keeps a capped dialog usable on a narrow terminal: below
+// this the label and buttons stop fitting, and a too-small box is worse
+// than one that spans the screen.
+const overlayMinWidth = 40
+
+// positionedOverlayRectCapped is positionedOverlayRectFixedHeight with an
+// upper bound on width. A percentage alone reads fine at 80 columns and
+// absurdly at 250: a one-line input field stretched the full width of a
+// wide terminal, with the eye travelling the whole way from the label to
+// the centered buttons. The cap is the dialog's natural width; the
+// percentage still governs whatever is narrower than that.
+//
+// Never wider than the screen, and never below overlayMinWidth unless the
+// screen itself is.
+func positionedOverlayRectCapped(app *tui.App, widthPercent, maxWidth, heightRows int) (x, y, w, h int) {
 	screenW, screenH := screenSize(app)
-	w = screenW * widthPercent / 100
-	h = heightRows
+	return cappedOverlayRect(screenW, screenH, widthPercent, maxWidth, heightRows)
+}
+
+// cappedOverlayRect is positionedOverlayRectCapped's arithmetic, split out
+// from the screen it reads so the sizing rule can be tested at terminal
+// sizes directly -- screenSize reports whatever the running Application
+// last drew at, so a test cannot vary it by setting a simulation screen's
+// size alone.
+func cappedOverlayRect(screenW, screenH, widthPercent, maxWidth, heightRows int) (x, y, w, h int) {
+	w = min(screenW*widthPercent/100, maxWidth)
+	w = max(w, min(screenW, overlayMinWidth))
+	w = min(w, screenW)
+
+	h = min(heightRows, screenH)
 	x = (screenW - w) / 2
 	y = (screenH - h) / 2
 	return
@@ -1321,7 +1358,9 @@ func (t *SessionsTable) openRenameInput(s Session) {
 		SetTitle(" Set App Name ").
 		SetBackgroundColor(tcell.ColorDefault)
 
-	x, y, w, h := positionedOverlayRect(t.app, 100, 20)
+	// Same shape as openNostrconnectInput, and the same fix -- narrower
+	// still, since a nickname is a few words rather than a pasted URI.
+	x, y, w, h := positionedOverlayRectCapped(t.app, 60, 60, nostrconnectInputRows)
 	view.SetRect(x, y, w, h)
 	t.app.ShowPositionedOverlay(overlayKey, view, form)
 }

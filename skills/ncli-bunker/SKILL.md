@@ -266,17 +266,40 @@ script:
 
 ```sh
 ncli bunker connect              # generates and prints a fresh bunker:// URI -- paste this into the OTHER app
-ncli bunker connect "nostrconnect://<client-pubkey>?relay=...&secret=...&metadata=..."
+ncli bunker connect "nostrconnect://<client-pubkey>?relay=...&relay=...&secret=...&perms=...&name=..."
 ```
 
 - `bunker://` (no argument): **this signer speaks second** -- it displays
   a `bunker://<pubkey>?relay=...&secret=...` URI; the connecting client
   pastes it in and sends the first `connect` request, which must present
-  the matching secret (single-use, constant-time compared).
+  the matching secret (single-use, constant-time compared). That request
+  may also carry the app's own name/url and a requested permission list;
+  both are used, and both are display/request only -- never an input to an
+  authorization decision.
 - `nostrconnect://` (a URI argument): **this signer speaks first** --
   given a URI the *other* app generated (e.g. shown as a QR code there),
-  this signer sends the first `connect` request to that app's pubkey and
-  waits (up to 60s) for it to echo the secret back.
+  this signer publishes a `connect` *response* carrying that URI's own
+  secret to the app's pubkey. The app recognizes the pairing by the secret
+  and learns this signer's pubkey from the response's author; it sends
+  nothing back, so there is no handshake to wait on.
+
+  Everything in the URI is honored, not just the first field of each kind:
+
+  - **Every `relay`**, not only the first. Clients routinely list four or
+    five. They are dialed in parallel and published to as each comes up, so
+    one dead relay at the head of the list neither delays nor fails a
+    pairing the others can carry. All of them failing is a `network` error
+    (exit 6, retryable), not a silent success.
+  - **`perms`**, applied as grants, so a freshly paired app stops prompting
+    on every single request.
+  - **`name`/`url`/`image`** for the Trusted Apps display. ncli also still
+    reads the older single-JSON `metadata=` param, but nothing emits it.
+
+  Since the flow has no acknowledgement, `connect` reports the pairing
+  confirmed once the app makes its first request (a compliant one sends
+  `switch_relays` immediately). An app that stays quiet leaves the pairing
+  **unconfirmed but registered** -- the secret has already gone out, so
+  that is not reported as a failure.
 
 Either way, a first-time `connect` from an unrecognized pubkey still goes
 through the normal approval queue once the secret checks out -- knowing
@@ -322,6 +345,11 @@ spec:
   `nip44_encrypt`/`nip44_decrypt`). `connect` itself can't be granted --
   pairing is already gated by the URI's own single-use secret, not by a
   remembered grant; the spec is rejected at load time if it names one.
+  `switch_relays` and `logout` can't be granted either, for the opposite
+  reason: they are answered automatically for any paired app and refused
+  for anyone else. Neither signs anything or exposes the key, and a
+  compliant client sends `switch_relays` right after every pairing, so
+  prompting for them would mean a dialog nobody can act on.
 - `kinds` is required for `sign_event` (either a list of exact kind
   numbers, or the literal string `any`) and rejected for every other
   method, so a kind never applies where it'd be meaningless.

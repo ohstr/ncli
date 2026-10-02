@@ -106,7 +106,7 @@ func TestHandleMembersList(t *testing.T) {
 	wsHandler, _ := newTestWSHandler(t)
 
 	w := httptest.NewRecorder()
-	handleMembersList(wsHandler)(w, httptest.NewRequest("GET", "/admin/membership/members", nil))
+	handleMembersList(testAdmin(wsHandler, nil))(w, httptest.NewRequest("GET", "/admin/membership/members", nil))
 	require.Equal(t, http.StatusOK, w.Code)
 	got := decodeJSON[struct {
 		Members []relay.MemberRecord `json:"members"`
@@ -116,7 +116,7 @@ func TestHandleMembersList(t *testing.T) {
 	require.NoError(t, wsHandler.Membership().Join(testMember, []string{"r1"}))
 
 	w = httptest.NewRecorder()
-	handleMembersList(wsHandler)(w, httptest.NewRequest("GET", "/admin/membership/members", nil))
+	handleMembersList(testAdmin(wsHandler, nil))(w, httptest.NewRequest("GET", "/admin/membership/members", nil))
 	require.Equal(t, http.StatusOK, w.Code)
 	got = decodeJSON[struct {
 		Members []relay.MemberRecord `json:"members"`
@@ -134,7 +134,7 @@ func TestHandleMemberShow(t *testing.T) {
 		r := httptest.NewRequest("GET", "/admin/membership/members/nope", nil)
 		r.SetPathValue("pubkey", "nope")
 		w := httptest.NewRecorder()
-		handleMemberShow(wsHandler)(w, r)
+		handleMemberShow(testAdmin(wsHandler, nil))(w, r)
 		require.Equal(t, http.StatusBadRequest, w.Code)
 	})
 
@@ -142,7 +142,7 @@ func TestHandleMemberShow(t *testing.T) {
 		r := httptest.NewRequest("GET", "/admin/membership/members/"+testMember, nil)
 		r.SetPathValue("pubkey", testMember)
 		w := httptest.NewRecorder()
-		handleMemberShow(wsHandler)(w, r)
+		handleMemberShow(testAdmin(wsHandler, nil))(w, r)
 		require.Equal(t, http.StatusNotFound, w.Code)
 	})
 
@@ -151,7 +151,7 @@ func TestHandleMemberShow(t *testing.T) {
 		r := httptest.NewRequest("GET", "/admin/membership/members/"+testMember, nil)
 		r.SetPathValue("pubkey", testMember)
 		w := httptest.NewRecorder()
-		handleMemberShow(wsHandler)(w, r)
+		handleMemberShow(testAdmin(wsHandler, nil))(w, r)
 		require.Equal(t, http.StatusOK, w.Code)
 		got := decodeJSON[relay.MemberRecord](t, w)
 		require.Equal(t, testMember, got.Pubkey)
@@ -165,7 +165,7 @@ func TestHandleMemberAdd(t *testing.T) {
 		wsHandler, store := newTestWSHandler(t)
 		r := httptest.NewRequest("POST", "/admin/membership/members", strings.NewReader("not-json"))
 		w := httptest.NewRecorder()
-		handleMemberAdd(wsHandler, store)(w, r)
+		handleMemberAdd(testAdmin(wsHandler, store))(w, r)
 		require.Equal(t, http.StatusBadRequest, w.Code)
 	})
 
@@ -174,7 +174,7 @@ func TestHandleMemberAdd(t *testing.T) {
 		wsHandler, store := newTestWSHandler(t)
 		r := httptest.NewRequest("POST", "/admin/membership/members", strings.NewReader(`{"pubkey":"short"}`))
 		w := httptest.NewRecorder()
-		handleMemberAdd(wsHandler, store)(w, r)
+		handleMemberAdd(testAdmin(wsHandler, store))(w, r)
 		require.Equal(t, http.StatusBadRequest, w.Code)
 	})
 
@@ -183,7 +183,7 @@ func TestHandleMemberAdd(t *testing.T) {
 		wsHandler, store := newTestWSHandler(t)
 		r := httptest.NewRequest("POST", "/admin/membership/members", strings.NewReader(`{"pubkey":"`+testMember+`","roles":["admin"]}`))
 		w := httptest.NewRecorder()
-		handleMemberAdd(wsHandler, store)(w, r)
+		handleMemberAdd(testAdmin(wsHandler, store))(w, r)
 		require.Equal(t, http.StatusOK, w.Code)
 
 		require.True(t, wsHandler.Membership().IsMember(testMember))
@@ -198,7 +198,7 @@ func TestHandleMemberAdd(t *testing.T) {
 		wsHandler, store := newTestWSHandler(t)
 		r := httptest.NewRequest("POST", "/admin/membership/members", strings.NewReader(`{"pubkey":"`+testMember+`"}`))
 		w := httptest.NewRecorder()
-		handleMemberAdd(wsHandler, store)(w, r)
+		handleMemberAdd(testAdmin(wsHandler, store))(w, r)
 		require.Equal(t, http.StatusOK, w.Code)
 
 		events, err := store.QueryEvents(t.Context(), &nip01.SubscriptionFilter{Kinds: []int{nip43.KindAddUser}})
@@ -218,7 +218,7 @@ func TestHandleMemberRemove(t *testing.T) {
 		r := httptest.NewRequest("DELETE", "/admin/membership/members/"+testMember, nil)
 		r.SetPathValue("pubkey", testMember)
 		w := httptest.NewRecorder()
-		handleMemberRemove(wsHandler, store)(w, r)
+		handleMemberRemove(testAdmin(wsHandler, store))(w, r)
 		require.Equal(t, http.StatusOK, w.Code)
 	})
 
@@ -230,7 +230,7 @@ func TestHandleMemberRemove(t *testing.T) {
 		r := httptest.NewRequest("DELETE", "/admin/membership/members/"+testMember, nil)
 		r.SetPathValue("pubkey", testMember)
 		w := httptest.NewRecorder()
-		handleMemberRemove(wsHandler, store)(w, r)
+		handleMemberRemove(testAdmin(wsHandler, store))(w, r)
 		require.Equal(t, http.StatusOK, w.Code)
 		require.False(t, wsHandler.Membership().IsMember(testMember))
 
@@ -251,7 +251,7 @@ func TestHandleInviteCreate(t *testing.T) {
 		wsHandler, _ := newTestWSHandler(t)
 		r := httptest.NewRequest("POST", "/admin/membership/invites", strings.NewReader(`{"ttl":"not-a-duration"}`))
 		w := httptest.NewRecorder()
-		handleInviteCreate(wsHandler)(w, r)
+		handleInviteCreate(testAdmin(wsHandler, nil))(w, r)
 		require.Equal(t, http.StatusBadRequest, w.Code)
 	})
 
@@ -259,7 +259,7 @@ func TestHandleInviteCreate(t *testing.T) {
 		wsHandler, _ := newTestWSHandler(t)
 		r := httptest.NewRequest("POST", "/admin/membership/invites", strings.NewReader(`{"max_uses":-1}`))
 		w := httptest.NewRecorder()
-		handleInviteCreate(wsHandler)(w, r)
+		handleInviteCreate(testAdmin(wsHandler, nil))(w, r)
 		require.Equal(t, http.StatusBadRequest, w.Code)
 	})
 
@@ -267,7 +267,7 @@ func TestHandleInviteCreate(t *testing.T) {
 		wsHandler, _ := newTestWSHandler(t)
 		r := httptest.NewRequest("POST", "/admin/membership/invites", strings.NewReader(`{"ttl":"1h","max_uses":2,"roles":["r1"]}`))
 		w := httptest.NewRecorder()
-		handleInviteCreate(wsHandler)(w, r)
+		handleInviteCreate(testAdmin(wsHandler, nil))(w, r)
 		require.Equal(t, http.StatusOK, w.Code)
 		got := decodeJSON[relay.InviteClaim](t, w)
 		require.NotEmpty(t, got.Code)
@@ -281,7 +281,7 @@ func TestHandleInviteListAndRevoke(t *testing.T) {
 	wsHandler, store := newTestWSHandler(t)
 
 	w := httptest.NewRecorder()
-	handleInviteList(store)(w, httptest.NewRequest("GET", "/admin/membership/invites", nil))
+	handleInviteList(testAdmin(nil, store))(w, httptest.NewRequest("GET", "/admin/membership/invites", nil))
 	require.Equal(t, http.StatusOK, w.Code)
 	got := decodeJSON[struct {
 		Invites []relay.InviteClaim `json:"invites"`
@@ -292,7 +292,7 @@ func TestHandleInviteListAndRevoke(t *testing.T) {
 	require.NoError(t, err)
 
 	w = httptest.NewRecorder()
-	handleInviteList(store)(w, httptest.NewRequest("GET", "/admin/membership/invites", nil))
+	handleInviteList(testAdmin(nil, store))(w, httptest.NewRequest("GET", "/admin/membership/invites", nil))
 	got = decodeJSON[struct {
 		Invites []relay.InviteClaim `json:"invites"`
 	}](t, w)
@@ -302,7 +302,7 @@ func TestHandleInviteListAndRevoke(t *testing.T) {
 	r := httptest.NewRequest("DELETE", "/admin/membership/invites/"+claim.Code, nil)
 	r.SetPathValue("code", claim.Code)
 	w = httptest.NewRecorder()
-	handleInviteRevoke(store)(w, r)
+	handleInviteRevoke(testAdmin(nil, store))(w, r)
 	require.Equal(t, http.StatusOK, w.Code)
 
 	stored, err := store.GetInviteClaim(claim.Code)
@@ -321,7 +321,7 @@ func TestHandleRoleCreate(t *testing.T) {
 		_, store := newTestWSHandler(t)
 		r := httptest.NewRequest("POST", "/admin/membership/roles", strings.NewReader(`{"label":"x"}`))
 		w := httptest.NewRecorder()
-		handleRoleCreate(store)(w, r)
+		handleRoleCreate(testAdmin(nil, store))(w, r)
 		require.Equal(t, http.StatusBadRequest, w.Code)
 	})
 
@@ -329,7 +329,7 @@ func TestHandleRoleCreate(t *testing.T) {
 		_, store := newTestWSHandler(t)
 		r := httptest.NewRequest("POST", "/admin/membership/roles", strings.NewReader(`{"id":"vip","color":361}`))
 		w := httptest.NewRecorder()
-		handleRoleCreate(store)(w, r)
+		handleRoleCreate(testAdmin(nil, store))(w, r)
 		require.Equal(t, http.StatusBadRequest, w.Code)
 	})
 
@@ -337,7 +337,7 @@ func TestHandleRoleCreate(t *testing.T) {
 		_, store := newTestWSHandler(t)
 		r := httptest.NewRequest("POST", "/admin/membership/roles", strings.NewReader(`{"id":"vip","label":"VIP","description":"desc","color":180,"order":2}`))
 		w := httptest.NewRecorder()
-		handleRoleCreate(store)(w, r)
+		handleRoleCreate(testAdmin(nil, store))(w, r)
 		require.Equal(t, http.StatusOK, w.Code)
 
 		events, err := store.QueryEvents(t.Context(), &nip01.SubscriptionFilter{Kinds: []int{nip43.KindRoleDefinition}, Authors: []string{testPubKey}})
@@ -361,7 +361,7 @@ func TestHandleRolesList(t *testing.T) {
 	_, store := newTestWSHandler(t)
 
 	w := httptest.NewRecorder()
-	handleRolesList(store)(w, httptest.NewRequest("GET", "/admin/membership/roles", nil))
+	handleRolesList(testAdmin(nil, store))(w, httptest.NewRequest("GET", "/admin/membership/roles", nil))
 	require.Equal(t, http.StatusOK, w.Code)
 	got := decodeJSON[struct {
 		Roles []roleJSON `json:"roles"`
@@ -369,14 +369,20 @@ func TestHandleRolesList(t *testing.T) {
 	require.Empty(t, got.Roles)
 
 	createReq := httptest.NewRequest("POST", "/admin/membership/roles", strings.NewReader(`{"id":"admin","label":"Admin"}`))
-	handleRoleCreate(store)(httptest.NewRecorder(), createReq)
+	handleRoleCreate(testAdmin(nil, store))(httptest.NewRecorder(), createReq)
 
 	w = httptest.NewRecorder()
-	handleRolesList(store)(w, httptest.NewRequest("GET", "/admin/membership/roles", nil))
+	handleRolesList(testAdmin(nil, store))(w, httptest.NewRequest("GET", "/admin/membership/roles", nil))
 	got = decodeJSON[struct {
 		Roles []roleJSON `json:"roles"`
 	}](t, w)
 	require.Len(t, got.Roles, 1)
 	require.Equal(t, "admin", got.Roles[0].ID)
 	require.Equal(t, "Admin", got.Roles[0].Label)
+}
+
+// testAdmin builds the transport-free core the handlers delegate to. A nil ws
+// or store is fine for a handler that does not reach that one.
+func testAdmin(ws *relay.SessionHandler, store *relay.EventStore) membershipAdmin {
+	return membershipAdmin{ws: ws, store: store}
 }

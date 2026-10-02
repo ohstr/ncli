@@ -236,7 +236,17 @@ func adminRequestBody(cmd *cobra.Command, method, path string, body interface{})
 
 	url := fmt.Sprintf("http://localhost:%d%s", port, path)
 
-	header, err := common.GenerateNIP98Header(privKey, url, method)
+	// Encode before signing: the payload tag hashes the body, so the bytes
+	// have to exist first and be the same ones that go on the wire.
+	var encoded []byte
+	if body != nil {
+		encoded, err = json.Marshal(body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to encode request body: %w", err)
+		}
+	}
+
+	header, err := common.GenerateNIP98Header(privKey, url, method, encoded)
 	if err != nil {
 		// Malformed nip11.privkey -- input left blank, it's private-key
 		// material.
@@ -244,11 +254,7 @@ func adminRequestBody(cmd *cobra.Command, method, path string, body interface{})
 	}
 
 	var bodyReader io.Reader
-	if body != nil {
-		encoded, err := json.Marshal(body)
-		if err != nil {
-			return nil, fmt.Errorf("failed to encode request body: %w", err)
-		}
+	if encoded != nil {
 		bodyReader = bytes.NewReader(encoded)
 	}
 

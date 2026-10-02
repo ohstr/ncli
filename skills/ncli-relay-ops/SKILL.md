@@ -1,6 +1,6 @@
 ---
 name: ncli-relay-ops
-description: Configure, run, and operate a live ncli Nostr relay — author relay.yaml (NIP-11, auth, search, cache, NIP-43 membership), start the server, and monitor/administer it remotely over NIP-98 (`ncli relay stats`/`reindex`/`clear`, and `ncli relay members`/`invites`/`roles` for NIP-43 membership admin), including rebuilding search/zap indexes on a running relay (`ncli relay reindex`) and switching between named relay configs without repeating `--config` (`ncli relay context`). Use when writing a relay config file, deploying/operating an ncli relay, managing NIP-43 relay membership/invite-codes/roles, troubleshooting search/zap index state, or juggling multiple relay targets.
+description: Configure, run, and operate a live ncli Nostr relay — author relay.yaml (NIP-11, auth, search, cache, NIP-43 membership), start the server, and monitor/administer it remotely over NIP-98 (`ncli relay stats`/`reindex`/`clear`, and `ncli relay members`/`invites`/`roles` for NIP-43 membership admin, plus a `nip86:` block serving the standard NIP-86 management API an app can call without a terminal), including rebuilding search/zap indexes on a running relay (`ncli relay reindex`) and switching between named relay configs without repeating `--config` (`ncli relay context`). Use when writing a relay config file, deploying/operating an ncli relay, managing NIP-43 relay membership/invite-codes/roles, troubleshooting search/zap index state, or juggling multiple relay targets.
 license: Unlicense
 ---
 
@@ -105,6 +105,58 @@ show` on a non-member), and `usage` (`501` — membership isn't enabled on the
 relay at all; not `network`, since retrying won't fix a config problem).
 
 Full endpoint list and subcommand reference: `references/membership-admin-reference.md`.
+
+## `nip86:` — let an app administer membership, no terminal
+
+`ncli relay members/invites/roles` is a bespoke API that only this CLI
+speaks, and it authenticates as `nip11.privkey` — so administering means
+holding the relay's own secret key. The `nip86:` block adds NIP-86, the
+standard Relay Management API, on the relay's own URL, authenticated by
+NIP-98 against a list of admin pubkeys:
+
+```yaml
+membership:
+  enabled: true          # required: every NIP-86 method here administers NIP-43
+nip86:
+  enabled: true
+  admins:                # in addition to nip11.pubkey, which is always allowed
+    - <host hex pubkey>
+  allowedOrigins:        # omit to answer any origin
+    - https://app.example
+```
+
+Requests are told apart from the WebSocket upgrade and the NIP-11 document by
+their content type alone — all three share the relay URL:
+
+```sh
+curl -X POST https://relay.example/ \
+  -H 'Content-Type: application/nostr+json+rpc' \
+  -H "Authorization: Nostr <base64 kind-27235 event>" \
+  -d '{"method":"createclaim","params":["party-2026"]}'
+```
+
+Gotchas worth knowing before you debug a 401:
+
+- The NIP-98 event **must** carry a `payload` tag hashing the body. NIP-98
+  itself only recommends it; NIP-86 requires it.
+- The `u` tag is compared against the request URL. A bare
+  `https://relay.example` is accepted for a request to `/`, but anything else
+  must match exactly — and clients know the relay as `wss://`, so the scheme
+  has to be swapped.
+- With `enabled: true` and no admin pubkey resolvable at all, the relay
+  refuses to start rather than serve an endpoint nobody can use.
+- A browser cannot reach the endpoint without the CORS preflight, which the
+  relay answers. A permissive origin is fine here: authorization is a signed
+  header, not a cookie.
+
+Methods: `supportedmethods`, `allowpubkey`, `unallowpubkey`,
+`listallowedpubkeys`, `createclaim` (optional code; generated when omitted),
+`listclaims`, `deleteclaim`, and the role methods `createrole`, `editrole`,
+`deleterole`, `assignrole`, `unassignrole`.
+
+**`unallowpubkey` ends the member's live huddle calls**, not just their next
+join — the other participants stay connected. `ncli relay members remove`
+does the same.
 
 ## `ncli relay stats`/`reindex`/`clear` — relay must be running
 

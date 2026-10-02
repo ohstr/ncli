@@ -901,7 +901,7 @@ func TestSessionsTableRenameModalPrefillSaveUnmodified(t *testing.T) {
 	app := tui.NewApp()
 	screen := tcell.NewSimulationScreen("")
 	screen.SetSize(80, 25)
-	app.SetScreen(screen) // openRenameInput's positionedOverlayRect needs a real screen size, even without a running app.Run() loop
+	app.SetScreen(screen) // openRenameInput's positionedOverlayRectCapped needs a real screen size, even without a running app.Run() loop
 	st := NewSessionsTable(app, client)
 	st.Init(t.Context())
 

@@ -59,9 +59,15 @@ type ipcRequest struct {
 }
 
 type ipcResponse struct {
-	OK    bool            `json:"ok"`
-	Error string          `json:"error,omitempty"`
-	Data  json.RawMessage `json:"data,omitempty"`
+	OK    bool   `json:"ok"`
+	Error string `json:"error,omitempty"`
+	// Code carries the failure's ncli error code (see cli/common) across
+	// the socket, since an error itself does not survive the trip --
+	// without it every daemon-side failure reaches the CLI as a bare
+	// string and gets reported as invalid_input, whatever it was.
+	// Optional, so a mismatched daemon/CLI pair still talks.
+	Code common.ErrorCode `json:"code,omitempty"`
+	Data json.RawMessage  `json:"data,omitempty"`
 }
 
 // Listen creates the control socket at path: 0700 parent directory, 0600
@@ -243,7 +249,7 @@ func (s *Server) dispatch(req ipcRequest) ipcResponse {
 // alongside a separately-obtained err.
 func result(v any, err error) ipcResponse {
 	if err != nil {
-		return ipcResponse{Error: err.Error()}
+		return ipcResponse{Error: err.Error(), Code: errorCode(err)}
 	}
 	data, mErr := json.Marshal(v)
 	if mErr != nil {

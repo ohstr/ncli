@@ -283,7 +283,7 @@ func (a *App) ShowOverlay(key string, prim tview.Primitive, focus tview.Primitiv
 // cli/bunker's overlaySpacer, which exists specifically because that
 // margin-filling approach was found not to hold up under a board's real
 // concurrent redraw traffic). Callers compute and apply prim's own rect
-// themselves first (see cli/bunker's positionedOverlayRect), since this
+// themselves first (see cli/bunker's positionedOverlayRect* helpers), since this
 // package has no fixed opinion on a dialog's size/shape.
 func (a *App) ShowPositionedOverlay(key string, prim tview.Primitive, focus tview.Primitive) {
 	a.pages.AddPage(key, prim, false, true)

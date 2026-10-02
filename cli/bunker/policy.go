@@ -327,6 +327,18 @@ func (s *Store) Pair(pubkey, appName, appURL string) error {
 	return s.saveLocked()
 }
 
+// IsPaired reports whether pubkey has a session at all -- distinct from
+// having any particular grant. Handler uses it to answer the session
+// management methods (switch_relays, logout) for a client that has
+// actually paired, without consulting the grant table those methods have
+// no entry in.
+func (s *Store) IsPaired(pubkey string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, ok := s.byPub[pubkey]
+	return ok
+}
+
 // Remember persists grant for pubkey, appending to any existing grants for
 // that app. Replaces an existing grant with the identical (Method, Kind)
 // scope, if any, rather than accumulating duplicates that would otherwise

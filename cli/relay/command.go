@@ -95,6 +95,7 @@ type RelayConfig struct {
 	Cache      *CacheConfig      `mapstructure:"cache"`
 	Pow        *PowConfig        `mapstructure:"pow"`
 	Membership *MembershipConfig `mapstructure:"membership"`
+	Nip86      *Nip86Config      `mapstructure:"nip86"`
 	AgentAuth  *AgentAuthConfig  `mapstructure:"agent_auth"`
 	Huddle     *HuddleConfig     `mapstructure:"huddle"`
 
@@ -205,6 +206,33 @@ type MembershipConfig struct {
 	// Join/Leave Request, in addition to updating its own internal
 	// membership store (which is authoritative either way).
 	PublishAddRemoveEvents bool `mapstructure:"publishAddRemoveEvents"`
+}
+
+// Nip86Config configures NIP-86, the Relay Management API: membership
+// administration over HTTP on the relay's own URL, so a host's app can add or
+// remove a guest and mint an invite code without a terminal. Omitting the
+// `nip86:` block leaves it off.
+type Nip86Config struct {
+	// Enabled serves the API for requests to the relay URL carrying
+	// Content-Type: application/nostr+json+rpc. The WebSocket upgrade and the
+	// NIP-11 document on that same URL are unaffected.
+	//
+	// Requires membership.enabled: every method it exposes administers NIP-43
+	// membership, so without it there would be nothing to administer.
+	Enabled bool `mapstructure:"enabled"`
+
+	// Admins are the hex pubkeys allowed to call it, in addition to
+	// nip11.pubkey (which is always allowed, so an existing operator keeps
+	// working). This is the point of the block: the relay's own key is
+	// otherwise the only admin identity, and administering from an app would
+	// mean carrying the relay's secret key on a phone.
+	Admins []string `mapstructure:"admins"`
+
+	// AllowedOrigins is the CORS allowlist for browser callers. Empty answers
+	// any origin, which is safe here because authorization is a signed NIP-98
+	// header rather than a cookie, so a hostile page gains nothing from being
+	// allowed to send the request.
+	AllowedOrigins []string `mapstructure:"allowedOrigins"`
 }
 
 // AgentAuthConfig configures NIP-AA: an agent key presenting a valid
@@ -343,6 +371,9 @@ func initConfig() error {
 			return err
 		}
 		if err := checkHuddleDuration("huddle.pingInterval", config.Huddle.PingInterval); err != nil {
+			return err
+		}
+		if _, _, err := parseUDPPortRange(config.Huddle.UDPPortRange); err != nil {
 			return err
 		}
 	}

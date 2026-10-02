@@ -65,7 +65,7 @@ func (c *ipcClient) call(req ipcRequest) (json.RawMessage, error) {
 		return nil, err
 	}
 	if !resp.OK {
-		return nil, errors.New(resp.Error)
+		return nil, codedError{code: resp.Code, msg: resp.Error}
 	}
 	return resp.Data, nil
 }

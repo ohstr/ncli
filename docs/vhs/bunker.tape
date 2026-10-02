@@ -133,7 +133,7 @@ Sleep 2000ms
 Enter
 Sleep 2000ms
 
-Type@1ms "nostrconnect://61ffd6c45416a60c586decb4e69a5bd5df553ec1a0c1f18b8d1bf71181c5182a?metadata=%7B%22name%22%3A%22Demo+App%22%2C%22url%22%3A%22https%3A%2F%2Fncli.dev%22%2C%22description%22%3A%22ncli+bunker+VHS+demo%22%7D&relay=wss%3A%2F%2Frelay.ohstr.com&secret=1f1c2d205d715375f192c87468490d82"
+Type@1ms "nostrconnect://61ffd6c45416a60c586decb4e69a5bd5df553ec1a0c1f18b8d1bf71181c5182a?name=Demo+App&relay=wss%3A%2F%2Frelay.ohstr.com&secret=1f1c2d205d715375f192c87468490d82&url=https%3A%2F%2Fncli.dev"
 Sleep 2000ms
 Tab
 Sleep 2000ms

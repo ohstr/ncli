@@ -56,17 +56,30 @@ still works and the status line says "watching only".`,
 
 func newJoinCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "join <room>",
+		Use:   "join <room|space>",
 		Short: "Join a huddle and watch who is talking",
-		Long: `Authenticate to the relay over NIP-42, join <room>, and open the roster view.
+		Long: `Authenticate to the relay over NIP-42, join the call, and open the roster view.
+
+The argument is either a transport room id ("standup") or a NIP-53 activity --
+an naddr, or a bare 30312:<pubkey>:<d> space or 30313:<pubkey>:<d> session
+coordinate. Given an activity, the space is looked up to find which relay and
+room to dial, and the conversation (kind:1311) is opened alongside the roster.
+
+Chat needs an activity. A kind:1311 message MUST name the activity it belongs
+to, and a bare room id is not an addressable event, so joining by room id
+gives the roster only -- there would be nothing valid to tag a message with.
 
 Ctrl+C (or q) asks before leaving, so a stray keystroke does not drop the
 call.`,
+		Example: `  ncli huddle join standup --relay wss://relay.example
+  ncli huddle join 30312:<pubkey>:standup
+  ncli huddle join naddr1...`,
 		Args: common.ExactArgs(1),
 		RunE: runJoin,
 	}
 
 	cmd.Flags().String("relay", "", "Relay hosting the huddle (falls back to the first configured prefs relay)")
+	cmd.Flags().Bool("no-chat", false, "Join without the conversation panel, even when joining by space")
 
 	return cmd
 }
@@ -90,18 +103,56 @@ func runJoin(cmd *cobra.Command, args []string) error {
 	}
 
 	relayFlag, _ := cmd.Flags().GetString("relay")
-	relayURL, err := resolveRelay(cmd, relayFlag)
-	if err != nil {
-		return err
+
+	ctx, stop := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	// A space reference is resolved before anything is dialed: it is what says
+	// which relay and room to dial in the first place.
+	var target *joinTarget
+	ref, refErr := parseActivityRef(room)
+	switch {
+	case refErr == nil:
+		targets, err := joinTargets(relayFlag, ref)
+		if err != nil {
+			return common.InvocationError(cmd, err)
+		}
+		resolveErr := common.WithSpinner(cmd, fmt.Sprintf("Looking up %s", ref.Address()), func() error {
+			var err error
+			target, err = resolveJoinTarget(ctx, ref, targets)
+			return err
+		})
+		if resolveErr != nil {
+			if errors.Is(resolveErr, client.ErrNoReachableTargets) {
+				return common.NetworkError(cmd, room, resolveErr)
+			}
+			return common.RuntimeError(cmd, resolveErr)
+		}
+		room = target.Room
+	case errors.Is(refErr, errNotActivityRef):
+		// A plain room id, which is the original behavior: no activity, and
+		// so no chat.
+	default:
+		return common.InvalidInputError(cmd, room, refErr)
+	}
+
+	// Joining by space takes the relay from the space itself; joining by room
+	// id still honors --relay and the prefs fallback.
+	var relayURL *url.URL
+	if target != nil {
+		relayURL = target.Transport
+	} else {
+		resolved, err := resolveRelay(cmd, relayFlag)
+		if err != nil {
+			return err
+		}
+		relayURL = resolved
 	}
 
 	endpoint, err := Endpoint(relayURL, room)
 	if err != nil {
 		return common.InvalidInputError(cmd, room, err)
 	}
-
-	ctx, stop := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
 
 	// Dial before the TUI takes the terminal: a refused or unreachable relay
 	// should print one plain error line, not flash a board for an instant and
@@ -137,15 +188,42 @@ func runJoin(cmd *cobra.Command, args []string) error {
 	}
 	defer func() { _ = hc.Close() }()
 
-	return runBoard(cmd, ctx, hc, room)
+	// Chat is opened before the TUI takes the terminal, for the same reason
+	// the huddle dial is: a relay that refuses the connection should say so in
+	// one plain line. It is not fatal, though -- the call works without it.
+	var chat chatSource
+	noChat, _ := cmd.Flags().GetBool("no-chat")
+	if target != nil && !noChat {
+		cc, chatErr := dialChat(ctx, target.ChatRelay, target.Activity,
+			target.ChatRelay.String(), privKeyHex, hc.Self().Pubkey)
+		if chatErr != nil {
+			log.Warn().Err(chatErr).Str("relay", target.ChatRelay.String()).
+				Msg("joining without chat: the relay connection failed")
+		} else {
+			chat = cc
+		}
+	}
+
+	return runBoard(cmd, ctx, hc, room, chatActivityOf(target), chat)
+}
+
+// chatActivityOf is the activity chat is scoped to, or "" when there is none.
+func chatActivityOf(target *joinTarget) string {
+	if target == nil {
+		return ""
+	}
+	return target.Activity
 }
 
 // runBoard owns the TUI for as long as it is on screen. The board is cheap to
 // build (no blocking calls -- the dial already happened), so unlike
 // cli/bunker's it is constructed up front rather than behind a splash screen.
-func runBoard(cmd *cobra.Command, ctx context.Context, hc Client, room string) error {
+func runBoard(cmd *cobra.Command, ctx context.Context, hc Client, room, activity string, chat chatSource) error {
 	app := tui.NewApp().Init()
-	app.RegisterCallback(func() {}, func() {})
+	// Deliberately no RegisterCallback: there is nothing here to reload or
+	// save, and registering a reload makes tui.App capture 'r' application-
+	// wide for its Restart dialog -- which both popped a dialog over a live
+	// call and would make the letter 'r' untypable in the chat composer.
 
 	// Console logging writes to the same terminal tview is drawing on, so it has
 	// to stop for as long as the board owns the screen.
@@ -158,6 +236,11 @@ func runBoard(cmd *cobra.Command, ctx context.Context, hc Client, room string) e
 	}
 
 	board := NewBoard(app, hc, room)
+
+	// Before PlayAudio and Run, since it rebuilds the layout.
+	if chat != nil {
+		board.EnableChat(activity, chat)
+	}
 
 	// Playback is best-effort. A build without the huddleaudio tag, or a machine
 	// with no usable device, still gets the roster view -- which is the whole

@@ -1,6 +1,6 @@
 ---
 name: ncli-huddle
-description: Host and join real-time voice rooms ("huddles") on an ncli relay -- enable the relay's huddle: block (WebSocket Opus audio, plus an optional WebRTC endpoint carrying video and screen share), see which rooms are live with ncli huddle list or which NIP-53 meeting spaces (kind:30312) are open with a live session with ncli huddle spaces, then join one with ncli huddle join to watch the live roster and who is speaking. Use when setting up voice on a relay, finding out what calls are running, telling a space apart from a transport room, joining a call from the terminal, letting a browser or a buzz client into the same room, or working out why a join was refused.
+description: Host and join real-time voice rooms ("huddles") on an ncli relay -- enable the relay's huddle: block (WebSocket Opus audio, plus an optional WebRTC endpoint carrying video and screen share), see which rooms are live with ncli huddle list or which NIP-53 meeting spaces (kind:30312) are open with a live session with ncli huddle spaces, then join one with ncli huddle join to watch the live roster, see who is speaking, and chat (kind:1311, with replies and quotes) when joining by space. Use when setting up voice on a relay, finding out what calls are running, telling a space apart from a transport room, joining a call from the terminal, sending or reading in-call chat, letting a browser or a buzz client into the same room, or working out why a join was refused.
 license: Unlicense
 ---
 
@@ -91,11 +91,13 @@ A space's `service`/`endpoint` tag is what points at the transport, and
 kind:30313, each with its own `d` tag, an `a` tag back to the parent space,
 and `status` going `planned -> live -> ended`.
 
-**`ncli huddle join` takes a room id, not a space.** It does not resolve a
-30312 into a service and room -- you pass the transport id directly. Nothing
-in `ncli` publishes a 30312 or a 30313 either; `ncli relay` only validates and
-stores them (NIP-53 is declared in its NIP-11 document when huddles are on).
-To create a space, build the event and `ncli publish` it.
+`ncli huddle join` takes **either**: a room id dials the transport directly
+(roster only), while an activity is resolved through the space to find the
+relay and room, and brings chat with it.
+
+Nothing in `ncli` *publishes* a 30312 or a 30313; `ncli relay` only validates
+and stores them (NIP-53 is declared in its NIP-11 document when huddles are
+on). To create a space, build the event and `ncli publish` it.
 
 ## Listing open spaces
 
@@ -164,7 +166,24 @@ list. A relay with no `huddle:` block has no endpoint to ask, which reads as
 ncli huddle join standup --relay wss://relay.example
 ncli huddle join standup --relay ws://localhost:7777 --identity satoshi
 ncli huddle join standup                       # --relay falls back to the first configured prefs relay
+
+# By NIP-53 activity: resolves the space for the relay and room, and opens chat
+ncli huddle join 30312:<pubkey>:standup --relay wss://relay.example
+ncli huddle join naddr1...                     # relay hints come from the naddr
+ncli huddle join 30313:<pubkey>:today           # a session, resolved via its parent space
+ncli huddle join 30312:<pubkey>:standup --no-chat
 ```
+
+Given an activity, `--relay` is where the *space event* is looked up (naddr
+hints, then prefs relays, if it is omitted). Which relay and room get **dialed**
+comes from the space itself: a published `endpoint` naming a full
+`/huddle/<id>/audio` URL is taken at its word, otherwise `service` is the relay
+and the space's own `d` tag is the room id. NIP-53 does not standardize that
+mapping, so a publisher doing something else needs the room id passed directly.
+
+A `closed` space is refused; `private` is not -- it only means unadvertised, and
+holding its coordinate means someone told you deliberately. A `30313` whose
+status is `ended` is refused too.
 
 `--identity` takes the same shapes as `id sign` (vault label, nsec, npub, hex,
 nprofile, nip-05) and must resolve to a **private** key -- joining means
@@ -231,10 +250,54 @@ rather than wrap into a click.
 is no established pure-Go capture library, and the CGO-free default build rules
 out the cgo ones. Mic capture is planned behind its own `-tags huddlemic`.
 
-Consequently there is **no mute control** (there is no microphone to gate) and
-**no raise-hand** (that publishes a NIP-53 kind 10312 with a `hand` tag, which
-needs a relay connection the view is not given). Both arrive with the pieces
-they depend on, rather than shipping now as buttons that do nothing.
+Consequently there is **no mute control** -- there is no microphone to gate.
+
+**No raise-hand** either: that publishes a NIP-53 kind 10312 with a `hand`
+tag, and while the relay connection chat now brings would carry it, presence
+has its own refresh/expiry rules that are not wired up. It arrives with those,
+rather than shipping as a button that does nothing.
+
+## Chat
+
+Joining by space opens the conversation beside the roster:
+
+```
+┏━━━━━ HUDDLE standup [1] ━━━━━┓┌──────────── CHAT ─────────────
+┃   PARTICIPANT        LEVEL   ┃│ 19:26 npub1hdgw9ky6f...39qn (you)
+┃ ·  npub1hdgw9ky6f...39qn     ┃│   hello from the pty
+┃                              ┃│   ↳ 19:27 npub1klmnopqrst...uvwx
+┃                              ┃│     a threaded reply
+┃                              ┃│ <r> reply  <y> quote  <Esc> clear  <Enter> send
+┃                              ┃│ > message
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛└───────────────────────────────
+```
+
+Messages are NIP-53 **kind:1311**, scoped by an `a` tag to the activity you
+joined -- the space, or the session if you named a 30313. Keys: `Tab` cycles
+roster -> transcript -> composer, `<r>` replies to the selected message, `<y>`
+quotes it, `<Esc>` clears a pending reply/quote, `<Enter>` sends.
+
+- **Chat requires joining by space.** A 1311 message MUST name its activity,
+  and a transport room id is not an addressable event, so `join standup` gives
+  the roster only. There is no workaround -- it is what the message would be
+  tagged with.
+- **Threading is real**, not flat. A reply carries an `e` tag and is nested
+  under its parent; quotes carry `q` tags and are noted inline. A reply that
+  arrives before the message it answers sits at the root marked *"replying to a
+  message not here"* and re-nests itself once the parent shows up, because
+  relays deliver stored events in no guaranteed order. Indentation caps at four
+  levels so a deep thread cannot squeeze the text away, and a reply *cycle*
+  (which any peer can author) costs a dropped nesting, never a hung terminal.
+- **What you see is what the relay accepted.** A sent message is not echoed
+  locally; it appears when it arrives back through the subscription. If the
+  relay rejects or does not confirm it within 10s, the hint line says `not
+  sent:` with the reason rather than leaving a message that looks delivered.
+- **Backlog is the last 200 messages**, so joining mid-conversation shows what
+  was already said.
+- **`--no-chat`** joins by space without the panel.
+- The conversation uses its **own Nostr relay connection** (the space's
+  `service` URL). The audio socket cannot carry it: that one speaks Opus frames
+  and a few JSON control messages, nothing else.
 
 ## When a join is refused
 

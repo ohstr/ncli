@@ -13,6 +13,7 @@ import (
 	"github.com/ohstr/ncli/client/tui"
 	"github.com/ohstr/ncli/huddleaudio"
 	"github.com/ohstr/ncli/huddleclient"
+	"github.com/ohstr/nmilat/nip01"
 	"github.com/ohstr/nmilat/nip19"
 )
 
@@ -70,7 +71,21 @@ type Board struct {
 	// case the board is no longer listen-only.
 	audio *audioPump
 
+	// chat and chatSrc are nil unless the call was joined by its NIP-53
+	// activity -- see EnableChat.
+	chat    *chatPanel
+	chatSrc chatSource
+
 	closeOnce sync.Once
+}
+
+// chatSource is what the board needs to run a conversation: somewhere to send
+// messages and a stream of the ones that arrive. An interface so the board can
+// be driven without a relay in tests.
+type chatSource interface {
+	chatSender
+	messages() <-chan *nip01.Event
+	close()
 }
 
 // NewBoard builds the huddle board for client. room is shown in the panel
@@ -128,16 +143,59 @@ func (b *Board) PlayAudio(player huddleaudio.Player) {
 	b.audio = newAudioPump(player)
 }
 
-// Childs gives the board's focusable panels to tui.App's Tab cycling. Only the
-// table is focusable -- the status line is a readout.
+// EnableChat gives the board a conversation panel for activity, the NIP-53
+// coordinate messages are scoped to. Call it before Run; the board takes
+// ownership of src and closes it on Leave.
+//
+// Chat is not available when a call is joined by bare room id: a kind:1311
+// message MUST carry an "a" tag naming its activity, and a transport room id
+// is not an addressable event -- there is nothing valid to put there. Joining
+// by space is what supplies one.
+func (b *Board) EnableChat(activity string, src chatSource) {
+	b.chatSrc = src
+	b.chat = newChatPanel(b.app, newChatLog(activity), src)
+
+	// The roster is bounded (occupancy is capped) while a conversation grows,
+	// so chat takes the larger share of the width.
+	body := tview.NewFlex().
+		AddItem(b.panel, 0, 1, true).
+		AddItem(b.chat, 0, 2, false)
+
+	b.Flex.Clear()
+	b.Flex.AddItem(body, 0, 1, true).AddItem(b.status, 1, 0, false)
+}
+
+// Childs gives the board's focusable panels to tui.App's Tab cycling. The
+// status line is a readout and never focusable; the chat transcript and
+// composer join the cycle only when chat is on.
 func (b *Board) Childs() []tview.Primitive {
-	return []tview.Primitive{b.table}
+	childs := []tview.Primitive{b.table}
+	if b.chat != nil {
+		childs = append(childs, b.chat.childs()...)
+	}
+	return childs
 }
 
 // FooterHints reports the keys this board actually honors. Leaving is offered
 // under both <q> and Ctrl+C because Ctrl+C is what a terminal user reaches for
 // to get out, and HandleCtrlC turns it into the same confirmed leave.
-func (b *Board) FooterHints(tview.Primitive) string {
+func (b *Board) FooterHints(focused tview.Primitive) string {
+	// The composer swallows plain runes, so advertising <q> while it has
+	// focus would be telling someone that typing "q" hangs up -- it does not.
+	if b.chat != nil && focused == b.chat.input {
+		return fmt.Sprintf("[%s:-:b]<Tab> [%s:-:-]Panel   [%s:-:b]<Enter> [%s:-:-]Send   [%s:-:b]<Esc> [%s:-:-]Cancel   [%s:-:b]<Ctrl+C> [%s:-:-]Leave",
+			tui.ColorAccent, tui.ColorMuted,
+			tui.ColorAccent, tui.ColorMuted,
+			tui.ColorAccent, tui.ColorMuted,
+			tui.ColorAccent, tui.ColorMuted)
+	}
+	if b.chat != nil && focused == b.chat.table {
+		return fmt.Sprintf("[%s:-:b]<Tab> [%s:-:-]Panel   [%s:-:b]<r> [%s:-:-]Reply   [%s:-:b]<y> [%s:-:-]Quote   [%s:-:b]<q> [%s:-:-]Leave",
+			tui.ColorAccent, tui.ColorMuted,
+			tui.ColorAccent, tui.ColorMuted,
+			tui.ColorAccent, tui.ColorMuted,
+			tui.ColorAccent, tui.ColorMuted)
+	}
 	return fmt.Sprintf("[%s:-:b]<Tab> [%s:-:-]Panel   [%s:-:b]<q> [%s:-:-]Leave   [%s:-:b]<Ctrl+C> [%s:-:-]Leave",
 		tui.ColorAccent, tui.ColorMuted,
 		tui.ColorAccent, tui.ColorMuted,
@@ -185,6 +243,9 @@ func (b *Board) Leave() {
 		if b.audio != nil {
 			b.audio.close()
 		}
+		if b.chatSrc != nil {
+			b.chatSrc.close()
+		}
 	})
 	if b.app != nil {
 		b.app.Stop()
@@ -203,11 +264,29 @@ func (b *Board) Run(ctx context.Context) {
 		go b.audio.run(ctx)
 	}
 
+	// A nil channel blocks forever in a select, which is exactly what is
+	// wanted when chat is off: one loop, no second code path.
+	var chatMessages <-chan *nip01.Event
+	if b.chatSrc != nil {
+		chatMessages = b.chatSrc.messages()
+	}
+
 	frames := b.client.Frames()
 	for {
 		select {
 		case <-ctx.Done():
 			return
+
+		case event, ok := <-chatMessages:
+			if !ok {
+				// The relay connection is gone. The call itself is still
+				// fine, so this only stops chat updating.
+				chatMessages = nil
+				continue
+			}
+			if b.chat != nil && b.chat.log.add(event) {
+				b.queueDraw(b.chat.render)
+			}
 
 		case frame, ok := <-frames:
 			if !ok {
@@ -230,7 +309,14 @@ func (b *Board) Run(ctx context.Context) {
 				}
 			}
 			rows := b.roster.participants()
-			b.queueDraw(func() { b.render(rows) })
+			b.queueDraw(func() {
+				b.render(rows)
+				if b.chat != nil {
+					// Cheap when nothing moved; this is what rewraps the
+					// transcript after a terminal resize.
+					b.chat.refresh()
+				}
+			})
 		}
 	}
 }

@@ -1,6 +1,6 @@
 ---
 name: ncli-huddle
-description: Host and join real-time voice rooms ("huddles") on an ncli relay -- enable the relay's huddle: block (WebSocket Opus audio, plus an optional WebRTC endpoint carrying video and screen share), then join a room with ncli huddle join to watch the live roster and who is speaking. Use when setting up voice on a relay, joining a call from the terminal, letting a browser or a buzz client into the same room, or working out why a join was refused.
+description: Host and join real-time voice rooms ("huddles") on an ncli relay -- enable the relay's huddle: block (WebSocket Opus audio, plus an optional WebRTC endpoint carrying video and screen share), see which rooms are live with ncli huddle list, then join one with ncli huddle join to watch the live roster and who is speaking. Use when setting up voice on a relay, finding out what calls are running, joining a call from the terminal, letting a browser or a buzz client into the same room, or working out why a join was refused.
 license: Unlicense
 ---
 
@@ -72,6 +72,39 @@ Things that bite:
   the signalling socket. Without a pinned range the OS picks ephemeral ports,
   which no `-p` covers, so the call connects as far as signalling and then no
   audio arrives. Publish the same range as UDP (`-p 21600-21650:21600-21650/udp`).
+
+## Finding a live room
+
+```sh
+ncli huddle list --relay wss://relay.example
+ncli huddle list --relay ws://localhost:7777 --identity satoshi   # members-only relay
+ncli huddle list --relay wss://relay.example --json
+```
+
+```
+ROOM     PEERS  PROTOCOL
+standup  1      v3
+```
+
+Rooms are **created on join and dropped when the last peer leaves**, so this
+is every room that exists -- there is no durable list, and a room nobody is in
+is not a room. Nothing ended or empty is ever listed. `(no live huddles)` in
+text mode, `{"rooms":[]}` under `--json` (an array, never `null`).
+
+This is worth running first because **a room id is otherwise pure out-of-band
+knowledge**: `join` on an id nobody is using opens that room rather than
+failing, so a typo puts you alone in a new call with no error to warn you.
+
+`PROTOCOL` is the version the room was pinned to by whoever opened it. A build
+speaking anything else is refused with `upgrade_required`, so a mismatch in
+this column is the reason a join will fail.
+
+An identity is only needed when the relay sets `requireMembership: true`. The
+list is gated exactly like a join -- it is the set of rooms you could already
+walk into, so it is open on an open relay and members-only on a closed one.
+Unsigned against a closed relay is an `auth` failure (exit 7), not an empty
+list. A relay with no `huddle:` block has no endpoint to ask, which reads as
+`has no huddle endpoint: the relay is not running with huddles enabled`.
 
 ## Joining from the terminal
 

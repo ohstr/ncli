@@ -48,6 +48,7 @@ still works and the status line says "watching only".`,
 	cmd.PersistentFlags().String("identity", "", "Identity to authenticate with -- vault label, nsec, npub, hex, nprofile, or nip-05")
 
 	cmd.AddCommand(newJoinCommand())
+	cmd.AddCommand(newListCommand())
 
 	return cmd
 }

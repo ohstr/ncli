@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.9.0-rc.1]
+
+### Added
+
+- `ncli huddle list` shows which huddles are live on a relay right now, with
+  each room's peer count and the protocol version it is pinned to. A room id
+  was otherwise out-of-band knowledge, and `huddle join` on an unused id opens
+  that room rather than failing -- so a typo put you alone in a new call with
+  nothing to warn you. Backed by a new `GET /huddle/rooms`, gated exactly like
+  a join: open on an open relay, members-only where `huddle.requireMembership`
+  is set. Rooms exist only while occupied, so nothing ended or empty is listed.
+
 ## [0.8.0-rc.1]
 
 ### Added

@@ -161,8 +161,8 @@ func (b *Board) EnableChat(activity string, src chatSource) {
 		AddItem(b.panel, 0, 1, true).
 		AddItem(b.chat, 0, 2, false)
 
-	b.Flex.Clear()
-	b.Flex.AddItem(body, 0, 1, true).AddItem(b.status, 1, 0, false)
+	b.Clear()
+	b.AddItem(body, 0, 1, true).AddItem(b.status, 1, 0, false)
 }
 
 // Childs gives the board's focusable panels to tui.App's Tab cycling. The

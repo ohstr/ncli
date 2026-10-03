@@ -90,11 +90,11 @@ func newChatPanel(app *tui.App, log *chatLog, sender chatSender) *chatPanel {
 		AddItem(p.table, 0, 1, false).
 		AddItem(p.hint, 1, 0, false).
 		AddItem(p.input, 1, 0, false)
-	p.Flex.SetBorder(true).
+	p.SetBorder(true).
 		SetTitle(" CHAT ").
 		SetTitleColor(tui.ColorPrimary)
-	tui.WireFocusBorder(p.table, p.Flex.Box)
-	tui.WireFocusBorder(p.input, p.Flex.Box)
+	tui.WireFocusBorder(p.table, p.Box)
+	tui.WireFocusBorder(p.input, p.Box)
 
 	p.render()
 	return p

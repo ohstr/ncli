@@ -1,6 +1,6 @@
 ---
 name: ncli-huddle
-description: Host and join real-time voice rooms ("huddles") on an ncli relay -- enable the relay's huddle: block (WebSocket Opus audio, plus an optional WebRTC endpoint carrying video and screen share), then join a room with ncli huddle join to watch the live roster and who is speaking. Use when setting up voice on a relay, joining a call from the terminal, letting a browser or a buzz client into the same room, or working out why a join was refused.
+description: Host and join real-time voice rooms ("huddles") on an ncli relay -- enable the relay's huddle: block (WebSocket Opus audio, plus an optional WebRTC endpoint carrying video and screen share), see which rooms are live with ncli huddle list or which NIP-53 meeting spaces (kind:30312) are open with a live session with ncli huddle spaces, then join one with ncli huddle join to watch the live roster, see who is speaking, and chat (kind:1311, with replies and quotes) when joining by space. Use when setting up voice on a relay, finding out what calls are running, telling a space apart from a transport room, joining a call from the terminal, sending or reading in-call chat, letting a browser or a buzz client into the same room, or working out why a join was refused.
 license: Unlicense
 ---
 
@@ -73,13 +73,117 @@ Things that bite:
   which no `-p` covers, so the call connects as far as signalling and then no
   audio arrives. Publish the same range as UDP (`-p 21600-21650:21600-21650/udp`).
 
+## Spaces vs. rooms
+
+Two different things, two different ids. Mixing them up is the easiest
+mistake here:
+
+| | **Space** (NIP-53 kind:30312) | **Room** (huddle transport) |
+|---|---|---|
+| What it is | a published event describing where a meeting lives and who hosts it | the live audio channel itself |
+| Its id | the `d` tag; addressable as `30312:<pubkey>:<d>` | a path segment in `/huddle/{id}/audio` |
+| Lifetime | durable -- it exists until replaced or closed | only while occupied; gone when the last peer leaves |
+| Who assigns it | the author picks it; unique per `(kind, pubkey, d)` | whoever joins first; unique by string within one relay |
+| Listed by | `ncli huddle spaces` | `ncli huddle list` |
+
+A space's `service`/`endpoint` tag is what points at the transport, and
+`status` is `open` / `private` / `closed`. Sessions inside a space are
+kind:30313, each with its own `d` tag, an `a` tag back to the parent space,
+and `status` going `planned -> live -> ended`.
+
+`ncli huddle join` takes **either**: a room id dials the transport directly
+(roster only), while an activity is resolved through the space to find the
+relay and room, and brings chat with it.
+
+Nothing in `ncli` *publishes* a 30312 or a 30313; `ncli relay` only validates
+and stores them (NIP-53 is declared in its NIP-11 document when huddles are
+on). To create a space, build the event and `ncli publish` it.
+
+## Listing open spaces
+
+```sh
+ncli huddle spaces
+ncli huddle spaces -s wss://relay.example
+ncli huddle spaces -s wss://relay.example --stale-after 15m
+```
+
+```
+SPACE    ROOM     SESSION        PEERS  SERVICE
+standup  Standup  Daily standup  3      ws://localhost:5599
+```
+
+Reports only spaces whose `status` is `open` **and** that have a live session.
+Excluded: a `private` or `closed` space, a session that is `ended` or still
+`planned`, and -- importantly -- a session claiming `live` whose event has not
+been refreshed within `--stale-after` (default 1h).
+
+That last rule is why a host whose process died does not leave a meeting that
+looks forever in progress: the spec allows a client to read an un-refreshed
+`live` event as ended, and this does. Widen `--stale-after` to see them anyway.
+
+Because 30312/30313 are replaceable, the newest copy of each
+`(kind, pubkey, d)` wins -- a stale copy from one relay beside a fresh one
+from another is normal, so arrival order is never trusted. `--json` carries
+the full `address`, `endpoint` and session list; text mode prints one row per
+live session.
+
+## Finding a live room
+
+```sh
+ncli huddle list --relay wss://relay.example
+ncli huddle list --relay ws://localhost:7777 --identity satoshi   # members-only relay
+ncli huddle list --relay wss://relay.example --json
+```
+
+```
+ROOM     PEERS  PROTOCOL
+standup  1      v3
+```
+
+Rooms are **created on join and dropped when the last peer leaves**, so this
+is every room that exists -- there is no durable list, and a room nobody is in
+is not a room. Nothing ended or empty is ever listed. `(no live huddles)` in
+text mode, `{"rooms":[]}` under `--json` (an array, never `null`).
+
+This is worth running first because **a room id is otherwise pure out-of-band
+knowledge**: `join` on an id nobody is using opens that room rather than
+failing, so a typo puts you alone in a new call with no error to warn you.
+
+`PROTOCOL` is the version the room was pinned to by whoever opened it. A build
+speaking anything else is refused with `upgrade_required`, so a mismatch in
+this column is the reason a join will fail.
+
+An identity is only needed when the relay sets `requireMembership: true`. The
+list is gated exactly like a join -- it is the set of rooms you could already
+walk into, so it is open on an open relay and members-only on a closed one.
+Unsigned against a closed relay is an `auth` failure (exit 7), not an empty
+list. A relay with no `huddle:` block has no endpoint to ask, which reads as
+`has no huddle endpoint: the relay is not running with huddles enabled`.
+
 ## Joining from the terminal
 
 ```sh
 ncli huddle join standup --relay wss://relay.example
 ncli huddle join standup --relay ws://localhost:7777 --identity satoshi
 ncli huddle join standup                       # --relay falls back to the first configured prefs relay
+
+# By NIP-53 activity: resolves the space for the relay and room, and opens chat
+ncli huddle join 30312:<pubkey>:standup --relay wss://relay.example
+ncli huddle join naddr1...                     # relay hints come from the naddr
+ncli huddle join 30313:<pubkey>:today           # a session, resolved via its parent space
+ncli huddle join 30312:<pubkey>:standup --no-chat
 ```
+
+Given an activity, `--relay` is where the *space event* is looked up (naddr
+hints, then prefs relays, if it is omitted). Which relay and room get **dialed**
+comes from the space itself: a published `endpoint` naming a full
+`/huddle/<id>/audio` URL is taken at its word, otherwise `service` is the relay
+and the space's own `d` tag is the room id. NIP-53 does not standardize that
+mapping, so a publisher doing something else needs the room id passed directly.
+
+A `closed` space is refused; `private` is not -- it only means unadvertised, and
+holding its coordinate means someone told you deliberately. A `30313` whose
+status is `ended` is refused too.
 
 `--identity` takes the same shapes as `id sign` (vault label, nsec, npub, hex,
 nprofile, nip-05) and must resolve to a **private** key -- joining means
@@ -146,10 +250,54 @@ rather than wrap into a click.
 is no established pure-Go capture library, and the CGO-free default build rules
 out the cgo ones. Mic capture is planned behind its own `-tags huddlemic`.
 
-Consequently there is **no mute control** (there is no microphone to gate) and
-**no raise-hand** (that publishes a NIP-53 kind 10312 with a `hand` tag, which
-needs a relay connection the view is not given). Both arrive with the pieces
-they depend on, rather than shipping now as buttons that do nothing.
+Consequently there is **no mute control** -- there is no microphone to gate.
+
+**No raise-hand** either: that publishes a NIP-53 kind 10312 with a `hand`
+tag, and while the relay connection chat now brings would carry it, presence
+has its own refresh/expiry rules that are not wired up. It arrives with those,
+rather than shipping as a button that does nothing.
+
+## Chat
+
+Joining by space opens the conversation beside the roster:
+
+```
+┏━━━━━ HUDDLE standup [1] ━━━━━┓┌──────────── CHAT ─────────────
+┃   PARTICIPANT        LEVEL   ┃│ 19:26 npub1hdgw9ky6f...39qn (you)
+┃ ·  npub1hdgw9ky6f...39qn     ┃│   hello from the pty
+┃                              ┃│   ↳ 19:27 npub1klmnopqrst...uvwx
+┃                              ┃│     a threaded reply
+┃                              ┃│ <r> reply  <y> quote  <Esc> clear  <Enter> send
+┃                              ┃│ > message
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛└───────────────────────────────
+```
+
+Messages are NIP-53 **kind:1311**, scoped by an `a` tag to the activity you
+joined -- the space, or the session if you named a 30313. Keys: `Tab` cycles
+roster -> transcript -> composer, `<r>` replies to the selected message, `<y>`
+quotes it, `<Esc>` clears a pending reply/quote, `<Enter>` sends.
+
+- **Chat requires joining by space.** A 1311 message MUST name its activity,
+  and a transport room id is not an addressable event, so `join standup` gives
+  the roster only. There is no workaround -- it is what the message would be
+  tagged with.
+- **Threading is real**, not flat. A reply carries an `e` tag and is nested
+  under its parent; quotes carry `q` tags and are noted inline. A reply that
+  arrives before the message it answers sits at the root marked *"replying to a
+  message not here"* and re-nests itself once the parent shows up, because
+  relays deliver stored events in no guaranteed order. Indentation caps at four
+  levels so a deep thread cannot squeeze the text away, and a reply *cycle*
+  (which any peer can author) costs a dropped nesting, never a hung terminal.
+- **What you see is what the relay accepted.** A sent message is not echoed
+  locally; it appears when it arrives back through the subscription. If the
+  relay rejects or does not confirm it within 10s, the hint line says `not
+  sent:` with the reason rather than leaving a message that looks delivered.
+- **Backlog is the last 200 messages**, so joining mid-conversation shows what
+  was already said.
+- **`--no-chat`** joins by space without the panel.
+- The conversation uses its **own Nostr relay connection** (the space's
+  `service` URL). The audio socket cannot carry it: that one speaks Opus frames
+  and a few JSON control messages, nothing else.
 
 ## When a join is refused
 

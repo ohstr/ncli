@@ -1,5 +1,44 @@
 # Changelog
 
+## [0.9.0-rc.1]
+
+### Added
+
+- `ncli huddle list` shows which huddles are live on a relay right now, with
+  each room's peer count and the protocol version it is pinned to. A room id
+  was otherwise out-of-band knowledge, and `huddle join` on an unused id opens
+  that room rather than failing -- so a typo put you alone in a new call with
+  nothing to warn you. Backed by a new `GET /huddle/rooms`, gated exactly like
+  a join: open on an open relay, members-only where `huddle.requireMembership`
+  is set. Rooms exist only while occupied, so nothing ended or empty is
+  listed. (#87)
+- `ncli huddle spaces` lists the NIP-53 meeting spaces (kind:30312) that are
+  `open` and have a live kind:30313 session. A space is the published,
+  addressable `30312:<pubkey>:<d>` record of where a meeting lives; the room
+  `huddle list` reports is the ephemeral transport underneath it, and the two
+  were previously indistinguishable from the CLI. A session claiming `live`
+  whose event has not been refreshed within `--stale-after` (default 1h) reads
+  as ended, so a host whose process died leaves no meeting that looks forever
+  in progress. (#87)
+- `ncli huddle join` accepts a NIP-53 activity as well as a room id -- an
+  naddr, or a `30312:<pubkey>:<d>` space or `30313:<pubkey>:<d>` session
+  coordinate. The space is resolved to find which relay and room to dial, so a
+  room id no longer has to be known out of band. (#87)
+- In-call chat. Joining by activity opens the kind:1311 conversation beside the
+  roster, with threaded replies (`e` tags, `<r>`), quotes (`q` tags, `<y>`) and
+  the last 200 messages as backlog. A reply that arrives before its parent
+  re-nests once the parent does; indentation is capped and reply cycles are
+  survivable. `--no-chat` omits the panel. Chat needs an activity: a 1311
+  message must name one, and a transport room id is not an addressable event,
+  so joining by room id is still roster-only. (#87)
+
+### Fixed
+
+- `ncli huddle join` no longer registers a reload callback, which made
+  `tui.App` capture `r` application-wide: pressing it over a live call popped a
+  "Restart?" dialog wired to nothing, and it would have made `r` untypable in
+  the chat composer. (#87)
+
 ## [0.8.0-rc.1]
 
 ### Added

@@ -26,7 +26,9 @@ that priority order.
 | `ncli bunker attach/status/stop/sessions/connect` | Reattach to, query, stop, or pair a running bunker daemon without opening the TUI |
 | `ncli blossom upload/download/list/rm/mirror/report` | Client for the Blossom protocol (BUD-01..12): content-addressed blob storage authenticated with a Nostr identity |
 | `ncli blossom servers add/remove/list/discover` | Manage the default Blossom server list, optionally publishing/discovering it as a signed kind:10063 (BUD-03) event |
-| `ncli huddle join <room>` | Join a relay's voice room and watch the live roster and who is speaking; plays the call in a `-tags huddleaudio` build (never captures a microphone) |
+| `ncli huddle join <room\|space>` | Join a relay's voice room and watch the live roster and who is speaking; plays the call in a `-tags huddleaudio` build (never captures a microphone). Given a NIP-53 activity instead of a room id (naddr, or a `30312:`/`30313:` coordinate) it resolves the space to find the relay and room, and opens the kind:1311 conversation beside the roster — reply with `<r>`, quote with `<y>`, or `--no-chat` to omit it. Chat needs an activity: a 1311 message must name one, and a bare room id is not an addressable event |
+| `ncli huddle list` | List the rooms that currently have someone in them, with peer count and the protocol version each is pinned to — a room id is otherwise out-of-band knowledge, and `join` on an unused one opens it rather than failing |
+| `ncli huddle spaces` | List NIP-53 meeting spaces (kind:30312) that are `open` and have a live kind:30313 session, treating an un-refreshed `live` session as ended. A *space* is a published, addressable `30312:<pubkey>:<d>` record of where a meeting lives; a *room* (above) is the ephemeral transport it runs over |
 | `ncli id [identifier]` | Generate or inspect a Nostr keypair (local vault) |
 | `ncli id delegate` | Mint a NIP-26 delegation token |
 | `ncli id sign -e <events.json> -o <signed.json>` | Sign one or more unsigned events with a vault/nsec identity |
@@ -47,9 +49,10 @@ parser never picks up log noise. `--json` and `-q/--quiet` are global flags
 (declared once on the root command, available on every subcommand) rather
 than per-command. `id`, `id list`, `id sign`, `version`, `id delegate`, `relay
 stats`/`reindex`/`clear`, `relay members`/`invites`/`roles`, `ping`,
-`miner mine`/`check`, `publish`, and `prefs relays add`/`remove`/`list`/
-`clear`/`prefs path` are human-readable text by default and switch their
-*success* output to structured JSON on stdout with `--json`. `find` has no
+`miner mine`/`check`, `publish`, `huddle list`/`spaces`, and `prefs relays add`/
+`remove`/`list`/`clear`/`prefs path` are human-readable text by default
+and switch their *success* output to structured JSON on stdout with
+`--json`. `find` has no
 separate success-mode toggle because it's JSON-only always, and its stdout
 is guaranteed to be exactly one JSON array on every successful run — `[]`
 when nothing matched, never bare `null` and never empty output — so a

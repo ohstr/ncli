@@ -142,6 +142,12 @@ func registerHuddleRoutes(mux *http.ServeMux, wsHandler *relay.SessionHandler, c
 	}
 
 	mux.Handle("/huddle/{id}/audio", wsaudio.NewHandler(handlerConfig))
+
+	// Discovery for `ncli huddle list`. A room id is otherwise pure
+	// out-of-band knowledge, and a typo silently opens an empty room rather
+	// than failing, so a joiner needs a way to see what is actually live.
+	mux.Handle("GET /huddle/rooms", huddleRoomsHandler(rooms, handlerConfig.Authorize))
+
 	log.Info().
 		Bool("requireMembership", cfg.RequireMembership).
 		Int("maxRooms", cfg.MaxRooms).

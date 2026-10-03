@@ -12,6 +12,14 @@
   a join: open on an open relay, members-only where `huddle.requireMembership`
   is set. Rooms exist only while occupied, so nothing ended or empty is
   listed. (#87)
+- `ncli huddle spaces` lists the NIP-53 meeting spaces (kind:30312) that are
+  `open` and have a live kind:30313 session. A space is the published,
+  addressable `30312:<pubkey>:<d>` record of where a meeting lives; the room
+  `huddle list` reports is the ephemeral transport underneath it, and the two
+  were previously indistinguishable from the CLI. A session claiming `live`
+  whose event has not been refreshed within `--stale-after` (default 1h) reads
+  as ended, so a host whose process died leaves no meeting that looks forever
+  in progress. (#87)
 
 ## [0.8.0-rc.1]
 

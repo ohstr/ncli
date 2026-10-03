@@ -49,6 +49,7 @@ still works and the status line says "watching only".`,
 
 	cmd.AddCommand(newJoinCommand())
 	cmd.AddCommand(newListCommand())
+	cmd.AddCommand(newSpacesCommand())
 
 	return cmd
 }

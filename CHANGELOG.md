@@ -10,7 +10,8 @@
   that room rather than failing -- so a typo put you alone in a new call with
   nothing to warn you. Backed by a new `GET /huddle/rooms`, gated exactly like
   a join: open on an open relay, members-only where `huddle.requireMembership`
-  is set. Rooms exist only while occupied, so nothing ended or empty is listed.
+  is set. Rooms exist only while occupied, so nothing ended or empty is
+  listed. (#87)
 
 ## [0.8.0-rc.1]
 

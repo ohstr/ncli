@@ -9,6 +9,7 @@
   config block (`enabled: true`). NIP-98 authenticates the caller but is not
   a membership/allowlist gate -- any validly-signed request is served, the
   same events an anonymous REQ for that filter would return over the socket.
+  (#90)
 
 ## [0.8.0-rc.2]
 

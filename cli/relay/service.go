@@ -150,6 +150,15 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 		mux.Handle("/query", relay.NewQueryHandler(store, &config.Nip11.Limitation, wsHandler.Membership()))
 	}
 
+	if eventsEnabled() {
+		// Unwrapped by adminAuth below, same reasoning as /query above: the
+		// handler does its own per-request NIP-98 check, not an
+		// admin-pubkey allowlist. wsHandler.Membership() for the same
+		// reason /query shares it -- one live membership view, not a
+		// second cache.
+		mux.Handle("/events", relay.NewEventsHandler(store, &config.Nip11.Limitation, wsHandler.Membership(), config.Nip11.Self))
+	}
+
 	// ADMIN ENDPOINTS
 	adminAuth := func(next http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {

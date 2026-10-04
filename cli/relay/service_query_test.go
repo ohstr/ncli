@@ -44,8 +44,8 @@ func bootQueryServer(t *testing.T, query *QueryConfig) string {
 	require.NoError(t, store.InsertEvents(context.Background(), []*nip01.Event{fixture}))
 
 	config = RelayConfig{
-		Nip11: nip11.Metadata{PubKey: testPubKey, PrivKey: testPrivKey},
-		Query: query,
+		Nip11:      nip11.Metadata{PubKey: testPubKey, PrivKey: testPrivKey},
+		HTTPBridge: &HTTPBridgeConfig{Query: query},
 	}
 
 	s := NewServer(store, nil)
@@ -132,8 +132,8 @@ func TestNewServer_QueryAdvertisesNIPCWWhenEnabled(t *testing.T) {
 	require.NoError(t, err)
 
 	config = RelayConfig{
-		Nip11: nip11.Metadata{PubKey: testPubKey, PrivKey: testPrivKey},
-		Query: &QueryConfig{Enabled: true},
+		Nip11:      nip11.Metadata{PubKey: testPubKey, PrivKey: testPrivKey},
+		HTTPBridge: &HTTPBridgeConfig{Query: &QueryConfig{Enabled: true}},
 	}
 
 	s := NewServer(store, nil)

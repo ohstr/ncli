@@ -142,7 +142,12 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 		// check (any validly-signed caller, not just nip86Admins()) --
 		// wrapping it here would wrongly turn an any-signer endpoint into an
 		// admin-only one. See QueryConfig's doc comment.
-		mux.Handle("/query", relay.NewQueryHandler(store))
+		//
+		// wsHandler.Membership() is passed, not a second independent
+		// MembershipService: a NIP-43 join/leave processed over the
+		// WebSocket must be visible to /query immediately, not through a
+		// separate cache of the same store that updates on its own schedule.
+		mux.Handle("/query", relay.NewQueryHandler(store, &config.Nip11.Limitation, wsHandler.Membership()))
 	}
 
 	// ADMIN ENDPOINTS

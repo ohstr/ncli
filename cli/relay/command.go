@@ -273,10 +273,14 @@ type AgentAuthConfig struct {
 // would collide with ncli's own existing vocabulary, not just nmilat's.
 type QueryConfig struct {
 	// Enabled mounts the handler at /query. NIP-98 authenticates every
-	// request (proves identity and binds it to this body/method/URL) but is
-	// not a membership/allowlist gate -- any validly-signed caller is served,
-	// the same results an anonymous REQ for the same filter would return
-	// over the WebSocket. It does not require membership.enabled.
+	// request (proves identity and binds it to this body/method/URL) on its
+	// own, but NIP-CW's Access Scoping section requires a plain filter
+	// through this endpoint to get the same access control an equivalent
+	// REQ would -- so when nip11.limitation.membership_required is set, a
+	// result is further gated to the NIP-98 signer's own NIP-43 membership,
+	// exactly like processRequest's REQ/COUNT check. With
+	// membership_required unset (the common case), any validly-signed
+	// caller is served, the same as an anonymous REQ would be.
 	Enabled bool `mapstructure:"enabled"`
 }
 

@@ -6,9 +6,10 @@
 
 - `ncli relay` can serve buzz's NIP-CW `POST /query` bridge, a one-shot HTTP
   alternative to a WebSocket REQ/EOSE round trip, behind a new `query:`
-  config block (`enabled: true`). NIP-98 authenticates the caller but is not
-  a membership/allowlist gate -- any validly-signed request is served, the
-  same events an anonymous REQ for that filter would return over the socket.
+  config block (`enabled: true`). NIP-98 authenticates the caller; when
+  `nip11.limitation.membership_required` is set, a result is further gated
+  to the signer's own NIP-43 membership, same as REQ/COUNT -- otherwise any
+  validly-signed request is served, the same as an anonymous REQ would be.
   (#90)
 
 ## [0.8.0-rc.2]

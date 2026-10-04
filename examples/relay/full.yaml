@@ -166,10 +166,13 @@ agent_auth:
 # endpoints above). Omitting this block leaves it unmounted.
 query:
   # NIP-98 authenticates every request -- it proves identity and binds the
-  # signature to this body/method/URL -- but is not a membership/allowlist
-  # gate: any validly-signed caller is served, independent of
-  # membership.enabled, the same results an anonymous REQ for the same
-  # filter would return over the WebSocket.
+  # signature to this body/method/URL -- on its own. But NIP-CW's Access
+  # Scoping section requires a plain filter through this endpoint to get
+  # the same access control an equivalent REQ would: with
+  # nip11.limitation.membership_required set above, a result is gated to
+  # the signer's own NIP-43 membership too, exactly like REQ/COUNT. With
+  # membership_required unset (the common case), any validly-signed caller
+  # is served, the same as an anonymous REQ would be.
   enabled: false
 
 # WebSocket connection tuning (optional, Go duration strings).

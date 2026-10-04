@@ -14,6 +14,7 @@ import (
 	"github.com/ohstr/nmilat/nip01"
 	"github.com/ohstr/nmilat/nip11"
 	"github.com/ohstr/nmilat/relay"
+	"github.com/ohstr/nmilat/utils"
 	"github.com/stretchr/testify/require"
 )
 
@@ -163,4 +164,89 @@ func TestNewServer_QueryAdvertisesNIPCWWhenEnabled(t *testing.T) {
 		}
 	}
 	require.True(t, sawCW, "supported_nips must advertise CW once query.enabled is true, so a buzz-relay client can tell the bridge is there before trying it")
+}
+
+const queryTestURL = "http://example.com/query"
+
+// TestNewServer_QueryEnforcesMembershipRequired is the end-to-end check for
+// NIP-CW's Access Scoping requirement: once nip11.limitation.
+// membership_required is set, /query must apply the same NIP-43 gate
+// processRequest's REQ/COUNT already does, keyed off the NIP-98 signer --
+// not just prove a signature and serve everyone. It wires
+// relay.NewQueryHandler the same way service.go does (store, &config.Nip11.
+// Limitation, wsHandler.Membership()) against a real membership-enabled
+// SessionHandler, so a regression in that wiring (e.g. a second,
+// independently-caching MembershipService) would fail here too.
+func TestNewServer_QueryEnforcesMembershipRequired(t *testing.T) {
+	const memberPriv = "111111111111111111111111111111111111111111111111111111111111111a"
+	const nonMemberPriv = "222222222222222222222222222222222222222222222222222222222222222b"
+
+	withTestConfig(t, false)
+	wsHandler, store := newTestWSHandler(t)
+	ctx := context.Background()
+
+	memberPub, err := utils.GetPublicKey(memberPriv)
+	require.NoError(t, err)
+	_, err = (membershipAdmin{ws: wsHandler, store: store}).addMember(ctx, memberPub, nil)
+	require.NoError(t, err)
+
+	fixture := &nip01.Event{
+		ID:        strings.Repeat("1", 64),
+		PubKey:    memberPub,
+		Kind:      1,
+		CreatedAt: uint64(time.Now().Unix()),
+		Content:   "members only",
+	}
+	require.NoError(t, store.InsertEvents(ctx, []*nip01.Event{fixture}))
+
+	handler := relay.NewQueryHandler(store, &nip11.Limitation{MembershipRequired: true}, wsHandler.Membership())
+	body := []byte(`[{"kinds":[1]}]`)
+
+	queryAs := func(t *testing.T, privKey string) *httptest.ResponseRecorder {
+		t.Helper()
+		header, err := common.GenerateNIP98Header(privKey, queryTestURL, http.MethodPost, body)
+		require.NoError(t, err)
+		req := httptest.NewRequest(http.MethodPost, "/query", strings.NewReader(string(body)))
+		req.Header.Set("Authorization", header)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		return rec
+	}
+
+	t.Run("a member is served", func(t *testing.T) {
+		rec := queryAs(t, memberPriv)
+		require.Equal(t, http.StatusOK, rec.Code)
+
+		var events []*nip01.Event
+		require.NoError(t, json.NewDecoder(rec.Body).Decode(&events))
+		require.Len(t, events, 1)
+	})
+
+	t.Run("a non-member is refused, not silently served", func(t *testing.T) {
+		rec := queryAs(t, nonMemberPriv)
+		require.Equal(t, http.StatusForbidden, rec.Code)
+	})
+}
+
+// A relay with no membership.enabled block still wires a non-nil
+// MembershipService.Membership() into NewQueryHandler (service.go always
+// passes wsHandler.Membership()), so the fail-closed path nmilat documents
+// (nil membership) is only reachable by misconfiguring nmilat directly, not
+// through ncli's own wiring -- but membership_required with membership.
+// enabled left off must still fail closed rather than silently open, since
+// there is then no record of anyone being a member at all.
+func TestNewServer_QueryMembershipRequiredFailsClosedWithNoMembers(t *testing.T) {
+	wsHandler, store := newTestWSHandler(t)
+
+	handler := relay.NewQueryHandler(store, &nip11.Limitation{MembershipRequired: true}, wsHandler.Membership())
+	body := []byte(`[{"kinds":[1]}]`)
+	header, err := common.GenerateNIP98Header(testPrivKey, queryTestURL, http.MethodPost, body)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/query", strings.NewReader(string(body)))
+	req.Header.Set("Authorization", header)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusForbidden, rec.Code)
 }

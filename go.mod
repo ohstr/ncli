@@ -95,3 +95,5 @@ require (
 	golang.org/x/sys v0.46.0
 	golang.org/x/term v0.44.0
 )
+
+replace github.com/ohstr/nmilat => /u/flzpace/xgit/orgs/ohstr/nmilat/.claude/worktrees/sdk-embedding-perf

@@ -85,7 +85,7 @@ require (
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/ebitengine/oto/v3 v3.3.3
-	github.com/ohstr/nmilat v0.5.0-rc.3.0.20261004143938-09765cf35731
+	github.com/ohstr/nmilat v0.5.0-rc.3.0.20261004153625-3e302880071b
 	github.com/pion/opus v0.1.0
 	github.com/pion/rtcp v1.2.18
 	github.com/pion/rtp v1.10.5

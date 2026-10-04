@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.8.0-rc.4]
+
+### Added
+
+- `ncli relay` mounts POST /events when `httpBridge.events.enabled` is set:
+  the write-side counterpart to the existing POST /query bridge (nmilat's
+  `relay.NewEventsHandler`), a NIP-98-authenticated HTTP alternative to
+  opening a WebSocket purely to publish one already-signed event. The buzz
+  CLI (and reactions, NIP-AM turn metrics) needs this to publish at all --
+  without it every write attempt 404s. Wired exactly like /query: unwrapped
+  by adminAuth (the handler does its own per-request NIP-98 check, not an
+  admin-pubkey allowlist), sharing `wsHandler.Membership()` rather than a
+  second independent cache. (#91)
+
+### Changed
+
+- **Breaking:** `query:`/`events:` moved under a new `httpBridge:` parent --
+  `httpBridge.query.enabled` / `httpBridge.events.enabled`. A bare root
+  `query` or `events` key names a wire path, not a concept, and gave an
+  operator skimming the config no reason to read the two together even
+  though they're the same feature's two halves. Anyone who already set the
+  bare `query:` block (shipped in #90/v0.8.0-rc.3) needs to move it under
+  `httpBridge:`; no functional change to /query's own behavior. (#91)
+- Bumped to the nmilat release carrying the NIP-98 anti-replay-nonce fix
+  (nmilat#51, the same commit that added `relay.NewEventsHandler` above)
+  and the POST /query `Limit`/same-second-pagination fix (nmilat#52). (#91)
+
 ## [0.8.0-rc.3]
 
 ### Added

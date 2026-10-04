@@ -98,7 +98,7 @@ type RelayConfig struct {
 	Nip86      *Nip86Config      `mapstructure:"nip86"`
 	AgentAuth  *AgentAuthConfig  `mapstructure:"agent_auth"`
 	Huddle     *HuddleConfig     `mapstructure:"huddle"`
-	Query      *QueryConfig      `mapstructure:"query"`
+	HTTPBridge *HTTPBridgeConfig `mapstructure:"httpBridge"`
 
 	HandshakeTimeout string `mapstructure:"handshakeTimeout"`
 	PingInterval     string `mapstructure:"pingInterval"`
@@ -260,9 +260,30 @@ type AgentAuthConfig struct {
 	KindEnforcement bool `mapstructure:"kindEnforcement"`
 }
 
+// HTTPBridgeConfig groups the NIP-98-authenticated HTTP endpoints that each
+// offer a one-shot alternative to something normally done over the
+// WebSocket connection: POST /query (a REQ/EOSE round trip) and POST
+// /events (publishing one already-signed event). A bare top-level `query:`
+// or `events:` key names a wire path, not a concept, and gives an operator
+// skimming the config no reason to read the two together even though
+// they're the same feature's two halves -- `httpBridge:` is what a REQ or
+// EVENT becomes when there's no socket to carry it.
+//
+// Config shape (was flat `query:`/`events:` before this grouping existed):
+//
+//	httpBridge:
+//	  query:
+//	    enabled: true
+//	  events:
+//	    enabled: true
+type HTTPBridgeConfig struct {
+	Query  *QueryConfig  `mapstructure:"query"`
+	Events *EventsConfig `mapstructure:"events"`
+}
+
 // QueryConfig configures the POST /query bridge: a one-shot HTTP alternative
 // to a WebSocket REQ/EOSE round trip (nmilat's relay.NewQueryHandler). Off by
-// default -- omitting the `query:` block leaves it unmounted.
+// default -- omitting the block leaves it unmounted.
 //
 // This isn't named nip98 (that's just the request-signing transport, shared
 // with the /admin endpoints above and not specific to this feature) or
@@ -281,6 +302,21 @@ type QueryConfig struct {
 	// exactly like processRequest's REQ/COUNT check. With
 	// membership_required unset (the common case), any validly-signed
 	// caller is served, the same as an anonymous REQ would be.
+	Enabled bool `mapstructure:"enabled"`
+}
+
+// EventsConfig configures the POST /events bridge: the write-side
+// counterpart to QueryConfig's POST /query (nmilat's relay.NewEventsHandler)
+// -- a NIP-98-authenticated HTTP alternative to opening a WebSocket purely
+// to publish one already-signed event. Off by default -- omitting the block
+// leaves it unmounted.
+type EventsConfig struct {
+	// Enabled mounts the handler at /events. The NIP-98 signer must match
+	// the submitted event's own pubkey (stricter than the WS EVENT path,
+	// which has no such blanket requirement) -- see
+	// relay.NewEventsHandler's doc comment. membership_required and the
+	// relay's own self-authored-kind guard are enforced exactly as they
+	// would be over WS.
 	Enabled bool `mapstructure:"enabled"`
 }
 

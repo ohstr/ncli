@@ -109,6 +109,13 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 		supportedNips = supportedNips.With(nip11.NIP(86))
 	}
 
+	if queryEnabled() {
+		// "CW" is buzz's own letter code (NIP-CW) for this bridge, not
+		// nmilat's unrelated nipcw (NIP-CASH Circle Wallet) package -- see
+		// QueryConfig's doc comment.
+		supportedNips = supportedNips.With(nip11.NIPLetter("CW"))
+	}
+
 	nip11Handler := nip11.NewHandler(&config.Nip11, supportedNips)
 
 	mux := http.NewServeMux()
@@ -129,6 +136,14 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 			wsHandler.ServeHTTP(w, r)
 		}
 	}))
+
+	if queryEnabled() {
+		// Unwrapped by adminAuth below: nmilat's handler does its own NIP-98
+		// check (any validly-signed caller, not just nip86Admins()) --
+		// wrapping it here would wrongly turn an any-signer endpoint into an
+		// admin-only one. See QueryConfig's doc comment.
+		mux.Handle("/query", relay.NewQueryHandler(store))
+	}
 
 	// ADMIN ENDPOINTS
 	adminAuth := func(next http.HandlerFunc) http.HandlerFunc {

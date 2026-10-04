@@ -98,6 +98,7 @@ type RelayConfig struct {
 	Nip86      *Nip86Config      `mapstructure:"nip86"`
 	AgentAuth  *AgentAuthConfig  `mapstructure:"agent_auth"`
 	Huddle     *HuddleConfig     `mapstructure:"huddle"`
+	Query      *QueryConfig      `mapstructure:"query"`
 
 	HandshakeTimeout string `mapstructure:"handshakeTimeout"`
 	PingInterval     string `mapstructure:"pingInterval"`
@@ -257,6 +258,26 @@ type AgentAuthConfig struct {
 	// Off by default -- per spec, kind= clauses are advisory only unless a
 	// relay opts into enforcing them.
 	KindEnforcement bool `mapstructure:"kindEnforcement"`
+}
+
+// QueryConfig configures the POST /query bridge: a one-shot HTTP alternative
+// to a WebSocket REQ/EOSE round trip (nmilat's relay.NewQueryHandler). Off by
+// default -- omitting the `query:` block leaves it unmounted.
+//
+// This isn't named nip98 (that's just the request-signing transport, shared
+// with the /admin endpoints above and not specific to this feature) or
+// nipcw/nip_cw. The underlying spec really is buzz's own NIP-CW
+// (https://github.com/block/buzz/blob/main/docs/nips/NIP-CW.md), but that
+// short name is already `ncli decode`'s name for something unrelated --
+// NIP-CASH's Circle Wallet circlehub1... connection -- so reusing it here
+// would collide with ncli's own existing vocabulary, not just nmilat's.
+type QueryConfig struct {
+	// Enabled mounts the handler at /query. NIP-98 authenticates every
+	// request (proves identity and binds it to this body/method/URL) but is
+	// not a membership/allowlist gate -- any validly-signed caller is served,
+	// the same results an anonymous REQ for the same filter would return
+	// over the WebSocket. It does not require membership.enabled.
+	Enabled bool `mapstructure:"enabled"`
 }
 
 func NewRelayCommand() *cobra.Command {

@@ -9,6 +9,7 @@ import (
 )
 
 const testPubkey = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+const testPubkey2 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 
 func newSpaceEvent(t *testing.T, pubkey, identifier, status, service string, createdAt uint64) *nip01.Event {
 	t.Helper()
@@ -127,6 +128,57 @@ func TestSelectSpaces_NewestCopyWins(t *testing.T) {
 	}
 	if got[0].Service != "wss://new.example" {
 		t.Fatalf("got[0].Service = %q, want the newer copy's %q", got[0].Service, "wss://new.example")
+	}
+}
+
+func TestSelectSpaces_SkipsUnparseableAndUnrelatedEvents(t *testing.T) {
+	malformed := nip53.NewMeetingSpace(nip53.MeetingSpaceParams{
+		Pubkey: testPubkey, Identifier: "broken", Room: "broken",
+		// Status/Service/Host provider all omitted -- ParseMeetingSpace
+		// requires each of them, so this must be skipped, not panic or
+		// abort the rest of the batch.
+	})
+	malformed.PubKey = testPubkey
+	unrelated := nip01.NewEvent(1, "just a note")
+	unrelated.PubKey = testPubkey
+
+	events := []*nip01.Event{
+		malformed,
+		unrelated,
+		newSpaceEvent(t, testPubkey, "standup", nip53.SpaceStatusOpen, "wss://relay.example", 100),
+	}
+
+	got := selectSpaces(events, time.Now(), time.Hour, false)
+	if len(got) != 1 {
+		t.Fatalf("selectSpaces() = %d spaces, want 1 (malformed/unrelated events skipped)", len(got))
+	}
+	if got[0].Identifier != "standup" {
+		t.Fatalf("got[0].Identifier = %q, want %q", got[0].Identifier, "standup")
+	}
+}
+
+func TestSelectSpaces_SessionWithNoParentSpaceIsDropped(t *testing.T) {
+	now := time.Now()
+	events := []*nip01.Event{
+		// No corresponding space event for this session at all.
+		newSessionEvent(t, testPubkey, "standup", "today", nip53.StatusLive, uint64(now.Unix())),
+	}
+
+	got := selectSpaces(events, now, time.Hour, false)
+	if len(got) != 0 {
+		t.Fatalf("selectSpaces() = %d spaces, want 0 (session has no parent space to attach to)", len(got))
+	}
+}
+
+func TestSelectSpaces_SameIdentifierFromAnotherAuthorIsAnotherSpace(t *testing.T) {
+	events := []*nip01.Event{
+		newSpaceEvent(t, testPubkey, "standup", nip53.SpaceStatusOpen, "wss://relay-a.example", 100),
+		newSpaceEvent(t, testPubkey2, "standup", nip53.SpaceStatusOpen, "wss://relay-b.example", 100),
+	}
+
+	got := selectSpaces(events, time.Now(), time.Hour, false)
+	if len(got) != 2 {
+		t.Fatalf("selectSpaces() = %d spaces, want 2 (same \"d\" tag from two different pubkeys is two spaces)", len(got))
 	}
 }
 

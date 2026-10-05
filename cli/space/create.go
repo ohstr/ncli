@@ -17,19 +17,19 @@ func newCreateCommand() *cobra.Command {
 		Long: `Publishes kind:30312. The id becomes both the space's "d" tag (its
 addressable identity, 30312:<pubkey>:<id>) and its "room" tag -- ncli's own
 convention is that --service plus that id together resolve to a huddle
-room (see "ncli huddle join"'s own docs), so there is nothing meaningful to
+room (see "ncli space join"'s own docs), so there is nothing meaningful to
 set the room tag to independently.
 
 Because id doubles as a huddle room id, it may not contain /, ?, # or % --
-the same restriction "ncli huddle join" enforces, checked here too so a
+the same restriction "ncli space join" enforces, checked here too so a
 bad id fails now rather than publishing successfully and only failing
 later at join time. A human-readable name belongs in --summary, which has
 no such restriction.
 
 --service defaults to --relay, which is what makes the space joinable with
-"ncli space join"/"ncli huddle join" afterwards. Set --service/--endpoint
-explicitly to describe a space pointing at some other meeting transport
-instead -- still a valid space, just not one ncli itself can dial.
+"ncli space join" afterwards. Set --service/--endpoint explicitly to
+describe a space pointing at some other meeting transport instead -- still
+a valid space, just not one ncli itself can dial.
 
 The signing identity is always recorded as the space's Host.`,
 		Example: `  ncli space create standup

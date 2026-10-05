@@ -38,14 +38,15 @@ func init() {
 	// own children; see NewBlossomCommand.
 	ncli.RootCmd.AddCommand(blossom.NewBlossomCommand())
 
-	// Register the huddle voice-room client ("huddle") -- mounts "join" as
-	// its own child, for joining a voice room on a relay running with
-	// huddles enabled; see NewHuddleCommand.
+	// Register the huddle voice-room client ("huddle") -- mounts "list" as
+	// its own child, for listing the ephemeral transport rooms occupied on
+	// a relay running with huddles enabled. Joining one lives under
+	// "space" instead (see below); see NewHuddleCommand.
 	ncli.RootCmd.AddCommand(huddle.NewHuddleCommand())
 
 	// Register the generic NIP-53 meeting-space command ("space") --
-	// mounts create/list/show plus huddle's own "join" (reused, not
-	// reimplemented) as its children; see NewSpaceCommand.
+	// mounts create/list/show plus huddle's own "join" (implemented in
+	// cli/huddle, mounted only here) as its children; see NewSpaceCommand.
 	ncli.RootCmd.AddCommand(space.NewSpaceCommand())
 }
 

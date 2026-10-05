@@ -54,8 +54,8 @@ func newListCommand() *cobra.Command {
 		Long: `Lists every open kind:30312 meeting space published to --relay, each row
 showing whether it currently has a live kind:30313 session -- a space is
 the persistent, durable thing worth seeing whether or not a call is
-happening in it right now, unlike "ncli huddle spaces", which only shows a
-space that has a live session.
+happening in it right now, so one with no live session is still shown,
+not filtered out.
 
 A live session claiming "live" whose event has not been refreshed within
 --stale-after is treated as ended, per the spec's allowance that clients

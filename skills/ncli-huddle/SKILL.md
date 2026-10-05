@@ -1,18 +1,27 @@
 ---
 name: ncli-huddle
-description: Host and join real-time voice rooms ("huddles") on an ncli relay -- enable the relay's huddle: block (WebSocket Opus audio, plus an optional WebRTC endpoint carrying video and screen share), see which rooms are live with ncli huddle list or which NIP-53 meeting spaces (kind:30312) are open with a live session with ncli huddle spaces, then join one with ncli huddle join to watch the live roster, see who is speaking, and chat (kind:1311, with replies and quotes) when joining by space. Use when setting up voice on a relay, finding out what calls are running, telling a space apart from a transport room, joining a call from the terminal, sending or reading in-call chat, letting a browser or a buzz client into the same room, or working out why a join was refused.
+description: Host real-time voice rooms ("huddles") on an ncli relay and list the ephemeral transport rooms currently live on one (ncli huddle list) -- enable the relay's huddle: block (WebSocket Opus audio, plus an optional WebRTC endpoint carrying video and screen share). Joining a call, watching the roster, chatting, and discovering NIP-53 spaces all moved to "ncli space" (create/list/show/join) -- see skills/ncli-space/SKILL.md for that, and read this skill for setting up the relay side, the transport-level room-listing command, the join/roster/audio/chat experience itself once joined, and how a join can be refused. Use when setting up voice on a relay, listing which rooms are occupied right now, understanding the audio/chat UI after joining, letting a browser or a buzz client into the same room, or working out why a join was refused.
 license: Unlicense
 ---
 
-<!-- Mirrors ohstr/ncli's cli/huddle/*.go and cli/relay/huddle.go as of
-writing. This skill is self-contained by design and won't see repo changes
-automatically -- update by hand if flags/behavior change. -->
+<!-- Mirrors ohstr/ncli's cli/huddle/*.go, cli/space/*.go, and
+cli/relay/huddle.go as of writing. This skill is self-contained by design
+and won't see repo changes automatically -- update by hand if
+flags/behavior change. -->
 
 # ncli huddle
 
 A huddle is a voice room hosted by the relay itself. The relay forwards
 Opus frames between participants and **never decodes them**, so it links no
 audio codec and stays pure Go.
+
+**`ncli huddle` itself now only lists rooms** (`ncli huddle list`, below).
+Joining one, and everything about NIP-53 spaces (creating, listing,
+showing), lives under `ncli space` -- see `skills/ncli-space/SKILL.md` for
+those commands. This skill still covers the relay-side setup and
+everything about the join/roster/audio/chat *experience* once you're in a
+call, since none of that changed -- only which top-level command actually
+starts it.
 
 Two doors open onto the same room:
 
@@ -84,48 +93,21 @@ mistake here:
 | Its id | the `d` tag; addressable as `30312:<pubkey>:<d>` | a path segment in `/huddle/{id}/audio` |
 | Lifetime | durable -- it exists until replaced or closed | only while occupied; gone when the last peer leaves |
 | Who assigns it | the author picks it; unique per `(kind, pubkey, d)` | whoever joins first; unique by string within one relay |
-| Listed by | `ncli huddle spaces` | `ncli huddle list` |
+| Listed by | `ncli space list` | `ncli huddle list` |
 
 A space's `service`/`endpoint` tag is what points at the transport, and
 `status` is `open` / `private` / `closed`. Sessions inside a space are
 kind:30313, each with its own `d` tag, an `a` tag back to the parent space,
 and `status` going `planned -> live -> ended`.
 
-`ncli huddle join` takes **either**: a room id dials the transport directly
+`ncli space join` takes **either**: a room id dials the transport directly
 (roster only), while an activity is resolved through the space to find the
 relay and room, and brings chat with it.
 
-Nothing in `ncli` *publishes* a 30312 or a 30313; `ncli relay` only validates
-and stores them (NIP-53 is declared in its NIP-11 document when huddles are
-on). To create a space, build the event and `ncli publish` it.
-
-## Listing open spaces
-
-```sh
-ncli huddle spaces
-ncli huddle spaces -s wss://relay.example
-ncli huddle spaces -s wss://relay.example --stale-after 15m
-```
-
-```
-SPACE    ROOM     SESSION        PEERS  SERVICE
-standup  Standup  Daily standup  3      ws://localhost:5599
-```
-
-Reports only spaces whose `status` is `open` **and** that have a live session.
-Excluded: a `private` or `closed` space, a session that is `ended` or still
-`planned`, and -- importantly -- a session claiming `live` whose event has not
-been refreshed within `--stale-after` (default 1h).
-
-That last rule is why a host whose process died does not leave a meeting that
-looks forever in progress: the spec allows a client to read an un-refreshed
-`live` event as ended, and this does. Widen `--stale-after` to see them anyway.
-
-Because 30312/30313 are replaceable, the newest copy of each
-`(kind, pubkey, d)` wins -- a stale copy from one relay beside a fresh one
-from another is normal, so arrival order is never trusted. `--json` carries
-the full `address`, `endpoint` and session list; text mode prints one row per
-live session.
+`ncli relay` only validates and stores a 30312/30313, it doesn't author one
+itself (NIP-53 is declared in its NIP-11 document when huddles are on) --
+publishing a space is `ncli space create`, covered in
+`skills/ncli-space/SKILL.md`.
 
 ## Finding a live room
 
@@ -162,16 +144,20 @@ list. A relay with no `huddle:` block has no endpoint to ask, which reads as
 
 ## Joining from the terminal
 
+`join` is implemented here (`cli/huddle`) but only ever reachable as
+`ncli space join` -- see `skills/ncli-space/SKILL.md` for why. The flags,
+resolution, and everything below in this section are otherwise unchanged.
+
 ```sh
-ncli huddle join standup --relay wss://relay.example
-ncli huddle join standup --relay ws://localhost:7777 --identity satoshi
-ncli huddle join standup                       # --relay falls back to the first configured prefs relay
+ncli space join standup --relay wss://relay.example
+ncli space join standup --relay ws://localhost:7777 --identity satoshi
+ncli space join standup                       # --relay falls back to the first configured prefs relay
 
 # By NIP-53 activity: resolves the space for the relay and room, and opens chat
-ncli huddle join 30312:<pubkey>:standup --relay wss://relay.example
-ncli huddle join naddr1...                     # relay hints come from the naddr
-ncli huddle join 30313:<pubkey>:today           # a session, resolved via its parent space
-ncli huddle join 30312:<pubkey>:standup --no-chat
+ncli space join 30312:<pubkey>:standup --relay wss://relay.example
+ncli space join naddr1...                     # relay hints come from the naddr
+ncli space join 30313:<pubkey>:today           # a session, resolved via its parent space
+ncli space join 30312:<pubkey>:standup --no-chat
 ```
 
 Given an activity, `--relay` is where the *space event* is looked up (naddr
@@ -187,9 +173,9 @@ status is `ended` is refused too.
 
 `--identity` takes the same shapes as `id sign` (vault label, nsec, npub, hex,
 nprofile, nip-05) and must resolve to a **private** key -- joining means
-signing a NIP-42 event. With no flag it falls back to `huddle.identity` /
-`NCLI_HUDDLE_IDENTITY`, then to the vault's sole entry when there is exactly
-one.
+signing a NIP-42 event. With no flag it falls back to `space.identity` /
+`NCLI_SPACE_IDENTITY` (matching the command it's actually reached through
+now), then to the vault's sole entry when there is exactly one.
 
 Room ids become a URL path segment, so `/`, `?`, `#` and `%` are rejected
 rather than escaped: escaping would leave the client asking for one room and

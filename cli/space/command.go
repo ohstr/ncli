@@ -3,15 +3,16 @@
 // where a meeting lives and who hosts it -- the spec deliberately leaves
 // its transport ("service"/"endpoint") unspecified, so a space can point
 // at anything. ncli's own voice/audio huddle protocol is just one thing a
-// space can point at, not the reason this command exists; "ncli huddle"
-// keeps its exact own behavior (it's about the ephemeral transport call,
-// not the persistent space), and "join" here is that same huddle-join
-// code, reused rather than reimplemented, under this more general name.
+// space can point at, not the reason this command exists. "join" is
+// implemented in cli/huddle (it needs huddle's own resolution/dial/TUI
+// code) but mounted only here, not under "ncli huddle" -- voice is one
+// option a space can enable, not a separate top-level thing to join.
+// "ncli huddle" itself now covers only what isn't about a space at all:
+// listing the relay's currently-occupied ephemeral rooms.
 package space
 
 import (
 	"github.com/ohstr/ncli/cli/common"
-	"github.com/ohstr/ncli/cli/huddle"
 	"github.com/spf13/cobra"
 )
 
@@ -28,9 +29,9 @@ purpose, so a space can describe any meeting technology.
 
 "space create" defaults that transport to ncli's own voice/audio huddle
 protocol on --relay -- that's what makes the space joinable with "space
-join"/"ncli huddle join" afterwards. Pointing --service/--endpoint at
-something else instead describes a space ncli can't dial itself, which is
-still a perfectly valid space.`,
+join" afterwards. Pointing --service/--endpoint at something else instead
+describes a space ncli can't dial itself, which is still a perfectly
+valid space.`,
 		Example: `  ncli space create standup
   ncli space list --relay wss://relay.example
   ncli space show standup
@@ -44,14 +45,9 @@ still a perfectly valid space.`,
 	cmd.AddCommand(newCreateCommand())
 	cmd.AddCommand(newListCommand())
 	cmd.AddCommand(newShowCommand())
-	// Reused, not reimplemented: same flags, same resolution/dial/TUI path
-	// as "ncli huddle join" -- see huddle.NewJoinCommand's own doc comment.
-	// Short is overridden since "huddle"'s own phrasing ("watch who is
-	// talking") reads oddly listed among create/list/show here; Long and
-	// the RunE/flags are left exactly as huddle defines them.
-	joinCmd := huddle.NewJoinCommand()
-	joinCmd.Short = "Join a space's huddle call and watch who is talking"
-	cmd.AddCommand(joinCmd)
+	// newJoinCommand wraps huddle.NewJoinCommand -- mounted only here, not
+	// under "ncli huddle" -- see this package's own doc comment for why.
+	cmd.AddCommand(newJoinCommand())
 
 	return cmd
 }

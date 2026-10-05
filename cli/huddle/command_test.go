@@ -109,18 +109,37 @@ func TestHuddleCommandShape(t *testing.T) {
 		t.Errorf("want the command named huddle, got %q", cmd.Use)
 	}
 	if cmd.PersistentFlags().Lookup("identity") == nil {
-		t.Error("want a persistent --identity flag")
+		t.Error("want a persistent --identity flag (still used by \"list\")")
 	}
 
-	var join *cobra.Command
+	var list *cobra.Command
 	for _, c := range cmd.Commands() {
-		if strings.HasPrefix(c.Use, "join") {
-			join = c
+		if strings.HasPrefix(c.Use, "list") {
+			list = c
 		}
 	}
-	if join == nil {
-		t.Fatal("want a join subcommand")
+	if list == nil {
+		t.Fatal("want a list subcommand")
 	}
+
+	// join moved to be mounted only under cli/space -- see
+	// TestJoinCommandShape for its own shape, and cli/space/command.go for
+	// where it's actually mounted now.
+	for _, c := range cmd.Commands() {
+		if strings.HasPrefix(c.Use, "join") {
+			t.Errorf("join should no longer be mounted under huddle, found %q", c.Use)
+		}
+		if strings.HasPrefix(c.Use, "spaces") {
+			t.Errorf("spaces should no longer exist under huddle (superseded by \"ncli space list\"), found %q", c.Use)
+		}
+	}
+}
+
+// TestJoinCommandShape exercises NewJoinCommand directly, since it's no
+// longer reachable via NewHuddleCommand's own tree -- cli/space mounts it
+// instead (see cli/space/command.go).
+func TestJoinCommandShape(t *testing.T) {
+	join := NewJoinCommand()
 	if join.Flags().Lookup("relay") == nil {
 		t.Error("want a --relay flag on join")
 	}

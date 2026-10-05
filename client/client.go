@@ -699,14 +699,19 @@ func readEventsWithFallback(ctx context.Context, timeout time.Duration, primary,
 // accepts a subscription and then never sends EOSE or an error can't hang
 // the caller past this deadline. identityHex empty is the same anonymous
 // read as before this parameter existed (ReadEventsFromRelayWithAuth
-// delegates straight to ReadEventsFromRelay in that case).
+// delegates straight to ReadEventsFromRelay in that case). Discards the
+// restricted bool ReadEventsFromRelayWithAuth now also returns (nmilat#64)
+// -- surfacing "restricted" vs. "genuinely empty" to find/dump/groups
+// show/list is ncli#102's own follow-up, not part of this dependency bump.
 func readEventsWithTimeout(ctx context.Context, timeout time.Duration, relayURL *url.URL, filters *nip01.SubscriptionFilterGroup, identityHex string) ([]*nip01.Event, error) {
 	if timeout <= 0 {
-		return relayclient.ReadEventsFromRelayWithAuth(ctx, relayURL, filters, identityHex)
+		events, _, err := relayclient.ReadEventsFromRelayWithAuth(ctx, relayURL, filters, identityHex)
+		return events, err
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	return relayclient.ReadEventsFromRelayWithAuth(ctx, relayURL, filters, identityHex)
+	events, _, err := relayclient.ReadEventsFromRelayWithAuth(ctx, relayURL, filters, identityHex)
+	return events, err
 }
 
 func GetPublicKey(privKey string) (string, error) {

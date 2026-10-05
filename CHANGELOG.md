@@ -32,6 +32,18 @@
   only knows how to skip *on* a prerelease, not skip *unless* one. A stable
   release still never touches `rc`, exactly as an RC never touches `latest`.
   (#98)
+- Bumped to nmilat past v0.5.0-rc.6 (a post-rc.6 commit, no tag cut yet),
+  which carries the `AuthState`/`AuthMessage`/`AuthSettled`/
+  `ReadEventsFromRelayWithAuth` additions `--auth-identity` above
+  depends on (nmilat#61), plus nmilat#64 landing right behind it: the
+  NIP-42 challenge is now sent on every connection unconditionally
+  rather than only when the relay's `auth_required` is on (which also
+  gated every write), and a `processClose` fix for a real relay killing
+  whole sessions over a harmless redundant CLOSE -- very likely the
+  actual cause behind the "connection closed" failure nmilat#61's own
+  redial fix was built to route around. `ReadEventsFromRelayWithAuth`
+  also gained a `restricted` return value nmilat#64 exposes; this repo
+  doesn't surface it yet (ncli#102's own follow-up).
 
 ## [0.8.0-rc.5]
 

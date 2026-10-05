@@ -17,7 +17,7 @@ that priority order.
 | `ncli profile <identifier>` | Readable profile card for one identity — metadata, following count, relay list, Blossom servers, lightning address — aggregated across every relay (not stopping at the first hit like `find`) |
 | `ncli ping <relay...>` / `-t <targets.yaml>` | Probe whether targets are reachable (connect + subscribe), no events fetched |
 | `ncli prefs relays add/list/remove/clear` | Manage the default relay list `find`/`dump`/`ping`/`miner check` fall back to |
-| `ncli relay --config <relay.yaml>` | Run the relay server; `agent_auth` block enables NIP-AA (an agent key gains virtual membership from its owner's NIP-43 membership via a NIP-OA credential, no separate enrollment); `nip86` block serves the NIP-86 management API on the relay URL so an app can administer membership without a terminal |
+| `ncli relay --config <relay.yaml>` | Run the relay server; `agent_auth` block enables NIP-AA (an agent key gains virtual membership from its owner's NIP-43 membership via a NIP-OA credential, no separate enrollment); `nip86` block serves the NIP-86 management API on the relay URL so an app can administer membership without a terminal; `query` block serves buzz's NIP-CW `POST /query` bridge, a one-shot HTTP alternative to a WS REQ/EOSE round trip -- NIP-98 there binds identity; results are further gated to the signer's own NIP-43 membership when `nip11.limitation.membership_required` is set, same as REQ/COUNT |
 | `ncli relay stats/reindex/clear` | Administer a *running* relay over NIP-98 HTTP, incl. rebuilding search/zap indexes |
 | `ncli relay members/invites/roles` | Administer a *running* relay's NIP-43 membership over NIP-98 HTTP: enroll/remove members, issue/revoke invite codes, define roles |
 | `ncli relay context list/add/use/remove` | Save named relay `--config` shortcuts and switch the current one, so `relay` subcommands stop needing `--config` repeated on every call |
@@ -26,9 +26,10 @@ that priority order.
 | `ncli bunker attach/status/stop/sessions/connect` | Reattach to, query, stop, or pair a running bunker daemon without opening the TUI |
 | `ncli blossom upload/download/list/rm/mirror/report` | Client for the Blossom protocol (BUD-01..12): content-addressed blob storage authenticated with a Nostr identity |
 | `ncli blossom servers add/remove/list/discover` | Manage the default Blossom server list, optionally publishing/discovering it as a signed kind:10063 (BUD-03) event |
-| `ncli huddle join <room\|space>` | Join a relay's voice room and watch the live roster and who is speaking; plays the call in a `-tags huddleaudio` build (never captures a microphone). Given a NIP-53 activity instead of a room id (naddr, or a `30312:`/`30313:` coordinate) it resolves the space to find the relay and room, and opens the kind:1311 conversation beside the roster — reply with `<r>`, quote with `<y>`, or `--no-chat` to omit it. Chat needs an activity: a 1311 message must name one, and a bare room id is not an addressable event |
-| `ncli huddle list` | List the rooms that currently have someone in them, with peer count and the protocol version each is pinned to — a room id is otherwise out-of-band knowledge, and `join` on an unused one opens it rather than failing |
-| `ncli huddle spaces` | List NIP-53 meeting spaces (kind:30312) that are `open` and have a live kind:30313 session, treating an un-refreshed `live` session as ended. A *space* is a published, addressable `30312:<pubkey>:<d>` record of where a meeting lives; a *room* (above) is the ephemeral transport it runs over |
+| `ncli huddle list` | List the ephemeral transport rooms that currently have someone in them, with peer count and the protocol version each is pinned to — a room id is otherwise out-of-band knowledge, and `space join` on an unused one opens it rather than failing |
+| `ncli space create <id>` | Publish a new NIP-53 meeting space (kind:30312). `--service` defaults to `--relay`, which is what makes the space joinable with `space join` afterward — point it elsewhere to describe a space on a transport ncli itself can't dial. `id` doubles as the huddle room id, so it's rejected up front if it contains `/`, `?`, `#` or `%` (put a human-readable name in `--summary` instead) |
+| `ncli space list` / `ncli space show <id>` | List every open space a relay knows about, or show one's full detail — a space with no live session is still shown, since the space is the durable thing, a live call is just a property of it |
+| `ncli space join [id\|naddr\|room]` | Join a space's voice/audio call and watch the live roster and who is speaking; plays the call in a `-tags huddleaudio` build (never captures a microphone). Given a NIP-53 activity instead of a room id (naddr, or a `30312:`/`30313:` coordinate) it resolves the space to find the relay and room, and opens the kind:1311 conversation beside the roster — reply with `<r>`, quote with `<y>`, or `--no-chat` to omit it. Omitting the argument entirely joins `--relay`'s one open space, if there's exactly one (errors listing every candidate if there's more than one). Chat needs an activity: a 1311 message must name one, and a bare room id is not an addressable event. (Implemented in `cli/huddle`, mounted only under `space` — voice is one option a space can enable, not a separate top-level thing to join) |
 | `ncli groups create/edit/delete/invite/join/leave` | Self-service NIP-29 relay-hosted-group writes — each a plain signed event (no admin HTTP surface), with a `previous` tag attached automatically; `edit` reads the group's current metadata first and merges in only the flags passed, since the underlying event replaces metadata wholesale |
 | `ncli groups members add/remove` / `ncli groups pins set` / `ncli groups delete-event` | More NIP-29 writes: add/remove a member (optionally with roles), replace a group's pinned-events list (whole list, not append — passing nothing clears every pin), or delete one of the group's own events |
 | `ncli groups list` / `ncli groups show <group-id>` | Read a relay's groups (metadata) or one group's full detail (metadata/admins/members) — anonymous reads; a private group is invisible without NIP-42 auth, which ncli's own connections don't do yet |
@@ -52,9 +53,9 @@ parser never picks up log noise. `--json` and `-q/--quiet` are global flags
 (declared once on the root command, available on every subcommand) rather
 than per-command. `id`, `id list`, `id sign`, `version`, `id delegate`, `relay
 stats`/`reindex`/`clear`, `relay members`/`invites`/`roles`, `ping`,
-`miner mine`/`check`, `publish`, `huddle list`/`spaces`, `groups create`/
-`edit`/`delete`/`invite`/`join`/`leave`/`members`/`pins`/`delete-event`/
-`list`/`show`, and `prefs relays add`/
+`miner mine`/`check`, `publish`, `huddle list`, `space create`/
+`list`/`show`, `groups create`/`edit`/`delete`/`invite`/`join`/`leave`/
+`members`/`pins`/`delete-event`/`list`/`show`, and `prefs relays add`/
 `remove`/`list`/`clear`/`prefs path` are human-readable text by default
 and switch their *success* output to structured JSON on stdout with
 `--json`. `find` has no
@@ -155,6 +156,12 @@ or invoking a command in that area:
 - Uploading/fetching/managing content on Blossom media servers
   (`blossom upload/download/list/rm/mirror/report/servers`) →
   `skills/ncli-blossom/SKILL.md`
+- Listing a relay's live ephemeral transport rooms (`huddle list`) or the
+  audio/video/chat details of an in-progress call → `skills/ncli-huddle/
+  SKILL.md`
+- Creating, listing, or showing a NIP-53 meeting space, or joining one's
+  voice call (`space create`/`list`/`show`/`join`) →
+  `skills/ncli-space/SKILL.md`
 - Creating or administering a NIP-29 relay-hosted group (`groups create`/
   `edit`/`delete`/`invite`/`join`/`leave`/`members`/`pins`/`delete-event`/
   `list`/`show`) → `skills/ncli-groups/SKILL.md`

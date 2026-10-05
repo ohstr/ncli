@@ -139,7 +139,7 @@ func resolveListIdentity(cmd *cobra.Command, identityFlag string) (string, error
 	if identityFlag == "" && viper.GetString("huddle.identity") == "" {
 		return "", nil
 	}
-	return resolveIdentity(cmd, identityFlag)
+	return resolveIdentity(cmd, identityFlag, "huddle.identity")
 }
 
 // listError turns a failed room-list response into the one error line worth

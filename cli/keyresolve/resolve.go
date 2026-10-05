@@ -128,6 +128,106 @@ func promptNewPassword() (string, error) {
 	return pw, nil
 }
 
+// ResolveIdentity picks a signing identity by precedence -- identityFlag
+// (if set), then configKey's viper value, then the vault's sole saved
+// entry if exactly one exists -- and resolves it down to a private key
+// hex, erroring if no identity can be determined at all or if the vault
+// has multiple entries with none chosen. Use this where the command
+// cannot proceed without exactly one identity (e.g. "huddle join", which
+// has nothing to authenticate with otherwise); for a command where
+// authenticating is optional, use ResolveIdentityOptional instead.
+func ResolveIdentity(cmd *cobra.Command, identityFlag, configKey string) (string, error) {
+	identity := identityFlag
+	if identity == "" {
+		identity = viper.GetString(configKey)
+	}
+
+	if identity == "" {
+		entries, err := client.LoadVaultEntries()
+		if err != nil {
+			return "", common.RuntimeError(cmd, err)
+		}
+		switch len(entries) {
+		case 0:
+			return "", common.InvocationError(cmd, fmt.Errorf("--identity is required (or set %s): no vault identity to fall back to", envVarHint(configKey)))
+		case 1:
+			identity = entries[0].Label
+		default:
+			return "", common.InvocationError(cmd, fmt.Errorf("--identity is required (or set %s): the vault has %d saved identities, none chosen by default", envVarHint(configKey), len(entries)))
+		}
+	}
+
+	return resolveNamedIdentity(cmd, identity, false)
+}
+
+// ResolveIdentityOptional is ResolveIdentity's opportunistic counterpart,
+// for commands where authenticating is a bonus, not a requirement --
+// public content is unaffected either way, and the only cost of skipping
+// it is missing content gated behind NIP-42. It returns "", nil (not an
+// error) in exactly the cases ResolveIdentity would otherwise refuse to
+// guess or fail to resolve: no flag/config value set and the vault has
+// zero or more than one entry, or (with jsonMode true) a sole vault entry
+// that turns out to need an interactive password prompt. An identity that
+// *was* explicitly named by flag or config still fails loudly if it can't
+// be resolved -- silently dropping a typo'd --identity would be worse
+// than erroring on one, and is exactly the "no events found" ambiguity
+// this exists to avoid.
+func ResolveIdentityOptional(cmd *cobra.Command, identityFlag, configKey string, jsonMode bool) (string, error) {
+	identity := identityFlag
+	explicit := identity != ""
+	if identity == "" {
+		identity = viper.GetString(configKey)
+		explicit = identity != ""
+	}
+
+	if identity == "" {
+		entries, err := client.LoadVaultEntries()
+		if err != nil {
+			return "", common.RuntimeError(cmd, err)
+		}
+		if len(entries) != 1 {
+			return "", nil
+		}
+		identity = entries[0].Label
+	}
+
+	privKeyHex, err := resolveNamedIdentity(cmd, identity, jsonMode)
+	if err != nil && !explicit {
+		return "", nil
+	}
+	return privKeyHex, err
+}
+
+// envVarHint turns a viper dotted config key (e.g. "huddle.identity") into
+// the NCLI_-prefixed, underscore-joined env var that sets it (e.g.
+// "NCLI_HUDDLE_IDENTITY"), matching root.go's SetEnvPrefix("NCLI") +
+// SetEnvKeyReplacer(".", "_") -- so the hint in an error message can't
+// drift out of sync with the actual env var name.
+func envVarHint(configKey string) string {
+	return "NCLI_" + strings.ToUpper(strings.ReplaceAll(configKey, ".", "_"))
+}
+
+// resolveNamedIdentity turns an already-chosen identifier (vault label,
+// nsec, npub, hex, nprofile, or nip-05) into its private key, rejecting a
+// pubkey-only identity -- authenticating means signing, so there is
+// nothing useful ResolveIdentity/ResolveIdentityOptional can return for
+// one.
+func resolveNamedIdentity(cmd *cobra.Command, identity string, jsonMode bool) (string, error) {
+	resolved, err := client.ResolveIdentifier(identity)
+	if err != nil {
+		return "", ClassifyIdentifierError(cmd, identity, err)
+	}
+
+	privKeyHex, err := ResolveSigningKey(cmd, jsonMode, resolved)
+	if err != nil {
+		return "", err
+	}
+	if privKeyHex == "" {
+		return "", common.AuthError(cmd, fmt.Errorf("identity %q has no private key available", common.RedactSecretInput(identity)))
+	}
+	return privKeyHex, nil
+}
+
 // ResolveSigningKey returns the private key behind resolved -- directly,
 // for an nsec identity (client.ResolveIdentifier already decoded it), or
 // via the vault, for a saved vault label (ResolveVaultPassword ->

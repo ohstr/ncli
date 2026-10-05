@@ -21,7 +21,6 @@ import (
 	"github.com/ohstr/nmilat/huddle/wsaudio"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"golang.org/x/term"
 )
 
@@ -285,45 +284,13 @@ func runBoard(cmd *cobra.Command, ctx context.Context, hc Client, room, activity
 	return nil
 }
 
-// resolveIdentity resolves the key that signs the NIP-42 auth event, mirroring
-// what cli/bunker's ResolveSignerKey does for the bunker: the --identity flag,
-// then the "huddle.identity" config key, then the vault's sole entry when there
-// is exactly one. A pubkey-only identity is rejected -- authenticating means
-// signing.
+// resolveIdentity resolves the key that signs the NIP-42 auth event: the
+// --identity flag, then the "huddle.identity" config key, then the vault's
+// sole entry when there is exactly one. A pubkey-only identity is
+// rejected -- authenticating means signing. Thin wrapper around the
+// cross-command keyresolve.ResolveIdentity helper.
 func resolveIdentity(cmd *cobra.Command, identityFlag string) (string, error) {
-	identity := identityFlag
-	if identity == "" {
-		identity = viper.GetString("huddle.identity")
-	}
-
-	if identity == "" {
-		entries, err := client.LoadVaultEntries()
-		if err != nil {
-			return "", common.RuntimeError(cmd, err)
-		}
-		switch len(entries) {
-		case 0:
-			return "", common.InvocationError(cmd, errors.New("--identity is required (or set NCLI_HUDDLE_IDENTITY/huddle.identity): no vault identity to fall back to"))
-		case 1:
-			identity = entries[0].Label
-		default:
-			return "", common.InvocationError(cmd, fmt.Errorf("--identity is required (or set NCLI_HUDDLE_IDENTITY/huddle.identity): the vault has %d saved identities, none chosen by default", len(entries)))
-		}
-	}
-
-	resolved, err := client.ResolveIdentifier(identity)
-	if err != nil {
-		return "", keyresolve.ClassifyIdentifierError(cmd, identity, err)
-	}
-
-	privKeyHex, err := keyresolve.ResolveSigningKey(cmd, false, resolved)
-	if err != nil {
-		return "", err
-	}
-	if privKeyHex == "" {
-		return "", common.AuthError(cmd, fmt.Errorf("identity %q has no private key available", common.RedactSecretInput(identity)))
-	}
-	return privKeyHex, nil
+	return keyresolve.ResolveIdentity(cmd, identityFlag, "huddle.identity")
 }
 
 // resolveRelay honors --relay, falling back to the first configured prefs relay

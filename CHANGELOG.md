@@ -79,6 +79,9 @@
   redial fix was built to route around. `ReadEventsFromRelayWithAuth`
   also gained a `restricted` return value nmilat#64 exposes; this repo
   doesn't surface it yet (ncli#102's own follow-up).
+- Bumped to nmilat past v0.5.0-rc.6 again, past nmilat#66: the
+  untagged-group-query privacy bypass fix `groups list --mine`/`--member`
+  above depends on for its own privacy guarantee to hold.
 
 ## [0.8.0-rc.5]
 

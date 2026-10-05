@@ -67,8 +67,10 @@ func LoadTargetsSpec(yamlPath string) (*TargetsSpec, error) {
 // targets -- merged and deduplicated by event ID across ALL of them (see
 // mergeEventsFromTargets) -- and writes the result to outPath as JSON.
 // This is `dump`'s implementation: targets comes from --targets, --relays,
-// or (both omitted) the configured prefs relays.
-func DumpFromTargets(ctx context.Context, targets *TargetsSpec, outPath string, filtersSpec []*FilterSpec, timeout time.Duration) error {
+// or (both omitted) the configured prefs relays. identityHex, from
+// --identity, authenticates to a remote target that requires it (NIP-42);
+// empty behaves exactly as before this parameter existed.
+func DumpFromTargets(ctx context.Context, targets *TargetsSpec, outPath string, filtersSpec []*FilterSpec, timeout time.Duration, identityHex string) error {
 	if len(filtersSpec) == 0 {
 		filtersSpec = []*FilterSpec{{}}
 	}
@@ -78,7 +80,7 @@ func DumpFromTargets(ctx context.Context, targets *TargetsSpec, outPath string, 
 		filters.Add(&f.SubscriptionFilter)
 	}
 
-	merged, err := mergeEventsFromTargets(ctx, targets, filters, timeout)
+	merged, err := mergeEventsFromTargets(ctx, targets, filters, timeout, identityHex)
 	if err != nil {
 		return err
 	}
@@ -128,7 +130,7 @@ var ErrNoReachableTargets = errors.New("no target could be reached (every connec
 // long any single remote target gets before it's treated the same way --
 // logged and skipped -- so one slow or unresponsive relay can't eat the
 // whole call; 0 waits indefinitely.
-func mergeEventsFromTargets(ctx context.Context, targets *TargetsSpec, filters *nip01.SubscriptionFilterGroup, timeout time.Duration) ([]*nip01.Event, error) {
+func mergeEventsFromTargets(ctx context.Context, targets *TargetsSpec, filters *nip01.SubscriptionFilterGroup, timeout time.Duration, identityHex string) ([]*nip01.Event, error) {
 	seen := make(map[string]struct{})
 	var merged []*nip01.Event
 	reached := false
@@ -154,7 +156,7 @@ func mergeEventsFromTargets(ctx context.Context, targets *TargetsSpec, filters *
 
 		case FlOW_REMOTE:
 			log.Info().Msgf("querying %s", target.relayURI.Host)
-			events, err = readEventsWithFallback(ctx, timeout, target.relayURI, target.relayFallbackURI, filters)
+			events, err = readEventsWithFallback(ctx, timeout, target.relayURI, target.relayFallbackURI, filters, identityHex)
 			if err != nil {
 				var connErr *relayclient.ConnectionError
 				if errors.As(err, &connErr) {
@@ -192,12 +194,14 @@ func mergeEventsFromTargets(ctx context.Context, targets *TargetsSpec, filters *
 // same merge/dedupe semantics but print JSON straight to stdout or write it
 // to a file rather than handing events back; this is for a caller (e.g.
 // "blossom servers discover") that needs to inspect/parse the result
-// itself instead of just reporting it.
+// itself instead of just reporting it. Always anonymous -- none of its
+// current callers need an identity; DumpFromTargets/Find take one
+// instead, for find/dump's --identity.
 func QueryTargets(ctx context.Context, targets *TargetsSpec, filters *nip01.SubscriptionFilterGroup, timeout time.Duration) ([]*nip01.Event, error) {
-	return mergeEventsFromTargets(ctx, targets, filters, timeout)
+	return mergeEventsFromTargets(ctx, targets, filters, timeout, "")
 }
 
-func Find(parent context.Context, idFilter *nip01.SubscriptionFilter, filtersSpec []*FilterSpec, targets *TargetsSpec, savePath string, timeout time.Duration) error {
+func Find(parent context.Context, idFilter *nip01.SubscriptionFilter, filtersSpec []*FilterSpec, targets *TargetsSpec, savePath string, timeout time.Duration, identityHex string) error {
 
 	filters := nip01.NewSubscriptionFilterGroup()
 	if idFilter != nil {
@@ -230,7 +234,7 @@ loop:
 
 		case FlOW_REMOTE:
 			log.Info().Msgf("querying %s", relay.relayURI.Host)
-			events, err = readEventsWithFallback(parent, timeout, relay.relayURI, relay.relayFallbackURI, filters)
+			events, err = readEventsWithFallback(parent, timeout, relay.relayURI, relay.relayFallbackURI, filters, identityHex)
 			if err != nil {
 				var connErr *relayclient.ConnectionError
 				if errors.As(err, &connErr) {
@@ -670,15 +674,16 @@ func connectRelayWithFallback(ctx context.Context, primary, fallback *url.URL, c
 }
 
 // readEventsWithFallback is connectRelayWithFallback's counterpart for the
-// one-shot ReadEventsFromRelay helper used by find/dump's target loop. If
+// one-shot ReadEventsFromRelayWithAuth helper used by find/dump's target
+// loop. If
 // timeout > 0, primary and (if tried) fallback each get their own budget --
 // a slow primary times out on its own deadline rather than one shared with
 // fallback, and doesn't fall back on a timeout at all (only on a dial/
 // connection failure -- see connectRelayWithFallback), matching
 // readEventsWithTimeout's ctx.DeadlineExceeded, which isn't a
 // *relayclient.ConnectionError.
-func readEventsWithFallback(ctx context.Context, timeout time.Duration, primary, fallback *url.URL, filters *nip01.SubscriptionFilterGroup) ([]*nip01.Event, error) {
-	events, err := readEventsWithTimeout(ctx, timeout, primary, filters)
+func readEventsWithFallback(ctx context.Context, timeout time.Duration, primary, fallback *url.URL, filters *nip01.SubscriptionFilterGroup, identityHex string) ([]*nip01.Event, error) {
+	events, err := readEventsWithTimeout(ctx, timeout, primary, filters, identityHex)
 	if err == nil || fallback == nil {
 		return events, err
 	}
@@ -686,20 +691,22 @@ func readEventsWithFallback(ctx context.Context, timeout time.Duration, primary,
 	if !errors.As(err, &connErr) {
 		return events, err
 	}
-	return readEventsWithTimeout(ctx, timeout, fallback, filters)
+	return readEventsWithTimeout(ctx, timeout, fallback, filters, identityHex)
 }
 
-// readEventsWithTimeout bounds a single ReadEventsFromRelay call to timeout
-// (0 disables the bound, waiting on ctx alone) -- so a relay that accepts a
-// subscription and then never sends EOSE or an error can't hang the caller
-// past this deadline.
-func readEventsWithTimeout(ctx context.Context, timeout time.Duration, relayURL *url.URL, filters *nip01.SubscriptionFilterGroup) ([]*nip01.Event, error) {
+// readEventsWithTimeout bounds a single ReadEventsFromRelayWithAuth call to
+// timeout (0 disables the bound, waiting on ctx alone) -- so a relay that
+// accepts a subscription and then never sends EOSE or an error can't hang
+// the caller past this deadline. identityHex empty is the same anonymous
+// read as before this parameter existed (ReadEventsFromRelayWithAuth
+// delegates straight to ReadEventsFromRelay in that case).
+func readEventsWithTimeout(ctx context.Context, timeout time.Duration, relayURL *url.URL, filters *nip01.SubscriptionFilterGroup, identityHex string) ([]*nip01.Event, error) {
 	if timeout <= 0 {
-		return relayclient.ReadEventsFromRelay(ctx, relayURL, filters)
+		return relayclient.ReadEventsFromRelayWithAuth(ctx, relayURL, filters, identityHex)
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	return relayclient.ReadEventsFromRelay(ctx, relayURL, filters)
+	return relayclient.ReadEventsFromRelayWithAuth(ctx, relayURL, filters, identityHex)
 }
 
 func GetPublicKey(privKey string) (string, error) {

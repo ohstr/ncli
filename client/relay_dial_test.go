@@ -86,7 +86,7 @@ func TestReadEventsWithFallback_RetriesOnDialFailure(t *testing.T) {
 	// fallback URL actually got dialed (hits > 0), not that the whole
 	// read succeeds; full read-to-EOSE behavior belongs to
 	// relayclient.ReadEventsFromRelay itself, unchanged by this feature.
-	_, err := readEventsWithFallback(context.Background(), 0, primary, wsURL, nip01.NewSubscriptionFilterGroup())
+	_, err := readEventsWithFallback(context.Background(), 0, primary, wsURL, nip01.NewSubscriptionFilterGroup(), "")
 	if err == nil {
 		t.Fatal("readEventsWithFallback() error = nil, want an error (mock server sends no EOSE)")
 	}
@@ -101,7 +101,7 @@ func TestReadEventsWithFallback_NoFallbackNoRetry(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := readEventsWithFallback(context.Background(), 0, badURL, nil, nip01.NewSubscriptionFilterGroup()); err == nil {
+	if _, err := readEventsWithFallback(context.Background(), 0, badURL, nil, nip01.NewSubscriptionFilterGroup(), ""); err == nil {
 		t.Fatal("readEventsWithFallback() with a nil fallback error = nil, want the primary's dial error")
 	}
 }

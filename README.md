@@ -437,6 +437,17 @@ ncli find --kinds 1 --limit 5 -s relay.ohstr.com,relay.primal.net
 More filter flags (`-a/--authors`, `-i/--ids`, `--since`/`--until`/
 `--search`/`--tag`) live behind `ncli find --help`.
 
+`--auth-identity` authenticates (NIP-42) against a target that requires
+it -- same identity shapes as everywhere else (vault label, nsec, npub,
+hex, nprofile, nip-05), but it must resolve to a **private** key, since
+authenticating means signing. Omit it to query anonymously, exactly as
+before this flag existed; a target that doesn't require auth ignores it
+either way.
+
+```sh
+ncli find --kinds 1 -s wss://relay.example --auth-identity mykey
+```
+
 A `--targets` file isn't just a relay list — it can carry `filters` too, so
 a single YAML file replaces both `-s` and the inline filter flags at once
 (an author given as the positional identifier, like below, still ANDs in
@@ -565,7 +576,8 @@ ncli dump -t examples/targets.yaml -o out.json
 
 ![`ncli dump` exporting events to JSON](docs/vhs/dump.gif)
 
-`-o/--out` is required (`.json` or `.jsonp`).
+`-o/--out` is required (`.json` or `.jsonp`). `--auth-identity` works the
+same way it does for `find` -- see above.
 
 ## `publish`
 

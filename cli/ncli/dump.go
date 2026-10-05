@@ -56,12 +56,17 @@ Omit both to use the relays from "ncli prefs relays".`,
 			return common.RuntimeError(cmd, err)
 		}
 
+		identityHex, err := resolveQueryIdentity(cmd)
+		if err != nil {
+			return err
+		}
+
 		if err := client.ResolveFilterAuthors(filtersSpec); err != nil {
 			return common.NetworkError(cmd, "", err)
 		}
 
 		err = common.WithSpinner(cmd, targetsMessage("exporting from", targetsSpec), func() error {
-			return client.DumpFromTargets(ctx, targetsSpec, outFile, filtersSpec, timeout)
+			return client.DumpFromTargets(ctx, targetsSpec, outFile, filtersSpec, timeout, identityHex)
 		})
 		if err != nil {
 			if errors.Is(err, client.ErrNoReachableTargets) {
@@ -77,6 +82,7 @@ func init() {
 	RootCmd.AddCommand(dumpCmd)
 
 	registerQueryFlags(dumpCmd, "")
+	registerQueryAuthFlag(dumpCmd)
 
 	dumpCmd.Flags().StringP("out", "o", "", "Output JSON file path")
 	_ = dumpCmd.MarkFlagRequired("out")

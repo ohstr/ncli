@@ -72,6 +72,11 @@ Omit both to use the relays from "ncli prefs relays".`,
 				return common.RuntimeError(cmd, err)
 			}
 
+			identityHex, err := resolveQueryIdentity(cmd)
+			if err != nil {
+				return err
+			}
+
 			if err := client.ResolveFilterAuthors(filtersSpec); err != nil {
 				return common.NetworkError(cmd, "", err)
 			}
@@ -87,7 +92,7 @@ Omit both to use the relays from "ncli prefs relays".`,
 			}
 
 			err = common.WithSpinner(cmd, targetsMessage("querying", targetsSpec), func() error {
-				return client.Find(ctx, idFilter, filtersSpec, targetsSpec, outPath, timeout)
+				return client.Find(ctx, idFilter, filtersSpec, targetsSpec, outPath, timeout, identityHex)
 			})
 			if err != nil {
 				if errors.Is(err, client.ErrNoReachableTargets) {
@@ -104,6 +109,7 @@ func init() {
 	RootCmd.AddCommand(findCmd)
 
 	registerQueryFlags(findCmd, "")
+	registerQueryAuthFlag(findCmd)
 
 	findCmd.Flags().StringP("out", "o", "", "Also save the result to this JSON file path")
 	_ = findCmd.MarkFlagFilename("out", "json", "jsonp")

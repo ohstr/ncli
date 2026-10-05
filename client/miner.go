@@ -278,7 +278,7 @@ func CheckPOWLive(ctx context.Context, targets *TargetsSpec, filtersSpec []*Filt
 		filters.Add(&f.SubscriptionFilter)
 	}
 
-	events, err := mergeEventsFromTargets(ctx, targets, filters, 0)
+	events, err := mergeEventsFromTargets(ctx, targets, filters, 0, "")
 	if err != nil {
 		return nil, err
 	}

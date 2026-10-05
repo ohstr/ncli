@@ -34,6 +34,22 @@ same idea: plain positional arguments instead of `-s/--relays` (`ncli
 ping relay.primal.net` needs no flag at all), and no filter flags at all
 — see `## ping` below for why.
 
+Both also take **`--auth-identity <id>`** (vault label, nsec, npub, hex,
+nprofile, or nip-05 — same shapes as everywhere else, but must resolve to
+a *private* key, since authenticating means signing): answers a target's
+NIP-42 AUTH challenge so a restricted relay — e.g. `nip11.limitation.
+auth_required`, or NIP-43 `membership_required` — actually returns its
+members-only content instead of a REQ this relay closes as `restricted:
+...`. Omit it to query anonymously, exactly as before this flag existed;
+a target that doesn't challenge ignores it either way, and it's a
+different flag from `miner check`'s own `--identity` (a public-key
+author filter, unrelated).
+
+```sh
+ncli find -k 1 -s wss://relay.example --auth-identity mykey
+ncli dump -k 1 -s wss://relay.example --auth-identity mykey -o out.json
+```
+
 ## `dump`
 
 ```sh

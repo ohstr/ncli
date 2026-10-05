@@ -30,6 +30,9 @@ that priority order.
 | `ncli space create <id>` | Publish a new NIP-53 meeting space (kind:30312). `--service` defaults to `--relay`, which is what makes the space joinable with `space join` afterward — point it elsewhere to describe a space on a transport ncli itself can't dial. `id` doubles as the huddle room id, so it's rejected up front if it contains `/`, `?`, `#` or `%` (put a human-readable name in `--summary` instead) |
 | `ncli space list` / `ncli space show <id>` | List every open space a relay knows about, or show one's full detail — a space with no live session is still shown, since the space is the durable thing, a live call is just a property of it |
 | `ncli space join [id\|naddr\|room]` | Join a space's voice/audio call and watch the live roster and who is speaking; plays the call in a `-tags huddleaudio` build (never captures a microphone). Given a NIP-53 activity instead of a room id (naddr, or a `30312:`/`30313:` coordinate) it resolves the space to find the relay and room, and opens the kind:1311 conversation beside the roster — reply with `<r>`, quote with `<y>`, or `--no-chat` to omit it. Omitting the argument entirely joins `--relay`'s one open space, if there's exactly one (errors listing every candidate if there's more than one). Chat needs an activity: a 1311 message must name one, and a bare room id is not an addressable event. (Implemented in `cli/huddle`, mounted only under `space` — voice is one option a space can enable, not a separate top-level thing to join) |
+| `ncli groups create/edit/delete/invite/join/leave` | Self-service NIP-29 relay-hosted-group writes — each a plain signed event (no admin HTTP surface), with a `previous` tag attached automatically; `edit` reads the group's current metadata first and merges in only the flags passed, since the underlying event replaces metadata wholesale |
+| `ncli groups members add/remove` / `ncli groups pins set` / `ncli groups delete-event` | More NIP-29 writes: add/remove a member (optionally with roles), replace a group's pinned-events list (whole list, not append — passing nothing clears every pin), or delete one of the group's own events |
+| `ncli groups list` / `ncli groups show <group-id>` | Read a relay's groups (metadata) or one group's full detail (metadata/admins/members) — anonymous reads; a private group is invisible without NIP-42 auth, which ncli's own connections don't do yet |
 | `ncli id [identifier]` | Generate or inspect a Nostr keypair (local vault) |
 | `ncli id delegate` | Mint a NIP-26 delegation token |
 | `ncli id sign -e <events.json> -o <signed.json>` | Sign one or more unsigned events with a vault/nsec identity |
@@ -51,7 +54,8 @@ parser never picks up log noise. `--json` and `-q/--quiet` are global flags
 than per-command. `id`, `id list`, `id sign`, `version`, `id delegate`, `relay
 stats`/`reindex`/`clear`, `relay members`/`invites`/`roles`, `ping`,
 `miner mine`/`check`, `publish`, `huddle list`, `space create`/
-`list`/`show`, and `prefs relays add`/
+`list`/`show`, `groups create`/`edit`/`delete`/`invite`/`join`/`leave`/
+`members`/`pins`/`delete-event`/`list`/`show`, and `prefs relays add`/
 `remove`/`list`/`clear`/`prefs path` are human-readable text by default
 and switch their *success* output to structured JSON on stdout with
 `--json`. `find` has no
@@ -158,6 +162,9 @@ or invoking a command in that area:
 - Creating, listing, or showing a NIP-53 meeting space, or joining one's
   voice call (`space create`/`list`/`show`/`join`) →
   `skills/ncli-space/SKILL.md`
+- Creating or administering a NIP-29 relay-hosted group (`groups create`/
+  `edit`/`delete`/`invite`/`join`/`leave`/`members`/`pins`/`delete-event`/
+  `list`/`show`) → `skills/ncli-groups/SKILL.md`
 
 These skills assume only the `ncli` binary is available — no access to this
 source tree. (Building/contributing to `ncli` itself is a different task —

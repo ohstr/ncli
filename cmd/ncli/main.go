@@ -7,6 +7,7 @@ import (
 	"github.com/ohstr/ncli/cli/blossom"
 	"github.com/ohstr/ncli/cli/bunker"
 	"github.com/ohstr/ncli/cli/common"
+	"github.com/ohstr/ncli/cli/groups"
 	"github.com/ohstr/ncli/cli/huddle"
 	"github.com/ohstr/ncli/cli/ncli"
 	relaycli "github.com/ohstr/ncli/cli/relay"
@@ -43,6 +44,11 @@ func init() {
 	// a relay running with huddles enabled. Joining one lives under
 	// "space" instead (see below); see NewHuddleCommand.
 	ncli.RootCmd.AddCommand(huddle.NewHuddleCommand())
+
+	// Register the NIP-29 relay-hosted-groups client ("groups") -- mounts
+	// create/edit/delete/invite/join/leave/members/pins/delete-event/list/
+	// show as its own children; see NewGroupsCommand.
+	ncli.RootCmd.AddCommand(groups.NewGroupsCommand())
 
 	// Register the generic NIP-53 meeting-space command ("space") --
 	// mounts create/list/show plus huddle's own "join" (implemented in

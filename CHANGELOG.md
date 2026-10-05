@@ -2,6 +2,25 @@
 
 ## [0.8.0-rc.6]
 
+### Added
+
+- `ncli find`/`ncli dump` take `--auth-identity`, authenticating (NIP-42)
+  against a target that requires it. Until now both connected
+  anonymously -- `registerQueryFlags` exposed no auth flag, and nothing
+  in the query path resolved or passed a signing key down to a relay
+  connection -- so a restricted relay (e.g. a private+closed NIP-29
+  group) read as "no events found," indistinguishable from a genuinely
+  empty result. Threads the key through `Find`/`DumpFromTargets` into
+  nmilat's `relayclient.ReadEventsFromRelayWithAuth` (nmilat#59/#61),
+  which answers the challenge and retries a REQ closed as restricted.
+  Not named `--identity`: `miner check`'s live mode shares
+  `registerQueryFlags` with find/dump and already has its own
+  `--identity` (an author to restrict the check to, a public key only)
+  -- same shared flag set, unrelated meaning, so this gets its own flag
+  rather than colliding. No identity given is unchanged: anonymous, as
+  before. `apply`'s per-target identity is left for a follow-up -- its
+  YAML stream/sync spec needs its own schema decision. (ncli#99)
+
 ### Changed
 
 - The release pipeline now also publishes `ghcr.io/ohstr/ncli:rc` (and the

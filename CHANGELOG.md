@@ -32,6 +32,11 @@
   only knows how to skip *on* a prerelease, not skip *unless* one. A stable
   release still never touches `rc`, exactly as an RC never touches `latest`.
   (#98)
+- Bumped to nmilat v0.5.0-rc.6, which carries the `AuthState`/
+  `AuthMessage`/`AuthSettled`/`ReadEventsFromRelayWithAuth` additions
+  `--auth-identity` above depends on (nmilat#61) -- also replaces the
+  untagged pseudo-version (`v0.5.0-rc.5.0.20261005175316-3a59b560a114`)
+  go.mod had been pinned to with a clean tagged release.
 
 ## [0.8.0-rc.5]
 

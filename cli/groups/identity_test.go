@@ -92,3 +92,43 @@ func TestResolveIdentity_AmbiguousVaultEntries(t *testing.T) {
 		t.Fatal("resolveIdentity() with 2 vault entries and no flag = nil error, want an error")
 	}
 }
+
+// TestResolveIdentityOptional_* cover resolveIdentityOptional, the
+// "groups show"/"groups list" counterpart to resolveIdentity above: a
+// bonus for reads rather than a requirement for a write.
+
+func TestResolveIdentityOptional_NoneGivenIsOptional(t *testing.T) {
+	withTempConfigDir(t)
+
+	got, err := resolveIdentityOptional(newTestCmd(), "")
+	if err != nil {
+		t.Fatalf("resolveIdentityOptional() error = %v, want nil", err)
+	}
+	if got != "" {
+		t.Fatalf("resolveIdentityOptional() = %q, want \"\"", got)
+	}
+}
+
+func TestResolveIdentityOptional_ExplicitFlagResolves(t *testing.T) {
+	withTempConfigDir(t)
+	id, err := client.GenerateIdentity()
+	if err != nil {
+		t.Fatalf("GenerateIdentity() error = %v", err)
+	}
+
+	got, err := resolveIdentityOptional(newTestCmd(), id.Nsec)
+	if err != nil {
+		t.Fatalf("resolveIdentityOptional() error = %v", err)
+	}
+	if got != id.PrivKeyHex {
+		t.Fatalf("resolveIdentityOptional() = %q, want %q", got, id.PrivKeyHex)
+	}
+}
+
+func TestResolveIdentityOptional_ExplicitBadFlagErrors(t *testing.T) {
+	withTempConfigDir(t)
+
+	if _, err := resolveIdentityOptional(newTestCmd(), "not-a-real-identity"); err == nil {
+		t.Fatal("resolveIdentityOptional() with a malformed identity error = nil, want an error")
+	}
+}

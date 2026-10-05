@@ -34,13 +34,15 @@ func newShowCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "show <group-id>",
 		Short: "Show one group's metadata, admins, and members",
-		Long: `Reads the relay's own mirrored kind:39000/39001/39002 events -- a plain
-read, no identity needed. A private group (the default on creation) is
-invisible to an anonymous connection; see "ncli groups --help" for why
-that's not a bug in this command.`,
-		Example: `  ncli groups show standup`,
-		Args:    common.ExactArgs(1),
-		RunE:    runShow,
+		Long: `Reads the relay's own mirrored kind:39000/39001/39002 events. --identity
+is optional here (unlike every write in this tree, which requires it):
+given, it authenticates (NIP-42) so a member can see their own private
+group; omitted, the read stays anonymous, which a private group (the
+default on creation) is invisible to.`,
+		Example: `  ncli groups show standup
+  ncli groups show standup --identity mykey`,
+		Args: common.ExactArgs(1),
+		RunE: runShow,
 	}
 
 	cmd.Flags().Duration("timeout", defaultQueryTimeout, "Query timeout")
@@ -73,15 +75,24 @@ func runShow(cmd *cobra.Command, args []string) error {
 	)
 	timeout, _ := cmd.Flags().GetDuration("timeout")
 
+	identityFlag, _ := cmd.Flags().GetString("identity")
+	privKeyHex, err := resolveIdentityOptional(cmd, identityFlag)
+	if err != nil {
+		return err
+	}
+
 	var events []*nip01.Event
 	err = common.WithSpinner(cmd, fmt.Sprintf("Querying %s for %s", relayURL.Host, groupID), func() error {
 		var qErr error
-		events, qErr = client.QueryTargets(ctx, targets, filters, timeout)
+		events, qErr = client.QueryTargetsWithAuth(ctx, targets, filters, timeout, privKeyHex)
 		return qErr
 	})
 	if err != nil {
 		if errors.Is(err, client.ErrNoReachableTargets) {
 			return common.NetworkError(cmd, relayURL.String(), err)
+		}
+		if errors.Is(err, client.ErrRestricted) {
+			return common.AuthError(cmd, err)
 		}
 		return common.RuntimeError(cmd, err)
 	}
@@ -124,7 +135,11 @@ func runShow(cmd *cobra.Command, args []string) error {
 	}
 
 	if detail.Metadata == nil && detail.Admins == nil && detail.Members == nil {
-		fmt.Println("(nothing found -- a private group is invisible to an anonymous connection)")
+		if privKeyHex == "" {
+			fmt.Println("(nothing found -- a private group is invisible to an anonymous connection)")
+		} else {
+			fmt.Println("(nothing found)")
+		}
 		return nil
 	}
 

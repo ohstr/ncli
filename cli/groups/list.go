@@ -34,12 +34,14 @@ func newListCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List the groups a relay knows about",
-		Long: `Reads the relay's own mirrored kind:39000 metadata events -- a plain
-read, no identity needed. A private group (the default on creation) is
-invisible to an anonymous connection; see "ncli groups --help" for why
-that's not a bug in this command.`,
+		Long: `Reads the relay's own mirrored kind:39000 metadata events. --identity
+is optional here (unlike every write in this tree, which requires it):
+given, it authenticates (NIP-42) so a member can see their own private
+group; omitted, the read stays anonymous, which a private group (the
+default on creation) is invisible to.`,
 		Example: `  ncli groups list
-  ncli groups list --relay wss://relay.example`,
+  ncli groups list --relay wss://relay.example
+  ncli groups list --identity mykey`,
 		Args: common.NoArgs,
 		RunE: runList,
 	}
@@ -67,15 +69,24 @@ func runList(cmd *cobra.Command, args []string) error {
 	filters := nip01.NewSubscriptionFilterGroup(nip01.NewFilter().WithKinds(nip29.KindGroupMetadata))
 	timeout, _ := cmd.Flags().GetDuration("timeout")
 
+	identityFlag, _ := cmd.Flags().GetString("identity")
+	privKeyHex, err := resolveIdentityOptional(cmd, identityFlag)
+	if err != nil {
+		return err
+	}
+
 	var events []*nip01.Event
 	err = common.WithSpinner(cmd, fmt.Sprintf("Listing groups on %s", relayURL.Host), func() error {
 		var qErr error
-		events, qErr = client.QueryTargets(ctx, targets, filters, timeout)
+		events, qErr = client.QueryTargetsWithAuth(ctx, targets, filters, timeout, privKeyHex)
 		return qErr
 	})
 	if err != nil {
 		if errors.Is(err, client.ErrNoReachableTargets) {
 			return common.NetworkError(cmd, relayURL.String(), err)
+		}
+		if errors.Is(err, client.ErrRestricted) {
+			return common.AuthError(cmd, err)
 		}
 		return common.RuntimeError(cmd, err)
 	}
@@ -102,7 +113,11 @@ func runList(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(groupList) == 0 {
-		fmt.Println("(no groups found -- a private group is invisible to an anonymous connection)")
+		if privKeyHex == "" {
+			fmt.Println("(no groups found -- a private group is invisible to an anonymous connection)")
+		} else {
+			fmt.Println("(no groups found)")
+		}
 		return nil
 	}
 

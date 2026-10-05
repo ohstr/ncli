@@ -115,6 +115,18 @@ func DumpFromTargets(ctx context.Context, targets *TargetsSpec, outPath string, 
 // instead.
 var ErrNoReachableTargets = errors.New("no target could be reached (every connection failed or timed out)")
 
+// ErrRestricted is returned by Find/DumpFromTargets/QueryTargetsWithAuth
+// when the merged result is empty AND at least one target closed the
+// query as "restricted: ..." (NIP-42 auth and/or NIP-43/NIP-29 membership)
+// rather than a plain EOSE -- distinguishing "the relay refused this" from
+// "nothing matched," the same way ErrNoReachableTargets distinguishes
+// "every target was unreachable" from a genuine empty result. Only
+// surfaces when identityHex was given: an anonymous caller's connections
+// never report restricted at all (relayclient.ReadEventsFromRelayWithAuth
+// has no such signal to give without an identity to retry with), so this
+// is unreachable for QueryTargets' own anonymous-only callers.
+var ErrRestricted = errors.New("relay restricted this query (private/membership required)")
+
 // mergeEventsFromTargets fetches events matching filters from every target
 // in targets (local store or remote relay), merging and deduplicating by
 // event ID across ALL of them -- DumpFromRelays' merge semantics above,
@@ -134,6 +146,7 @@ func mergeEventsFromTargets(ctx context.Context, targets *TargetsSpec, filters *
 	seen := make(map[string]struct{})
 	var merged []*nip01.Event
 	reached := false
+	anyRestricted := false
 
 	for _, target := range targets.Relays {
 		if target.killed {
@@ -141,6 +154,7 @@ func mergeEventsFromTargets(ctx context.Context, targets *TargetsSpec, filters *
 		}
 
 		var events []*nip01.Event
+		var restricted bool
 		var err error
 
 		switch target.Type {
@@ -156,7 +170,7 @@ func mergeEventsFromTargets(ctx context.Context, targets *TargetsSpec, filters *
 
 		case FlOW_REMOTE:
 			log.Info().Msgf("querying %s", target.relayURI.Host)
-			events, err = readEventsWithFallback(ctx, timeout, target.relayURI, target.relayFallbackURI, filters, identityHex)
+			events, restricted, err = readEventsWithFallback(ctx, timeout, target.relayURI, target.relayFallbackURI, filters, identityHex)
 			if err != nil {
 				var connErr *relayclient.ConnectionError
 				if errors.As(err, &connErr) {
@@ -168,6 +182,9 @@ func mergeEventsFromTargets(ctx context.Context, targets *TargetsSpec, filters *
 					continue
 				}
 				return nil, err
+			}
+			if restricted {
+				anyRestricted = true
 			}
 		}
 
@@ -183,6 +200,10 @@ func mergeEventsFromTargets(ctx context.Context, targets *TargetsSpec, filters *
 
 	if !reached && len(targets.Relays) > 0 {
 		return nil, ErrNoReachableTargets
+	}
+
+	if len(merged) == 0 && anyRestricted {
+		return nil, ErrRestricted
 	}
 
 	return merged, nil
@@ -201,6 +222,14 @@ func QueryTargets(ctx context.Context, targets *TargetsSpec, filters *nip01.Subs
 	return mergeEventsFromTargets(ctx, targets, filters, timeout, "")
 }
 
+// QueryTargetsWithAuth is QueryTargets' --identity-aware counterpart, for
+// a caller (groups show/list) that wants the merged set back rather than
+// Find/DumpFromTargets' own reporting. identityHex empty behaves exactly
+// like QueryTargets. Can return ErrRestricted -- see its own doc comment.
+func QueryTargetsWithAuth(ctx context.Context, targets *TargetsSpec, filters *nip01.SubscriptionFilterGroup, timeout time.Duration, identityHex string) ([]*nip01.Event, error) {
+	return mergeEventsFromTargets(ctx, targets, filters, timeout, identityHex)
+}
+
 func Find(parent context.Context, idFilter *nip01.SubscriptionFilter, filtersSpec []*FilterSpec, targets *TargetsSpec, savePath string, timeout time.Duration, identityHex string) error {
 
 	filters := nip01.NewSubscriptionFilterGroup()
@@ -214,12 +243,15 @@ func Find(parent context.Context, idFilter *nip01.SubscriptionFilter, filtersSpe
 	var events []*nip01.Event
 	var err error
 	reached := false
+	anyRestricted := false
 
 loop:
 	for _, relay := range targets.Relays {
 		if relay.killed {
 			continue
 		}
+
+		var restricted bool
 
 		switch relay.Type {
 		case FlOW_LOCAL:
@@ -234,7 +266,7 @@ loop:
 
 		case FlOW_REMOTE:
 			log.Info().Msgf("querying %s", relay.relayURI.Host)
-			events, err = readEventsWithFallback(parent, timeout, relay.relayURI, relay.relayFallbackURI, filters, identityHex)
+			events, restricted, err = readEventsWithFallback(parent, timeout, relay.relayURI, relay.relayFallbackURI, filters, identityHex)
 			if err != nil {
 				var connErr *relayclient.ConnectionError
 				if errors.As(err, &connErr) {
@@ -247,6 +279,9 @@ loop:
 				}
 				return err
 			}
+			if restricted {
+				anyRestricted = true
+			}
 
 		}
 
@@ -258,6 +293,10 @@ loop:
 
 	if !reached && len(targets.Relays) > 0 {
 		return ErrNoReachableTargets
+	}
+
+	if len(events) == 0 && anyRestricted {
+		return ErrRestricted
 	}
 
 	if len(events) == 0 {
@@ -682,14 +721,14 @@ func connectRelayWithFallback(ctx context.Context, primary, fallback *url.URL, c
 // connection failure -- see connectRelayWithFallback), matching
 // readEventsWithTimeout's ctx.DeadlineExceeded, which isn't a
 // *relayclient.ConnectionError.
-func readEventsWithFallback(ctx context.Context, timeout time.Duration, primary, fallback *url.URL, filters *nip01.SubscriptionFilterGroup, identityHex string) ([]*nip01.Event, error) {
-	events, err := readEventsWithTimeout(ctx, timeout, primary, filters, identityHex)
+func readEventsWithFallback(ctx context.Context, timeout time.Duration, primary, fallback *url.URL, filters *nip01.SubscriptionFilterGroup, identityHex string) (events []*nip01.Event, restricted bool, err error) {
+	events, restricted, err = readEventsWithTimeout(ctx, timeout, primary, filters, identityHex)
 	if err == nil || fallback == nil {
-		return events, err
+		return events, restricted, err
 	}
 	var connErr *relayclient.ConnectionError
 	if !errors.As(err, &connErr) {
-		return events, err
+		return events, restricted, err
 	}
 	return readEventsWithTimeout(ctx, timeout, fallback, filters, identityHex)
 }
@@ -699,19 +738,15 @@ func readEventsWithFallback(ctx context.Context, timeout time.Duration, primary,
 // accepts a subscription and then never sends EOSE or an error can't hang
 // the caller past this deadline. identityHex empty is the same anonymous
 // read as before this parameter existed (ReadEventsFromRelayWithAuth
-// delegates straight to ReadEventsFromRelay in that case). Discards the
-// restricted bool ReadEventsFromRelayWithAuth now also returns (nmilat#64)
-// -- surfacing "restricted" vs. "genuinely empty" to find/dump/groups
-// show/list is ncli#102's own follow-up, not part of this dependency bump.
-func readEventsWithTimeout(ctx context.Context, timeout time.Duration, relayURL *url.URL, filters *nip01.SubscriptionFilterGroup, identityHex string) ([]*nip01.Event, error) {
+// delegates straight to ReadEventsFromRelay in that case, which always
+// reports restricted=false, having no such signal to give).
+func readEventsWithTimeout(ctx context.Context, timeout time.Duration, relayURL *url.URL, filters *nip01.SubscriptionFilterGroup, identityHex string) ([]*nip01.Event, bool, error) {
 	if timeout <= 0 {
-		events, _, err := relayclient.ReadEventsFromRelayWithAuth(ctx, relayURL, filters, identityHex)
-		return events, err
+		return relayclient.ReadEventsFromRelayWithAuth(ctx, relayURL, filters, identityHex)
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	events, _, err := relayclient.ReadEventsFromRelayWithAuth(ctx, relayURL, filters, identityHex)
-	return events, err
+	return relayclient.ReadEventsFromRelayWithAuth(ctx, relayURL, filters, identityHex)
 }
 
 func GetPublicKey(privKey string) (string, error) {

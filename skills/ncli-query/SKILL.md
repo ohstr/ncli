@@ -50,6 +50,13 @@ ncli find -k 1 -s wss://relay.example --auth-identity mykey
 ncli dump -k 1 -s wss://relay.example --auth-identity mykey -o out.json
 ```
 
+If authenticating still isn't enough -- the identity isn't a member, or
+no identity was given against a restricted target at all -- both exit
+`7` (`auth`) with `"relay restricted this query (private/membership
+required)"` instead of the usual empty-result success, so a script can
+tell "refused" apart from "genuinely nothing matched" from `$?`/the
+`--json` error shape alone.
+
 ## `dump`
 
 ```sh

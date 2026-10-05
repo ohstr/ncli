@@ -40,8 +40,10 @@ entirely.
 (vault label/nsec/npub/hex/nprofile/nip-05, falling back to `groups.identity`
 / `NCLI_GROUPS_IDENTITY`, then the vault's sole entry when there is exactly
 one) are persistent flags on `groups` itself, inherited by every
-subcommand. `list`/`show` accept `--relay` but ignore `--identity` -- they
-are plain anonymous reads (see "Private groups" below).
+subcommand. Every write requires `--identity` (signing); `list`/`show`
+instead treat it as a bonus -- given, it authenticates (NIP-42) so a
+member can see their own private group; omitted, the read stays
+anonymous (see "Private groups" below).
 
 ```sh
 ncli groups create standup
@@ -51,6 +53,7 @@ ncli groups join standup --invite-code <code>
 ncli groups members add standup <pubkey> admin
 ncli groups list --relay wss://relay.example
 ncli groups show standup
+ncli groups show standup --identity mykey   # authenticated, if standup is private
 ```
 
 Output matches `ncli publish`'s own shape: a `published <id> to <relay>`
@@ -119,17 +122,27 @@ the event's own signature -- NIP-42 relay auth is not required to write,
 and these work today against any relay that speaks NIP-29, independent of
 ncli's own dependency state.
 
-`list`/`show` are different: they are anonymous reads with no identity
-attached at all. A relay enforcing NIP-29 visibility gating rejects a REQ
-naming a *private* group unless the session has a NIP-42-authenticated
-identity that is also a member of that exact group; public groups skip
-the check. Since a group defaults to **private and closed** on creation,
-`ncli groups list`/`show` against your own freshly-created group returns
-nothing until ncli's own connections can do NIP-42 auth -- tracked
-separately, not a bug in these two commands. `--identity` is deliberately
-not accepted by `list`/`show` yet: there is nothing in ncli's connection
-path today that would do anything with it, and a flag that silently does
-nothing is worse than no flag.
+`list`/`show` both accept `--identity` now, as a bonus: given, the
+connection authenticates (NIP-42); omitted, the read stays anonymous, as
+before `--identity` was accepted here at all. `show` always names one
+specific group (a "d" tag), which is what the relay's NIP-29 visibility
+gate keys off: a REQ naming a *private* group is rejected unless the
+session has an authenticated identity that is also a member of that
+exact group, so an authenticated member now sees their own private
+group where an anonymous read gets nothing. Since a group defaults to
+**private and closed** on creation, `ncli groups show standup` against
+your own freshly-created group needs `--identity` to see anything at
+all. `list` asks for every group's metadata by kind alone, naming no
+specific group -- see nmilat's own NIP-29 implementation notes for
+exactly how a kind-only query's visibility is scoped.
+
+Either way, if the result comes back empty specifically because the
+relay refused the query (no identity against a private group, or an
+identity that isn't a member) rather than because there's genuinely
+nothing there, `list`/`show` exit `7` (`auth`) with `"relay restricted
+this query (private/membership required)"` instead of the usual
+"(nothing found)" success -- same shape `find`/`dump`'s own
+`--auth-identity` uses.
 
 ## Validation
 

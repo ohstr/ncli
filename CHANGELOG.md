@@ -20,6 +20,26 @@
   rather than colliding. No identity given is unchanged: anonymous, as
   before. `apply`'s per-target identity is left for a follow-up -- its
   YAML stream/sync spec needs its own schema decision. Closes #99. (#100)
+- `ncli groups show`/`ncli groups list` accept `--identity` now (the same
+  persistent flag every write in `groups` already requires, just optional
+  here) to authenticate a read the same way `--auth-identity` does for
+  `find`/`dump`: given, a member can see their own private group; omitted,
+  the read stays anonymous as before. Threaded via a new
+  `client.QueryTargetsWithAuth`, `QueryTargets`' --identity-aware
+  counterpart (`QueryTargets` itself is untouched -- none of its other 10
+  callers need this).
+- `find`/`dump`/`groups show`/`groups list` all now tell "the relay
+  refused this" apart from "nothing matched": a new `client.ErrRestricted`
+  surfaces whenever a query comes back empty because at least one target
+  closed it as `"restricted: ..."` rather than a plain EOSE, and each
+  command maps it to exit `7` (`auth`) instead of the usual empty-result
+  success. Required threading `restricted` all the way down to
+  `relayclient.ReadEventsFromRelayWithAuth`'s own per-attempt result
+  (previously discarded on the retry path) through
+  `readEventsWithTimeout`/`readEventsWithFallback`/
+  `mergeEventsFromTargets`. Never observable without an identity -- an
+  anonymous caller's connections have no such signal to give, so
+  `QueryTargets`' own anonymous-only callers are unaffected. Closes #102.
 
 ### Changed
 

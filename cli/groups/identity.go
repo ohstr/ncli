@@ -57,3 +57,16 @@ func resolveIdentity(cmd *cobra.Command, identityFlag string) (pubKeyHex, privKe
 	}
 	return resolved.PubKeyHex, privKeyHex, nil
 }
+
+// resolveIdentityOptional resolves the same --identity flag (or
+// groups.identity config key) resolveIdentity does, but as a bonus for
+// "groups show"/"groups list"'s reads rather than a requirement for a
+// write: "" with no error when nothing is given/configured and the vault
+// has no sole entry to fall back to, so both commands stay anonymous-by-
+// default exactly as before this existed. Only the private key is
+// returned -- a read authenticates with it (NIP-42), it never needs the
+// actor's own pubkey back the way a write (resolveIdentity) does.
+func resolveIdentityOptional(cmd *cobra.Command, identityFlag string) (privKeyHex string, err error) {
+	jsonMode, _ := cmd.Flags().GetBool("json")
+	return keyresolve.ResolveIdentityOptional(cmd, identityFlag, "groups.identity", jsonMode)
+}

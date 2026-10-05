@@ -28,11 +28,12 @@ own recent events), which is why these are dedicated commands rather than a
 hand-written YAML event: populating that tag needs a relay round trip no
 YAML file can do.
 
-"groups list"/"groups show" need no identity -- they are plain reads. A
-private group's roster is gated by NIP-42 relay auth on the relay side;
-until ncli's own connections can authenticate (tracked separately), those
-two commands only ever see what an anonymous connection is allowed to see,
-which for a private group (the default on creation) is nothing.`,
+"groups list"/"groups show" don't require an identity -- they're plain
+reads, anonymous by default -- but accept --identity as a bonus: given,
+it authenticates (NIP-42) so a member can see their own private group's
+roster; omitted, they only ever see what an anonymous connection is
+allowed to, which for a private group (the default on creation) is
+nothing.`,
 		Example: `  ncli groups create standup
   ncli groups edit standup --name "Standup" --public
   ncli groups members add standup <pubkey>
@@ -41,7 +42,7 @@ which for a private group (the default on creation) is nothing.`,
 	}
 
 	cmd.PersistentFlags().String("relay", "", "Relay the group lives on (falls back to the first configured prefs relay)")
-	cmd.PersistentFlags().String("identity", "", "Identity to sign group events with -- vault label, nsec, npub, hex, nprofile, or nip-05")
+	cmd.PersistentFlags().String("identity", "", "Identity to sign group events with (required for writes), or to authenticate a \"list\"/\"show\" read with (optional) -- vault label, nsec, npub, hex, nprofile, or nip-05")
 
 	cmd.AddCommand(newCreateCommand())
 	cmd.AddCommand(newEditCommand())

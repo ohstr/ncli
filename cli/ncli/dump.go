@@ -72,6 +72,9 @@ Omit both to use the relays from "ncli prefs relays".`,
 			if errors.Is(err, client.ErrNoReachableTargets) {
 				return common.NetworkError(cmd, "", err)
 			}
+			if errors.Is(err, client.ErrRestricted) {
+				return common.AuthError(cmd, err)
+			}
 			return common.RuntimeError(cmd, err)
 		}
 		return nil

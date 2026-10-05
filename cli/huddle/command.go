@@ -21,7 +21,6 @@ import (
 	"github.com/ohstr/nmilat/huddle/wsaudio"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"golang.org/x/term"
 )
 
@@ -288,7 +287,8 @@ func runBoard(cmd *cobra.Command, ctx context.Context, hc Client, room, activity
 // what cli/bunker's ResolveSignerKey does for the bunker: the --identity flag,
 // then configKey's config value, then the vault's sole entry when there is
 // exactly one. A pubkey-only identity is rejected -- authenticating means
-// signing.
+// signing. Thin wrapper around the cross-command keyresolve.ResolveIdentity
+// helper.
 //
 // configKey is parameterized (rather than a hardcoded "huddle.identity")
 // because this is shared by two callers with different fallback
@@ -296,48 +296,7 @@ func runBoard(cmd *cobra.Command, ctx context.Context, hc Client, room, activity
 // "ncli space join" now) and resolveListIdentity's own "huddle.identity"
 // ("ncli huddle list" stays under huddle).
 func resolveIdentity(cmd *cobra.Command, identityFlag, configKey string) (string, error) {
-	identity := identityFlag
-	if identity == "" {
-		identity = viper.GetString(configKey)
-	}
-
-	if identity == "" {
-		entries, err := client.LoadVaultEntries()
-		if err != nil {
-			return "", common.RuntimeError(cmd, err)
-		}
-		switch len(entries) {
-		case 0:
-			return "", common.InvocationError(cmd, fmt.Errorf("--identity is required (or set %s): no vault identity to fall back to", envVarHint(configKey)))
-		case 1:
-			identity = entries[0].Label
-		default:
-			return "", common.InvocationError(cmd, fmt.Errorf("--identity is required (or set %s): the vault has %d saved identities, none chosen by default", envVarHint(configKey), len(entries)))
-		}
-	}
-
-	resolved, err := client.ResolveIdentifier(identity)
-	if err != nil {
-		return "", keyresolve.ClassifyIdentifierError(cmd, identity, err)
-	}
-
-	privKeyHex, err := keyresolve.ResolveSigningKey(cmd, false, resolved)
-	if err != nil {
-		return "", err
-	}
-	if privKeyHex == "" {
-		return "", common.AuthError(cmd, fmt.Errorf("identity %q has no private key available", common.RedactSecretInput(identity)))
-	}
-	return privKeyHex, nil
-}
-
-// envVarHint turns a viper dotted config key (e.g. "space.identity") into
-// the NCLI_-prefixed, underscore-joined env var that sets it, alongside the
-// config key itself (e.g. "NCLI_SPACE_IDENTITY/space.identity") -- matching
-// root.go's SetEnvPrefix("NCLI") + SetEnvKeyReplacer(".", "_"), so an error
-// message's hint can't drift out of sync with the actual env var name.
-func envVarHint(configKey string) string {
-	return "NCLI_" + strings.ToUpper(strings.ReplaceAll(configKey, ".", "_")) + "/" + configKey
+	return keyresolve.ResolveIdentity(cmd, identityFlag, configKey)
 }
 
 // resolveRelay honors --relay, falling back to the first configured prefs relay

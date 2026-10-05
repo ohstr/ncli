@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.8.0-rc.5]
+
+### Changed
+
+- Bumped to nmilat v0.5.0-rc.5, which carries the NIP-29 relay-based groups
+  implementation (nmilat#56: real create/delete/membership/moderation state
+  behind kinds 9000-9022, not just structural validation). ncli doesn't use
+  any of it yet -- this just picks up a clean tagged version in place of
+  the untagged pseudo-version (`v0.5.0-rc.3.0.20261004153625-3e302880071b`)
+  go.mod had been pinned to.
+
 ## [0.8.0-rc.4]
 
 ### Added

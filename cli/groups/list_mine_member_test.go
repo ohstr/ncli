@@ -286,4 +286,3 @@ func TestGroupsList_MineAndMember_EndToEnd(t *testing.T) {
 		}
 	})
 }
-

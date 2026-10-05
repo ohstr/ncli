@@ -2,14 +2,38 @@
 
 ## [0.8.0-rc.5]
 
+### Added
+
+- `ncli space create/list/show/join` -- a generic front door for NIP-53
+  meeting spaces (kind:30312), which had no write path at all before.
+  `create` always fills every field `nip53.ParseMeetingSpace` strictly
+  requires, and rejects a room id that couldn't later be dialed as a
+  huddle room before publishing, not after. Consolidates NIP-53
+  listing/joining under `space`: `ncli huddle` now keeps only `list`
+  (ephemeral room listing, genuinely distinct from a space) -- `join`
+  moved off `huddle` and is reachable only as `space join` now
+  (implementation stays in `cli/huddle`, which needs its own dial/TUI
+  code). `space join` with no argument resolves to the relay's one open
+  space when exactly one exists, erroring on zero or multiple rather than
+  guessing. (#93)
+- `ncli groups create/edit/delete/invite/join/leave/members/pins/
+  delete-event/list/show` -- the full self-service NIP-29 relay-hosted-
+  groups write surface, each a plain signed event (no admin HTTP surface)
+  with the `previous` tag attached automatically. `edit` reads the
+  group's current kind:39000 metadata first and merges in only the flags
+  actually passed, since the underlying kind:9002 event replaces metadata
+  wholesale. `list`/`show` are anonymous reads only for now -- a private
+  group (the default on creation) needs NIP-42 auth to read, which this
+  repo's connections can't do yet (tracked separately). (#94)
+
 ### Changed
 
 - Bumped to nmilat v0.5.0-rc.5, which carries the NIP-29 relay-based groups
-  implementation (nmilat#56: real create/delete/membership/moderation state
-  behind kinds 9000-9022, not just structural validation). ncli doesn't use
-  any of it yet -- this just picks up a clean tagged version in place of
-  the untagged pseudo-version (`v0.5.0-rc.3.0.20261004153625-3e302880071b`)
-  go.mod had been pinned to.
+  implementation above (nmilat#56: real create/delete/membership/
+  moderation state behind kinds 9000-9022, not just structural
+  validation) -- also replaces the untagged pseudo-version
+  (`v0.5.0-rc.3.0.20261004153625-3e302880071b`) go.mod had been pinned to
+  with a clean tagged release. (#96)
 
 ## [0.8.0-rc.4]
 

@@ -141,7 +141,7 @@ func TestHuddleCommandShape(t *testing.T) {
 }
 
 func TestResolveRelayHonorsTheFlag(t *testing.T) {
-	cmd := newJoinCommand()
+	cmd := NewJoinCommand()
 
 	// A bare host is accepted the same bare-host-friendly way every other ncli
 	// relay input is, and defaults to wss.

@@ -29,6 +29,9 @@ that priority order.
 | `ncli huddle join <room\|space>` | Join a relay's voice room and watch the live roster and who is speaking; plays the call in a `-tags huddleaudio` build (never captures a microphone). Given a NIP-53 activity instead of a room id (naddr, or a `30312:`/`30313:` coordinate) it resolves the space to find the relay and room, and opens the kind:1311 conversation beside the roster — reply with `<r>`, quote with `<y>`, or `--no-chat` to omit it. Chat needs an activity: a 1311 message must name one, and a bare room id is not an addressable event |
 | `ncli huddle list` | List the rooms that currently have someone in them, with peer count and the protocol version each is pinned to — a room id is otherwise out-of-band knowledge, and `join` on an unused one opens it rather than failing |
 | `ncli huddle spaces` | List NIP-53 meeting spaces (kind:30312) that are `open` and have a live kind:30313 session, treating an un-refreshed `live` session as ended. A *space* is a published, addressable `30312:<pubkey>:<d>` record of where a meeting lives; a *room* (above) is the ephemeral transport it runs over |
+| `ncli space create <id>` | Publish a new NIP-53 meeting space (kind:30312). `--service` defaults to `--relay`, which is what makes the space joinable with `space join`/`huddle join` afterward — point it elsewhere to describe a space on a transport ncli itself can't dial |
+| `ncli space list` / `ncli space show <id>` | List every open space a relay knows about, or show one's full detail — unlike `huddle spaces`, a space with no live session is still shown, since the space is the durable thing, a live call is just a property of it |
+| `ncli space join <id\|naddr\|room>` | Same command as `ncli huddle join`, mounted under the generic name too — a space's voice/audio call is one option it can support, not the only reason to have a space |
 | `ncli id [identifier]` | Generate or inspect a Nostr keypair (local vault) |
 | `ncli id delegate` | Mint a NIP-26 delegation token |
 | `ncli id sign -e <events.json> -o <signed.json>` | Sign one or more unsigned events with a vault/nsec identity |
@@ -49,7 +52,8 @@ parser never picks up log noise. `--json` and `-q/--quiet` are global flags
 (declared once on the root command, available on every subcommand) rather
 than per-command. `id`, `id list`, `id sign`, `version`, `id delegate`, `relay
 stats`/`reindex`/`clear`, `relay members`/`invites`/`roles`, `ping`,
-`miner mine`/`check`, `publish`, `huddle list`/`spaces`, and `prefs relays add`/
+`miner mine`/`check`, `publish`, `huddle list`/`spaces`, `space create`/
+`list`/`show`, and `prefs relays add`/
 `remove`/`list`/`clear`/`prefs path` are human-readable text by default
 and switch their *success* output to structured JSON on stdout with
 `--json`. `find` has no
@@ -150,6 +154,10 @@ or invoking a command in that area:
 - Uploading/fetching/managing content on Blossom media servers
   (`blossom upload/download/list/rm/mirror/report/servers`) →
   `skills/ncli-blossom/SKILL.md`
+- Joining a relay's voice room, or listing live rooms/spaces (`huddle
+  join`/`list`/`spaces`) → `skills/ncli-huddle/SKILL.md`
+- Creating, listing, or showing a NIP-53 meeting space (`space create`/
+  `list`/`show`/`join`) → `skills/ncli-space/SKILL.md`
 
 These skills assume only the `ncli` binary is available — no access to this
 source tree. (Building/contributing to `ncli` itself is a different task —

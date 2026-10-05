@@ -10,6 +10,7 @@ import (
 	"github.com/ohstr/ncli/cli/huddle"
 	"github.com/ohstr/ncli/cli/ncli"
 	relaycli "github.com/ohstr/ncli/cli/relay"
+	"github.com/ohstr/ncli/cli/space"
 	"github.com/spf13/cobra"
 )
 
@@ -41,6 +42,11 @@ func init() {
 	// its own child, for joining a voice room on a relay running with
 	// huddles enabled; see NewHuddleCommand.
 	ncli.RootCmd.AddCommand(huddle.NewHuddleCommand())
+
+	// Register the generic NIP-53 meeting-space command ("space") --
+	// mounts create/list/show plus huddle's own "join" (reused, not
+	// reimplemented) as its children; see NewSpaceCommand.
+	ncli.RootCmd.AddCommand(space.NewSpaceCommand())
 }
 
 func main() {

@@ -47,14 +47,18 @@ still works and the status line says "watching only".`,
 
 	cmd.PersistentFlags().String("identity", "", "Identity to authenticate with -- vault label, nsec, npub, hex, nprofile, or nip-05")
 
-	cmd.AddCommand(newJoinCommand())
+	cmd.AddCommand(NewJoinCommand())
 	cmd.AddCommand(newListCommand())
 	cmd.AddCommand(newSpacesCommand())
 
 	return cmd
 }
 
-func newJoinCommand() *cobra.Command {
+// NewJoinCommand builds the "join" subcommand. Exported so cli/space can
+// mount this exact same command (same flags, same resolution/dial/TUI path)
+// under "ncli space join" too, rather than reimplementing it -- a space is
+// just the generic NIP-53 framing of the same underlying huddle call.
+func NewJoinCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "join <room|space>",
 		Short: "Join a huddle and watch who is talking",

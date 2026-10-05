@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.8.0-rc.6]
+
+### Changed
+
+- The release pipeline now also publishes `ghcr.io/ohstr/ncli:rc` (and the
+  per-arch `rc-amd64`/`rc-arm64` tags under it), always pointing at the
+  newest *prerelease* build the way `latest` already points at the newest
+  *stable* one. Same per-arch/manifest split as `latest`, but with the
+  inverse condition: `skip_push` on the `rc` entries is a template that
+  pushes only when `.Prerelease` is set, since goreleaser's `auto` keyword
+  only knows how to skip *on* a prerelease, not skip *unless* one. A stable
+  release still never touches `rc`, exactly as an RC never touches `latest`.
+
 ## [0.8.0-rc.5]
 
 ### Added

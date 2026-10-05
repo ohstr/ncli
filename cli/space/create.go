@@ -5,6 +5,7 @@ import (
 	"syscall"
 
 	"github.com/ohstr/ncli/cli/common"
+	"github.com/ohstr/ncli/cli/huddle"
 	"github.com/ohstr/nmilat/nip53"
 	"github.com/spf13/cobra"
 )
@@ -18,6 +19,12 @@ addressable identity, 30312:<pubkey>:<id>) and its "room" tag -- ncli's own
 convention is that --service plus that id together resolve to a huddle
 room (see "ncli huddle join"'s own docs), so there is nothing meaningful to
 set the room tag to independently.
+
+Because id doubles as a huddle room id, it may not contain /, ?, # or % --
+the same restriction "ncli huddle join" enforces, checked here too so a
+bad id fails now rather than publishing successfully and only failing
+later at join time. A human-readable name belongs in --summary, which has
+no such restriction.
 
 --service defaults to --relay, which is what makes the space joinable with
 "ncli space join"/"ncli huddle join" afterwards. Set --service/--endpoint
@@ -51,6 +58,15 @@ func runCreate(cmd *cobra.Command, args []string) error {
 	relayURL, err := resolveRelay(cmd, relayFlag)
 	if err != nil {
 		return err
+	}
+
+	// id doubles as the huddle room id (see the Long text above), so it has
+	// to survive huddle.Endpoint's own check -- reused here rather than
+	// duplicated, so the two can't drift. Catching this now means a bad id
+	// fails loudly at create time instead of publishing successfully and
+	// only failing later, unhelpfully, at join time.
+	if _, err := huddle.Endpoint(relayURL, id); err != nil {
+		return common.InvalidInputError(cmd, id, err)
 	}
 
 	identityFlag, _ := cmd.Flags().GetString("identity")

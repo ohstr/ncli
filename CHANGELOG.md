@@ -40,6 +40,21 @@
   `mergeEventsFromTargets`. Never observable without an identity -- an
   anonymous caller's connections have no such signal to give, so
   `QueryTargets`' own anonymous-only callers are unaffected. Closes #102.
+- `ncli groups list` takes `--mine`/`--member <pubkey>` to scope the
+  listing to groups a specific pubkey belongs to -- the "what groups am I
+  in" shape `buzz-acp`'s `discover_channels()` needs, as opposed to the
+  default "what groups exist" one. Implemented as a second filter in the
+  same subscription, a `kind:39002` roster query `#p`-tagged to the
+  target pubkey, merged client-side against the usual `kind:39000`
+  listing. `--mine` resolves its pubkey from `--identity` (so it requires
+  one); `--member` takes any pubkey directly with no identity required,
+  though an authenticated read is still needed to see that pubkey's own
+  private groups, same as the unscoped listing -- scoping by `#p` is
+  orthogonal to NIP-42 auth, not a way around it. Depended on nmilat's
+  own P0 fix for its privacy guarantee to hold (nmilat#66): before that
+  fix, a `#p`-tagged `kind:39002` query bypassed the relay's visibility
+  gate exactly like the untagged `kind:39000` case it fixed, since
+  neither carries a "d"/"h" tag the old request-level gate looked at.
 
 ### Changed
 
@@ -64,6 +79,9 @@
   redial fix was built to route around. `ReadEventsFromRelayWithAuth`
   also gained a `restricted` return value nmilat#64 exposes; this repo
   doesn't surface it yet (ncli#102's own follow-up).
+- Bumped to nmilat past v0.5.0-rc.6 again, past nmilat#66: the
+  untagged-group-query privacy bypass fix `groups list --mine`/`--member`
+  above depends on for its own privacy guarantee to hold.
 
 ## [0.8.0-rc.5]
 

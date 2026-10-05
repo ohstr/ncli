@@ -13,6 +13,7 @@ import (
 	"github.com/ohstr/ncli/client"
 	"github.com/ohstr/nmilat/nip01"
 	"github.com/ohstr/nmilat/nip29"
+	"github.com/ohstr/nmilat/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -38,15 +39,28 @@ func newListCommand() *cobra.Command {
 is optional here (unlike every write in this tree, which requires it):
 given, it authenticates (NIP-42) so a member can see their own private
 group; omitted, the read stays anonymous, which a private group (the
-default on creation) is invisible to.`,
+default on creation) is invisible to.
+
+--mine/--member narrow the listing to groups a specific pubkey belongs
+to (a second kind:39002 query, "#p" tagged to that pubkey, merged against
+the usual kind:39000 one) -- the "what groups am I in" shape, as opposed
+to the default "what groups exist" one. --mine resolves that pubkey from
+--identity, so it requires one; --member takes any pubkey directly, no
+identity required (though an authenticated read is still needed to see
+that pubkey's own private groups, same as the unscoped listing).`,
 		Example: `  ncli groups list
   ncli groups list --relay wss://relay.example
-  ncli groups list --identity mykey`,
+  ncli groups list --identity mykey
+  ncli groups list --identity mykey --mine
+  ncli groups list --member <pubkey>`,
 		Args: common.NoArgs,
 		RunE: runList,
 	}
 
 	cmd.Flags().Duration("timeout", defaultQueryTimeout, "Query timeout")
+	cmd.Flags().Bool("mine", false, "Only list groups --identity is a member of")
+	cmd.Flags().String("member", "", "Only list groups this pubkey is a member of")
+	cmd.MarkFlagsMutuallyExclusive("mine", "member")
 
 	return cmd
 }
@@ -66,7 +80,6 @@ func runList(cmd *cobra.Command, args []string) error {
 		return common.RuntimeError(cmd, err)
 	}
 
-	filters := nip01.NewSubscriptionFilterGroup(nip01.NewFilter().WithKinds(nip29.KindGroupMetadata))
 	timeout, _ := cmd.Flags().GetDuration("timeout")
 
 	identityFlag, _ := cmd.Flags().GetString("identity")
@@ -74,6 +87,32 @@ func runList(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+
+	mineFlag, _ := cmd.Flags().GetBool("mine")
+	memberFlag, _ := cmd.Flags().GetString("member")
+
+	var scopeToPubkey string
+	switch {
+	case memberFlag != "":
+		if err := utils.Validate32Key(memberFlag); err != nil {
+			return common.InvalidInputError(cmd, memberFlag, err)
+		}
+		scopeToPubkey = memberFlag
+	case mineFlag:
+		if privKeyHex == "" {
+			return common.UsageError(cmd, errors.New("--mine requires --identity, to know which pubkey to scope to"))
+		}
+		scopeToPubkey, err = client.GetPublicKey(privKeyHex)
+		if err != nil {
+			return common.RuntimeError(cmd, err)
+		}
+	}
+
+	filterBuilders := []*nip01.SubscriptionFilter{nip01.NewFilter().WithKinds(nip29.KindGroupMetadata)}
+	if scopeToPubkey != "" {
+		filterBuilders = append(filterBuilders, nip01.NewFilter().WithKinds(nip29.KindGroupMembers).WithTag("p", scopeToPubkey))
+	}
+	filters := nip01.NewSubscriptionFilterGroup(filterBuilders...)
 
 	var events []*nip01.Event
 	err = common.WithSpinner(cmd, fmt.Sprintf("Listing groups on %s", relayURL.Host), func() error {
@@ -91,10 +130,29 @@ func runList(cmd *cobra.Command, args []string) error {
 		return common.RuntimeError(cmd, err)
 	}
 
+	var memberGroupIDs map[string]bool
+	if scopeToPubkey != "" {
+		memberGroupIDs = make(map[string]bool)
+		for _, ev := range events {
+			if ev.Kind != nip29.KindGroupMembers {
+				continue
+			}
+			if gm, perr := nip29.ParseGroupMembers(ev); perr == nil {
+				memberGroupIDs[gm.ID] = true
+			}
+		}
+	}
+
 	var groupList []groupSummary
 	for _, ev := range events {
+		if ev.Kind != nip29.KindGroupMetadata {
+			continue
+		}
 		meta, perr := nip29.ParseGroupMetadata(ev)
 		if perr != nil {
+			continue
+		}
+		if memberGroupIDs != nil && !memberGroupIDs[meta.ID] {
 			continue
 		}
 		groupList = append(groupList, groupSummary{
@@ -113,9 +171,14 @@ func runList(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(groupList) == 0 {
-		if privKeyHex == "" {
+		switch {
+		case scopeToPubkey != "" && privKeyHex == "":
+			fmt.Println("(no groups found -- a private group that pubkey belongs to is invisible to an anonymous connection)")
+		case scopeToPubkey != "":
+			fmt.Println("(no groups found -- that pubkey is not a member of any group visible to this connection)")
+		case privKeyHex == "":
 			fmt.Println("(no groups found -- a private group is invisible to an anonymous connection)")
-		} else {
+		default:
 			fmt.Println("(no groups found)")
 		}
 		return nil

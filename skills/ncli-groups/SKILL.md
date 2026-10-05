@@ -33,7 +33,7 @@ entirely.
 | `groups members remove <group-id> <pubkey>` | 9001 | |
 | `groups pins set <group-id> [--event...] [--address...]` | 9010 | whole-list replace |
 | `groups delete-event <group-id> <event-id>` | 9005 | |
-| `groups list` | reads 39000 | every group the relay has metadata for |
+| `groups list [--mine\|--member <pubkey>]` | reads 39000 (+39002 when scoped) | every group the relay has metadata for, or just the ones a pubkey belongs to |
 | `groups show <group-id>` | reads 39000/39001/39002 | one group's full detail |
 
 `--relay` (falls back to the first configured prefs relay) and `--identity`
@@ -52,6 +52,8 @@ ncli groups invite standup
 ncli groups join standup --invite-code <code>
 ncli groups members add standup <pubkey> admin
 ncli groups list --relay wss://relay.example
+ncli groups list --identity mykey --mine     # only groups mykey belongs to
+ncli groups list --member <pubkey>           # only groups that pubkey belongs to
 ncli groups show standup
 ncli groups show standup --identity mykey   # authenticated, if standup is private
 ```

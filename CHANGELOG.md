@@ -19,7 +19,7 @@
   -- same shared flag set, unrelated meaning, so this gets its own flag
   rather than colliding. No identity given is unchanged: anonymous, as
   before. `apply`'s per-target identity is left for a follow-up -- its
-  YAML stream/sync spec needs its own schema decision. (ncli#99)
+  YAML stream/sync spec needs its own schema decision. Closes #99. (#100)
 
 ### Changed
 

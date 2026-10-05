@@ -24,36 +24,35 @@ import (
 	"golang.org/x/term"
 )
 
-// NewHuddleCommand builds the `ncli huddle` command tree.
+// NewHuddleCommand builds the `ncli huddle` command tree. Joining a call and
+// listing/creating NIP-53 spaces live under "ncli space" instead (see
+// NewJoinCommand and cli/space) -- this tree now covers only the
+// transport-level operation that isn't about a space at all: listing the
+// ephemeral rooms a relay currently has occupied.
 func NewHuddleCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "huddle",
-		Short: "Join a relay's voice rooms",
-		Long: `Join a voice room hosted by a relay running "ncli relay" with huddles enabled.
-
-Shows the live roster and who is speaking, drawn from the level telemetry every
-audio frame already carries. It never captures a microphone, so joining puts no
-audio into the room.
-
-Hearing the call needs a build with audio output: the release binaries are built
-without cgo and the only maintained output library needs it on Linux, so
-playback is compiled in only under "-tags huddleaudio". Without it the roster
-still works and the status line says "watching only".`,
-		Example: `  ncli huddle join standup --relay wss://relay.example
-  ncli huddle join standup --relay ws://localhost:7777 --identity satoshi`,
-		RunE: common.RequireSubcommand,
+		Short: "List a relay's live voice rooms",
+		Long: `Lists the ephemeral transport rooms currently occupied on a relay running
+"ncli relay" with huddles enabled -- see "ncli space join" to actually join
+one.`,
+		Example: `  ncli huddle list --relay wss://relay.example`,
+		RunE:    common.RequireSubcommand,
 	}
 
 	cmd.PersistentFlags().String("identity", "", "Identity to authenticate with -- vault label, nsec, npub, hex, nprofile, or nip-05")
 
-	cmd.AddCommand(newJoinCommand())
 	cmd.AddCommand(newListCommand())
-	cmd.AddCommand(newSpacesCommand())
 
 	return cmd
 }
 
-func newJoinCommand() *cobra.Command {
+// NewJoinCommand builds the "join" subcommand. Lives in this package (it
+// needs huddle's own resolution/dial/TUI code) but is only ever mounted
+// under "ncli space" (see cli/space), not here -- a space is the generic
+// NIP-53 framing of the same underlying huddle call, and voice is one
+// option a space can enable, not a separate top-level thing to join.
+func NewJoinCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "join <room|space>",
 		Short: "Join a huddle and watch who is talking",
@@ -70,9 +69,9 @@ gives the roster only -- there would be nothing valid to tag a message with.
 
 Ctrl+C (or q) asks before leaving, so a stray keystroke does not drop the
 call.`,
-		Example: `  ncli huddle join standup --relay wss://relay.example
-  ncli huddle join 30312:<pubkey>:standup
-  ncli huddle join naddr1...`,
+		Example: `  ncli space join standup --relay wss://relay.example
+  ncli space join 30312:<pubkey>:standup
+  ncli space join naddr1...`,
 		Args: common.ExactArgs(1),
 		RunE: runJoin,
 	}
@@ -91,12 +90,12 @@ func runJoin(cmd *cobra.Command, args []string) error {
 	// authenticating, joining a real room, and only then finding there is
 	// nowhere to draw it.
 	if !term.IsTerminal(int(os.Stdout.Fd())) {
-		return common.UnsupportedError(cmd, "huddle join",
+		return common.UnsupportedError(cmd, "space join",
 			errors.New("the roster view needs a terminal, and stdout is not one"))
 	}
 
 	identityFlag, _ := cmd.Flags().GetString("identity")
-	privKeyHex, err := resolveIdentity(cmd, identityFlag)
+	privKeyHex, err := resolveIdentity(cmd, identityFlag, "space.identity")
 	if err != nil {
 		return err
 	}
@@ -284,13 +283,20 @@ func runBoard(cmd *cobra.Command, ctx context.Context, hc Client, room, activity
 	return nil
 }
 
-// resolveIdentity resolves the key that signs the NIP-42 auth event: the
-// --identity flag, then the "huddle.identity" config key, then the vault's
-// sole entry when there is exactly one. A pubkey-only identity is
-// rejected -- authenticating means signing. Thin wrapper around the
-// cross-command keyresolve.ResolveIdentity helper.
-func resolveIdentity(cmd *cobra.Command, identityFlag string) (string, error) {
-	return keyresolve.ResolveIdentity(cmd, identityFlag, "huddle.identity")
+// resolveIdentity resolves the key that signs the NIP-42 auth event, mirroring
+// what cli/bunker's ResolveSignerKey does for the bunker: the --identity flag,
+// then configKey's config value, then the vault's sole entry when there is
+// exactly one. A pubkey-only identity is rejected -- authenticating means
+// signing. Thin wrapper around the cross-command keyresolve.ResolveIdentity
+// helper.
+//
+// configKey is parameterized (rather than a hardcoded "huddle.identity")
+// because this is shared by two callers with different fallback
+// conventions: runJoin's "space.identity" (join is only ever reached via
+// "ncli space join" now) and resolveListIdentity's own "huddle.identity"
+// ("ncli huddle list" stays under huddle).
+func resolveIdentity(cmd *cobra.Command, identityFlag, configKey string) (string, error) {
+	return keyresolve.ResolveIdentity(cmd, identityFlag, configKey)
 }
 
 // resolveRelay honors --relay, falling back to the first configured prefs relay

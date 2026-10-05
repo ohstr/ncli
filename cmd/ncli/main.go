@@ -7,9 +7,11 @@ import (
 	"github.com/ohstr/ncli/cli/blossom"
 	"github.com/ohstr/ncli/cli/bunker"
 	"github.com/ohstr/ncli/cli/common"
+	"github.com/ohstr/ncli/cli/groups"
 	"github.com/ohstr/ncli/cli/huddle"
 	"github.com/ohstr/ncli/cli/ncli"
 	relaycli "github.com/ohstr/ncli/cli/relay"
+	"github.com/ohstr/ncli/cli/space"
 	"github.com/spf13/cobra"
 )
 
@@ -37,10 +39,21 @@ func init() {
 	// own children; see NewBlossomCommand.
 	ncli.RootCmd.AddCommand(blossom.NewBlossomCommand())
 
-	// Register the huddle voice-room client ("huddle") -- mounts "join" as
-	// its own child, for joining a voice room on a relay running with
-	// huddles enabled; see NewHuddleCommand.
+	// Register the huddle voice-room client ("huddle") -- mounts "list" as
+	// its own child, for listing the ephemeral transport rooms occupied on
+	// a relay running with huddles enabled. Joining one lives under
+	// "space" instead (see below); see NewHuddleCommand.
 	ncli.RootCmd.AddCommand(huddle.NewHuddleCommand())
+
+	// Register the NIP-29 relay-hosted-groups client ("groups") -- mounts
+	// create/edit/delete/invite/join/leave/members/pins/delete-event/list/
+	// show as its own children; see NewGroupsCommand.
+	ncli.RootCmd.AddCommand(groups.NewGroupsCommand())
+
+	// Register the generic NIP-53 meeting-space command ("space") --
+	// mounts create/list/show plus huddle's own "join" (implemented in
+	// cli/huddle, mounted only here) as its children; see NewSpaceCommand.
+	ncli.RootCmd.AddCommand(space.NewSpaceCommand())
 }
 
 func main() {

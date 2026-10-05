@@ -157,6 +157,24 @@ agent_auth:
   # spec, kind= clauses are advisory only unless a relay opts into this.
   kindEnforcement: false
 
+# POST /query (optional): a one-shot HTTP alternative to a WebSocket
+# REQ/EOSE round trip -- the request body is a JSON array of NIP-01
+# filters, the response a flat JSON array of matching events. This is
+# buzz's own NIP-CW spec, not ncli's own "NIP-CW" (the decode command's
+# name for NIP-CASH's unrelated Circle Wallet connection) and not NIP-98
+# (that's just the request-signing transport, shared with the /admin
+# endpoints above). Omitting this block leaves it unmounted.
+query:
+  # NIP-98 authenticates every request -- it proves identity and binds the
+  # signature to this body/method/URL -- on its own. But NIP-CW's Access
+  # Scoping section requires a plain filter through this endpoint to get
+  # the same access control an equivalent REQ would: with
+  # nip11.limitation.membership_required set above, a result is gated to
+  # the signer's own NIP-43 membership too, exactly like REQ/COUNT. With
+  # membership_required unset (the common case), any validly-signed caller
+  # is served, the same as an anonymous REQ would be.
+  enabled: false
+
 # WebSocket connection tuning (optional, Go duration strings).
 handshakeTimeout: 5s
 pingInterval: 30s

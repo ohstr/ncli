@@ -1,5 +1,55 @@
 # Changelog
 
+## [0.8.0-rc.5]
+
+### Changed
+
+- Bumped to nmilat v0.5.0-rc.5, which carries the NIP-29 relay-based groups
+  implementation (nmilat#56: real create/delete/membership/moderation state
+  behind kinds 9000-9022, not just structural validation). ncli doesn't use
+  any of it yet -- this just picks up a clean tagged version in place of
+  the untagged pseudo-version (`v0.5.0-rc.3.0.20261004153625-3e302880071b`)
+  go.mod had been pinned to.
+
+## [0.8.0-rc.4]
+
+### Added
+
+- `ncli relay` mounts POST /events when `httpBridge.events.enabled` is set:
+  the write-side counterpart to the existing POST /query bridge (nmilat's
+  `relay.NewEventsHandler`), a NIP-98-authenticated HTTP alternative to
+  opening a WebSocket purely to publish one already-signed event. The buzz
+  CLI (and reactions, NIP-AM turn metrics) needs this to publish at all --
+  without it every write attempt 404s. Wired exactly like /query: unwrapped
+  by adminAuth (the handler does its own per-request NIP-98 check, not an
+  admin-pubkey allowlist), sharing `wsHandler.Membership()` rather than a
+  second independent cache. (#91)
+
+### Changed
+
+- **Breaking:** `query:`/`events:` moved under a new `httpBridge:` parent --
+  `httpBridge.query.enabled` / `httpBridge.events.enabled`. A bare root
+  `query` or `events` key names a wire path, not a concept, and gave an
+  operator skimming the config no reason to read the two together even
+  though they're the same feature's two halves. Anyone who already set the
+  bare `query:` block (shipped in #90/v0.8.0-rc.3) needs to move it under
+  `httpBridge:`; no functional change to /query's own behavior. (#91)
+- Bumped to the nmilat release carrying the NIP-98 anti-replay-nonce fix
+  (nmilat#51, the same commit that added `relay.NewEventsHandler` above)
+  and the POST /query `Limit`/same-second-pagination fix (nmilat#52). (#91)
+
+## [0.8.0-rc.3]
+
+### Added
+
+- `ncli relay` can serve buzz's NIP-CW `POST /query` bridge, a one-shot HTTP
+  alternative to a WebSocket REQ/EOSE round trip, behind a new `query:`
+  config block (`enabled: true`). NIP-98 authenticates the caller; when
+  `nip11.limitation.membership_required` is set, a result is further gated
+  to the signer's own NIP-43 membership, same as REQ/COUNT -- otherwise any
+  validly-signed request is served, the same as an anonymous REQ would be.
+  (#90)
+
 ## [0.8.0-rc.2]
 
 ### Added

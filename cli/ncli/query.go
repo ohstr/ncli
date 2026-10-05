@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/ohstr/ncli/cli/common"
+	"github.com/ohstr/ncli/cli/keyresolve"
 	"github.com/ohstr/ncli/client"
 	"github.com/spf13/cobra"
 )
@@ -42,6 +43,31 @@ func registerQueryFlags(cmd *cobra.Command, prefix string) {
 	cmd.Flags().StringP("relays", "s", "", relaysDesc)
 
 	registerInlineFilterFlags(cmd)
+}
+
+// registerQueryAuthFlag adds --auth-identity to find/dump: an identity to
+// authenticate with (NIP-42) against a target that requires it, resolved
+// by resolveQueryIdentity. Deliberately not part of registerQueryFlags,
+// let alone named plain "identity" -- miner check already has its own
+// --identity flag (an author to restrict the live check to, a public key
+// only) registered on the same command registerQueryFlags also touches,
+// and it means something unrelated: a signing/auth key, not a filter.
+func registerQueryAuthFlag(cmd *cobra.Command) {
+	cmd.Flags().String("auth-identity", "", "Identity to authenticate with (NIP-42) against a target that requires it -- vault label, nsec, npub, hex, nprofile, or nip-05 (optional; omitted targets are queried anonymously, same as before this flag existed)")
+}
+
+// resolveQueryIdentity resolves registerQueryAuthFlag's --auth-identity
+// flag into a private key hex string, via
+// keyresolve.ResolveIdentityOptional under "query.identity"
+// (NCLI_QUERY_IDENTITY) -- authenticating is a bonus for a query command,
+// never a requirement, so this returns "" rather than erroring when
+// nothing was given/configured and the vault has no sole entry to fall
+// back to. It errors only when an identity was explicitly given (flag or
+// config) and failed to resolve.
+func resolveQueryIdentity(cmd *cobra.Command) (string, error) {
+	identityFlag, _ := cmd.Flags().GetString("auth-identity")
+	jsonMode, _ := cmd.Flags().GetBool("json")
+	return keyresolve.ResolveIdentityOptional(cmd, identityFlag, "query.identity", jsonMode)
 }
 
 // queryMutualExclusionCheck enforces registerQueryFlags' two options, not a

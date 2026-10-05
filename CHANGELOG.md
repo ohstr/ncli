@@ -12,6 +12,7 @@
   pushes only when `.Prerelease` is set, since goreleaser's `auto` keyword
   only knows how to skip *on* a prerelease, not skip *unless* one. A stable
   release still never touches `rc`, exactly as an RC never touches `latest`.
+  (#98)
 
 ## [0.8.0-rc.5]
 

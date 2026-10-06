@@ -37,6 +37,15 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 	sessionConfig := relay.SessionConfig{
 		OutgoingBufferSize:      config.OutgoingBufferSize,
 		MaxConcurrentStoreTasks: config.MaxConcurrentStoreTasks,
+		// Without this, every SDK-internal log.Logger.Warn/Error call
+		// (membership/groups cache load failures, the websocket upgrade
+		// warning, nmilat#72's missing-nip11.url startup warning) writes
+		// to a zero-value zerolog.Logger and is silently dropped -- this
+		// service's own log.Info/Warn calls go through the global
+		// zerolog/log logger ConfigureLogging just set up above, so
+		// route the SDK's through the same sink rather than a second,
+		// silent one.
+		Logger: log.Logger,
 	}
 
 	if d, err := time.ParseDuration(config.PingInterval); err == nil {

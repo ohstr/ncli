@@ -1,6 +1,6 @@
 ---
 name: ncli-groups
-description: Create and manage NIP-29 relay-hosted groups with ncli groups -- create/edit/delete a group, invite/join/leave, add/remove members, replace the pinned-events list, delete a group's own event, and list/show groups a relay knows about. Use when setting up or administering a self-service group on a relay, writing a group-scoped moderation event, or reading a group's current metadata/admins/members.
+description: Create and manage NIP-29 relay-hosted groups with ncli groups -- create/edit/delete a group, invite/join/leave, add/remove members, replace the pinned-events list, delete a group's own event, organize/browse a NIP-29 Subgroups hierarchy, and list/show groups a relay knows about. Use when setting up or administering a self-service group on a relay, writing a group-scoped moderation event, linking groups into a parent/child hierarchy, or reading a group's current metadata/admins/members.
 license: Unlicense
 ---
 
@@ -23,9 +23,9 @@ entirely.
 
 | Command | Kind | Notes |
 |---|---|---|
-| `groups create [group-id]` | 9007 | random id if omitted |
-| `groups edit <group-id>` | 9002 | reads current metadata first, see below |
-| `groups delete <group-id>` | 9008 | relay enforces admin-only |
+| `groups create [group-id] [--parent <id>]` | 9007 (+9002 if `--parent`) | random id if omitted |
+| `groups edit <group-id> [--parent <id>]` | 9002 | reads current metadata first, see below |
+| `groups delete <group-id>` | 9008 | relay enforces admin-only; cascades any children to root, see "Subgroups" |
 | `groups invite <group-id>` | 9009 | random code if `--code` omitted |
 | `groups join <group-id>` | 9021 | relay auto-grants on acceptance |
 | `groups leave <group-id>` | 9022 | relay auto-removes |
@@ -35,6 +35,7 @@ entirely.
 | `groups delete-event <group-id> <event-id>` | 9005 | |
 | `groups list [--mine\|--member <pubkey>]` | reads 39000 (+39002 when scoped) | every group the relay has metadata for, or just the ones a pubkey belongs to |
 | `groups show <group-id>` | reads 39000/39001/39002 | one group's full detail |
+| `groups tree` | reads 39000 | every visible group assembled into a NIP-29 Subgroups hierarchy, see below |
 
 `--relay` (falls back to the first configured prefs relay) and `--identity`
 (vault label/nsec/npub/hex/nprofile/nip-05, falling back to `groups.identity`
@@ -136,13 +137,69 @@ so they fail differently:
   needs `--identity` to see anything. Missing or non-member: `show` exits
   `7` (`auth`), `"relay restricted this query (private/membership
   required)"`, not the usual `(nothing found)` -- same shape
-  `find`/`dump`'s `--auth-identity` uses.
+  `find`/`dump`'s `--auth-identity` uses. **The same exit `7` now also
+  fires for a group that doesn't exist at all**, not just a private one
+  you can't access -- the relay deliberately makes "private, no access"
+  and "doesn't exist" indistinguishable, closing an id-enumeration
+  oracle an unauthenticated prober could otherwise use to brute-force
+  which group ids exist. `ncli groups show <typo'd-id>` exits `7`, not
+  `(nothing found)`.
 - `list` names no group (`{"kinds":[39000]}`, plus a kind:39002 lookup
   for `--mine`/`--member`), so that gate never fires. Visibility is
   enforced per result instead: the relay silently drops any private
   group's metadata the session isn't a member of. There's no refusal to
   report, so `list` never exits `7` for this -- an empty/filtered result
   is always an ordinary `(no groups found -- ...)` success.
+
+## Subgroups
+
+NIP-29 groups MAY be organized hierarchically (a group's `parent` tag
+names another group's id). `--parent` on `create`/`edit` sets it;
+`groups tree` renders the whole hierarchy.
+
+```sh
+ncli groups create standup-notes --parent standup   # create, then link in one call
+ncli groups edit standup-notes --parent standup      # link an existing group
+ncli groups edit standup-notes --parent ""           # detach to root
+ncli groups tree                                     # render the hierarchy
+ncli groups tree --identity mykey --json             # same, scripted
+```
+
+`create --parent` is sugar for two events (9007, then 9002) -- under
+`--json` they're combined into one `{"create": ..., "set_parent": ...}`
+value, never two concatenated JSON blobs, so a scripted caller still
+gets exactly one well-formed result to parse.
+
+The relay enforces every NIP-29 `MUST` here, each a distinct `restricted`
+rejection: naming yourself as your own parent, naming a parent that
+doesn't exist, a parent assignment that would close a cycle, and -- new
+beyond the letter of the spec -- the submitter must also be an admin of
+the *new* parent (not just of the group being edited), and both groups
+must share the same `--private`/`--public` setting. That last one isn't
+a NIP-29 requirement; it's because a group's mirrored kind:39000 is
+signed once and cached, so its tags can't be redacted per viewer -- a
+public parent's `child` tag naming a private group would permanently
+leak that group's id to everyone who can see the public one, regardless
+of their own membership.
+
+A subgroup's own membership is entirely independent of its parent's:
+joining the parent grants no access to the child and vice versa, by
+spec design, and `ncli groups show`/`members` on a subgroup behaves
+exactly as it would for any standalone group.
+
+**Deleting a parent (`groups delete`) cascades**: every remaining child
+automatically becomes a root, not an orphaned dangling reference.
+
+**`groups edit` on a group with existing children must re-list every one
+of them**, even on an edit that has nothing to do with subgroups --
+kind:9002 is a full replace, so `mergeEditParams` always carries the
+current `Children` list forward unconditionally (there's no `--child`
+flag; the relay rejects any edit that omits or adds to it). This is the
+same full-replace footgun `--private`/`--closed` already have, just for
+one more field.
+
+A relay that hosts NIP-29 groups at all advertises
+`{"nip29":{"subgroups":true}}` in its NIP-11 document.
 
 ## Validation
 

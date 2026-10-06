@@ -30,7 +30,9 @@ current metadata first and only overrides the fields a flag explicitly
 named, to avoid silently clearing everything else (visibility included) on
 an edit that only meant to change the name.`,
 		Example: `  ncli groups edit standup --name "Standup" --about "Daily sync"
-  ncli groups edit standup --public --open`,
+  ncli groups edit standup --public --open
+  ncli groups edit standup-notes --parent standup
+  ncli groups edit standup-notes --parent ""`,
 		Args: common.ExactArgs(1),
 		RunE: runEdit,
 	}
@@ -43,6 +45,7 @@ an edit that only meant to change the name.`,
 	cmd.Flags().Bool("public", false, "Anyone can read the group's content")
 	cmd.Flags().Bool("closed", false, "Require an invite/approval to join")
 	cmd.Flags().Bool("open", false, "Anyone can join")
+	cmd.Flags().String("parent", "", "Parent group id (NIP-29 Subgroups); pass \"\" to detach to root")
 	cmd.MarkFlagsMutuallyExclusive("private", "public")
 	cmd.MarkFlagsMutuallyExclusive("closed", "open")
 
@@ -77,6 +80,8 @@ type editFlags struct {
 	name, about, picture, banner             string
 	nameSet, aboutSet, pictureSet, bannerSet bool
 	private, public, closed, open            bool
+	parent                                   string
+	parentSet                                bool
 }
 
 func editFlagsFromCmd(cmd *cobra.Command) editFlags {
@@ -93,6 +98,8 @@ func editFlagsFromCmd(cmd *cobra.Command) editFlags {
 	f.public = cmd.Flags().Changed("public")
 	f.closed = cmd.Flags().Changed("closed")
 	f.open = cmd.Flags().Changed("open")
+	f.parent, _ = cmd.Flags().GetString("parent")
+	f.parentSet = cmd.Flags().Changed("parent")
 	return f
 }
 
@@ -103,13 +110,20 @@ func editFlagsFromCmd(cmd *cobra.Command) editFlags {
 // else back to blank/public/open.
 func mergeEditParams(current *nip29.GroupMetadata, pubKeyHex, groupID string, f editFlags) nip29.GroupMetadataParams {
 	params := nip29.GroupMetadataParams{
-		SelfPubkey:        pubKeyHex,
-		ID:                groupID,
-		Name:              current.Name,
-		Picture:           current.Picture,
-		Banner:            current.Banner,
-		About:             current.About,
-		Parent:            current.Parent,
+		SelfPubkey: pubKeyHex,
+		ID:         groupID,
+		Name:       current.Name,
+		Picture:    current.Picture,
+		Banner:     current.Banner,
+		About:      current.About,
+		Parent:     current.Parent,
+		// Children is never flag-controlled here (there's no --child
+		// flag) -- it's always carried forward unchanged. kind:9002 is a
+		// full replace, and the relay rejects any edit on a group that
+		// currently has children unless it re-lists every one of them;
+		// omitting this would make every unrelated edit on such a group
+		// fail.
+		Children:          current.Children,
 		Private:           current.Private,
 		Restricted:        current.Restricted,
 		Hidden:            current.Hidden,
@@ -142,6 +156,9 @@ func mergeEditParams(current *nip29.GroupMetadata, pubKeyHex, groupID string, f 
 	}
 	if f.open {
 		params.Closed = false
+	}
+	if f.parentSet {
+		params.Parent = f.parent
 	}
 	return params
 }

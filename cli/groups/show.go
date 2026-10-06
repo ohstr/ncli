@@ -110,6 +110,7 @@ func runShow(cmd *cobra.Command, args []string) error {
 					detail.Metadata = &groupSummary{
 						ID: meta.ID, Name: meta.Name, About: meta.About,
 						Private: meta.Private, Closed: meta.Closed,
+						Parent: meta.Parent, Children: meta.Children,
 					}
 				}
 			}
@@ -149,6 +150,10 @@ func runShow(cmd *cobra.Command, args []string) error {
 		fmt.Printf("about:      %s\n", dashIfEmpty(m.About))
 		fmt.Printf("visibility: %s\n", visibilityLabel(m.Private))
 		fmt.Printf("membership: %s\n", membershipLabel(m.Closed))
+		fmt.Printf("parent:     %s\n", dashIfEmpty(m.Parent))
+		if len(m.Children) > 0 {
+			fmt.Printf("children:   %s\n", strings.Join(m.Children, ", "))
+		}
 	} else {
 		fmt.Printf("id:         %s\n", groupID)
 		fmt.Println("(no metadata found)")

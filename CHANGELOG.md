@@ -47,6 +47,7 @@
   proving the documentation is sufficient, not just that the shipped
   examples are self-consistent. R12's public-search scenario gets a real
   Meilisearch pre-started in the agent container for this.
+  ([#115](https://github.com/ohstr/ncli/pull/115))
 
 ### Fixed
 

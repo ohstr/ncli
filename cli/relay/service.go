@@ -116,7 +116,24 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 		supportedNips = supportedNips.With(nip11.NIPLetter("CW"))
 	}
 
-	nip11Handler := nip11.NewHandler(&config.Nip11, supportedNips)
+	// Built from a copy, not &config.Nip11 directly: nip11.NewHandler
+	// marshals its metadata once and serves those bytes for the server's
+	// whole lifetime, so this is the only chance to add NIP29 before it's
+	// baked in. nmilat's own SessionHandler.ServeHTTP does this same
+	// nip29Registered() check for an embedder that calls it directly --
+	// but this service's "/" handler (below) answers Accept:nip11 itself
+	// rather than delegating to wsHandler.ServeHTTP, because supportedNips
+	// here also carries NIP-98/86/CW that wsHandler.SupportedNIPs() alone
+	// doesn't know about; reaching the SDK's copy of this check isn't an
+	// option without losing those.
+	nip11Metadata := config.Nip11
+	for _, id := range relay.RegisteredNIPs() {
+		if id == nip11.NIP(29) {
+			nip11Metadata.NIP29 = &nip11.NIP29Capabilities{Subgroups: true}
+			break
+		}
+	}
+	nip11Handler := nip11.NewHandler(&nip11Metadata, supportedNips)
 
 	mux := http.NewServeMux()
 	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

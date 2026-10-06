@@ -2,6 +2,7 @@ package groups
 
 import (
 	"context"
+	"errors"
 	"net/url"
 	"os/signal"
 	"syscall"
@@ -63,8 +64,11 @@ func runEdit(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	current, err := currentGroupMetadata(ctx, relayURL, groupID)
+	current, err := currentGroupMetadata(ctx, relayURL, groupID, privKeyHex)
 	if err != nil {
+		if errors.Is(err, client.ErrRestricted) {
+			return common.AuthError(cmd, err)
+		}
 		return common.NetworkError(cmd, relayURL.String(), err)
 	}
 
@@ -167,7 +171,17 @@ func mergeEditParams(current *nip29.GroupMetadata, pubKeyHex, groupID string, f 
 // returning a zero-value *nip29.GroupMetadata (not an error) if the group
 // has no metadata event yet -- a brand-new group, or one on a relay that
 // hasn't mirrored it yet, simply edits from a blank slate.
-func currentGroupMetadata(ctx context.Context, relayURL *url.URL, groupID string) (*nip29.GroupMetadata, error) {
+//
+// privKeyHex authenticates the query (NIP-42) as the editor: groups are
+// private by default, so an unauthenticated read here would always come
+// back empty for the common case, and mergeEditParams would then "carry
+// forward" blank values for every field it didn't overwrite -- silently
+// clearing Private/Closed/Parent/Children on an edit that only meant to
+// change, say, the name. ErrRestricted propagates to the caller instead
+// of collapsing to a blank slate, since this editor's own query being
+// denied means its edit's premise (merge onto what's there now) doesn't
+// hold -- not that there's nothing there.
+func currentGroupMetadata(ctx context.Context, relayURL *url.URL, groupID, privKeyHex string) (*nip29.GroupMetadata, error) {
 	targets, err := client.TargetsFromRelayList([]string{relayURL.String()})
 	if err != nil {
 		return nil, err
@@ -177,7 +191,7 @@ func currentGroupMetadata(ctx context.Context, relayURL *url.URL, groupID string
 		nip01.NewFilter().WithKinds(nip29.KindGroupMetadata).WithTag("d", groupID).WithLimit(1),
 	)
 
-	events, err := client.QueryTargets(ctx, targets, filters, metadataQueryTimeout)
+	events, err := client.QueryTargetsWithAuth(ctx, targets, filters, metadataQueryTimeout, privKeyHex)
 	if err != nil {
 		return nil, err
 	}

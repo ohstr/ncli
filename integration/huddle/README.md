@@ -2,11 +2,11 @@
 
 One real `ncli relay` container with `huddle.enabled`, testing both doors
 end-to-end: `/huddle/{id}/audio` and `/huddle/{id}/rtc`, NIP-42 admission,
-and fan-out between real `huddleclient` peers over real WebSockets and real
+and fan-out between real `huddle/client` peers over real WebSockets and real
 pion peers over real WebRTC.
 
 Unlike the stream/inspect/sync stacks this is **not** an `ncli apply`
-workflow, so there is no spec fixture -- the peers are `huddleclient`
+workflow, so there is no spec fixture -- the peers are `huddle/client`
 clients constructed in the test.
 
 ## What's here

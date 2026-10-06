@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ohstr/ncli/huddleclient"
+	hclient "github.com/ohstr/ncli/huddle/client"
 	"github.com/ohstr/nmilat/huddle/wire"
 )
 
@@ -64,13 +64,13 @@ func TestRunHeadless_StreamsRosterSpeakingAndChat(t *testing.T) {
 		t.Errorf("joined = %+v", e)
 	}
 
-	fc.setRoster(huddleclient.Peer{Pubkey: selfPub}, huddleclient.Peer{Pubkey: peerPub, Index: 1})
+	fc.setRoster(hclient.Peer{Pubkey: selfPub}, hclient.Peer{Pubkey: peerPub, Index: 1})
 	if e := rec.waitFor(t, "participant_joined"); e.Pubkey != peerPub {
 		t.Errorf("participant_joined = %+v", e)
 	}
 
-	fc.frames <- huddleclient.Frame{
-		Author:     huddleclient.Peer{Pubkey: peerPub},
+	fc.frames <- hclient.Frame{
+		Author:     hclient.Peer{Pubkey: peerPub},
 		Header:     wire.FrameHeader{LevelDbov: -12},
 		Attributed: true,
 	}
@@ -82,7 +82,7 @@ func TestRunHeadless_StreamsRosterSpeakingAndChat(t *testing.T) {
 		t.Errorf("chat = %+v", e)
 	}
 
-	fc.setRoster(huddleclient.Peer{Pubkey: selfPub})
+	fc.setRoster(hclient.Peer{Pubkey: selfPub})
 	rec.waitFor(t, "participant_left")
 
 	cancel()

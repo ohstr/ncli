@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ohstr/ncli/huddleclient"
+	"github.com/ohstr/ncli/huddle/client"
 	"github.com/ohstr/nmilat/huddle/room"
 	"github.com/ohstr/nmilat/huddle/wire"
 	"github.com/stretchr/testify/require"
@@ -45,9 +45,9 @@ func huddleEndpointFor(roomID string) string {
 }
 
 // dialHuddlePeer joins roomID as peer i. version 0 means the client's default.
-func dialHuddlePeer(t *testing.T, ctx context.Context, roomID string, i int, version uint8) *huddleclient.Client {
+func dialHuddlePeer(t *testing.T, ctx context.Context, roomID string, i int, version uint8) *client.Client {
 	t.Helper()
-	c, err := huddleclient.Dial(ctx, huddleclient.Config{
+	c, err := client.Dial(ctx, client.Config{
 		Endpoint:        huddleEndpointFor(roomID),
 		RelayURL:        huddleIntegrationRelayURL,
 		PrivKey:         huddlePeerKey(i),
@@ -59,7 +59,7 @@ func dialHuddlePeer(t *testing.T, ctx context.Context, roomID string, i int, ver
 }
 
 // speak sends one 20 ms frame carrying payload at a speaking level.
-func speak(t *testing.T, c *huddleclient.Client, seq uint16, payload []byte) {
+func speak(t *testing.T, c *client.Client, seq uint16, payload []byte) {
 	t.Helper()
 	require.NoError(t, c.Send(wire.FrameHeader{
 		Seq:       seq,
@@ -70,7 +70,7 @@ func speak(t *testing.T, c *huddleclient.Client, seq uint16, payload []byte) {
 
 // nextFrame reads one frame, copying Opus because it aliases the read buffer
 // only until the next read.
-func nextFrame(t *testing.T, c *huddleclient.Client, timeout time.Duration) huddleclient.Frame {
+func nextFrame(t *testing.T, c *client.Client, timeout time.Duration) client.Frame {
 	t.Helper()
 	select {
 	case f, ok := <-c.Frames():
@@ -79,11 +79,11 @@ func nextFrame(t *testing.T, c *huddleclient.Client, timeout time.Duration) hudd
 		return f
 	case <-time.After(timeout):
 		t.Fatalf("no frame within %v (client err: %v)", timeout, c.Err())
-		return huddleclient.Frame{}
+		return client.Frame{}
 	}
 }
 
-func expectNoFrame(t *testing.T, c *huddleclient.Client, window time.Duration) {
+func expectNoFrame(t *testing.T, c *client.Client, window time.Duration) {
 	t.Helper()
 	select {
 	case f := <-c.Frames():
@@ -173,7 +173,7 @@ func testHuddleEveryPeerHearsEveryOther(t *testing.T) {
 	defer cancel()
 
 	const peers = 5
-	clients := make([]*huddleclient.Client, peers)
+	clients := make([]*client.Client, peers)
 	for i := 0; i < peers; i++ {
 		clients[i] = dialHuddlePeer(t, ctx, "many-peer", 10+i, 0)
 	}
@@ -268,7 +268,7 @@ func testHuddleSimultaneousSpeech(t *testing.T) {
 	defer cancel()
 
 	const peers = 4
-	clients := make([]*huddleclient.Client, peers)
+	clients := make([]*client.Client, peers)
 	for i := 0; i < peers; i++ {
 		clients[i] = dialHuddlePeer(t, ctx, "talk-over", 40+i, 0)
 	}
@@ -310,7 +310,7 @@ func testHuddleSimultaneousSpeech(t *testing.T) {
 	sendStart := time.Now()
 	for i, c := range clients {
 		senders.Add(1)
-		go func(i int, c *huddleclient.Client) {
+		go func(i int, c *client.Client) {
 			defer senders.Done()
 			for seq := 1; seq <= 50; seq++ { // 50 frames = 1s of speech
 				speak(t, c, uint16(seq), []byte(fmt.Sprintf("p%d", i)))
@@ -364,7 +364,7 @@ func testHuddleDTXAndLevelSurvive(t *testing.T) {
 	require.Equal(t, wire.FlagDTX|reservedBit, got.Header.Flags,
 		"reserved flag bits must be forwarded untouched")
 	require.Equal(t, wire.LevelSilenceFloor, got.Header.LevelDbov)
-	require.False(t, got.Speaking(huddleclient.DefaultSpeakingThreshold),
+	require.False(t, got.Speaking(client.DefaultSpeakingThreshold),
 		"a silence-floor frame must not read as speech")
 }
 
@@ -375,18 +375,18 @@ func testHuddleRoomFullRefusesBeyondCapacity(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
-	clients := make([]*huddleclient.Client, 0, room.MaxPeers)
+	clients := make([]*client.Client, 0, room.MaxPeers)
 	for i := 0; i < room.MaxPeers; i++ {
 		clients = append(clients, dialHuddlePeer(t, ctx, "full", 100+i, 0))
 	}
 
-	_, err := huddleclient.Dial(ctx, huddleclient.Config{
+	_, err := client.Dial(ctx, client.Config{
 		Endpoint: huddleEndpointFor("full"),
 		RelayURL: huddleIntegrationRelayURL,
 		PrivKey:  huddlePeerKey(100 + room.MaxPeers),
 	})
 	require.Error(t, err, "the %dth peer should have been refused", room.MaxPeers+1)
-	var refused *huddleclient.RefusedError
+	var refused *client.RefusedError
 	require.ErrorAs(t, err, &refused)
 	require.Equal(t, "room_full", refused.Code)
 
@@ -403,7 +403,7 @@ func testHuddleAuthForAnotherRelayIsRejected(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	_, err := huddleclient.Dial(ctx, huddleclient.Config{
+	_, err := client.Dial(ctx, client.Config{
 		Endpoint: huddleEndpointFor("wrong-relay"),
 		RelayURL: "ws://not-this-relay.example",
 		PrivKey:  huddlePeerKey(200),
@@ -412,7 +412,7 @@ func testHuddleAuthForAnotherRelayIsRejected(t *testing.T) {
 
 	// Refused with a code, not dropped: a client needs to be able to tell "your
 	// identity was not accepted" from a network failure.
-	var refused *huddleclient.RefusedError
+	var refused *client.RefusedError
 	require.ErrorAs(t, err, &refused)
 	require.Equal(t, "auth_failed", refused.Code)
 }
@@ -428,14 +428,14 @@ func testHuddleVersionMismatchRequiresUpgrade(t *testing.T) {
 	pinned := dialHuddlePeer(t, ctx, "version", 210, wire.CurrentProtocolVersion)
 	require.NotEmpty(t, pinned.Self().Pubkey)
 
-	_, err := huddleclient.Dial(ctx, huddleclient.Config{
+	_, err := client.Dial(ctx, client.Config{
 		Endpoint:        huddleEndpointFor("version"),
 		RelayURL:        huddleIntegrationRelayURL,
 		PrivKey:         huddlePeerKey(211),
 		ProtocolVersion: wire.CurrentProtocolVersion - 1,
 	})
 	require.Error(t, err, "a peer on a different version must be refused")
-	var refused *huddleclient.RefusedError
+	var refused *client.RefusedError
 	require.ErrorAs(t, err, &refused)
 	require.Equal(t, "upgrade_required", refused.Code)
 	require.NotNil(t, refused.CurrentVersion, "the refusal should name the room's version")

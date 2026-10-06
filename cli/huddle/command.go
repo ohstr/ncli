@@ -15,8 +15,8 @@ import (
 	"github.com/ohstr/ncli/cli/keyresolve"
 	"github.com/ohstr/ncli/client"
 	"github.com/ohstr/ncli/client/tui"
-	"github.com/ohstr/ncli/huddleaudio"
-	"github.com/ohstr/ncli/huddleclient"
+	"github.com/ohstr/ncli/huddle/audio"
+	hclient "github.com/ohstr/ncli/huddle/client"
 	"github.com/ohstr/nmilat/huddle/wire"
 	"github.com/ohstr/nmilat/huddle/wsaudio"
 	"github.com/rs/zerolog/log"
@@ -165,10 +165,10 @@ func runJoin(cmd *cobra.Command, args []string) error {
 	// Dial before the TUI takes the terminal: a refused or unreachable relay
 	// should print one plain error line, not flash a board for an instant and
 	// then vanish with nowhere to show why.
-	var hc *huddleclient.Client
+	var hc *hclient.Client
 	dialErr := common.WithSpinner(cmd, fmt.Sprintf("Joining %s", room), func() error {
 		var err error
-		hc, err = huddleclient.Dial(ctx, huddleclient.Config{
+		hc, err = hclient.Dial(ctx, hclient.Config{
 			Endpoint: endpoint,
 			RelayURL: relayURL.String(),
 			PrivKey:  privKeyHex,
@@ -179,13 +179,13 @@ func runJoin(cmd *cobra.Command, args []string) error {
 		// A relay with huddles switched off never mounts the endpoint, so the
 		// upgrade 404s instead of being refused with a code. That is the most
 		// common failure by far, and "bad handshake" explains none of it.
-		var notUpgraded *huddleclient.DialError
+		var notUpgraded *hclient.DialError
 		if errors.As(dialErr, &notUpgraded) && notUpgraded.Status == http.StatusNotFound {
 			return common.UnsupportedError(cmd, relayURL.String(), fmt.Errorf(
 				"%s has no huddle endpoint: the relay is not running with huddles enabled", relayURL.Host))
 		}
 
-		var refused *huddleclient.RefusedError
+		var refused *hclient.RefusedError
 		if errors.As(dialErr, &refused) {
 			if hint := refusalHint(refused); hint != "" {
 				return common.RuntimeError(cmd, fmt.Errorf("%s refused the join: %s", relayURL.Host, hint))
@@ -265,9 +265,9 @@ func runBoard(cmd *cobra.Command, ctx context.Context, hc Client, room, activity
 	// Playback is best-effort. A build without the huddleaudio tag, or a machine
 	// with no usable device, still gets the roster view -- which is the whole
 	// command minus the sound, not a failure. The status line says which it is.
-	if player, err := huddleaudio.NewPlayer(); err == nil {
+	if player, err := audio.NewPlayer(); err == nil {
 		board.PlayAudio(player)
-	} else if !errors.Is(err, huddleaudio.ErrPlaybackUnavailable) {
+	} else if !errors.Is(err, audio.ErrPlaybackUnavailable) {
 		// A real device failure is worth a line, unlike the expected
 		// "this build has no audio output".
 		log.Warn().Err(err).Msg("continuing without audio playback")
@@ -369,7 +369,7 @@ func Endpoint(base *url.URL, room string) (string, error) {
 // refusalHint turns a relay's refusal code into something worth reading. An
 // empty return means the code is unrecognized, so the caller shows the relay's
 // own message instead of inventing an explanation for it.
-func refusalHint(err *huddleclient.RefusedError) string {
+func refusalHint(err *hclient.RefusedError) string {
 	switch err.Code {
 	case wsaudio.CodeAudioUnavailable:
 		return "this relay does not have huddles enabled"

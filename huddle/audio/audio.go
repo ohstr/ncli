@@ -1,4 +1,4 @@
-// Package huddleaudio turns the Opus frames a huddle delivers into PCM and plays
+// Package audio turns the Opus frames a huddle delivers into PCM and plays
 // them.
 //
 // Decoding is pure Go (pion/opus) and builds on every target. Playing is not: the
@@ -6,7 +6,7 @@
 // Linux, which ncli's CGO_ENABLED=0 release builds cannot have. So output lives
 // behind the `huddleaudio` build tag and the default build gets a stub that says
 // so. See player.go.
-package huddleaudio
+package audio
 
 import (
 	"errors"
@@ -31,7 +31,7 @@ const (
 // ErrShortDecode reports that the decoder produced fewer samples than a full
 // frame. It is separate from a decode failure: the payload was valid enough to
 // decode, there was just less of it than a 20 ms frame.
-var ErrShortDecode = errors.New("huddleaudio: decoder produced a short frame")
+var ErrShortDecode = errors.New("audio: decoder produced a short frame")
 
 // Decoder decodes one peer's Opus stream.
 //
@@ -48,7 +48,7 @@ type Decoder struct {
 func NewDecoder() (*Decoder, error) {
 	dec, err := opus.NewDecoderWithOutput(SampleRate, Channels)
 	if err != nil {
-		return nil, fmt.Errorf("huddleaudio: decoder: %w", err)
+		return nil, fmt.Errorf("audio: decoder: %w", err)
 	}
 	return &Decoder{
 		dec: dec,
@@ -60,14 +60,14 @@ func NewDecoder() (*Decoder, error) {
 // Decode turns one Opus payload into PCM samples.
 //
 // The returned slice is reused on the next call, so a caller keeping it must
-// copy. That mirrors huddleclient.Frame.Opus and keeps a 50-per-second hot path
+// copy. That mirrors client.Frame.Opus and keeps a 50-per-second hot path
 // from allocating.
 func (d *Decoder) Decode(payload []byte) ([]int16, error) {
 	if len(payload) == 0 {
 		return nil, nil
 	}
 	if _, _, err := d.dec.Decode(payload, d.pcm); err != nil {
-		return nil, fmt.Errorf("huddleaudio: decode: %w", err)
+		return nil, fmt.Errorf("audio: decode: %w", err)
 	}
 	for i := range d.out {
 		// Little-endian, matching what pion/opus writes.

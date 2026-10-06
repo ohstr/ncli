@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/ohstr/ncli/huddleclient"
+	hclient "github.com/ohstr/ncli/huddle/client"
 	"github.com/ohstr/nmilat/nip01"
 )
 
@@ -39,7 +39,7 @@ func runHeadless(ctx, durationCtx context.Context, hc Client, room, activity str
 	self := hc.Self().Pubkey
 	emit(joinEvent{Type: "joined", Time: time.Now(), Room: room, Activity: activity, Self: self})
 
-	r := newRoster(self, SpeakingHold, huddleclient.DefaultSpeakingThreshold, time.Now)
+	r := newRoster(self, SpeakingHold, hclient.DefaultSpeakingThreshold, time.Now)
 	present := map[string]bool{}
 	speaking := map[string]bool{}
 

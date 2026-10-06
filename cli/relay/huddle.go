@@ -11,7 +11,7 @@ import (
 
 	"github.com/ohstr/ncli/cli/common"
 
-	"github.com/ohstr/ncli/huddlesfu"
+	"github.com/ohstr/ncli/huddle/sfu"
 	"github.com/ohstr/nmilat/huddle/room"
 	"github.com/ohstr/nmilat/huddle/wsaudio"
 	"github.com/ohstr/nmilat/relay"
@@ -160,7 +160,7 @@ func registerHuddleRoutes(mux *http.ServeMux, wsHandler *relay.SessionHandler, c
 
 		// The same rooms manager on purpose: a browser and a WebSocket client
 		// using one room id must end up in one call, not two.
-		mux.Handle("/huddle/{id}/rtc", huddlesfu.NewHandler(huddlesfu.Config{
+		mux.Handle("/huddle/{id}/rtc", sfu.NewHandler(sfu.Config{
 			Enabled:        true,
 			RelayURL:       relayURL,
 			Rooms:          rooms,

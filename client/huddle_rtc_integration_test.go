@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/ohstr/ncli/huddleclient"
+	"github.com/ohstr/ncli/huddle/client"
 	"github.com/ohstr/nmilat/huddle/wire"
 	"github.com/ohstr/nmilat/nip42"
 	"github.com/pion/rtp"
@@ -404,7 +404,7 @@ type wsListener struct {
 	heard [][]byte
 }
 
-func newWSListener(c *huddleclient.Client) *wsListener {
+func newWSListener(c *client.Client) *wsListener {
 	l := &wsListener{}
 	go func() {
 		for f := range c.Frames() {
@@ -505,7 +505,7 @@ func testHuddleLateJoinerGetsTheLiveCall(t *testing.T) {
 // description, so its candidates routinely reach the relay before the SDP. The
 // relay used to reject and discard them.
 //
-// Unlike the in-process test in huddlesfu, this one runs over a real network
+// Unlike the in-process test in huddle/sfu, this one runs over a real network
 // against a container, so a discarded candidate actually costs a path.
 func testHuddleCandidatesBeforeTheOffer(t *testing.T) {
 	const roomID = "rtc-candidates-first"

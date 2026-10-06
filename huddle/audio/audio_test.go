@@ -1,4 +1,4 @@
-package huddleaudio
+package audio
 
 import (
 	"bytes"

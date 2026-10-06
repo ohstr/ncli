@@ -1,4 +1,4 @@
-// Package huddleclient joins a huddle audio room as a client: it performs the
+// Package client joins a huddle audio room as a client: it performs the
 // NIP-42 handshake, tracks the roster, and hands back inbound audio already
 // attributed to whoever spoke.
 //
@@ -14,7 +14,7 @@
 // which is why this client tracks the roster rather than leaving it to callers.
 // Protocol v3 adds an epoch alongside the index so a late frame from a departed
 // peer is distinguishable from one by whoever took its index.
-package huddleclient
+package client
 
 import (
 	"context"
@@ -39,9 +39,9 @@ const DefaultFrameBuffer = 32
 
 // Failure modes, for callers that need to distinguish them.
 var (
-	ErrRefused      = errors.New("huddleclient: the relay refused the join")
-	ErrNoPrivateKey = errors.New("huddleclient: a private key is required to sign the auth event")
-	ErrClosed       = errors.New("huddleclient: the client is closed")
+	ErrRefused      = errors.New("client: the relay refused the join")
+	ErrNoPrivateKey = errors.New("client: a private key is required to sign the auth event")
+	ErrClosed       = errors.New("client: the client is closed")
 )
 
 // RefusedError carries the relay's own error code, so a caller can act on
@@ -53,7 +53,7 @@ type RefusedError struct {
 }
 
 func (e *RefusedError) Error() string {
-	return fmt.Sprintf("huddleclient: refused (%s): %s", e.Code, e.Message)
+	return fmt.Sprintf("client: refused (%s): %s", e.Code, e.Message)
 }
 
 func (e *RefusedError) Unwrap() error { return ErrRefused }
@@ -163,9 +163,9 @@ type DialError struct {
 
 func (e *DialError) Error() string {
 	if e.Status != 0 {
-		return fmt.Sprintf("huddleclient: dial %s: HTTP %d: %v", e.Endpoint, e.Status, e.Err)
+		return fmt.Sprintf("client: dial %s: HTTP %d: %v", e.Endpoint, e.Status, e.Err)
 	}
-	return fmt.Sprintf("huddleclient: dial %s: %v", e.Endpoint, e.Err)
+	return fmt.Sprintf("client: dial %s: %v", e.Endpoint, e.Err)
 }
 
 func (e *DialError) Unwrap() error { return e.Err }
@@ -228,27 +228,27 @@ func (c *Client) handshake(cfg Config) error {
 
 	var challenge control
 	if err := c.readControl(&challenge); err != nil {
-		return fmt.Errorf("huddleclient: reading the challenge: %w", err)
+		return fmt.Errorf("client: reading the challenge: %w", err)
 	}
 	if challenge.Type != "challenge" || challenge.Challenge == "" {
-		return fmt.Errorf("huddleclient: expected a challenge, got %q", challenge.Type)
+		return fmt.Errorf("client: expected a challenge, got %q", challenge.Type)
 	}
 
 	// The relay tag names the relay, not this endpoint.
 	event := nip42.NewAuthEvent(challenge.Challenge, cfg.RelayURL)
 	if err := event.Sign(cfg.PrivKey); err != nil {
-		return fmt.Errorf("huddleclient: signing the auth event: %w", err)
+		return fmt.Errorf("client: signing the auth event: %w", err)
 	}
 	if err := c.write(map[string]any{
 		"type": "auth", "event": event, "protocol_version": cfg.ProtocolVersion,
 	}); err != nil {
-		return fmt.Errorf("huddleclient: sending auth: %w", err)
+		return fmt.Errorf("client: sending auth: %w", err)
 	}
 
 	for {
 		var msg control
 		if err := c.readControl(&msg); err != nil {
-			return fmt.Errorf("huddleclient: waiting for joined: %w", err)
+			return fmt.Errorf("client: waiting for joined: %w", err)
 		}
 		switch msg.Type {
 		case "joined":

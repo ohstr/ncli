@@ -1,4 +1,4 @@
-// Package huddlertp adapts a huddle audio room onto RTP, so a peer reached over
+// Package rtp adapts a huddle audio room onto RTP, so a peer reached over
 // WebRTC can sit in the same room as one reached over the huddle WebSocket.
 //
 // It implements nmilat/huddle/room.Sink. A room hands it frames; it repacketizes
@@ -22,7 +22,7 @@
 // A room delivers every other peer's audio to one Sink, but a WebRTC receiver
 // expects each remote speaker on its own track with its own SSRC. So a Sink
 // demultiplexes by author and creates a track on demand.
-package huddlertp
+package rtp
 
 import (
 	"crypto/rand"
@@ -46,7 +46,7 @@ const OpusPayloadType uint8 = 111
 const DefaultQueueDepth = 8
 
 // ErrNoTrackFactory is returned by New when Config has no NewTrack.
-var ErrNoTrackFactory = errors.New("huddlertp: Config.NewTrack is required")
+var ErrNoTrackFactory = errors.New("rtp: Config.NewTrack is required")
 
 // PacketWriter receives the RTP packets built for one speaker.
 // *webrtc.TrackLocalStaticRTP satisfies it, so an SFU passes one directly;
@@ -291,7 +291,7 @@ func (s *Sink) Tracks() int {
 func randomSSRC() (uint32, error) {
 	var b [4]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		return 0, fmt.Errorf("huddlertp: could not generate an SSRC: %w", err)
+		return 0, fmt.Errorf("rtp: could not generate an SSRC: %w", err)
 	}
 	return binary.BigEndian.Uint32(b[:]), nil
 }

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ohstr/ncli/huddleclient"
+	"github.com/ohstr/ncli/huddle/client"
 	"github.com/ohstr/nmilat/huddle/wire"
 )
 
@@ -31,10 +31,10 @@ func (c *clock) advance(d time.Duration) {
 	c.t = c.t.Add(d)
 }
 
-func peers(spec ...any) []huddleclient.Peer {
-	out := make([]huddleclient.Peer, 0, len(spec)/2)
+func peers(spec ...any) []client.Peer {
+	out := make([]client.Peer, 0, len(spec)/2)
 	for i := 0; i+1 < len(spec); i += 2 {
-		out = append(out, huddleclient.Peer{
+		out = append(out, client.Peer{
 			Pubkey: spec[i].(string),
 			Index:  uint8(spec[i+1].(int)),
 		})
@@ -42,9 +42,9 @@ func peers(spec ...any) []huddleclient.Peer {
 	return out
 }
 
-func frame(pubkey string, level int8) huddleclient.Frame {
-	return huddleclient.Frame{
-		Author:     huddleclient.Peer{Pubkey: pubkey},
+func frame(pubkey string, level int8) client.Frame {
+	return client.Frame{
+		Author:     client.Peer{Pubkey: pubkey},
 		Header:     wire.FrameHeader{LevelDbov: level},
 		Attributed: true,
 	}

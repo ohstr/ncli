@@ -1,4 +1,4 @@
-package huddleaudio
+package audio
 
 import "errors"
 
@@ -6,7 +6,7 @@ import "errors"
 // output. It is not a failure to fix at runtime: the output backend needs cgo and
 // ALSA on Linux, which the CGO_ENABLED=0 release builds cannot have, so it is
 // compiled in only under the `huddleaudio` build tag.
-var ErrPlaybackUnavailable = errors.New("huddleaudio: this build has no audio output (rebuild with -tags huddleaudio)")
+var ErrPlaybackUnavailable = errors.New("audio: this build has no audio output (rebuild with -tags huddleaudio)")
 
 // Player is an audio sink taking 16-bit mono PCM at SampleRate.
 //

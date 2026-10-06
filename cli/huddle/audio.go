@@ -5,8 +5,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ohstr/ncli/huddleaudio"
-	"github.com/ohstr/ncli/huddleclient"
+	"github.com/ohstr/ncli/huddle/audio"
+	"github.com/ohstr/ncli/huddle/client"
 )
 
 // audioPump turns the call into sound: it decodes and mixes every speaker, then
@@ -18,8 +18,8 @@ import (
 // moment would starve it. A steady 20 ms write keeps the device fed and is what
 // makes the result a conversation rather than alternating bursts.
 type audioPump struct {
-	mixer  *huddleaudio.Mixer
-	player huddleaudio.Player
+	mixer  *audio.Mixer
+	player audio.Player
 
 	// decodeErrors counts payloads the decoder rejected. A bad frame is dropped,
 	// never fatal: one peer sending something unplayable must not end the call
@@ -28,14 +28,14 @@ type audioPump struct {
 	written      atomic.Int64
 }
 
-func newAudioPump(player huddleaudio.Player) *audioPump {
-	return &audioPump{mixer: huddleaudio.NewMixer(), player: player}
+func newAudioPump(player audio.Player) *audioPump {
+	return &audioPump{mixer: audio.NewMixer(), player: player}
 }
 
 // add mixes one inbound frame. Unattributed frames are skipped: the mixer keys a
 // decoder per peer, and guessing the peer would feed one speaker's stream into
 // another's decoder, corrupting both.
-func (a *audioPump) add(f huddleclient.Frame) {
+func (a *audioPump) add(f client.Frame) {
 	if !f.Attributed || len(f.Opus) == 0 {
 		return
 	}

@@ -17,7 +17,7 @@
   breaking change for anything importing these packages directly. The
   `-tags huddleaudio` build tag is unchanged: it names a build
   constraint, not the package, and still gates the same cgo/ALSA-backed
-  playback code.
+  playback code. ([#113](https://github.com/ohstr/ncli/pull/113))
 - `examples/relay/` is reorganized around real deployment scenarios instead
   of individual tech features: `open.yaml`/`auth.yaml`/`cache-search.yaml`/
   `ephemeral.yaml` are retired (folded into the files below or, for

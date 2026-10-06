@@ -28,6 +28,7 @@
   old example loaded with no complaint and simply never mounted the
   endpoint -- caught while building `app-backend-relay.yaml` above, which
   depends on it actually working.
+  ([#114](https://github.com/ohstr/ncli/pull/114))
 
 ## [0.8.0-rc.9]
 

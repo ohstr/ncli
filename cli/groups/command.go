@@ -55,6 +55,7 @@ nothing.`,
 	cmd.AddCommand(newDeleteEventCommand())
 	cmd.AddCommand(newListCommand())
 	cmd.AddCommand(newShowCommand())
+	cmd.AddCommand(newTreeCommand())
 
 	return cmd
 }

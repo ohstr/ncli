@@ -29,6 +29,12 @@ type groupSummary struct {
 	About   string `json:"about,omitempty"`
 	Private bool   `json:"private"`
 	Closed  bool   `json:"closed"`
+	// Parent/Children are NIP-29 "Subgroups": Parent names this group's
+	// own parent (empty = root); Children is the ordered list of
+	// subgroup ids a parent group itself carries. Neither implies the
+	// other -- a group can have one, both, or neither.
+	Parent   string   `json:"parent,omitempty"`
+	Children []string `json:"children,omitempty"`
 }
 
 func newListCommand() *cobra.Command {
@@ -158,6 +164,7 @@ func runList(cmd *cobra.Command, args []string) error {
 		groupList = append(groupList, groupSummary{
 			ID: meta.ID, Name: meta.Name, About: meta.About,
 			Private: meta.Private, Closed: meta.Closed,
+			Parent: meta.Parent, Children: meta.Children,
 		})
 	}
 

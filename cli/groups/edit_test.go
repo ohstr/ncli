@@ -71,3 +71,50 @@ func TestMergeEditParams_IDAndPubkeyAlwaysSet(t *testing.T) {
 		t.Fatalf("params.ID = %q, want %q", params.ID, "group1")
 	}
 }
+
+func TestMergeEditParams_ChildrenAlwaysCarriedForward(t *testing.T) {
+	// There is no --child flag -- Children must survive an edit that
+	// never mentions it, same as every other untouched field. The relay
+	// rejects an edit that omits an existing child, so forgetting this
+	// would make every unrelated edit on a parent group fail outright.
+	current := &nip29.GroupMetadata{Children: []string{"notes", "retro"}}
+
+	params := mergeEditParams(current, "pubkey", "group1", editFlags{name: "Renamed", nameSet: true})
+
+	if len(params.Children) != 2 || params.Children[0] != "notes" || params.Children[1] != "retro" {
+		t.Fatalf("params.Children = %v, want unchanged [notes retro]", params.Children)
+	}
+}
+
+func TestMergeEditParams_ParentSetOverridesCurrent(t *testing.T) {
+	current := &nip29.GroupMetadata{Parent: "old-parent"}
+
+	params := mergeEditParams(current, "pubkey", "group1", editFlags{parent: "new-parent", parentSet: true})
+
+	if params.Parent != "new-parent" {
+		t.Fatalf("params.Parent = %q, want %q", params.Parent, "new-parent")
+	}
+}
+
+func TestMergeEditParams_ParentUnsetKeepsCurrent(t *testing.T) {
+	current := &nip29.GroupMetadata{Parent: "standup"}
+
+	params := mergeEditParams(current, "pubkey", "group1", editFlags{})
+
+	if params.Parent != "standup" {
+		t.Fatalf("params.Parent = %q, want unchanged %q", params.Parent, "standup")
+	}
+}
+
+func TestMergeEditParams_ExplicitEmptyParentDetaches(t *testing.T) {
+	current := &nip29.GroupMetadata{Parent: "standup"}
+
+	// cmd.Flags().Changed("parent") is what disambiguates "not passed"
+	// from "passed as an empty string" -- editFlags.parentSet models
+	// that bit directly, independent of editFlags.parent's own value.
+	params := mergeEditParams(current, "pubkey", "group1", editFlags{parent: "", parentSet: true})
+
+	if params.Parent != "" {
+		t.Fatalf("params.Parent = %q, want empty (detached to root)", params.Parent)
+	}
+}

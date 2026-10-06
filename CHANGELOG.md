@@ -18,6 +18,16 @@
   and `full.yaml` are unchanged -- a quickstart skeleton and an every-field
   reference aren't scenarios. README and the `ncli-relay-ops`/`ncli-huddle`
   skills' cross-references are updated accordingly.
+- Four more `examples/relay/` scenarios, each exercising a combination of
+  existing fields the first 8 didn't: `accountability-relay.yaml`
+  (`auth_required` alone, no membership -- requires *some* signed-in
+  identity, not a specific one), `enterprise-compliance-relay.yaml`
+  (membership + auth + strict PoW + `nip86` together, not any one
+  mechanism in isolation), `family-private-relay.yaml` (same mechanism as
+  `community-membership-relay.yaml`, operated differently -- direct
+  enrollment only, no invite flow), and `tracked-membership-relay.yaml`
+  (`membership.enabled` with `membership_required` left off -- a roster
+  and roles for display/moderation tooling, not an admission gate).
 
 ### Fixed
 

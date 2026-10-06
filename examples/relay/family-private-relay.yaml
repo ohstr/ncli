@@ -1,0 +1,33 @@
+# Scenario: a small closed circle -- a family, a handful of close
+# friends -- that wants its own quiet shared space, not a community
+# that grows by invite. The mechanism is the same NIP-43 membership used
+# in examples/relay/community-membership-relay.yaml; what's different is
+# how it's operated: nobody self-serves an invite code or signs up --
+# whoever runs the relay enrolls each person directly
+# (`ncli relay members add`), and that's the only way in, ever.
+#
+# See examples/relay/community-membership-relay.yaml for the behavior
+# this gates (a non-member's EVENT is refused, an enrolled one succeeds)
+# -- that part is identical here, so this file doesn't repeat it. See
+# examples/relay/full.yaml for the complete set of nip11 fields.
+nip11:
+  name: "The Family Relay"
+  description: "A closed circle -- enrolled directly, no invite codes, no public signup"
+  # Generated with `ncli id --json` for this example only -- never reuse a
+  # privkey that's ever appeared in a public repo for anything real.
+  privkey: "2c89a47d07c33c4b600f5c4982d7545d07f7fad0e035251529ec960a78f0f73f"
+  contact: "admin@example.com"
+  url: "ws://localhost:5520"
+  limitation:
+    auth_required: true
+    membership_required: true
+
+membership:
+  enabled: true
+  # No publishAddRemoveEvents: there's no audience for a "so-and-so
+  # joined" announcement here the way a community might want one.
+  publishAddRemoveEvents: false
+
+logdir: "./data/logs"
+store: "./data/db/family-private.db"
+port: 5520

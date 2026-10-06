@@ -49,6 +49,10 @@ closest to what you're building and adapt its name/port/store.
 | `agent-swarm-relay.yaml` | A team's AI agents post under their own key via a human's membership, no separate bot enrollment | `agent_auth.enabled` on top of membership + `auth_required` + `membership_required` -- NIP-AA |
 | `community-voice-relay.yaml` | A community that meets, not just posts -- live voice rooms alongside its notes | `huddle.enabled` (+ `rtc`, `iceServers` for browsers) -- real-time voice over its own WebSocket, independent of the Nostr socket |
 | `app-backend-relay.yaml` | A product's own backend administers/calls the relay over HTTP, never a terminal | `nip86.enabled` (+ `admins`) -- the standard NIP-86 management API -- and `httpBridge.query.enabled` -- a one-shot HTTP alternative to a WS REQ/EOSE round trip |
+| `accountability-relay.yaml` | Public Q&A/support relay deterring drive-by abuse without an allowlist | `nip11.limitation.auth_required` **alone**, no membership block -- requires *some* signed-in identity, not a specific one (that distinction is the point: `membership_required` is what actually restricts *who*) |
+| `enterprise-compliance-relay.yaml` | An org's internal relay wanting defense in depth, not one mechanism alone | `membership` + `auth_required`/`membership_required` + `pow.strict` + `nip86` **together** -- the checks stack (an enrolled member's event still needs real PoW; a high-PoW event from a non-member is still refused) |
+| `family-private-relay.yaml` | A small closed circle enrolled directly, never by invite | Same mechanism as `community-membership-relay.yaml` (`membership` + `membership_required`) -- the difference is operational: `ncli relay members add` only, no invite flow ever used |
+| `tracked-membership-relay.yaml` | A community wanting a visible roster/roles without gating anything | `membership.enabled` with `membership_required` **left off** -- membership is a label (`members list`, `roles`) for display/moderation tooling, not an admission check |
 
 `examples/relay/full.yaml` documents every field at its default, commented:
 `description`, `limitation.*`, `pow.*`, `cache.topZapped.*`,

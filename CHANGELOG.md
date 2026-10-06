@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.8.0-rc.8]
+
+### Fixed
+
+- `groups edit` silently flipped a private group public, and rejected any
+  edit on a group with subgroups, because its current-metadata read
+  (`currentGroupMetadata`) queried the relay unauthenticated -- always
+  denied for a private group, the default on creation -- so the merge
+  carried forward blank `Private`/`Closed`/`Children` instead of the
+  group's real values. The read now authenticates as the editor's own
+  `--identity`, and a restricted read fails the edit outright rather
+  than silently proceeding from blank.
+  ([#110](https://github.com/ohstr/ncli/pull/110))
+- `ncli relay`'s NIP-11 document never advertised `nip29.subgroups`, even
+  on a build that hosts NIP-29 groups and lists `29` in `supported_nips`
+  -- this service built its own NIP-11 handler straight from config
+  rather than going through the SDK's dynamic capability check.
+  ([#110](https://github.com/ohstr/ncli/pull/110))
+
 ## [0.8.0-rc.7]
 
 ### Added

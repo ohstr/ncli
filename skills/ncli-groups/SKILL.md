@@ -108,6 +108,16 @@ group already had; a flag you did pass overrides it. This means:
 - A malformed existing kind:39000 (fails to parse) is treated the same as
   "no metadata yet" rather than blocking the edit -- there needs to be a
   way to fix a broken group, not just inspect it.
+- That current-metadata read authenticates as `--identity` (NIP-42), the
+  same identity the edit itself signs with. It has to: a fresh group
+  defaults to **private and closed**, and an unauthenticated read of a
+  private group's kind:39000 is always denied -- reading it unauthenticated
+  would look exactly like "no metadata yet" and silently reset
+  `Private`/`Closed`/`Parent`/`Children` to blank on an edit that never
+  meant to touch any of them. So a read the relay actually restricts (the
+  `--identity` given isn't a member, or the group doesn't exist) fails the
+  whole edit with the same exit `7`/`"relay restricted this query"` shape
+  `show` uses, rather than quietly falling back to a blank slate.
 
 ## `groups pins set` is a whole-list replace too
 
@@ -190,13 +200,14 @@ exactly as it would for any standalone group.
 **Deleting a parent (`groups delete`) cascades**: every remaining child
 automatically becomes a root, not an orphaned dangling reference.
 
-**`groups edit` on a group with existing children must re-list every one
-of them**, even on an edit that has nothing to do with subgroups --
-kind:9002 is a full replace, so `mergeEditParams` always carries the
-current `Children` list forward unconditionally (there's no `--child`
-flag; the relay rejects any edit that omits or adds to it). This is the
-same full-replace footgun `--private`/`--closed` already have, just for
-one more field.
+kind:9002 is a full replace, and the relay rejects any edit that omits or
+adds to a group's current children (there's no `--child` flag to name
+them explicitly). `groups edit` handles this the same way it handles
+`--private`/`--closed` -- see "`groups edit` reads before it writes"
+above: it reads the group's current `Children` (authenticated as
+`--identity`) and carries that list forward unconditionally, so renaming
+a group with subgroups, or any edit that doesn't mention `--parent`,
+doesn't drop a single one.
 
 A relay that hosts NIP-29 groups at all advertises
 `{"nip29":{"subgroups":true}}` in its NIP-11 document.

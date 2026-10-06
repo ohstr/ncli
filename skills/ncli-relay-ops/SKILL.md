@@ -251,6 +251,18 @@ Full endpoint list and subcommand reference: `references/admin-reindex-reference
   later at the membership gate. An agent whose owner is later removed as
   a member loses access on its *next* connection attempt only — an
   already-open session is not forcibly terminated.
+- NIP-29 group hosting has no config toggle of its own -- it's always on
+  (`nip29/relayreg` is unconditionally linked into the binary) -- and a
+  fresh group defaults to **private and closed**. That default means
+  `nip11.url` is effectively required the moment anyone creates a group,
+  not just when `auth`/`membership` above turn it on deliberately: NIP-42
+  AUTH validates a client's `relay` tag against it, and without it every
+  AUTH attempt fails that check, silently, which leaves a private group
+  invisible even to its own creator via `ncli groups show`/`list` --
+  indistinguishable from the relay never having created it at all. Set
+  `nip11.url` from the start on any relay hosting groups, even one with no
+  other auth-dependent feature turned on. See `ncli-groups`'s own skill
+  for the `groups` command surface.
 - `ncli relay context add` stores the config file's *absolute* path and
   requires the file to already exist -- it's a saved shortcut to a path,
   not a copy of the file. `context remove` only deletes the shortcut, never

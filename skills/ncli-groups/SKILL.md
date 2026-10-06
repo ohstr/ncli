@@ -126,25 +126,35 @@ ncli's own dependency state.
 
 `list`/`show` both accept `--identity` now, as a bonus: given, the
 connection authenticates (NIP-42); omitted, the read stays anonymous, as
-before `--identity` was accepted here at all. `show` always names one
-specific group (a "d" tag), which is what the relay's NIP-29 visibility
-gate keys off: a REQ naming a *private* group is rejected unless the
-session has an authenticated identity that is also a member of that
-exact group, so an authenticated member now sees their own private
-group where an anonymous read gets nothing. Since a group defaults to
-**private and closed** on creation, `ncli groups show standup` against
-your own freshly-created group needs `--identity` to see anything at
-all. `list` asks for every group's metadata by kind alone, naming no
-specific group -- see nmilat's own NIP-29 implementation notes for
-exactly how a kind-only query's visibility is scoped.
+before `--identity` was accepted here at all. The relay enforces NIP-29
+visibility two different ways depending on which of these you run, and
+they fail differently:
 
-Either way, if the result comes back empty specifically because the
-relay refused the query (no identity against a private group, or an
-identity that isn't a member) rather than because there's genuinely
-nothing there, `list`/`show` exit `7` (`auth`) with `"relay restricted
-this query (private/membership required)"` instead of the usual
-"(nothing found)" success -- same shape `find`/`dump`'s own
-`--auth-identity` uses.
+- `show` always names one specific group (a "d" tag). The relay's
+  request-level gate keys off exactly that tag: a REQ naming a *private*
+  group is rejected outright (a "restricted: ..." CLOSED) unless the
+  session has an authenticated identity that is also a member of that
+  exact group. Since a group defaults to **private and closed** on
+  creation, `ncli groups show standup` against your own freshly-created
+  group needs `--identity` to see anything at all -- and if it's missing
+  or isn't a member, `show` exits `7` (`auth`) with `"relay restricted
+  this query (private/membership required)"` instead of the usual
+  "(nothing found)" success, same shape `find`/`dump`'s own
+  `--auth-identity` uses.
+- `list` asks for every group's metadata by kind alone (`{"kinds":[39000]}`,
+  plus a second kind:39002 query when `--mine`/`--member` scope it), naming
+  no group at all, so the request-level gate above has nothing to key off
+  and never rejects the REQ. Visibility here is enforced per result
+  instead: the relay drops any private group's metadata from the stream
+  unless the session's authenticated identity is a member of that
+  specific group, before it ever reaches you. That makes an empty/filtered
+  `list` indistinguishable from "the relay has no groups" -- there's no
+  refusal to report, so `list` never exits `7` for this; `(no groups
+  found -- ...)` is printed as an ordinary success either way. `--mine`
+  needs `--identity` to resolve which pubkey to scope to in the first
+  place (`--member` takes a pubkey directly), but neither flag changes
+  this: you still only ever see a private group's metadata if the
+  connection itself is authenticated as a member of it.
 
 ## Validation
 

@@ -16,16 +16,21 @@ docs drifting from what's actually shipped.
   (so R3 has something real to administer).
 - **`blossom`** -- reference Blossom server, for R7.
 - **`agent`** -- the agent-under-test's machine (`agent/Dockerfile`): no
-  Go/`ncli`/repo copy, just curl/bash/Node + Claude Code. Runs non-root
-  (Claude Code refuses `bypassPermissions` as root) and shares `relay`'s
-  network namespace, since ncli's admin commands hard-target
-  `localhost` with no `--url` override.
+  Go/`ncli`/repo copy, just curl/bash/Node + Claude Code, plus a
+  Meilisearch binary (not always-on -- R12's `prepare_r12` starts it only
+  before that round). Runs non-root (Claude Code refuses
+  `bypassPermissions` as root) and shares `relay`'s network namespace,
+  since ncli's admin commands hard-target `localhost` with no `--url`
+  override.
 
-Eleven rounds (`rounds/r0-bootstrap.md` .. `r10-space.md`) cover
-install, identity, relay queries, relay admin, publish/apply,
+Thirteen rounds (`rounds/r0-bootstrap.md` .. `r12-relay-scenarios-serve.md`)
+cover install, identity, relay queries, relay admin, publish/apply,
 PoW mining, NIP-46 bunker signing (started and driven with no TTY),
-Blossom, the documented error-code contract, NIP-29 groups, and NIP-53
-spaces (a headless call plus chat). Each round is a fresh, non-interactive `claude -p`
+Blossom, the documented error-code contract, NIP-29 groups, NIP-53
+spaces (a headless call plus chat), and (R11/R12) whether an agent working
+only from the `ncli-relay-ops` skill's scenario table can stand up each
+named `examples/relay/` scenario and get the behavior it promises. Each
+round is a fresh, non-interactive `claude -p`
 call with no memory of prior rounds, though the container filesystem
 persists between them (R0's install, R1's identity, etc. are still
 there).
@@ -89,6 +94,16 @@ and `.env` are gitignored; never commit either.
 provide. `bin/run.sh` pre-starts the daemon itself via `script` before
 R6 runs; the round only drives its scriptable surface (`connect`,
 `status`, `sessions`, `history`).
+
+## Known constraint: R11/R12
+
+The agent-swarm scenario's NIP-OA credential has no documented `ncli`
+command that mints one directly -- the round asks the agent to find a
+scriptable path itself and say plainly if it can't, rather than papering
+over the gap. `prepare_r10` pre-starts Meilisearch for the public-search
+scenario the same way `prepare_r6` pre-starts the bunker daemon; if it
+never comes up, R12 still runs and the search scenario simply surfaces
+that as a finding instead of silently skipping it.
 
 ## Follow-up & extending
 

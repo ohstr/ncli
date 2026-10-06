@@ -28,6 +28,25 @@
   enrollment only, no invite flow), and `tracked-membership-relay.yaml`
   (`membership.enabled` with `membership_required` left off -- a roster
   and roles for display/moderation tooling, not an admission gate).
+- `cli/relay` gains a test for every scenario's defining promise, booting
+  a real in-process relay per scenario (the same `bootX`+`httptest`
+  pattern `huddle_test.go`/`service_query_test.go` already use) and
+  driving it over a real WebSocket/HTTP connection: PoW actually rejects
+  a 0-difficulty event, `membership_required` actually refuses a
+  non-member and admits an enrolled one, NIP-AA actually grants (and
+  withholds) virtual membership from a NIP-OA credential, `nip86`/
+  `httpBridge.query` are mounted and auth-gated rather than 404, and
+  `cache.topZapped` answers a real cache REQ. A table-driven test also
+  loads every shipped `examples/relay/*.yaml` (not just the 8 named
+  scenarios) through the real config loader, the doc-drift guard that
+  would have caught the `httpBridge` bug below on its own.
+- `integration/agent-eval` gains two rounds (R11/R12): a fresh agent,
+  working only from the `ncli-relay-ops` skill's scenario table (never
+  handed the actual YAML files), authors and stands up each of the 8
+  named scenarios itself and demonstrates the promised behavior --
+  proving the documentation is sufficient, not just that the shipped
+  examples are self-consistent. R12's public-search scenario gets a real
+  Meilisearch pre-started in the agent container for this.
 
 ### Fixed
 

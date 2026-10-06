@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.8.0-rc.7]
+
+### Added
+
+- `ncli groups create --parent <id>` and `ncli groups edit --parent <id>`
+  (`""` detaches to root) for NIP-29 "Subgroups" -- `create --parent` is
+  sugar for two events (9007 then 9002) combined into a single
+  `{"create":...,"set_parent":...}` value under `--json`, never two
+  concatenated JSON blobs. `edit`'s existing `mergeEditParams` now also
+  carries the group's current `Children` list forward unconditionally
+  (there's no `--child` flag): nmilat's relay rejects any edit on a group
+  with existing subgroups that doesn't re-list every one of them, since
+  kind:9002 is a full replace. Relies on nmilat's own new validation
+  (self-reference/cycle/parent-must-exist/cross-group-admin/privacy-
+  boundary checks, nmilat#70) for everything the relay itself enforces.
+- New `ncli groups tree`: reads every visible kind:39000 and assembles
+  the parent/child hierarchy locally from each group's own `Parent` tag
+  (NIP-29's own recommended assembly, not the relay's `Children` tag --
+  a node whose parent is private and unreadable still surfaces as its
+  own root rather than being dropped). Indented text by default, a
+  nested `{"roots":[...],"nodes":{...}}` object under `--json`.
+  `Parent`/`Children` also surfaced in `groups list`/`show --json`.
+- `ncli groups show <nonexistent-id>` now exits `7` (`auth`), same as a
+  private group you're not a member of, rather than printing
+  `(nothing found)` -- nmilat's relay deliberately makes the two
+  indistinguishable now (closing an id-enumeration oracle an
+  unauthenticated prober could otherwise use), so this follows suit
+  rather than masking it. (#108)
+
 ## [0.8.0-rc.6]
 
 ### Added

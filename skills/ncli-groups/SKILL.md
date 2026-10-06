@@ -125,36 +125,24 @@ and these work today against any relay that speaks NIP-29, independent of
 ncli's own dependency state.
 
 `list`/`show` both accept `--identity` now, as a bonus: given, the
-connection authenticates (NIP-42); omitted, the read stays anonymous, as
-before `--identity` was accepted here at all. The relay enforces NIP-29
-visibility two different ways depending on which of these you run, and
-they fail differently:
+connection authenticates (NIP-42); omitted, the read stays anonymous.
+The relay's NIP-29 visibility gate sits at a different level for each,
+so they fail differently:
 
-- `show` always names one specific group (a "d" tag). The relay's
-  request-level gate keys off exactly that tag: a REQ naming a *private*
-  group is rejected outright (a "restricted: ..." CLOSED) unless the
-  session has an authenticated identity that is also a member of that
-  exact group. Since a group defaults to **private and closed** on
-  creation, `ncli groups show standup` against your own freshly-created
-  group needs `--identity` to see anything at all -- and if it's missing
-  or isn't a member, `show` exits `7` (`auth`) with `"relay restricted
-  this query (private/membership required)"` instead of the usual
-  "(nothing found)" success, same shape `find`/`dump`'s own
-  `--auth-identity` uses.
-- `list` asks for every group's metadata by kind alone (`{"kinds":[39000]}`,
-  plus a second kind:39002 query when `--mine`/`--member` scope it), naming
-  no group at all, so the request-level gate above has nothing to key off
-  and never rejects the REQ. Visibility here is enforced per result
-  instead: the relay drops any private group's metadata from the stream
-  unless the session's authenticated identity is a member of that
-  specific group, before it ever reaches you. That makes an empty/filtered
-  `list` indistinguishable from "the relay has no groups" -- there's no
-  refusal to report, so `list` never exits `7` for this; `(no groups
-  found -- ...)` is printed as an ordinary success either way. `--mine`
-  needs `--identity` to resolve which pubkey to scope to in the first
-  place (`--member` takes a pubkey directly), but neither flag changes
-  this: you still only ever see a private group's metadata if the
-  connection itself is authenticated as a member of it.
+- `show` names one group (a "d" tag) -- the gate keys off exactly that
+  tag, rejecting a REQ for a *private* group outright (a "restricted:
+  ..." CLOSED) unless the session is authenticated as a member. A fresh
+  group defaults to **private and closed**, so `ncli groups show standup`
+  needs `--identity` to see anything. Missing or non-member: `show` exits
+  `7` (`auth`), `"relay restricted this query (private/membership
+  required)"`, not the usual `(nothing found)` -- same shape
+  `find`/`dump`'s `--auth-identity` uses.
+- `list` names no group (`{"kinds":[39000]}`, plus a kind:39002 lookup
+  for `--mine`/`--member`), so that gate never fires. Visibility is
+  enforced per result instead: the relay silently drops any private
+  group's metadata the session isn't a member of. There's no refusal to
+  report, so `list` never exits `7` for this -- an empty/filtered result
+  is always an ordinary `(no groups found -- ...)` success.
 
 ## Validation
 

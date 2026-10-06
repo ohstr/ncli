@@ -125,26 +125,24 @@ and these work today against any relay that speaks NIP-29, independent of
 ncli's own dependency state.
 
 `list`/`show` both accept `--identity` now, as a bonus: given, the
-connection authenticates (NIP-42); omitted, the read stays anonymous, as
-before `--identity` was accepted here at all. `show` always names one
-specific group (a "d" tag), which is what the relay's NIP-29 visibility
-gate keys off: a REQ naming a *private* group is rejected unless the
-session has an authenticated identity that is also a member of that
-exact group, so an authenticated member now sees their own private
-group where an anonymous read gets nothing. Since a group defaults to
-**private and closed** on creation, `ncli groups show standup` against
-your own freshly-created group needs `--identity` to see anything at
-all. `list` asks for every group's metadata by kind alone, naming no
-specific group -- see nmilat's own NIP-29 implementation notes for
-exactly how a kind-only query's visibility is scoped.
+connection authenticates (NIP-42); omitted, the read stays anonymous.
+The relay's NIP-29 visibility gate sits at a different level for each,
+so they fail differently:
 
-Either way, if the result comes back empty specifically because the
-relay refused the query (no identity against a private group, or an
-identity that isn't a member) rather than because there's genuinely
-nothing there, `list`/`show` exit `7` (`auth`) with `"relay restricted
-this query (private/membership required)"` instead of the usual
-"(nothing found)" success -- same shape `find`/`dump`'s own
-`--auth-identity` uses.
+- `show` names one group (a "d" tag) -- the gate keys off exactly that
+  tag, rejecting a REQ for a *private* group outright (a "restricted:
+  ..." CLOSED) unless the session is authenticated as a member. A fresh
+  group defaults to **private and closed**, so `ncli groups show standup`
+  needs `--identity` to see anything. Missing or non-member: `show` exits
+  `7` (`auth`), `"relay restricted this query (private/membership
+  required)"`, not the usual `(nothing found)` -- same shape
+  `find`/`dump`'s `--auth-identity` uses.
+- `list` names no group (`{"kinds":[39000]}`, plus a kind:39002 lookup
+  for `--mine`/`--member`), so that gate never fires. Visibility is
+  enforced per result instead: the relay silently drops any private
+  group's metadata the session isn't a member of. There's no refusal to
+  report, so `list` never exits `7` for this -- an empty/filtered result
+  is always an ordinary `(no groups found -- ...)` success.
 
 ## Validation
 

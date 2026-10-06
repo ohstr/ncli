@@ -1,6 +1,9 @@
-# Huddle audio: real-time voice rooms served over their own WebSocket at
-# /huddle/{id}/audio. See examples/relay/full.yaml for the complete set of
-# nip11 fields and which ones `ncli relay` honors from config.
+# Scenario: a community that meets, not just posts -- a weekly standup, a
+# book club, a game night voice channel -- hosted on the same relay as its
+# text notes rather than on a third-party call service. Real-time voice
+# rooms are served over their own WebSocket at /huddle/{id}/audio. See
+# examples/relay/full.yaml for the complete set of nip11 fields and which
+# ones `ncli relay` honors from config.
 #
 # Audio does not share the Nostr socket. That socket decodes every frame as
 # JSON, so a binary audio frame on it is a parse error that drops the session --
@@ -9,16 +12,17 @@
 # A joining client authenticates with a NIP-42 kind:22242 event whose `relay`
 # tag names *this relay* (nip11.url below), not the huddle endpoint.
 nip11:
-  name: "ncli Huddle Relay"
+  name: "Community Voice Relay"
+  description: "Text notes plus live voice rooms for the same community"
   pubkey: "d3345d36e7885ad6340263309a96e0821b22e176ebc721098492063df5516086"
   contact: "admin@example.com"
   # url: required when huddle.enabled is true -- it is what an incoming
   # NIP-42 auth event's relay tag is validated against.
-  url: "ws://localhost:5502"
+  url: "ws://localhost:5506"
 
 logdir: "./data/logs"
-store: "./data/db/huddle.db"
-port: 5502
+store: "./data/db/community-voice.db"
+port: 5506
 
 huddle:
   # Mounts /huddle/{id}/audio. Omitting this block, or leaving enabled false,

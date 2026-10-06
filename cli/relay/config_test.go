@@ -1108,7 +1108,7 @@ huddle:
 // feature quietly off with no error anywhere. Asserting the parsed values is
 // what catches that.
 func TestHuddleExampleConfigMatchesTheStruct(t *testing.T) {
-	content, err := os.ReadFile(filepath.Join("..", "..", "examples", "relay", "huddle.yaml"))
+	content, err := os.ReadFile(filepath.Join("..", "..", "examples", "relay", "community-voice-relay.yaml"))
 	require.NoError(t, err)
 
 	cfg := loadRelayConfigFromYAML(t, string(content))

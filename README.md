@@ -258,8 +258,8 @@ pow:
   min: 20       # required leading-zero-bit difficulty; 0 = no requirement
 ```
 
-See [`examples/relay/pow.yaml`](examples/relay/pow.yaml) for a relay with
-this actually enforced (`strict: true`).
+See [`examples/relay/anti-spam-relay.yaml`](examples/relay/anti-spam-relay.yaml)
+for a relay with this actually enforced (`strict: true`).
 
 Let people talk to each other through the relay — group voice calls, plus video
 and screen sharing for browsers — with a `huddle:` block. Calls get their own
@@ -274,10 +274,13 @@ huddle:
 ```
 
 The relay forwards audio without decoding it, so it links no codec. See
-[`examples/relay/huddle.yaml`](examples/relay/huddle.yaml) for the documented
-preset, and [`ncli huddle`](#huddle) for joining a call from a terminal.
+[`examples/relay/community-voice-relay.yaml`](examples/relay/community-voice-relay.yaml)
+for the documented preset, and [`ncli huddle`](#huddle) for joining a call
+from a terminal.
 
-More presets (auth-required, membership, ephemeral, cache+search) live under
+More scenarios (a personal outbox, a membership-gated community, a public
+search-and-trending relay, an agent-friendly relay, an app's own backend
+administering over HTTP, a throwaway dev/test instance) live under
 [`examples/relay/`](examples/relay/).
 
 ## `relay context`
@@ -325,16 +328,16 @@ members, hand out invite codes, and define roles on a running relay:
 
 ```sh
 # enroll a pubkey directly -- no invite code needed
-ncli relay members add <pubkey> --role vip --config examples/relay/membership.yaml
+ncli relay members add <pubkey> --role vip --config examples/relay/community-membership-relay.yaml
 
 # who's currently enrolled
-ncli relay members list --config examples/relay/membership.yaml
+ncli relay members list --config examples/relay/community-membership-relay.yaml
 
 # issue a code to hand out out-of-band (a signup email, a Discord invite)
-ncli relay invites create --ttl 24h --max-uses 1 --config examples/relay/membership.yaml
+ncli relay invites create --ttl 24h --max-uses 1 --config examples/relay/community-membership-relay.yaml
 
 # define a role
-ncli relay roles create vip --label "VIP" --color 280 --config examples/relay/membership.yaml
+ncli relay roles create vip --label "VIP" --color 280 --config examples/relay/community-membership-relay.yaml
 ```
 
 NIP-43 has no "delete role" event, so `roles create` re-run with the same
@@ -354,9 +357,10 @@ agent_auth:
   kindEnforcement: false
 ```
 
-See the commented-out block in
-[`examples/relay/membership.yaml`](examples/relay/membership.yaml) or the
-fully-documented one in
+See [`examples/relay/agent-swarm-relay.yaml`](examples/relay/agent-swarm-relay.yaml)
+for a relay built around this, or the commented-out block in
+[`examples/relay/community-membership-relay.yaml`](examples/relay/community-membership-relay.yaml)
+and the fully-documented one in
 [`examples/relay/full.yaml`](examples/relay/full.yaml).
 
 ## `relay stats`/`reindex`/`clear`
@@ -821,7 +825,7 @@ format, and pairing an AI agent for unattended signing.
 ## `huddle`
 
 Real-time voice rooms hosted by the relay itself. Enable the `huddle:` block
-(shape: [`examples/relay/huddle.yaml`](examples/relay/huddle.yaml)), then join
+(shape: [`examples/relay/community-voice-relay.yaml`](examples/relay/community-voice-relay.yaml)), then join
 from another terminal:
 
 ```sh

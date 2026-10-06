@@ -1,0 +1,55 @@
+# Scenario: a community that controls who can post. Think a paid newsletter,
+# a close friend group, or a project's contributor channel -- anyone can be
+# pointed at the relay URL, but writing (and, with membership_required,
+# reading) needs an invite first.
+#
+# Mechanism: NIP-43 relay membership. An outsider gets an invite claim from
+# an admin (`ncli relay invites create`, or NIP-86 createclaim) or an existing
+# member (REQ kind:28935) -- with membership_required, a non-member can't
+# request one -- then joins with it (EVENT kind:28934) and is enrolled from
+# then on. membership.enabled requires nip11.privkey: the relay signs its
+# kind:13534 member list and add/remove/invite events with it. See examples/relay/full.yaml for the complete set of nip11 fields
+# and which ones `ncli relay` actually honors from config vs. always
+# overwrites.
+nip11:
+  name: "Weekly Build Log"
+  description: "Members-only notes for paid subscribers"
+  # Generated with `ncli id --json` for this example only -- never reuse a
+  # privkey that's ever appeared in a public repo for anything real.
+  privkey: "86bb649e7e6456d19163cd4c5b9653b9611387961af669610842d60a8a436a61"
+  contact: "admin@example.com"
+  # url: required whenever auth_required is true (below).
+  url: "ws://localhost:5511"
+  limitation:
+    auth_required: true
+    # membership_required additionally gates REQ/COUNT, not just EVENT: a
+    # non-member's subscription sees nothing at all rather than an empty feed
+    # they could otherwise tell apart from "no posts yet". Drop this (keep
+    # auth_required) if you want posts to be publicly readable and only
+    # writing gated to members -- a public blog with a members-only comment
+    # section, say.
+    membership_required: true
+
+membership:
+  enabled: true
+  # How long a code handed out (e.g. in a welcome email) stays redeemable.
+  inviteTTL: "24h"
+  # One subscriber, one code. Raise this to let one code cover a household.
+  inviteMaxUses: 1
+  # Also publish a signed kind:8000/8001 whenever someone joins or leaves,
+  # so a member's own client can show "3 new members this week" without
+  # querying the admin API.
+  publishAddRemoveEvents: true
+
+# NIP-AA (optional): lets a member bring an AI agent that posts under its own
+# key but inherits *their* membership via a NIP-OA credential, with no
+# separate invite for the bot. See examples/relay/agent-swarm-relay.yaml for
+# a filled-in version of this block.
+# agent_auth:
+#   enabled: true
+#   freshnessWindow: "120s"
+#   kindEnforcement: false
+
+logdir: "./data/logs"
+store: "./data/db/community-membership.db"
+port: 5511

@@ -9,8 +9,8 @@ invite codes out-of-band, and define roles — all against an **already
 running** relay, over the same NIP-98-authenticated HTTP mechanism as `ncli
 relay stats`/`reindex`/`clear` (see `references/admin-reindex-reference.md`).
 Requires `membership.enabled: true` in the relay's config (see
-`examples/relay/membership.yaml`) — every endpoint below returns `501` if it
-isn't.
+`examples/relay/community-membership-relay.yaml`) — every endpoint below
+returns `501` if it isn't.
 
 Every write goes through the relay's live `MembershipService` (the same
 instance every open connection consults for auth decisions), never a direct

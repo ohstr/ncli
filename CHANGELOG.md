@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.8.0-rc.10]
+
+### Changed
+
+- `examples/relay/` is reorganized around real deployment scenarios instead
+  of individual tech features: `open.yaml`/`auth.yaml`/`cache-search.yaml`/
+  `ephemeral.yaml` are retired (folded into the files below or, for
+  ephemeral's NIP-16-is-automatic fact, into the `ncli-relay-ops` skill's
+  gotchas), `membership.yaml`/`pow.yaml`/`huddle.yaml` are renamed and
+  reframed as `community-membership-relay.yaml`/`anti-spam-relay.yaml`/
+  `community-voice-relay.yaml`, and four new scenarios are added:
+  `personal-relay.yaml`, `dev-test-relay.yaml`, `agent-swarm-relay.yaml`
+  (NIP-AA, filling in `agent_auth` for real), and `app-backend-relay.yaml`
+  (NIP-86 + the `httpBridge.query` POST /query bridge, both administered
+  by an app's own backend rather than a human at a terminal). `minimal.yaml`
+  and `full.yaml` are unchanged -- a quickstart skeleton and an every-field
+  reference aren't scenarios. README and the `ncli-relay-ops`/`ncli-huddle`
+  skills' cross-references are updated accordingly.
+
+### Fixed
+
+- `examples/relay/full.yaml` documented `query:` as a bare top-level key;
+  the real config shape (since the `httpBridge` grouping landed) is nested
+  under `httpBridge.query`/`httpBridge.events`. Viper silently drops an
+  unknown top-level key rather than erroring, so a config copied from the
+  old example loaded with no complaint and simply never mounted the
+  endpoint -- caught while building `app-backend-relay.yaml` above, which
+  depends on it actually working.
+
 ## [0.8.0-rc.9]
 
 ### Security

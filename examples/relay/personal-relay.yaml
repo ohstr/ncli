@@ -1,0 +1,23 @@
+# Scenario: one person's own relay for their own notes -- an outbox/backup
+# that's always there even if every public relay you post to disappears.
+# Not a product; just somewhere your own events durably live.
+#
+# Wide open on purpose, like most real personal relays: nobody else knows
+# about it, and NIP-42 auth_required alone wouldn't restrict writes to just
+# *you* anyway (it only requires some signed-in identity, not a specific
+# one -- see the gotchas in skills/ncli-relay-ops/SKILL.md). If you want
+# this relay to actually refuse strangers instead of relying on obscurity,
+# enroll yourself as its only member -- see
+# examples/relay/community-membership-relay.yaml for the membership block,
+# minus the invite codes and multiple members. See examples/relay/full.yaml
+# for the complete set of nip11 fields and which ones `ncli relay` actually
+# honors from config vs. always overwrites.
+nip11:
+  name: "My Notes"
+  description: "One person's own outbox -- nothing fancy, just durable"
+  pubkey: "d3345d36e7885ad6340263309a96e0821b22e176ebc721098492063df5516086"
+  contact: "me@example.com"
+
+logdir: "./data/logs"
+store: "./data/db/personal.db"
+port: 5510

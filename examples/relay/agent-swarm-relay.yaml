@@ -1,0 +1,53 @@
+# Scenario: a team runs several AI agents (a research assistant, a
+# support-ticket triager, a changelog summarizer) that each need to post
+# under their own identity -- so a bad agent's output is attributable to it,
+# not to the human who operates it -- without enrolling every one of them
+# in membership by hand as they're spun up and retired.
+#
+# Mechanism: NIP-AA. An agent presenting a valid NIP-OA credential during
+# AUTH gains virtual membership derived from its *owner's* NIP-43
+# membership, with no separate invite or enrollment for the agent itself.
+# agent_auth.enabled requires nip11.limitation.membership_required, which
+# itself requires membership.enabled and limitation.auth_required -- the
+# relay refuses to start if any link in that chain is missing. See
+# examples/relay/full.yaml for the complete set of nip11 fields.
+nip11:
+  name: "Team Agent Relay"
+  description: "Agents post under their own key, inheriting their operator's membership"
+  # Generated with `ncli id --json` for this example only -- never reuse a
+  # privkey that's ever appeared in a public repo for anything real.
+  privkey: "7687e9cd85027cf2d446a4b834f67afa6f2ace3cff8ac6139731c3802f339f8e"
+  contact: "admin@example.com"
+  # url: required whenever auth_required is true (below).
+  url: "ws://localhost:5515"
+  limitation:
+    auth_required: true
+    membership_required: true
+
+membership:
+  enabled: true
+  # The human operators are enrolled the normal way (invite, or
+  # `ncli relay members add` for a direct admin bypass -- see
+  # examples/relay/community-membership-relay.yaml). Their agents never go
+  # through this at all; agent_auth below is what grants them access.
+  inviteTTL: "24h"
+  inviteMaxUses: 1
+  publishAddRemoveEvents: true
+
+agent_auth:
+  enabled: true
+  # How far an AUTH event's created_at may drift from now. Tight on purpose
+  # -- a replayed AUTH from a captured agent credential is far more useful
+  # to an attacker than a replayed human one, since agents authenticate far
+  # more often and unattended.
+  freshnessWindow: "120s"
+  # true additionally checks a virtual member's retained credential's
+  # kind= clauses against every EVENT it submits -- so a credential scoped
+  # to "this agent may only publish kind:1 notes" is actually enforced here,
+  # not just advisory the way the spec allows by default. Worth turning on
+  # precisely because an agent's output is less supervised than a human's.
+  kindEnforcement: true
+
+logdir: "./data/logs"
+store: "./data/db/agent-swarm.db"
+port: 5515

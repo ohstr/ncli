@@ -1,0 +1,67 @@
+# Scenario: a product team runs this relay behind their own app. Nobody on
+# the team wants to carry the relay's secret key around in a terminal to
+# approve a signup, and the app's own backend needs to read a user's notes
+# without opening and managing a WebSocket subscription for a single
+# request-response lookup. Both of those are HTTP, administered and called
+# the way the rest of the app's infrastructure already is.
+#
+# Mechanisms: nip86 (the standard NIP-86 Relay Management API, so the
+# backend can enroll/remove members over HTTP instead of someone running
+# `ncli relay members add` by hand) and httpBridge.query (POST /query, a
+# one-shot HTTP alternative to a WS REQ/EOSE round trip for the backend's
+# own reads). Both ride NIP-98 request signing on the relay's own URL,
+# told apart from the WebSocket upgrade and the NIP-11 document by
+# Content-Type alone. See examples/relay/full.yaml for the complete set of
+# nip11 fields.
+nip11:
+  name: "App Relay"
+  description: "Administered by the app's own backend, not a human at a terminal"
+  # Generated with `ncli id --json` for this example only -- never reuse a
+  # privkey that's ever appeared in a public repo for anything real.
+  privkey: "60a873c3693f3e2c97937a6d349d384e84aaadf2505504bc6f176b2ffe56b5d3"
+  contact: "admin@example.com"
+  # url: required whenever auth_required is true (below).
+  url: "ws://localhost:5517"
+  limitation:
+    auth_required: true
+
+membership:
+  # Required: every nip86 method below administers NIP-43 membership, so
+  # this has to be on even if the app's own product rules (not relay
+  # config) end up deciding who gets enrolled.
+  enabled: true
+  publishAddRemoveEvents: true
+
+nip86:
+  enabled: true
+  # The app backend's own identity, in addition to nip11.pubkey (always
+  # allowed) -- this is the point of the block: without it, administering
+  # means carrying the relay's own secret key on a server that only needs
+  # to manage memberships, not sign as the relay itself.
+  admins:
+    - "fc74ab8148ac69e907b03b443b34b2130f4ecd0c9d6afc16ba45b1f37138f01b"
+  # Empty would answer any origin. Pinned here because this API is only
+  # ever meant to be called from the app's own backend, never a browser.
+  allowedOrigins:
+    - "https://app.example"
+
+httpBridge:
+  query:
+    # The backend's own reads go through here instead of a WebSocket
+    # subscription it would otherwise have to keep open for one lookup.
+    # NIP-98 identifies the caller on its own; nothing here is
+    # additionally gated to membership since limitation.membership_required
+    # isn't set -- any validly-signed caller is served, the same as an
+    # anonymous REQ would be. Set membership_required too if results
+    # should be restricted to the signer's own NIP-43 membership, exactly
+    # like REQ/COUNT.
+    enabled: true
+  # events: the write-side counterpart -- publish one already-signed event
+  # over HTTP the same way. Left off here: this app's backend only needs
+  # to read, since its users publish from their own client over WebSocket.
+  # events:
+  #   enabled: true
+
+logdir: "./data/logs"
+store: "./data/db/app-backend.db"
+port: 5517

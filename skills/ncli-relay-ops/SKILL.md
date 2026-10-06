@@ -33,17 +33,30 @@ logdir: ./data/logs
 `pubkey` alone is enough to start; `privkey` is only required if you also
 want `cache.topZapped.enabled` or `ncli relay stats`/`reindex`/`clear`.
 
-## Preset shapes
+## Scenario examples
 
-| Preset | What it toggles vs. minimal |
-|---|---|
-| open | Adds `cache.search.*` (Meilisearch) enabled |
-| auth | Adds `cache.search.*` **and** `nip11.limitation.auth_required: true` **and** `nip11.url` (required once auth is on) |
-| ephemeral | Same shape as open, distinct `store`/`port`/`index_name` for a throwaway instance. Nothing ephemeral-specific to configure -- NIP-16 handling (kinds 20000-29999) is automatic based on kind, not a toggle. |
-| cache-search | Adds `cache.search.*` **and** `cache.topZapped.enabled: true` **and** `nip11.privkey` — the shape you need for `ncli relay stats`/`reindex`/`clear` too, since their auth also requires `nip11.privkey` |
-| membership | Adds `membership.enabled: true` **and** `nip11.privkey` **and** `nip11.limitation.auth_required: true` + `nip11.url` (auth is a prerequisite for membership) **and** (optionally) `nip11.limitation.membership_required: true` — NIP-43 relay membership: enrolled pubkeys can REQ/EVENT, everyone else must invite-then-join first. See `examples/relay/membership.yaml`. |
-| pow | Adds `pow.strict: true` **and** `pow.min` (a nonzero difficulty) — actually rejects under-difficulty events instead of just advertising the requirement. See `examples/relay/pow.yaml`. |
-| full | Documents every field: `description`, `limitation.*`, `pow.*`, `cache.topZapped.enabled`, `cache.topZapped.window`, `membership.*`, `agent_auth.*`, `handshakeTimeout`/`pingInterval`/`pongTimeout`/`writeTimeout`, `outgoingBufferSize`/`maxConcurrentStoreTasks`/`verificationWorkers`, `logs.*` rotation, full `cache.search.*` |
+Each file under `examples/relay/` (besides `minimal.yaml` and `full.yaml`
+below) is a real deployment shape, not just a feature demo -- copy the one
+closest to what you're building and adapt its name/port/store.
+
+| File | Scenario | Key fields beyond minimal |
+|---|---|---|
+| `personal-relay.yaml` | One person's own outbox/backup -- wide open, low stakes | Nothing beyond minimal, by design |
+| `community-membership-relay.yaml` | Invite-gated community (paid newsletter, friend group, contributor channel) | `membership.enabled` + `nip11.privkey` + `auth_required`+`url` (+ optional `membership_required`) -- NIP-43 relay membership: enrolled pubkeys can REQ/EVENT, everyone else must invite-then-join first |
+| `public-search-relay.yaml` | Public, high-traffic relay where search and "what's trending" actually work | `cache.search.*` + `cache.topZapped.enabled` + `nip11.privkey` -- also the shape `ncli relay stats`/`reindex`/`clear` need, since their auth requires `nip11.privkey` too |
+| `anti-spam-relay.yaml` | Public relay fighting spam with mining cost instead of a ban list | `pow.strict: true` + `pow.min` (nonzero) -- actually rejects under-difficulty events instead of just advertising the requirement |
+| `dev-test-relay.yaml` | Throwaway relay for local development or CI | Nothing beyond minimal -- its own port/store so it can run alongside `just dev relay` or another instance of itself |
+| `agent-swarm-relay.yaml` | A team's AI agents post under their own key via a human's membership, no separate bot enrollment | `agent_auth.enabled` on top of membership + `auth_required` + `membership_required` -- NIP-AA |
+| `community-voice-relay.yaml` | A community that meets, not just posts -- live voice rooms alongside its notes | `huddle.enabled` (+ `rtc`, `iceServers` for browsers) -- real-time voice over its own WebSocket, independent of the Nostr socket |
+| `app-backend-relay.yaml` | A product's own backend administers/calls the relay over HTTP, never a terminal | `nip86.enabled` (+ `admins`) -- the standard NIP-86 management API -- and `httpBridge.query.enabled` -- a one-shot HTTP alternative to a WS REQ/EOSE round trip |
+
+`examples/relay/full.yaml` documents every field at its default, commented:
+`description`, `limitation.*`, `pow.*`, `cache.topZapped.*`,
+`membership.*`, `nip86.*`, `agent_auth.*`, `httpBridge.*`,
+`handshakeTimeout`/`pingInterval`/`pongTimeout`/`writeTimeout`,
+`outgoingBufferSize`/`maxConcurrentStoreTasks`/`verificationWorkers`,
+`logs.*` rotation, `huddle.*`, and full `cache.search.*`.
+`examples/relay/minimal.yaml` is the bare quickstart `just dev relay` runs.
 
 Full field table: `references/config-schema.md`.
 
@@ -275,6 +288,17 @@ Full endpoint list and subcommand reference: `references/admin-reindex-reference
   falsely advertising "accepts no messages." Same substitution pattern for
   `max_limit` (555,555), `max_subscriptions` (355), `max_indexable_tags`
   (5) when each is left at zero.
+- POST /query and POST /events live under a nested `httpBridge:` key
+  (`httpBridge.query.enabled`/`httpBridge.events.enabled`), not bare
+  top-level `query:`/`events:` keys -- viper silently drops an unknown
+  top-level key rather than erroring, so a config using the old flat shape
+  loads with no complaint and simply never mounts either endpoint. See
+  `examples/relay/app-backend-relay.yaml`.
+- NIP-16 ephemeral event kinds (20000-29999) need no config anywhere --
+  handling is automatic based on an event's own kind, not a toggle. Publish
+  one against any relay to see it: accepted and briefly queryable, then
+  expired rather than persisted (10 minutes by default; see nmilat/relay's
+  store.go).
 - `nip11.pubkey` is optional if `nip11.privkey` is set — it's derived
   automatically and must match if both are present (config-validation error
   otherwise). `ncli relay stats`/`reindex`/`clear` use the same derivation

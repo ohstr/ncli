@@ -132,22 +132,31 @@ func groupIDsFromListJSON(t *testing.T, stdout string) map[string]bool {
 	return ids
 }
 
-// waitForGroupsListCount polls "groups list --identity creatorIdentity"
-// (the broadest view available, bypassing --mine/--member filtering
-// entirely) until it reports at least want groups, or fails the test after
-// 2s -- the same durability race nmilat's own integration tests guard
-// against (EventStore's batched write queue means a query sent immediately
-// after create/edit's own OK can legitimately race ahead of that commit).
+// waitForGroupsListCount polls both "groups list --identity creatorIdentity"
+// (the broadest view, bypassing --mine/--member filtering) and the same
+// query with --mine added, until both report at least want groups, or
+// fails the test after 2s. The plain view alone isn't enough: a group's
+// kind:39000 metadata and kind:39002 roster mirrors are two separate
+// publishSelfSigned calls (relay/groups.go's publishGroupMetadataMirror/
+// publishGroupRosterMirrors), so a plain list becoming queryable doesn't
+// guarantee --mine's own kind:39002 "#p" lookup is durable yet too --
+// confirmed as the actual cause of a real (if rare under local timing,
+// reliably hit once on a slower CI runner) flake in
+// TestGroupsList_MineAndMember_EndToEnd's "creator --mine sees both" case,
+// which a plain-list-only wait let through.
 func waitForGroupsListCount(t *testing.T, relayURL *url.URL, creatorIdentity string, want int) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
 	for {
-		stdout, err := execGroupsCmd(t, relayURL, "list", "--identity", creatorIdentity)
-		if err == nil && len(groupIDsFromListJSON(t, stdout)) >= want {
+		plainStdout, plainErr := execGroupsCmd(t, relayURL, "list", "--identity", creatorIdentity)
+		mineStdout, mineErr := execGroupsCmd(t, relayURL, "list", "--identity", creatorIdentity, "--mine")
+		if plainErr == nil && mineErr == nil &&
+			len(groupIDsFromListJSON(t, plainStdout)) >= want &&
+			len(groupIDsFromListJSON(t, mineStdout)) >= want {
 			return
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("groups list never reported >= %d groups (last stdout=%q err=%v)", want, stdout, err)
+			t.Fatalf("groups list never reported >= %d groups on both the plain and --mine views (last plain=%q plainErr=%v mine=%q mineErr=%v)", want, plainStdout, plainErr, mineStdout, mineErr)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}

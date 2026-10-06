@@ -48,6 +48,21 @@
   examples are self-consistent. R12's public-search scenario gets a real
   Meilisearch pre-started in the agent container for this.
   ([#115](https://github.com/ohstr/ncli/pull/115))
+- `cli/relay` gains three more scenario tests for the 4 new scenarios
+  above: `auth_required` alone admits any signed-in identity rather than
+  a specific one (`accountability-relay`, contrasting with
+  `membership_required`'s test); PoW still applies to an enrolled member
+  (`enterprise-compliance-relay` -- membership and PoW stack, neither
+  exempts the other); and `membership.enabled` without
+  `membership_required` gates nothing at all (`tracked-membership-relay`).
+  `family-private-relay` shares `community-membership-relay`'s own
+  already-tested mechanism, so it gets the doc-drift load only, not a
+  duplicate behavior test.
+- `integration/agent-eval` gains a third relay-scenarios round (R13) for
+  these same 4 scenarios, same shape as R11/R12 -- the agent authors each
+  config from the skill alone and demonstrates the promise, including the
+  defense-in-depth check that an enrolled member's unmined event is still
+  rejected for PoW.
 
 ### Fixed
 

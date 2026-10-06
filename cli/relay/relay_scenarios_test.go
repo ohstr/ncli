@@ -30,8 +30,8 @@ import (
 
 // Every shipped examples/relay/*.yaml, including the quickstart and
 // every-field reference -- the doc-drift guard below loads all of them,
-// not just the 8 named scenarios, since a stale field is just as silent
-// in either.
+// not just the named scenarios, since a stale field is just as silent in
+// either.
 var scenarioExampleFiles = []string{
 	"minimal.yaml",
 	"full.yaml",
@@ -43,6 +43,10 @@ var scenarioExampleFiles = []string{
 	"agent-swarm-relay.yaml",
 	"community-voice-relay.yaml",
 	"app-backend-relay.yaml",
+	"accountability-relay.yaml",
+	"enterprise-compliance-relay.yaml",
+	"family-private-relay.yaml",
+	"tracked-membership-relay.yaml",
 }
 
 // TestScenarioExamplesLoadThroughTheRealConfigLoader guards against the
@@ -190,6 +194,133 @@ func TestScenario_CommunityMembershipRelay_GatesNonMembers(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, ok.Accepted, "an enrolled member's event must be accepted (message: %s)", ok.Message)
 	})
+}
+
+/////////////////////////////////////////////////////////////////////
+// accountability-relay.yaml -- auth_required alone admits any signed-in
+// identity, unlike membership_required which restricts to a specific list
+/////////////////////////////////////////////////////////////////////
+
+func TestScenario_AccountabilityRelay_AdmitsAnySignedInIdentity(t *testing.T) {
+	ts := bootScenario(t, RelayConfig{
+		Nip11: nip11.Metadata{
+			PubKey: testPubKey,
+			URL:    huddleRelayURL,
+			Limitation: nip11.Limitation{
+				AuthRequired: true,
+			},
+		},
+	})
+	u, err := url.Parse("ws" + strings.TrimPrefix(ts.URL, "http"))
+	require.NoError(t, err)
+
+	t.Run("an unauthenticated connection's event is refused", func(t *testing.T) {
+		conn, err := relayclient.Connect(context.Background(), u)
+		require.NoError(t, err)
+		t.Cleanup(conn.Close)
+
+		ev, err := nip01.NewSignedEvent(1, "hello", scenarioMemberPriv)
+		require.NoError(t, err)
+		ok, err := conn.Publish(context.Background(), ev)
+		require.NoError(t, err)
+		require.False(t, ok.Accepted, "auth_required must refuse EVENT before any AUTH at all")
+	})
+
+	t.Run("any authenticated identity is admitted, not just a specific one", func(t *testing.T) {
+		const strangerPriv = "000000000000000000000000000000000000000000000000000000000000000d"
+		conn, err := relayclient.Connect(context.Background(), u)
+		require.NoError(t, err)
+		t.Cleanup(conn.Close)
+		authAs(t, conn, strangerPriv)
+
+		ev, err := nip01.NewSignedEvent(1, "hello from nobody in particular", strangerPriv)
+		require.NoError(t, err)
+		ok, err := conn.Publish(context.Background(), ev)
+		require.NoError(t, err)
+		require.True(t, ok.Accepted,
+			"auth_required alone checks that *some* identity authenticated, never which one -- "+
+				"see community-membership-relay's own test for the contrast (message: %s)", ok.Message)
+	})
+}
+
+/////////////////////////////////////////////////////////////////////
+// enterprise-compliance-relay.yaml -- membership and PoW stack, neither
+// exempts the other
+/////////////////////////////////////////////////////////////////////
+
+func TestScenario_EnterpriseComplianceRelay_PoWStillAppliesToAnEnrolledMember(t *testing.T) {
+	ts := bootScenario(t, RelayConfig{
+		Nip11: nip11.Metadata{
+			PubKey:  testPubKey,
+			PrivKey: testPrivKey,
+			Self:    testPubKey,
+			URL:     huddleRelayURL,
+			Limitation: nip11.Limitation{
+				AuthRequired:       true,
+				MembershipRequired: true,
+				MinPowDifficulty:   20,
+				StrictPow:          true,
+			},
+		},
+		Membership: &MembershipConfig{Enabled: true},
+		Pow:        &PowConfig{Strict: true, Min: 20},
+	})
+	u, err := url.Parse("ws" + strings.TrimPrefix(ts.URL, "http"))
+	require.NoError(t, err)
+
+	enrollMember(t, ts.URL, scenarioMemberPub)
+
+	conn, err := relayclient.Connect(context.Background(), u)
+	require.NoError(t, err)
+	t.Cleanup(conn.Close)
+	authAs(t, conn, scenarioMemberPriv)
+
+	// No mining -- real difficulty is effectively 0. Being enrolled must
+	// not substitute for proof-of-work: the two checks are independent,
+	// not alternatives. (The reverse -- a non-member's event is refused
+	// regardless of PoW -- is already covered by
+	// TestScenario_CommunityMembershipRelay_GatesNonMembers, which shares
+	// this same membership_required mechanism.)
+	ev, err := nip01.NewSignedEvent(1, "an enrolled member, but unmined", scenarioMemberPriv)
+	require.NoError(t, err)
+	ok, err := conn.Publish(context.Background(), ev)
+	require.NoError(t, err)
+	require.False(t, ok.Accepted, "membership must not exempt an enrolled member from the PoW requirement")
+	require.Contains(t, ok.Message, "pow:", "rejection message should name the pow check, not a membership one")
+}
+
+/////////////////////////////////////////////////////////////////////
+// tracked-membership-relay.yaml -- membership.enabled without
+// membership_required tracks a roster but gates nothing
+/////////////////////////////////////////////////////////////////////
+
+func TestScenario_TrackedMembershipRelay_DoesNotGateUnenrolledPubkeys(t *testing.T) {
+	ts := bootScenario(t, RelayConfig{
+		Nip11:      nip11.Metadata{PubKey: testPubKey, PrivKey: testPrivKey, Self: testPubKey},
+		Membership: &MembershipConfig{Enabled: true},
+	})
+	u, err := url.Parse("ws" + strings.TrimPrefix(ts.URL, "http"))
+	require.NoError(t, err)
+
+	// No AUTH at all: neither auth_required nor membership_required is
+	// set, so an entirely anonymous, never-enrolled connection publishing
+	// is the whole point of this scenario -- membership here is a label
+	// for a roster/roles, not an admission check.
+	conn, err := relayclient.Connect(context.Background(), u)
+	require.NoError(t, err)
+	t.Cleanup(conn.Close)
+
+	ev, err := nip01.NewSignedEvent(1, "never enrolled, never asked to be", scenarioAgentPriv)
+	require.NoError(t, err)
+	ok, err := conn.Publish(context.Background(), ev)
+	require.NoError(t, err)
+	require.True(t, ok.Accepted,
+		"membership.enabled without membership_required must not gate writes (message: %s)", ok.Message)
+
+	// The roster itself is still real and queryable by an admin, though --
+	// that's the point of the scenario, just not exercised by this test
+	// (already covered by TestHandleMembersList's own direct coverage of
+	// the admin API this relies on).
 }
 
 /////////////////////////////////////////////////////////////////////

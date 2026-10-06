@@ -23,14 +23,14 @@ docs drifting from what's actually shipped.
   since ncli's admin commands hard-target `localhost` with no `--url`
   override.
 
-Thirteen rounds (`rounds/r0-bootstrap.md` .. `r12-relay-scenarios-serve.md`)
+Fourteen rounds (`rounds/r0-bootstrap.md` .. `r13-relay-scenarios-write-2.md`)
 cover install, identity, relay queries, relay admin, publish/apply,
 PoW mining, NIP-46 bunker signing (started and driven with no TTY),
 Blossom, the documented error-code contract, NIP-29 groups, NIP-53
-spaces (a headless call plus chat), and (R11/R12) whether an agent working
-only from the `ncli-relay-ops` skill's scenario table can stand up each
-named `examples/relay/` scenario and get the behavior it promises. Each
-round is a fresh, non-interactive `claude -p`
+spaces (a headless call plus chat), and (R11-R13) whether an agent working
+only from the `ncli-relay-ops` skill's scenario table can stand up each of
+the 12 named `examples/relay/` scenarios and get the behavior it promises.
+Each round is a fresh, non-interactive `claude -p`
 call with no memory of prior rounds, though the container filesystem
 persists between them (R0's install, R1's identity, etc. are still
 there).
@@ -95,7 +95,7 @@ provide. `bin/run.sh` pre-starts the daemon itself via `script` before
 R6 runs; the round only drives its scriptable surface (`connect`,
 `status`, `sessions`, `history`).
 
-## Known constraint: R11/R12
+## Known constraint: R11-R13
 
 The agent-swarm scenario's NIP-OA credential has no documented `ncli`
 command that mints one directly -- the round asks the agent to find a

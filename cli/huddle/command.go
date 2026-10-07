@@ -90,8 +90,7 @@ func runJoin(cmd *cobra.Command, args []string) error {
 	// authenticating, joining a real room, and only then finding there is
 	// nowhere to draw it.
 	if !term.IsTerminal(int(os.Stdout.Fd())) {
-		return common.UnsupportedError(cmd, "space join",
-			errors.New("the roster view needs a terminal, and stdout is not one"))
+		return common.UsageError(cmd, errors.New("the roster view needs a terminal, and stdout is not one"))
 	}
 
 	identityFlag, _ := cmd.Flags().GetString("identity")
@@ -171,7 +170,7 @@ func runJoin(cmd *cobra.Command, args []string) error {
 		// common failure by far, and "bad handshake" explains none of it.
 		var notUpgraded *huddleclient.DialError
 		if errors.As(dialErr, &notUpgraded) && notUpgraded.Status == http.StatusNotFound {
-			return common.RuntimeError(cmd, fmt.Errorf(
+			return common.UnsupportedError(cmd, relayURL.String(), fmt.Errorf(
 				"%s has no huddle endpoint: the relay is not running with huddles enabled", relayURL.Host))
 		}
 

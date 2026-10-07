@@ -151,7 +151,7 @@ func listError(cmd *cobra.Command, relayURL *url.URL, endpoint string, resp *htt
 
 	switch resp.StatusCode {
 	case http.StatusNotFound:
-		return common.RuntimeError(cmd, fmt.Errorf(
+		return common.UnsupportedError(cmd, relayURL.String(), fmt.Errorf(
 			"%s has no huddle endpoint: the relay is not running with huddles enabled", relayURL.Host))
 	case http.StatusUnauthorized:
 		hint := "pass --identity to sign the request"

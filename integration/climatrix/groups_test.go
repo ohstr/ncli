@@ -79,12 +79,7 @@ func TestGroupsCLI(t *testing.T) {
 
 	t.Run("show of a private group without membership is auth", func(t *testing.T) {
 		groupsCLI(t, r, eve.Nsec, "show", "team").ExpectErr(t, "auth")
-		// An anonymous read can't see the relay's restricted CLOSED (nmilat's
-		// ReadEventsFromRelay treats it as EOSE), so it reports an empty
-		// success instead of auth.
-		anon := groupsCLI(t, r, "", "show", "team")
-		known(t, "anon-restricted-read-looks-empty", anon.Code == 0 && strings.TrimSpace(anon.Stdout) == "{}",
-			"anonymous show of a private group: exit 0, {}")
+		groupsCLI(t, r, "", "show", "team").ExpectErr(t, "auth")
 	})
 
 	t.Run("show of a missing group looks the same as a private one", func(t *testing.T) {

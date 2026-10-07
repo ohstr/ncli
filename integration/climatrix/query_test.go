@@ -162,11 +162,9 @@ func TestQuery(t *testing.T) {
 		gated := authRelay(t)
 		eve := A(t, "eve")
 		DialAs(t, gated.URL, eve.PrivHex).Publish(Ev(t, eve.PrivHex, 1, "behind auth"))
-		res := e.Run(t, "find", "--kinds", "1", "-s", gated.URL, "--json")
-		// AGENTS.md: [] means "queried, nothing matched". Here the relay
-		// refused the REQ, but the anonymous reader can't see that.
-		known(t, "anon-restricted-read-looks-empty", res.Code == 0 && strings.TrimSpace(res.Stdout) == "[]",
-			"anonymous find on an auth_required relay: exit 0, []")
+		// AGENTS.md: [] means "queried, nothing matched" -- a refused query
+		// must not look like that.
+		e.Run(t, "find", "--kinds", "1", "-s", gated.URL, "--json").ExpectErr(t, "auth")
 		var evs []corpusEvent
 		e.MustOK(t, "find", "--kinds", "1", "-s", gated.URL, "--auth-identity", eve.Nsec, "--json").JSON(t, &evs)
 		if len(evs) != 1 {

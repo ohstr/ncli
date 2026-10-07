@@ -8,13 +8,14 @@ default:
 build:
     go build -o bin/ncli ./cmd/ncli
 
-# Run the test suite (skips live-relay integration tests; see test-integration)
+# Run the test suite (skips relay-backed matrix tests; see test-integration-cli)
 test:
     go test -short -race ./...
 
-# Run the live-relay integration tests (hits relay.ohstr.com; not run in CI)
-test-integration:
-    go test -tags integration ./cli/bunker/... -run Live -v -count=1
+# Run the black-box command matrix against local `ncli relay` processes
+# (no Docker, no public relays) -- see integration/climatrix/README.md
+test-integration-cli:
+    go test ./integration/climatrix/... -v -count=1 -timeout 20m
 
 # Run the stream integration test (needs Docker; brings up/tears down its
 # own local relay containers -- see integration/stream/README.md -- and hits

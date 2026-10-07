@@ -64,7 +64,7 @@
 "prefs relays remove": {modes: [json], tests: [TestPrefs]}
 "profile": {modes: [json, errors], tests: [TestQuery]}
 "publish": {modes: [json, errors], tests: [TestPublish]}
-"relay": {modes: [errors], tests: [TestRelayAdmin, TestHarness_RelaySeedsCorpus], pending: "-c context creation (phase 5)"}
+"relay": {modes: [json, errors], tests: [TestRelayAdmin, TestRelayJSONLogs, TestHarness_RelaySeedsCorpus], pending: "-c context creation (phase 5)"}
 "relay clear": {modes: [errors], tests: [TestBareGroupCommands]}
 "relay clear search": {modes: [errors], tests: [TestRelayAdmin]}
 "relay clear zaps": {modes: [json], tests: [TestRelayAdmin]}

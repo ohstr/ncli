@@ -72,8 +72,8 @@ huddle:
   udpPortRange: "21600-21650"   # pin media ports; needed in a container
 ```
 
-`examples/relay/huddle.yaml` is a ready-made preset; `examples/relay/full.yaml`
-documents every field.
+`examples/relay/community-voice-relay.yaml` is a ready-made preset;
+`examples/relay/full.yaml` documents every field.
 
 Things that bite:
 

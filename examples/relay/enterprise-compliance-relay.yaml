@@ -1,0 +1,47 @@
+# Scenario: an organization's internal relay, where "enrolled" alone
+# isn't enough -- security wants defense in depth, and IT wants to
+# administer it from their own tooling rather than a human running `ncli`
+# by hand. Three independent checks stack: only employees get in
+# (membership), every post costs real CPU even from an enrolled account
+# (PoW -- deters a compromised or malfunctioning client from flooding),
+# and administration happens over the standard management API, not the
+# bespoke one that needs the relay's own secret key on someone's laptop.
+#
+# Mechanism: membership + auth_required + membership_required (same as
+# community-membership-relay.yaml) plus pow.strict (same as
+# anti-spam-relay.yaml) plus nip86 (same as app-backend-relay.yaml) --
+# together, not any one in isolation. The checks are independent, not a
+# substitute for each other: an enrolled member's event still needs real
+# PoW, and a high-PoW event from a non-member is still refused. See
+# examples/relay/full.yaml for the complete set of nip11 fields.
+nip11:
+  name: "Internal Comms Relay"
+  description: "Membership, proof-of-work, and NIP-86 admin, all three at once"
+  # Generated with `ncli id --json` for this example only -- never reuse a
+  # privkey that's ever appeared in a public repo for anything real.
+  privkey: "d8761bb5e2733c13c0b55f6ab109bd4b9ddab5cae6d9d79beddcbf6b3993096e"
+  contact: "admin@example.com"
+  url: "ws://localhost:5519"
+  limitation:
+    auth_required: true
+    membership_required: true
+
+membership:
+  enabled: true
+  publishAddRemoveEvents: true
+
+pow:
+  strict: true
+  min: 20
+
+nip86:
+  enabled: true
+  # The security team's own tooling identity, in addition to nip11.pubkey
+  # (always allowed) -- administers membership without anyone carrying
+  # the relay's own secret key around.
+  admins:
+    - "9a46b162fe3ce6ac8e35d0544c7c39cb97409f4880bd4760e7ff4d73b8aecb8c"
+
+logdir: "./data/logs"
+store: "./data/db/enterprise-compliance.db"
+port: 5519

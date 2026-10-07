@@ -1,0 +1,27 @@
+# Scenario: a community that wants to know who's who -- verified-member
+# badges, roles for moderation tooling, a roster its own client can show
+# -- without actually blocking anyone from reading or posting. Membership
+# here is a label, not a gate: unlike
+# examples/relay/community-membership-relay.yaml, membership_required is
+# left off, so an unenrolled pubkey posts exactly as freely as an
+# enrolled one. What membership buys is the roster and roles themselves
+# (`ncli relay members list`, `ncli relay roles create`), for a client or
+# a human moderator to act on -- not an admission check the relay itself
+# enforces.
+#
+# See examples/relay/full.yaml for the complete set of nip11 fields.
+nip11:
+  name: "Open Community, Tracked Roster"
+  description: "Membership and roles for display and moderation tooling -- not an admission gate"
+  # Generated with `ncli id --json` for this example only -- never reuse a
+  # privkey that's ever appeared in a public repo for anything real.
+  privkey: "48a03ba7237b78355be7259357272e66bed931ab0960132488c57493cb8187a6"
+  contact: "admin@example.com"
+
+membership:
+  enabled: true
+  publishAddRemoveEvents: true
+
+logdir: "./data/logs"
+store: "./data/db/tracked-membership.db"
+port: 5521

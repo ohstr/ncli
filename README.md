@@ -254,12 +254,14 @@ what actually rejects events, both under-difficulty ones and ones whose
 
 ```yaml
 pow:
-  strict: false # true rejects under-difficulty and self-contradictory nonce tags
-  min: 20       # required leading-zero-bit difficulty; 0 = no requirement
+  # true rejects under-difficulty and self-contradictory nonce tags
+  strict: false
+  # required leading-zero-bit difficulty; 0 = no requirement
+  min: 20
 ```
 
-See [`examples/relay/pow.yaml`](examples/relay/pow.yaml) for a relay with
-this actually enforced (`strict: true`).
+See [`examples/relay/anti-spam-relay.yaml`](examples/relay/anti-spam-relay.yaml)
+for a relay with this actually enforced (`strict: true`).
 
 Let people talk to each other through the relay — group voice calls, plus video
 and screen sharing for browsers — with a `huddle:` block. Calls get their own
@@ -270,15 +272,37 @@ nip11:
   url: "wss://relay.example" # required: a joining client's auth event names it
 huddle:
   enabled: true
-  rtc: true # also serve browsers, which is what carries video and screen sharing
+  # also serve browsers, which is what carries video and screen sharing
+  rtc: true
 ```
 
 The relay forwards audio without decoding it, so it links no codec. See
-[`examples/relay/huddle.yaml`](examples/relay/huddle.yaml) for the documented
-preset, and [`ncli huddle`](#huddle) for joining a call from a terminal.
+[`examples/relay/community-voice-relay.yaml`](examples/relay/community-voice-relay.yaml)
+for the documented preset, and [`ncli huddle`](#huddle) for joining a call
+from a terminal.
 
-More presets (auth-required, membership, ephemeral, cache+search) live under
-[`examples/relay/`](examples/relay/).
+### Example configs
+
+Every file under [`examples/relay/`](examples/relay/) is a working config,
+commented top to bottom. Pick the scenario closest to yours and start from
+it:
+
+| File | For |
+|---|---|
+| [`minimal.yaml`](examples/relay/minimal.yaml) | the smallest config that runs |
+| [`full.yaml`](examples/relay/full.yaml) | every field, at its default, documented |
+| [`personal-relay.yaml`](examples/relay/personal-relay.yaml) | your own outbox/backup relay |
+| [`dev-test-relay.yaml`](examples/relay/dev-test-relay.yaml) | a throwaway relay for local dev or CI |
+| [`public-search-relay.yaml`](examples/relay/public-search-relay.yaml) | a public relay with profile search and zap-ranked trending |
+| [`anti-spam-relay.yaml`](examples/relay/anti-spam-relay.yaml) | a public relay that requires proof-of-work |
+| [`accountability-relay.yaml`](examples/relay/accountability-relay.yaml) | anyone posts, but only signed in (NIP-42) |
+| [`community-membership-relay.yaml`](examples/relay/community-membership-relay.yaml) | members only, joined by invite (NIP-43) |
+| [`family-private-relay.yaml`](examples/relay/family-private-relay.yaml) | a closed circle the operator enrolls by hand |
+| [`tracked-membership-relay.yaml`](examples/relay/tracked-membership-relay.yaml) | open to all, with a member roster and roles |
+| [`enterprise-compliance-relay.yaml`](examples/relay/enterprise-compliance-relay.yaml) | members + proof-of-work + NIP-86 admin, stacked |
+| [`agent-swarm-relay.yaml`](examples/relay/agent-swarm-relay.yaml) | AI agents posting under their owner's membership (NIP-AA) |
+| [`app-backend-relay.yaml`](examples/relay/app-backend-relay.yaml) | an app's backend administering and querying over HTTP |
+| [`community-voice-relay.yaml`](examples/relay/community-voice-relay.yaml) | voice calls and meeting spaces (huddles) |
 
 ## `relay context`
 
@@ -325,16 +349,16 @@ members, hand out invite codes, and define roles on a running relay:
 
 ```sh
 # enroll a pubkey directly -- no invite code needed
-ncli relay members add <pubkey> --role vip --config examples/relay/membership.yaml
+ncli relay members add <pubkey> --role vip --config examples/relay/community-membership-relay.yaml
 
 # who's currently enrolled
-ncli relay members list --config examples/relay/membership.yaml
+ncli relay members list --config examples/relay/community-membership-relay.yaml
 
 # issue a code to hand out out-of-band (a signup email, a Discord invite)
-ncli relay invites create --ttl 24h --max-uses 1 --config examples/relay/membership.yaml
+ncli relay invites create --ttl 24h --max-uses 1 --config examples/relay/community-membership-relay.yaml
 
 # define a role
-ncli relay roles create vip --label "VIP" --color 280 --config examples/relay/membership.yaml
+ncli relay roles create vip --label "VIP" --color 280 --config examples/relay/community-membership-relay.yaml
 ```
 
 NIP-43 has no "delete role" event, so `roles create` re-run with the same
@@ -354,9 +378,10 @@ agent_auth:
   kindEnforcement: false
 ```
 
-See the commented-out block in
-[`examples/relay/membership.yaml`](examples/relay/membership.yaml) or the
-fully-documented one in
+See [`examples/relay/agent-swarm-relay.yaml`](examples/relay/agent-swarm-relay.yaml)
+for a relay built around this, or the commented-out block in
+[`examples/relay/community-membership-relay.yaml`](examples/relay/community-membership-relay.yaml)
+and the fully-documented one in
 [`examples/relay/full.yaml`](examples/relay/full.yaml).
 
 ## `relay stats`/`reindex`/`clear`
@@ -821,7 +846,7 @@ format, and pairing an AI agent for unattended signing.
 ## `huddle`
 
 Real-time voice rooms hosted by the relay itself. Enable the `huddle:` block
-(shape: [`examples/relay/huddle.yaml`](examples/relay/huddle.yaml)), then join
+(shape: [`examples/relay/community-voice-relay.yaml`](examples/relay/community-voice-relay.yaml)), then join
 from another terminal:
 
 ```sh

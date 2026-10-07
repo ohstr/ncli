@@ -1,0 +1,26 @@
+# Scenario: a throwaway relay for local development or CI -- spun up,
+# exercised, torn down, and rebuilt from scratch next run. Nothing here
+# needs to survive a restart, so the store lives under a clearly-scratch
+# path you can delete without a second thought.
+#
+# This is deliberately the same shape as examples/relay/minimal.yaml --
+# no auth, no search, no membership -- just its own port and store so it
+# can run alongside whatever else is already up (`just dev relay`, your
+# own app's relay, another instance of this same file for a second test
+# run). See examples/relay/full.yaml for the complete set of nip11 fields.
+#
+# NIP-16 ephemeral event kinds (20000-29999) need no config here or
+# anywhere else -- handling is automatic based on an event's own kind.
+# Publish one against this relay to see it in action: accepted and briefly
+# queryable, then expired rather than persisted (10 minutes by default; see
+# nmilat/relay's store.go). Useful to know when a test asserts an event
+# "disappeared" and you're wondering whether that's your bug or the kind
+# you picked.
+nip11:
+  name: "Scratch Test Relay"
+  pubkey: "d3345d36e7885ad6340263309a96e0821b22e176ebc721098492063df5516086"
+  contact: "admin@example.com"
+
+logdir: "./data/logs"
+store: "./data/db/scratch/dev-test.db"
+port: 5599

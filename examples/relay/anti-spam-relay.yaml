@@ -1,0 +1,33 @@
+# Scenario: a public relay getting hammered by low-effort spam (bot
+# reposts, scraped content, engagement farming) and fighting it the way the
+# protocol intends -- making every event cost a little CPU to produce,
+# rather than an account ban list that a fresh pubkey sidesteps instantly.
+#
+# Mechanism: NIP-13 proof-of-work. strict: true actually rejects (OK false,
+# "pow: ...") any event whose real difficulty falls short of min, instead of
+# just advertising it via NIP-11. Roll a new or raised requirement out
+# safely: announce min here first with strict: false (the default), give
+# regulars' clients time to notice and start mining to it, then flip strict
+# once they have. See examples/relay/full.yaml for the complete set of
+# nip11 fields and which ones `ncli relay` actually honors from config vs.
+# always overwrites.
+nip11:
+  name: "Low-Noise Public Relay"
+  description: "Open to anyone, but every post costs real CPU to mine"
+  pubkey: "d3345d36e7885ad6340263309a96e0821b22e176ebc721098492063df5516086"
+  contact: "admin@example.com"
+
+logdir: "./data/logs"
+store: "./data/db/anti-spam.db"
+port: 5513
+
+pow:
+  strict: true
+  # 20 leading zero bits is roughly a second of mining on an ordinary laptop
+  # -- enough to make posting 10,000 throwaway accounts a day impractical,
+  # without making a human's occasional post feel like a wait. Raise it if
+  # spam volume outpaces this; it costs legitimate posters more too, so
+  # don't reach for it before trying auth_required/membership instead (see
+  # examples/relay/community-membership-relay.yaml) if what you actually
+  # want is to know who's posting, not just to tax everyone equally.
+  min: 20

@@ -1,5 +1,45 @@
 # Changelog
 
+## [0.8.0-rc.10]
+
+### Changed
+
+- `examples/relay/` is reorganized around real deployment scenarios instead
+  of individual tech features: `open.yaml`/`auth.yaml`/`cache-search.yaml`/
+  `ephemeral.yaml` are retired (folded into the files below or, for
+  ephemeral's NIP-16-is-automatic fact, into the `ncli-relay-ops` skill's
+  gotchas), `membership.yaml`/`pow.yaml`/`huddle.yaml` are renamed and
+  reframed as `community-membership-relay.yaml`/`anti-spam-relay.yaml`/
+  `community-voice-relay.yaml`, and four new scenarios are added:
+  `personal-relay.yaml`, `dev-test-relay.yaml`, `agent-swarm-relay.yaml`
+  (NIP-AA, filling in `agent_auth` for real), and `app-backend-relay.yaml`
+  (NIP-86 + the `httpBridge.query` POST /query bridge, both administered
+  by an app's own backend rather than a human at a terminal). `minimal.yaml`
+  and `full.yaml` are unchanged -- a quickstart skeleton and an every-field
+  reference aren't scenarios. README and the `ncli-relay-ops`/`ncli-huddle`
+  skills' cross-references are updated accordingly.
+- Four more `examples/relay/` scenarios, each exercising a combination of
+  existing fields the first 8 didn't: `accountability-relay.yaml`
+  (`auth_required` alone, no membership -- requires *some* signed-in
+  identity, not a specific one), `enterprise-compliance-relay.yaml`
+  (membership + auth + strict PoW + `nip86` together, not any one
+  mechanism in isolation), `family-private-relay.yaml` (same mechanism as
+  `community-membership-relay.yaml`, operated differently -- direct
+  enrollment only, no invite flow), and `tracked-membership-relay.yaml`
+  (`membership.enabled` with `membership_required` left off -- a roster
+  and roles for display/moderation tooling, not an admission gate).
+
+### Fixed
+
+- `examples/relay/full.yaml` documented `query:` as a bare top-level key;
+  the real config shape (since the `httpBridge` grouping landed) is nested
+  under `httpBridge.query`/`httpBridge.events`. Viper silently drops an
+  unknown top-level key rather than erroring, so a config copied from the
+  old example loaded with no complaint and simply never mounted the
+  endpoint -- caught while building `app-backend-relay.yaml` above, which
+  depends on it actually working.
+  ([#114](https://github.com/ohstr/ncli/pull/114))
+
 ## [0.8.0-rc.9]
 
 ### Security

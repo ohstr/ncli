@@ -1,0 +1,28 @@
+# Scenario: a public support/Q&A relay that wants to deter drive-by abuse
+# without maintaining an allowlist -- anyone can post, but only after
+# signing in as *some* identity. There's no membership list behind this:
+# every signed-in pubkey is treated the same, so this buys accountability
+# (a post is always attributable to a real keypair, not an anonymous
+# connection) rather than access control.
+#
+# Mechanism: nip11.limitation.auth_required on its own, with no
+# membership block at all. This is deliberately NOT the same as
+# community-membership-relay.yaml: auth_required only checks that *some*
+# NIP-42 AUTH succeeded on the connection, never which pubkey it was --
+# see the gotchas in skills/ncli-relay-ops/SKILL.md. If you need to
+# actually restrict *who* may post, not just require that they're signed
+# in, you want membership_required instead (see
+# examples/relay/community-membership-relay.yaml).
+nip11:
+  name: "Community Support Relay"
+  description: "Open to any signed-in identity -- no invite needed, no anonymous posting either"
+  pubkey: "d3345d36e7885ad6340263309a96e0821b22e176ebc721098492063df5516086"
+  contact: "admin@example.com"
+  # url: required whenever auth_required is true.
+  url: "ws://localhost:5518"
+  limitation:
+    auth_required: true
+
+logdir: "./data/logs"
+store: "./data/db/accountability.db"
+port: 5518

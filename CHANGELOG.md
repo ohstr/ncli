@@ -45,6 +45,8 @@
 - `groups show` exits `not_found` when the relay returns nothing for the
   group, instead of printing `{}`; `groups tree --json` prints `"roots": []`,
   not `null`. ([#119](https://github.com/ohstr/ncli/pull/119))
+- `bunker sessions grants --json` prints `[]` for an app with no grants,
+  not `null`. ([#119](https://github.com/ohstr/ncli/pull/119))
 - An authenticated `groups list`/`find` could intermittently omit private
   groups: a REQ the relay answered before AUTH landed was taken as final.
   It is now retried once authenticated.

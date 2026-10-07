@@ -125,7 +125,9 @@ func TestGroupsModeration(t *testing.T) {
 		var outside struct {
 			Nodes map[string]map[string]any `json:"nodes"`
 		}
-		groupsCLI(t, r, eve.Nsec, "tree").JSON(t, &outside)
+		res := groupsCLI(t, r, eve.Nsec, "tree")
+		res.JSON(t, &outside)
+		res.ExpectJSONArray(t, "roots")
 		for _, id := range []string{"mod", "child"} {
 			if _, ok := outside.Nodes[id]; ok {
 				t.Errorf("outsider's tree shows private group %s", id)

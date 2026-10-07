@@ -1,6 +1,6 @@
 ---
 name: ncli-bunker
-description: Run ncli as a NIP-46 remote signer ("bunker") -- approve/reject other Nostr clients' signing requests from a live TUI, remember per-app permissions so you aren't re-prompted every time, and run it detached in the background (ncli bunker attach/status/stop/sessions/history/connect). Use when setting up remote signing, pairing a client via bunker:///nostrconnect://, pairing an AI agent as a NIP-46 client for unattended signing, managing remembered app permissions, reviewing what was approved/rejected/expired, or troubleshooting why a client isn't getting approved.
+description: Run ncli as a NIP-46 remote signer ("bunker") -- approve/reject other Nostr clients' signing requests from a live TUI, remember per-app permissions so you aren't re-prompted every time, run it detached in the background, start and drive it with no terminal (headless start, ncli bunker pending list/approve/reject, sessions set-grant) (ncli bunker attach/status/stop/sessions/history/connect). Use when setting up remote signing, pairing a client via bunker:///nostrconnect://, pairing an AI agent as a NIP-46 client for unattended signing, managing remembered app permissions, reviewing what was approved/rejected/expired, or troubleshooting why a client isn't getting approved.
 license: Unlicense
 ---
 
@@ -29,9 +29,22 @@ label, nsec, npub, hex, nprofile, or nip-05 -- it must resolve to a
 **private** key. `--relay` is repeatable; omit it to fall back to
 `ncli prefs relays add`'s configured list.
 
-This needs a real interactive terminal (it's a TUI) -- `--json` or a
-non-interactive stdin/stdout fails immediately with a clear usage error
-instead of hanging, same as `id delegate`'s wizard.
+On a terminal this opens the TUI. **Without one** (stdin/stdout not a
+TTY) **or with `--json`**, it starts the signer as a background daemon
+instead and prints its status (the same object `ncli bunker status
+--json` prints), then exits 0 -- this is how an agent or script starts
+it:
+
+```sh
+ncli bunker --identity agent-key --relay wss://relay.example --json
+# {"running": true, "identity_pub": "...", "relays": [...], "pending_count": 0, ...}
+```
+
+It never prompts in this mode: a vault identity needs
+`NCLI_VAULT_PASSWORD` set, or it fails `usage`. Run again while a daemon
+is up, it just reports that daemon's status -- unless `--identity` names a
+different key, which is `conflict` (exit 5): `ncli bunker stop` first.
+`ncli bunker attach` stays TUI-only.
 
 ## Background daemon (Linux/macOS)
 
@@ -402,21 +415,36 @@ What that buys an agent, once paired and granted:
   let you (or a supervising script) audit exactly what an agent app can
   currently do without a prompt, and `sessions revoke-grant`/`sessions
   revoke` pull that back if it misbehaves or its scope needs narrowing.
-- `ncli bunker status --json`'s `pending_count` is the only scriptable
-  signal that something is waiting on a decision `--grants` didn't
-  already cover -- there's no push notification/webhook, so a supervising
-  script has to poll it (or watch `history --json` for what already got
-  decided).
+- `ncli bunker status --json`'s `pending_count` says something is
+  waiting on a decision; `ncli bunker pending list --json` shows what
+  (there's no push notification -- poll it).
+
+### Deciding requests without the TUI
+
+Everything the TUI's approval dialog does is a command:
+
+```sh
+ncli bunker pending list --json
+# [{"id":"...","app":"<pubkey>","app_name":"...","method":"sign_event","kind":1,
+#   "created_at":"...","expires_at":"...","event":{...unsigned event...}}]   ([] when empty)
+ncli bunker pending approve <id>                       # once
+ncli bunker pending approve <id> --always              # this kind (or method), until revoked
+ncli bunker pending approve <id> --always --for 24h    # ... for a duration
+ncli bunker pending approve <id> --always --uses 10    # ... for N requests
+ncli bunker pending approve <id> --always --any-kind   # every non-sensitive kind
+ncli bunker pending reject <id>                        # once
+ncli bunker pending reject <id> --always               # this method, from now on
+ncli bunker sessions set-grant <pubkey> --grants grants.yaml   # like connect --grants, for an app already paired
+```
+
+`approve --json` prints `{"approved":true,"remembered":<bool>}`, `reject`
+`{"rejected":true,...}`. An id that's already decided or expired (5
+minutes) is `not_found`; `--any-kind` on kind 0/3/5 is `invalid_input`;
+`--for`/`--uses`/`--any-kind` without `--always` is `usage`. Read the
+`event` in `pending list` before approving a `sign_event` -- it's exactly
+what gets signed.
 
 What it can't do:
-
-- **No headless approval of anything outside a grant.** Once a request
-  actually reaches the pending queue -- because neither an existing grant
-  nor a `--grants` spec covers it -- deciding it only happens through the
-  interactive TUI (the approve/reject dialog, `a`/`x`, auto-prompt); there
-  is no `ncli bunker pending approve`/`reject` or equivalent. `--grants`
-  sidesteps this for whatever it declares in advance; it's not a general
-  headless-approval mechanism for a request nobody anticipated.
 - **`--grants` covers one pairing attempt, not "trust this pubkey
   forever, sight unseen."** It still requires generating (or accepting) a
   real pairing URI and the actual intended app completing that specific
@@ -431,8 +459,9 @@ What it can't do:
   `id sign`/`publish`/`apply` need direct key material regardless of
   whether a bunker is running -- see the first paragraph above.
 
-To get an agent running unattended against bunker: either pair it
-interactively once and approve its first request with the narrowest scope
+To get an agent running unattended against bunker: either pair it once
+and approve (in the TUI, or with `ncli bunker pending approve <id>
+--always ...`) its first request with the narrowest scope
 and duration that actually covers what it needs to do (e.g. "Always: kind
 1" for an agent that only posts notes, not "any kind" unless it genuinely
 needs that breadth) -- that one approval is the only human step left in
@@ -447,8 +476,9 @@ credential), unrelated to signing.
 
 ## Gotchas learned
 
-- `ncli bunker` reattaches to an already-running daemon if one exists,
-  **ignoring** `--identity`/`--relay` for that invocation -- the same
+- On a terminal, `ncli bunker` reattaches to an already-running daemon if
+  one exists, **ignoring** `--identity`/`--relay` for that invocation
+  (headless, a different `--identity` is `conflict` instead) -- the same
   "attach to whatever's already there" behavior `tmux` gives a bare
   `tmux` command with a session already up. To run under a different
   identity, `ncli bunker stop` first.

@@ -120,11 +120,9 @@ var ErrNoReachableTargets = errors.New("no target could be reached (every connec
 // query as "restricted: ..." (NIP-42 auth and/or NIP-43/NIP-29 membership)
 // rather than a plain EOSE -- distinguishing "the relay refused this" from
 // "nothing matched," the same way ErrNoReachableTargets distinguishes
-// "every target was unreachable" from a genuine empty result. Only
-// surfaces when identityHex was given: an anonymous caller's connections
-// never report restricted at all (relayclient.ReadEventsFromRelayWithAuth
-// has no such signal to give without an identity to retry with), so this
-// is unreachable for QueryTargets' own anonymous-only callers.
+// "every target was unreachable" from a genuine empty result. Anonymous
+// callers get it too: the reader reports a restricted CLOSED with or
+// without an identity.
 var ErrRestricted = errors.New("relay restricted this query (private/membership required)")
 
 // mergeEventsFromTargets fetches events matching filters from every target
@@ -736,10 +734,8 @@ func readEventsWithFallback(ctx context.Context, timeout time.Duration, primary,
 // readEventsWithTimeout bounds a single ReadEventsFromRelayWithAuth call to
 // timeout (0 disables the bound, waiting on ctx alone) -- so a relay that
 // accepts a subscription and then never sends EOSE or an error can't hang
-// the caller past this deadline. identityHex empty is the same anonymous
-// read as before this parameter existed (ReadEventsFromRelayWithAuth
-// delegates straight to ReadEventsFromRelay in that case, which always
-// reports restricted=false, having no such signal to give).
+// the caller past this deadline. identityHex empty reads anonymously and
+// still reports a restricted CLOSED.
 func readEventsWithTimeout(ctx context.Context, timeout time.Duration, relayURL *url.URL, filters *nip01.SubscriptionFilterGroup, identityHex string) ([]*nip01.Event, bool, error) {
 	if timeout <= 0 {
 		return relayclient.ReadEventsFromRelayWithAuth(ctx, relayURL, filters, identityHex)

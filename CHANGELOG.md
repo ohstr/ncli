@@ -19,6 +19,12 @@
 
 ### Fixed
 
+- An anonymous `find`/`dump`/`groups show` that the relay refuses exits
+  `auth` (7) instead of printing `[]`/`{}` with exit 0, which read as
+  "nothing matched". ([#117](https://github.com/ohstr/ncli/pull/117))
+- `groups` writes to a private group carried no NIP-29 `previous` tags:
+  the timeline read behind them was anonymous, so it never saw the group.
+  It now reads as the writer. ([#117](https://github.com/ohstr/ncli/pull/117))
 - A `groups` write the relay rejects is classified by the relay's reason:
   `duplicate:` exits `conflict` (5), `restricted:`/`auth-required:` exit
   `auth` (7), `invalid:` exits `invalid_input` (3), instead of always

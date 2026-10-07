@@ -2,6 +2,16 @@
 
 ## [0.8.0-rc.9]
 
+### Security
+
+- The relay's admin HTTP API (`/admin/...`) accepted a NIP-98 header with
+  no `payload` tag for any request body, and accepted the same header
+  again until it expired: a captured header could enroll an attacker as a
+  member or mint them an invite code. A `payload` tag is now required and
+  each NIP-98 event is accepted once. `ncli` adds a `nonce` tag so repeated
+  identical requests stay distinct; admin clients that send no `payload`
+  tag are now refused. ([#117](https://github.com/ohstr/ncli/pull/117))
+
 ### Fixed
 
 - `miner check -e` on a malformed file exits `invalid_input` (3), not

@@ -186,6 +186,7 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 	}
 
 	// ADMIN ENDPOINTS
+	adminReplay := newReplayGuard()
 	adminAuth := func(next http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			// Read the body here so the signature can be checked against it,
@@ -202,13 +203,18 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 				body = read
 				r.Body = io.NopCloser(bytes.NewReader(body))
 			}
-			// RequirePayload stays off: a payload tag is verified when present,
-			// so an older client that sends none still works.
+			// The payload tag is required: without it a captured header is
+			// good for any body at this URL and method until it expires.
 			if _, err := nip98.Verify(r, nip98.Options{
 				AllowedPubkeys: nip86Admins(),
 				Body:           body,
+				RequirePayload: true,
 			}); err != nil {
 				http.Error(w, err.Error(), http.StatusUnauthorized)
+				return
+			}
+			if !adminReplay.first(r.Header.Get("Authorization"), time.Now()) {
+				http.Error(w, "NIP-98 event already used", http.StatusUnauthorized)
 				return
 			}
 			next.ServeHTTP(w, r)

@@ -134,6 +134,10 @@ key.`,
 		if err != nil {
 			return common.RuntimeError(cmd, err)
 		}
+		// An event id is 256 bits; nothing outside 0-256 can be mined.
+		if difficulty < 0 || difficulty > 256 {
+			return common.InvalidInputError(cmd, strconv.Itoa(difficulty), fmt.Errorf("--difficulty must be 0-256, got %d", difficulty))
+		}
 
 		workers, err := cmd.Flags().GetInt("workers")
 		if err != nil {
@@ -315,6 +319,9 @@ Omit both to use the relays from "ncli prefs relays".`,
 				return common.RuntimeError(cmd, ferr)
 			}
 			report, err = client.CheckPOWFromFile(eventsPath)
+			if err != nil {
+				return common.InvalidInputError(cmd, eventsPath, err)
+			}
 		} else {
 			targetsSpec, filtersSpec, qerr := resolveQuery(cmd)
 			if qerr != nil {

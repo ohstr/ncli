@@ -1,15 +1,15 @@
 ---
 name: ncli-identity
-description: Generate, inspect, and manage Nostr keypairs with ncli's local vault (`ncli id`), decode any NIP-19 bech32 entity, NIP-CASH cash token, or NIP-CW circlehub1... connection (`ncli decode`), sign unsigned events with a vault/nsec identity (`ncli id sign`), and mint NIP-26 delegation tokens (`ncli id delegate`) for scripted or agent-driven signing. Use when generating or resolving a Nostr identity (hex/npub/nsec/NIP-05), decoding an npub/nsec/note/nprofile/nevent/naddr, a lokicash1...-style cash token, or a circlehub1... connection, signing a hand-authored or dumped unsigned event so it can be published, scripting vault access with NCLI_VAULT_PASSWORD, or non-interactively creating a delegation token with --issuer/NCLI_DELEGATE_ISSUER.
+description: Generate, inspect, import, and manage Nostr keypairs with ncli's local vault (`ncli id`, `ncli id import`), decode any NIP-19 bech32 entity, NIP-CASH cash token, or NIP-CW circlehub1... connection (`ncli decode`), sign unsigned events with a vault/nsec identity (`ncli id sign`), and mint NIP-26 delegation tokens (`ncli id delegate`) for scripted or agent-driven signing. Use when generating, importing an existing nsec/hex/ncryptsec into the vault, or resolving a Nostr identity (hex/npub/nsec/NIP-05), decoding an npub/nsec/note/nprofile/nevent/naddr, a lokicash1...-style cash token, or a circlehub1... connection, signing a hand-authored or dumped unsigned event so it can be published, scripting vault access with NCLI_VAULT_PASSWORD, or non-interactively creating a delegation token with --issuer/NCLI_DELEGATE_ISSUER.
 license: Unlicense
 ---
 
 <!-- Mirrors ohstr/ncli's cli/ncli/id.go, cli/ncli/id_sign.go,
-cli/ncli/decode.go, client/decode.go, and cli/delegate/command.go as of
+cli/ncli/id_import.go, cli/ncli/decode.go, client/decode.go, and cli/delegate/command.go as of
 writing. This skill is self-contained by design and won't see repo
 changes automatically — update by hand if flags/schemas change. -->
 
-# ncli id / ncli id sign / ncli id delegate
+# ncli id / ncli id import / ncli id sign / ncli id delegate
 
 `sign` and `delegate` are both subcommands of `id` (`ncli id sign`, `ncli id
 delegate`). Both resolve a vault label the same way `id --reveal` does:
@@ -50,6 +50,35 @@ ncli id list --json --reveal
 `--reveal` only works on identities actually saved in the vault — resolving
 an arbitrary npub/nsec/NIP-05 that isn't vault-saved and asking to reveal it
 errors with "identity not saved in vault, nothing to reveal".
+
+## `ncli id import` — save an existing key
+
+```sh
+# key on stdin: nsec, 64-char hex or ncryptsec
+NCLI_VAULT_PASSWORD=hunter2 ncli id import --label agent-key --json < key.txt
+# or from a file
+ncli id import --file key.txt --label agent-key
+# ncryptsec: its password comes from the env (or a prompt)
+NCLI_IMPORT_PASSWORD=pw ncli id import --label agent-key < key.ncryptsec
+```
+
+- The key is never an argument: `ncli id import nsec1...` is `usage`
+  (exit 2) and doesn't echo the key. Use stdin, `--file` (`-` = stdin), or
+  the hidden prompt (terminal only).
+- Each line is trimmed; the first holding a valid key is imported, the
+  rest ignored. `skipped_lines` counts non-blank lines skipped before it.
+  No valid key is `invalid_input` (exit 3), never echoing what was read.
+- Safe to re-run. Success prints
+  `{"npub","pub_hex","label","status","skipped_lines"}`, `status` being:
+  - `imported` — new key saved
+  - `unchanged` — already saved under that label, or no `--label` given
+  - `relabeled` — `--force` renamed it; `previous_label` is set
+- A key is never saved twice. Same key, different `--label` without
+  `--force`: `conflict` (exit 5), `input` = the existing label. A label held
+  by another key: `conflict`, `input` = that label.
+- `--json` or a piped key never prompts: set `NCLI_VAULT_PASSWORD` (and
+  `NCLI_IMPORT_PASSWORD` for an ncryptsec), or it's `usage`. A wrong
+  ncryptsec password is `auth` (exit 7).
 
 ## `ncli decode` — decode any NIP-19 entity, cash token, or circlehub1... connection
 

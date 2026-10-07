@@ -12,8 +12,16 @@
   identical requests stay distinct; admin clients that send no `payload`
   tag are now refused. ([#117](https://github.com/ohstr/ncli/pull/117))
 
+### Changed
+
+- `groups show --json` admin entries use `pubkey`/`roles` keys, not
+  `Pubkey`/`Roles`. ([#117](https://github.com/ohstr/ncli/pull/117))
+
 ### Fixed
 
+- Bare `ncli` exits 2 (`usage`) like every other group command; under
+  `--json` it printed help on stdout and exited 0.
+  ([#117](https://github.com/ohstr/ncli/pull/117))
 - `miner check -e` on a malformed file exits `invalid_input` (3), not
   `internal` (1). ([#117](https://github.com/ohstr/ncli/pull/117))
 - `miner mine` rejects a `--difficulty` outside 0-256 instead of mining

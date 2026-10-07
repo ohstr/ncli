@@ -1,6 +1,19 @@
 ---
 name: ncli-huddle
-description: Host real-time voice rooms ("huddles") on an ncli relay and list the ephemeral transport rooms currently live on one (ncli huddle list) -- enable the relay's huddle: block (WebSocket Opus audio, plus an optional WebRTC endpoint carrying video and screen share). Joining a call, watching the roster, chatting, and discovering NIP-53 spaces all moved to "ncli space" (create/list/show/join) -- see skills/ncli-space/SKILL.md for that, and read this skill for setting up the relay side, the transport-level room-listing command, the join/roster/audio/chat experience itself once joined, and how a join can be refused. Use when setting up voice on a relay, listing which rooms are occupied right now, understanding the audio/chat UI after joining, letting a browser or a buzz client into the same room, or working out why a join was refused.
+description: >-
+  Host real-time voice rooms ("huddles") on an ncli relay and list the
+  ephemeral transport rooms currently live on one (ncli huddle list) --
+  enable the relay's huddle: block (WebSocket Opus audio, plus an optional
+  WebRTC endpoint carrying video and screen share). Joining a call,
+  watching the roster, chatting, and discovering NIP-53 spaces all moved
+  to "ncli space" (create/list/show/join) -- see
+  skills/ncli-space/SKILL.md for that, and read this skill for setting up
+  the relay side, the transport-level room-listing command, the
+  join/roster/audio/chat experience itself once joined, and how a join can
+  be refused. Use when setting up voice on a relay, listing which rooms
+  are occupied right now, understanding the audio/chat UI after joining,
+  letting a browser or a buzz client into the same room, or working out
+  why a join was refused.
 license: Unlicense
 ---
 

@@ -20,5 +20,12 @@ later rounds will reuse it.
 5. Mint a NIP-26 delegation token with `ncli id delegate`, from
    `eval-agent` to a second, freshly generated throwaway pubkey, scoped to
    kind 1 only, for a short validity window.
+6. Generate another keypair *without* saving it, write its private key to
+   a file, and import that file into the vault under label
+   `eval-imported`. Import it again and confirm nothing changed.
+7. Rename `eval-imported` to `eval-kept`, without supplying its key.
+8. Generate and import a third key under `eval-temp`, then remove
+   `eval-temp` from the vault. Never prompt; `eval-agent` and `eval-kept`
+   must stay.
 
 Write your self-report to `/report/r1-identity.self-report.json`.

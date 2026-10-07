@@ -44,8 +44,8 @@ The signer keeps running after you close it. Reattach with
   ncli bunker --identity satoshi
   ncli bunker attach`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := requireInteractive(cmd); err != nil {
-				return err
+			if !isInteractive(cmd) {
+				return runHeadless(cmd, identity, relayFlags)
 			}
 
 			// Already running (from an earlier "ncli bunker") -- just
@@ -56,7 +56,7 @@ The signer keeps running after you close it. Reattach with
 				return runTUI(cmd, existing, nil)
 			}
 
-			bunkerClient, cancel, err := ensureDaemonRunning(cmd, identity, relayFlags)
+			bunkerClient, cancel, err := ensureDaemonRunning(cmd, identity, relayFlags, true)
 			if err != nil {
 				return err
 			}
@@ -73,17 +73,59 @@ The signer keeps running after you close it. Reattach with
 	cmd.AddCommand(newSessionsCommand())
 	cmd.AddCommand(newHistoryCommand())
 	cmd.AddCommand(newConnectCommand())
+	cmd.AddCommand(newPendingCommand())
 	cmd.AddCommand(newHiddenDaemonCommand())
 
 	return cmd
 }
 
-func requireInteractive(cmd *cobra.Command) error {
+// isInteractive reports whether the TUI can run: a terminal on both ends
+// and no --json.
+func isInteractive(cmd *cobra.Command) bool {
 	jsonMode, _ := cmd.Flags().GetBool("json")
-	interactive := term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd()))
-	if jsonMode || !interactive {
-		return common.UsageError(cmd, errors.New("this needs an interactive terminal (TUI); use `ncli bunker status`/`sessions`/`connect` for scripted access to an already-running daemon"))
+	return !jsonMode && term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd()))
+}
+
+func requireInteractive(cmd *cobra.Command) error {
+	if !isInteractive(cmd) {
+		return common.UsageError(cmd, errors.New("this needs an interactive terminal (TUI); use `ncli bunker status`/`sessions`/`pending`/`connect` for scripted access to a running daemon"))
 	}
+	return nil
+}
+
+// runHeadless is bare `ncli bunker` without a terminal: start the daemon
+// detached (never prompting) and print its status, or report the one
+// already running.
+func runHeadless(cmd *cobra.Command, identity string, relayFlags []string) error {
+	if existing, err := DialIPC(SocketPath(), 500*time.Millisecond); err == nil {
+		defer func() { _ = existing.Close() }()
+		st, err := existing.Status()
+		if err != nil {
+			return common.RuntimeError(cmd, err)
+		}
+		if identity != "" {
+			if want, rerr := client.ResolveIdentifier(identity); rerr == nil && want.PubKeyHex != st.IdentityPub {
+				return common.ConflictError(cmd, "", fmt.Errorf("a bunker is already running as %s; stop it first with `ncli bunker stop`", fullNpub(st.IdentityPub)))
+			}
+		}
+		printStatus(cmd, st)
+		return nil
+	}
+
+	bunkerClient, cancel, err := ensureDaemonRunning(cmd, identity, relayFlags, false)
+	if err != nil {
+		return err
+	}
+	if cancel != nil {
+		cancel()
+		return common.UsageError(cmd, errors.New("this platform can't run the bunker in the background; start it in a terminal"))
+	}
+	defer func() { _ = bunkerClient.Close() }()
+	st, err := bunkerClient.Status()
+	if err != nil {
+		return common.RuntimeError(cmd, err)
+	}
+	printStatus(cmd, st)
 	return nil
 }
 
@@ -136,28 +178,32 @@ func newStatusCommand() *cobra.Command {
 				return common.RuntimeError(cmd, err)
 			}
 
-			if jsonMode {
-				common.PrintJSON(map[string]any{
-					"running":        true,
-					"identity_pub":   st.IdentityPub,
-					"identity_name":  st.IdentityName,
-					"identity_nip05": st.IdentityNip05,
-					"vault_label":    st.VaultLabel,
-					"relays":         st.Relays,
-					"relay_statuses": st.RelayStatuses,
-					"pending_count":  st.PendingCount,
-					"session_count":  st.SessionCount,
-				})
-				return nil
-			}
-
-			fmt.Println("running")
-			printIdentityAndRelays(st)
-			fmt.Println("pending: ", st.PendingCount)
-			fmt.Println("sessions:", st.SessionCount)
+			printStatus(cmd, st)
 			return nil
 		},
 	}
+}
+
+// printStatus is a running daemon's `bunker status` output.
+func printStatus(cmd *cobra.Command, st StatusInfo) {
+	if jsonMode, _ := cmd.Flags().GetBool("json"); jsonMode {
+		common.PrintJSON(map[string]any{
+			"running":        true,
+			"identity_pub":   st.IdentityPub,
+			"identity_name":  st.IdentityName,
+			"identity_nip05": st.IdentityNip05,
+			"vault_label":    st.VaultLabel,
+			"relays":         st.Relays,
+			"relay_statuses": st.RelayStatuses,
+			"pending_count":  st.PendingCount,
+			"session_count":  st.SessionCount,
+		})
+		return
+	}
+	fmt.Println("running")
+	printIdentityAndRelays(st)
+	fmt.Println("pending: ", st.PendingCount)
+	fmt.Println("sessions:", st.SessionCount)
 }
 
 // printIdentityAndRelays writes st's identity and per-relay connection
@@ -437,6 +483,7 @@ func newSessionsCommand() *cobra.Command {
 	_ = revokeGrantCmd.MarkFlagRequired("method")
 	revokeGrantCmd.Flags().Int("kind", 0, "Event kind, for a sign_event grant (omit for the any-kind grant)")
 	cmd.AddCommand(revokeGrantCmd)
+	cmd.AddCommand(newSetGrantCommand())
 
 	return cmd
 }
@@ -640,8 +687,8 @@ func runDaemonProcess(cmd *cobra.Command, privKeyHex, vaultLabel string, relays 
 // either spawns a detached background daemon and dials it (Unix) or, if
 // spawnDaemon reports ErrBackgroundUnsupported (Windows), runs the daemon
 // core directly in this same process instead.
-func ensureDaemonRunning(cmd *cobra.Command, identityFlag string, relayFlags []string) (BunkerClient, context.CancelFunc, error) {
-	privKeyHex, pubKeyHex, vaultLabel, err := ResolveSignerKey(cmd, false, identityFlag)
+func ensureDaemonRunning(cmd *cobra.Command, identityFlag string, relayFlags []string, mayPrompt bool) (BunkerClient, context.CancelFunc, error) {
+	privKeyHex, pubKeyHex, vaultLabel, err := ResolveSignerKey(cmd, !mayPrompt, identityFlag)
 	if err != nil {
 		return nil, nil, err
 	}

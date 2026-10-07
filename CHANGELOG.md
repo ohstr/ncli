@@ -20,6 +20,13 @@
 - `POST /query` returns what REQ would for its signer, private NIP-29
   groups included. ([#117](https://github.com/ohstr/ncli/pull/117))
 
+### Added
+
+- `ncli bunker` without a terminal (or with `--json`) starts the signer in
+  the background and prints its status. `bunker pending list/approve/reject`
+  and `bunker sessions set-grant` do from scripts what the TUI does.
+  ([#119](https://github.com/ohstr/ncli/pull/119))
+
 ### Changed
 
 - Moved the `id delegate` wizard to Bubble Tea v2. v1 queried the terminal

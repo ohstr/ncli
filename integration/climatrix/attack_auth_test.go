@@ -65,24 +65,24 @@ func TestAttack_NIP42Auth(t *testing.T) {
 		}
 		// NIP-42: an unauthenticated client gets "auth-required:" so it
 		// knows to AUTH; "restricted:" means "authed, still not allowed".
-		known(t, "relay-auth-prefix", hasPrefix(msg, "restricted:"), "anon EVENT gets "+msg)
-		evs, closed := c.Req(F{"kinds": []int{1}})
-		if len(evs) != 0 || closed == "" {
-			t.Fatalf("anon REQ served %d events (closed %q)", len(evs), closed)
+		if !hasPrefix(msg, "auth-required:") {
+			t.Errorf("anon EVENT: %q, want auth-required:", msg)
 		}
-		known(t, "relay-auth-prefix", hasPrefix(closed, "restricted:"), "anon REQ closed "+closed)
-		// Seed so a leaked count is visible as non-zero.
+		evs, closed := c.Req(F{"kinds": []int{1}})
+		if len(evs) != 0 || !hasPrefix(closed, "auth-required:") {
+			t.Errorf("anon REQ: %d events, closed %q", len(evs), closed)
+		}
+		// Seed so a leaked count would show as non-zero.
 		seed := DialAs(t, r.URL, eve.PrivHex)
 		for i := range 3 {
 			seed.Publish(Ev(t, eve.PrivHex, 1, "seed "+strconv.Itoa(i)))
 		}
-		// COUNT skips the auth_required gate REQ enforces: an anonymous
-		// client learns how many events match any filter (by author, #p...).
-		n, closed := c.Count(F{"kinds": []int{1}})
-		known(t, "relay-count-bypasses-auth", n == 3 && closed == "",
-			"anon COUNT answered n="+strconv.Itoa(n))
-		if n2, _ := c.Count(F{"authors": []string{eve.PubHex}}); n2 > 0 {
-			t.Logf("anon COUNT by author also leaks: n=%d", n2)
+		// COUNT is a read: same gate as REQ, refused with CLOSED.
+		for _, f := range []F{{"kinds": []int{1}}, {"authors": []string{eve.PubHex}}} {
+			n, closed := c.Count(f)
+			if n > 0 || !hasPrefix(closed, "auth-required:") {
+				t.Errorf("anon COUNT %v: n=%d closed %q", f, n, closed)
+			}
 		}
 	})
 	t.Run("wrong challenge", func(t *testing.T) {
@@ -171,13 +171,11 @@ func TestAttack_NIP43Membership(t *testing.T) {
 		if evs, closed := c.Req(F{"kinds": []int{1}}); len(evs) != 0 || closed == "" {
 			t.Errorf("non-member REQ: %d events, closed %q", len(evs), closed)
 		}
+		// NIP-45: a refused COUNT is answered with CLOSED, not silence.
 		n, closed := c.Count(F{"kinds": []int{1}})
-		if n > 0 {
-			t.Errorf("non-member COUNT leaked n=%d", n)
+		if n > 0 || !hasPrefix(closed, "restricted:") {
+			t.Errorf("non-member COUNT: n=%d closed %q", n, closed)
 		}
-		// NIP-45: a refused COUNT is answered with CLOSED; the membership
-		// gate sends only a NOTICE, so the client waits until it times out.
-		known(t, "relay-count-membership-no-closed", closed == "timeout: no COUNT", "non-member COUNT got no reply")
 		if evs, closed := c.Req(F{"authors": []string{alice.PubHex}}); len(evs) != 0 {
 			t.Errorf("non-member read alice's events by author: %d (closed %q)", len(evs), closed)
 		}
@@ -294,13 +292,15 @@ func TestAttack_NIP43Membership(t *testing.T) {
 		if ok, msg := member.Publish(after); !ok {
 			t.Fatalf("alice publish: %s", msg)
 		}
-		// Membership is cached on the session at AUTH time and never
-		// re-checked, so removal doesn't reach open connections.
-		known(t, "relay-removed-member-live-session", live.Saw(after.ID, 2*time.Second),
-			"removed member's open subscription still receives new events")
-		ok, _ := c.Publish(Ev(t, mallory.PrivHex, 1, "still here"))
-		known(t, "relay-removed-member-live-session", ok,
-			"removed member can still publish on the connection it had")
+		if live.Saw(after.ID, 2*time.Second) {
+			t.Errorf("removed member's open subscription still receives new events")
+		}
+		if !strings.HasPrefix(live.Closed, "restricted:") {
+			t.Errorf("open subscription closed with %q, want a restricted: CLOSED", live.Closed)
+		}
+		if ok, msg := c.Publish(Ev(t, mallory.PrivHex, 1, "still here")); ok {
+			t.Errorf("removed member can still publish on the connection it had: %s", msg)
+		}
 		c2 := DialAs(t, r.URL, mallory.PrivHex)
 		if evs, closed := c2.Req(F{"kinds": []int{1}}); len(evs) > 0 || closed == "" {
 			t.Errorf("removed member can still read on a new connection: %d", len(evs))

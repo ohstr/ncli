@@ -84,6 +84,12 @@ docker run --rm ghcr.io/ohstr/ncli:latest --help
 
 **From source** — see [Development](#development).
 
+Check what you're running, and where ncli keeps its files:
+
+```sh
+ncli version
+```
+
 ## `relay`
 
 Run a Nostr relay server.
@@ -356,12 +362,19 @@ ncli relay members add <pubkey> --role vip --config examples/relay/community-mem
 
 # who's currently enrolled
 ncli relay members list --config examples/relay/community-membership-relay.yaml
+# one member's record, then un-enroll them
+ncli relay members show <pubkey> --config examples/relay/community-membership-relay.yaml
+ncli relay members remove <pubkey> --config examples/relay/community-membership-relay.yaml
 
 # issue a code to hand out out-of-band (a signup email, a Discord invite)
 ncli relay invites create --ttl 24h --max-uses 1 --config examples/relay/community-membership-relay.yaml
+# every live code, then cancel one
+ncli relay invites list --config examples/relay/community-membership-relay.yaml
+ncli relay invites revoke <code> --config examples/relay/community-membership-relay.yaml
 
-# define a role
+# define a role, and list them
 ncli relay roles create vip --label "VIP" --color 280 --config examples/relay/community-membership-relay.yaml
+ncli relay roles list --config examples/relay/community-membership-relay.yaml
 ```
 
 NIP-43 has no "delete role" event, so `roles create` re-run with the same
@@ -827,6 +840,10 @@ ncli bunker attach
 ncli bunker status --json
 # every app with a remembered permission
 ncli bunker sessions list
+# one app's permissions; name it; drop one permission, or the whole app
+ncli bunker sessions grants <pubkey>
+ncli bunker sessions rename <pubkey> "my agent"
+ncli bunker sessions revoke-grant <pubkey> --method sign_event --kind 1
 ncli bunker sessions revoke <pubkey>
 # recently resolved requests, most recent first
 ncli bunker history
@@ -954,6 +971,17 @@ ncli groups list --mine --relay wss://relay.example --identity mykey
 ncli groups show standup --relay wss://relay.example --identity mykey
 # every visible group, as a parent/child tree
 ncli groups tree --relay wss://relay.example
+
+# admins: add or remove a member (optionally with roles)
+ncli groups members add standup <pubkey> moderator --relay wss://relay.example --identity mykey
+ncli groups members remove standup <pubkey> --relay wss://relay.example --identity mykey
+# replace the pinned list (passing nothing clears it)
+ncli groups pins set standup --event <event-id> --relay wss://relay.example --identity mykey
+# delete one message from the group, or the whole group
+ncli groups delete-event standup <event-id> --relay wss://relay.example --identity mykey
+ncli groups delete standup --relay wss://relay.example --identity mykey
+# a member leaving
+ncli groups leave standup --relay wss://relay.example --identity friend
 ```
 
 A private group is invisible without `--identity`: `list` silently leaves it
@@ -973,6 +1001,14 @@ ncli blossom upload photo.jpg --identity mykey
 ncli blossom list --identity mykey
 ncli blossom download <hash> -o photo.jpg
 ncli blossom rm <hash> --identity mykey --yes
+# copy a blob from another URL onto your servers
+ncli blossom mirror https://other.example/<hash> --identity mykey
+# report a blob to its server (BUD-09)
+ncli blossom report <hash> --type spam --reason "bot spam" --identity mykey
+
+# your default servers; drop one
+ncli blossom servers list
+ncli blossom servers remove https://blossom.example
 ```
 
 `upload`/`rm`/`mirror` fan out to every configured server and report a

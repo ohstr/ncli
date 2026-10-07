@@ -83,8 +83,8 @@ ncli relay context add bee_community ~/relays/bee-community.yaml
 # every relay command now targets bee_community
 ncli relay context use bee_community
 
-# list saved contexts, "*" = current
-ncli relay context
+# list saved contexts, "*" = current (bare `ncli relay context` does the same)
+ncli relay context list
 ncli relay context remove bee_community
 ```
 

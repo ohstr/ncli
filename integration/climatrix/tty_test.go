@@ -3,6 +3,7 @@ package climatrix
 import (
 	"bytes"
 	"context"
+	"io"
 	"net"
 	"os/exec"
 	"regexp"
@@ -33,15 +34,37 @@ func needsScript(t *testing.T) {
 // as a person would see them.
 func (e *Env) RunTTY(t *testing.T, args ...string) Result {
 	t.Helper()
+	return e.RunTTYKeys(t, nil, args...)
+}
+
+// ttyEnv is a realistic terminal. script(1) never answers terminal queries,
+// so anything that waits on one shows up here as a slow command.
+func (e *Env) ttyEnv() []string { return append(e.environ(), "TERM=xterm-256color") }
+
+// RunTTYKeys is RunTTY typing keys, one chunk at a time, into the program.
+func (e *Env) RunTTYKeys(t *testing.T, keys []string, args ...string) Result {
+	t.Helper()
 	needsScript(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
-	line := shellQuote(append([]string{bin(t)}, args...))
+	// script(1)'s pty starts at 0x0 when its own stdin isn't a terminal; give it
+	// a real size, as any terminal emulator would.
+	line := "stty cols 120 rows 40 2>/dev/null; exec " + shellQuote(append([]string{bin(t)}, args...))
 	cmd := exec.CommandContext(ctx, "script", "-qfec", line, "/dev/null")
 	cmd.Dir = e.Dir
-	// TERM=screen: termenv skips its terminal colour queries, which script(1)
-	// never answers (bubbletea v1 makes one at init; 5s each otherwise).
-	cmd.Env = append(e.environ(), "TERM=screen")
+	cmd.Env = e.ttyEnv()
+	if keys != nil {
+		pr, pw := io.Pipe()
+		cmd.Stdin = pr
+		go func() {
+			for _, k := range keys {
+				time.Sleep(400 * time.Millisecond)
+				_, _ = pw.Write([]byte(k))
+			}
+			time.Sleep(2 * time.Second)
+			_ = pw.Close()
+		}()
+	}
 	var out bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &out
 	err := cmd.Run()
@@ -59,12 +82,12 @@ func (e *Env) RunTTY(t *testing.T, args ...string) Result {
 func (e *Env) StartTTY(t *testing.T, args ...string) *exec.Cmd {
 	t.Helper()
 	needsScript(t)
-	line := shellQuote(append([]string{bin(t)}, args...))
+	// script(1)'s pty starts at 0x0 when its own stdin isn't a terminal; give it
+	// a real size, as any terminal emulator would.
+	line := "stty cols 120 rows 40 2>/dev/null; exec " + shellQuote(append([]string{bin(t)}, args...))
 	cmd := exec.Command("script", "-qfec", line, "/dev/null")
 	cmd.Dir = e.Dir
-	// TERM=screen: termenv skips its terminal colour queries, which script(1)
-	// never answers (bubbletea v1 makes one at init; 5s each otherwise).
-	cmd.Env = append(e.environ(), "TERM=screen")
+	cmd.Env = e.ttyEnv()
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -96,6 +119,44 @@ func TestTTY_FailureShapes(t *testing.T) {
 	root := e.RunTTY(t)
 	if root.Code != 2 || !strings.Contains(root.Stdout, "Usage:") {
 		t.Errorf("bare ncli: want help, exit 2\n%s", root)
+	}
+}
+
+// escSeq matches CSI and OSC terminal sequences.
+var escSeq = regexp.MustCompile("\x1b\\[[0-9;?<>=$ ]*[@-~]|\x1b\\][^\x07\x1b]*(\x07|\x1b\\\\)|\x1b[()][0-9A-Za-z]|\x1b[=>78]")
+
+// plain strips terminal control sequences, leaving the text a person saw.
+func plain(s string) string {
+	return strings.ReplaceAll(escSeq.ReplaceAllString(s, ""), "\r", "")
+}
+
+// Starting a command on a terminal must not wait on terminal queries the
+// terminal may never answer (bubbletea v1 did, for 5s, on every command).
+func TestTTY_StartupIsFast(t *testing.T) {
+	e := NewEnv(t)
+	bin(t)
+	start := time.Now()
+	e.RunTTY(t, "version")
+	if took := time.Since(start); took > 2*time.Second {
+		t.Errorf("ncli version on a terminal took %s", took.Round(100*time.Millisecond))
+	}
+}
+
+// The id delegate wizard, driven by keystrokes: issuer, delegatee, the
+// default kind, the default duration.
+func TestTTY_DelegateWizard(t *testing.T) {
+	e := NewEnv(t)
+	alice, agent := A(t, "alice"), A(t, "agent")
+	res := e.RunTTYKeys(t, []string{alice.PrivHex, "\r", agent.PrivHex, "\r", "\r", "\r", "q"}, "id", "delegate")
+	out := plain(res.Stdout)
+	if !strings.Contains(out, "Delegation Token Generated") {
+		t.Fatalf("wizard didn't reach the result\n%s", out)
+	}
+	if !strings.Contains(out, agent.PubHex[:16]) || !strings.Contains(out, "kind=25521") {
+		t.Errorf("result lacks the delegatee or the default kind\n%s", out)
+	}
+	if res.Code != 0 {
+		t.Errorf("wizard exit %d", res.Code)
 	}
 }
 

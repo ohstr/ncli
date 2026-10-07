@@ -1,12 +1,15 @@
 package climatrix
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/ohstr/nmilat/nip19"
 )
 
@@ -222,6 +225,29 @@ func TestIDDelegate(t *testing.T) {
 	if tok, _ := d["token"].(string); len(tok) != 128 {
 		t.Errorf("token = %q, want a 64-byte schnorr sig", tok)
 	}
+	// Checked independently of nmilat: NIP-26 signs
+	// sha256("nostr:delegation:<delegatee>:<conditions>").
+	t.Run("token verifies under NIP-26", func(t *testing.T) {
+		cond, _ := d["conditions"].(string)
+		tok, _ := d["token"].(string)
+		sigBytes, err := hex.DecodeString(tok)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sig, err := schnorr.ParseSignature(sigBytes)
+		if err != nil {
+			t.Fatal(err)
+		}
+		pubBytes, _ := hex.DecodeString(alice.PubHex)
+		pub, err := schnorr.ParsePubKey(pubBytes)
+		if err != nil {
+			t.Fatal(err)
+		}
+		digest := sha256.Sum256([]byte("nostr:delegation:" + agent.PubHex + ":" + cond))
+		if !sig.Verify(digest[:], pub) {
+			t.Errorf("delegation token doesn't verify against NIP-26's nostr:delegation:... string")
+		}
+	})
 	t.Run("no issuer non-interactive", func(t *testing.T) {
 		e.Run(t, "id", "delegate", "--json").ExpectErr(t, "usage")
 	})

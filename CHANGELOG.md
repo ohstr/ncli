@@ -26,6 +26,10 @@
   the background and prints its status. `bunker pending list/approve/reject`
   and `bunker sessions set-grant` do from scripts what the TUI does.
   ([#119](https://github.com/ohstr/ncli/pull/119))
+- `space join` without a terminal (or with `--json`) streams the call as
+  JSON lines -- arrivals, departures, speaking, chat -- until `--duration`
+  or an interrupt. `space chat send/list` post and read a space's
+  conversation without joining. ([#119](https://github.com/ohstr/ncli/pull/119))
 
 ### Changed
 
@@ -48,7 +52,8 @@
 - `ncli relay --json` logged in console format once the server started;
   every stderr line is now JSON. ([#119](https://github.com/ohstr/ncli/pull/119))
 - `space show <id>` for a space that doesn't exist exits `not_found`
-  instead of succeeding with nothing. ([#119](https://github.com/ohstr/ncli/pull/119))
+  instead of succeeding with nothing; so does `space join` for a missing
+  space, instead of `internal`. ([#119](https://github.com/ohstr/ncli/pull/119))
 - `groups show` exits `not_found` when the relay returns nothing for the
   group, instead of printing `{}`; `groups tree --json` prints `"roots": []`,
   not `null`. ([#119](https://github.com/ohstr/ncli/pull/119))

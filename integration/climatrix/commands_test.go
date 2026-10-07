@@ -1,9 +1,12 @@
 package climatrix
 
 import (
+	"encoding/json"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestApply(t *testing.T) {
@@ -220,7 +223,100 @@ func TestSpaceAndHuddle(t *testing.T) {
 		e.Run(t, "huddle", "list", "--relay", DeadRelayURL(t), "--json").ExpectErr(t, "network")
 	})
 
-	t.Run("join needs a terminal", func(t *testing.T) {
-		e.Run(t, "space", "join", "standup", "--relay", r.URL, "--json").ExpectErr(t, "usage")
+	t.Run("headless join and chat", func(t *testing.T) {
+		space := "30312:" + alice.PubHex + ":standup"
+		bob, carol := A(t, "bob"), A(t, "carol")
+
+		joins := make(chan Result, 2)
+		go func() {
+			joins <- e.Run(t, "space", "join", space, "--relay", r.URL, "--identity", alice.Nsec, "--duration", "8s", "--json")
+		}()
+		time.Sleep(time.Second)
+		go func() {
+			joins <- e.Run(t, "space", "join", space, "--relay", r.URL, "--identity", bob.Nsec, "--duration", "4s", "--json")
+		}()
+		time.Sleep(2 * time.Second)
+
+		var sent struct {
+			Results []struct {
+				ID       string `json:"id"`
+				Accepted bool   `json:"accepted"`
+			} `json:"results"`
+		}
+		e.MustOK(t, "space", "chat", "send", space, "--relay", r.URL, "hello room", "--identity", carol.Nsec, "--json").JSON(t, &sent)
+		if len(sent.Results) != 1 || !sent.Results[0].Accepted {
+			t.Fatalf("chat send: %+v", sent)
+		}
+
+		var streams []Result
+		for range 2 {
+			res := <-joins
+			if res.Code != 0 {
+				t.Fatalf("headless join failed\n%s", res)
+			}
+			res.ExpectCleanJSONStderr(t)
+			streams = append(streams, res)
+		}
+		// alice's join runs longest, so it saw bob arrive and leave.
+		aliceStream := streams[0]
+		if !strings.Contains(aliceStream.Stdout, `"self":"`+alice.PubHex+`"`) {
+			aliceStream = streams[1]
+		}
+		var types []string
+		var chat map[string]any
+		for _, line := range strings.Split(strings.TrimSpace(aliceStream.Stdout), "\n") {
+			var ev map[string]any
+			if err := json.Unmarshal([]byte(line), &ev); err != nil {
+				t.Fatalf("stream line is not JSON: %q", line)
+			}
+			types = append(types, ev["type"].(string))
+			if ev["type"] == "participant_joined" && ev["pubkey"] != bob.PubHex {
+				t.Errorf("participant_joined for %v, want bob", ev["pubkey"])
+			}
+			if ev["type"] == "chat" {
+				chat = ev
+			}
+		}
+		want := []string{"joined", "participant_joined", "participant_left", "ended"}
+		for _, w := range want {
+			if !slices.Contains(types, w) {
+				t.Errorf("stream lacks %q: %v", w, types)
+			}
+		}
+		if types[0] != "joined" || types[len(types)-1] != "ended" {
+			t.Errorf("stream order: %v", types)
+		}
+		if chat == nil || chat["content"] != "hello room" || chat["id"] != sent.Results[0].ID {
+			t.Errorf("chat event = %v", chat)
+		}
+
+		var list struct {
+			Activity string           `json:"activity"`
+			Messages []map[string]any `json:"messages"`
+		}
+		res := e.MustOK(t, "space", "chat", "list", space, "--relay", r.URL, "--json")
+		res.ExpectJSONArray(t, "messages")
+		res.JSON(t, &list)
+		if list.Activity != space || len(list.Messages) != 1 || list.Messages[0]["content"] != "hello room" {
+			t.Errorf("chat list: %+v", list)
+		}
+
+		e.MustOK(t, "space", "chat", "send", space, "--relay", r.URL, "re: hello", "--reply", sent.Results[0].ID, "--identity", bob.Nsec, "--json")
+		e.MustOK(t, "space", "chat", "list", space, "--relay", r.URL, "--json").JSON(t, &list)
+		if len(list.Messages) != 2 || list.Messages[1]["parent"] != sent.Results[0].ID {
+			t.Errorf("reply not threaded: %+v", list.Messages)
+		}
+	})
+
+	t.Run("join and chat errors", func(t *testing.T) {
+		e.Run(t, "space", "join", "standup", "--relay", r.URL, "--duration", "-1s", "--json").ExpectErr(t, "invalid_input")
+		e.Run(t, "space", "join", "30312:"+alice.PubHex+":nosuch", "--relay", r.URL, "--identity", alice.Nsec, "--json").ExpectErr(t, "not_found")
+		e.Run(t, "space", "chat", "send", "standup", "hi", "--relay", r.URL, "--identity", alice.Nsec, "--json").ExpectErr(t, "invalid_input")
+		e.Run(t, "space", "chat", "send", "30312:"+alice.PubHex+":standup", "hi", "--relay", r.URL, "--reply", "nothex", "--identity", alice.Nsec, "--json").ExpectErr(t, "invalid_input")
+		e.Run(t, "space", "chat", "list", "30312:"+alice.PubHex+":nosuch", "--relay", r.URL, "--json").ExpectErr(t, "not_found")
+		e.Run(t, "space", "chat", "--json").ExpectErr(t, "usage")
+		off := StartRelay(t, "", nil)
+		e.MustOK(t, "space", "create", "quiet", "--relay", off.URL, "--identity", alice.Nsec, "--json")
+		e.Run(t, "space", "join", "30312:"+alice.PubHex+":quiet", "--relay", off.URL, "--identity", alice.Nsec, "--json").ExpectErr(t, "unsupported")
 	})
 }

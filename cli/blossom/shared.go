@@ -21,14 +21,21 @@ const (
 	defaultTimeout = 30 * time.Second
 )
 
-// uploadErrorHint is appended to any upload/mirror failure. nipB7/client's
-// Upload/Mirror return an error both for real transport failures and for
-// "the PUT succeeded but the server's JSON response was malformed or
-// failed BlobDescriptor.Validate()" (confirmed via its own tests) -- these
-// two cases aren't distinguishable from here via errors.Is/As on the
-// current SDK error types, so every failure gets this disclaimer rather
-// than one that only sometimes applies.
-const uploadErrorHint = " (if the file was already sent to the server, it may exist there despite this error -- check with `ncli blossom list` before retrying)"
+// uploadErrorHint is appended to an upload/mirror failure whose outcome is
+// unknown. nipB7/client's Upload/Mirror return an error both for real
+// transport failures and for "the PUT succeeded but the server's JSON
+// response was malformed" -- indistinguishable here -- so those get this
+// disclaimer. A 4xx refusal is a definite "no" and doesn't.
+const uploadErrorHint = " (if the file was already sent to the server, it may exist there despite this error -- check the server for its hash before retrying)"
+
+// uploadFailure renders an upload/mirror error, with uploadErrorHint unless
+// the server definitely refused it.
+func uploadFailure(err error) string {
+	if httpErr, ok := errors.AsType[*bclient.HTTPError](err); ok && httpErr.StatusCode >= 400 && httpErr.StatusCode < 500 {
+		return describeError(err)
+	}
+	return describeError(err) + uploadErrorHint
+}
 
 // newHTTPClient returns a Blossom HTTP client bounded by timeout -- the
 // zero value's http.DefaultClient has no timeout at all, which would let
@@ -98,7 +105,9 @@ func buildAuth(privKeyHex, pubKeyHex, verb string, hashes []string, ttl time.Dur
 
 // classifyHTTPError maps a Blossom server error to the right CLIError
 // code: AuthError for a 401/403 rejection, NotFoundError for a 404,
-// NetworkError for everything else -- including *bclient.PaymentRequiredError,
+// ConflictError for a 409, InvalidInputError for any other 4xx the server
+// refused outright (a 400 policy rejection won't pass on retry), and
+// NetworkError for 408/429/5xx and transport failures -- including *bclient.PaymentRequiredError,
 // whose CodeNetwork retryable=true fits "retry once payment is settled"
 // better than any other existing code. A payment-required error is
 // rewrapped so its Cashu/Lightning details survive into the final message
@@ -113,6 +122,13 @@ func classifyHTTPError(cmd *cobra.Command, input string, err error) error {
 			return common.AuthError(cmd, err)
 		case http.StatusNotFound:
 			return common.NotFoundError(cmd, input, err)
+		case http.StatusConflict:
+			return common.ConflictError(cmd, input, err)
+		case http.StatusRequestTimeout, http.StatusTooManyRequests:
+			return common.NetworkError(cmd, input, err)
+		}
+		if httpErr.StatusCode >= 400 && httpErr.StatusCode < 500 {
+			return common.InvalidInputError(cmd, input, err)
 		}
 	}
 	return common.NetworkError(cmd, input, err)

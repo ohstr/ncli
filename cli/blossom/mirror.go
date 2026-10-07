@@ -78,7 +78,7 @@ func newMirrorCommand() *cobra.Command {
 
 					descriptor, err := hc.Mirror(ctx, server, sourceURL, auth)
 					if err != nil {
-						res.Error = describeError(err) + uploadErrorHint
+						res.Error = uploadFailure(err)
 						res.err = err
 					} else {
 						res.OK = true

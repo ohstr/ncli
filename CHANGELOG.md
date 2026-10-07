@@ -65,6 +65,10 @@
   not `null`. ([#119](https://github.com/ohstr/ncli/pull/119))
 - `bunker sessions grants --json` prints `[]` for an app with no grants,
   not `null`. ([#119](https://github.com/ohstr/ncli/pull/119))
+- A Blossom server's outright refusal (a 4xx other than 401/403/404/409/429,
+  e.g. a mirror of a private address) exits `invalid_input`, not a
+  retryable `network`, and no longer suggests the blob may exist anyway.
+  ([#119](https://github.com/ohstr/ncli/pull/119))
 - A NIP-43 join (invite claim or `relay members add`) now applies to the
   member's already-open connections; they were refused until they
   reconnected. A private group read refused before AUTH says

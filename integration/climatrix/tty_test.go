@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -81,6 +82,14 @@ func (e *Env) RunTTYKeys(t *testing.T, keys []string, args ...string) Result {
 // test ends.
 func (e *Env) StartTTY(t *testing.T, args ...string) *exec.Cmd {
 	t.Helper()
+	cmd, _, _ := e.startTTY(t, args...)
+	return cmd
+}
+
+// startTTY is StartTTY with the keyboard (stdin) and screen (merged
+// output) handed back to the test.
+func (e *Env) startTTY(t *testing.T, args ...string) (*exec.Cmd, io.Writer, *syncBuffer) {
+	t.Helper()
 	needsScript(t)
 	// script(1)'s pty starts at 0x0 when its own stdin isn't a terminal; give it
 	// a real size, as any terminal emulator would.
@@ -88,11 +97,33 @@ func (e *Env) StartTTY(t *testing.T, args ...string) *exec.Cmd {
 	cmd := exec.Command("script", "-qfec", line, "/dev/null")
 	cmd.Dir = e.Dir
 	cmd.Env = e.ttyEnv()
+	pr, pw := io.Pipe()
+	cmd.Stdin = pr
+	screen := &syncBuffer{}
+	cmd.Stdout, cmd.Stderr = screen, screen
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
-	return cmd
+	t.Cleanup(func() { _ = pw.Close(); _ = cmd.Process.Kill(); _ = cmd.Wait() })
+	return cmd, pw, screen
+}
+
+// syncBuffer is a bytes.Buffer safe to read while a process writes it.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }
 
 // sgr matches a colour/style escape, not a terminal query.

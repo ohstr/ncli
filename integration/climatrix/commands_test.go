@@ -192,9 +192,11 @@ func TestSpaceAndHuddle(t *testing.T) {
 		if len(l.Spaces) != 1 {
 			t.Errorf("show: %v", l.Spaces)
 		}
-		e.MustOK(t, "space", "show", "nosuch", "--relay", r.URL, "--json").JSON(t, &l)
-		if len(l.Spaces) != 0 {
-			t.Errorf("show of a missing space: %v", l.Spaces)
+		if er := e.Run(t, "space", "show", "nosuch", "--relay", r.URL, "--json").ExpectErr(t, "not_found"); er.Input != "nosuch" {
+			t.Errorf("show of a missing space: input = %q, want nosuch", er.Input)
+		}
+		if res := e.Run(t, "space", "show", "nosuch", "--relay", r.URL); res.Code != exitCodes["not_found"] || res.Stdout != "" {
+			t.Errorf("text show of a missing space: %s", res)
 		}
 	})
 

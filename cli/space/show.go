@@ -76,17 +76,13 @@ func runShow(cmd *cobra.Command, args []string) error {
 	staleAfter, _ := cmd.Flags().GetDuration("stale-after")
 	spaces := selectSpaces(events, time.Now(), staleAfter, true)
 
-	jsonMode, _ := cmd.Flags().GetBool("json")
-	if jsonMode {
-		if spaces == nil {
-			spaces = []spaceSummary{}
-		}
-		common.PrintJSON(map[string]any{"spaces": spaces})
-		return nil
+	if len(spaces) == 0 {
+		return common.NotFoundError(cmd, id, fmt.Errorf("no space found with id %q on %s", id, relayURL.Host))
 	}
 
-	if len(spaces) == 0 {
-		fmt.Printf("(no space found with id %q)\n", id)
+	jsonMode, _ := cmd.Flags().GetBool("json")
+	if jsonMode {
+		common.PrintJSON(map[string]any{"spaces": spaces})
 		return nil
 	}
 

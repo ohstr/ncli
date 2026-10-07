@@ -77,6 +77,7 @@ test-integration-huddle-stress:
 # them together here is just one `go test` invocation, not a shared stack.
 test-integrations:
     go test ./client/... -run 'TestStreamIntegration|TestInspectIntegration|TestSyncIntegration|TestHuddleIntegration' -v -count=1 -timeout 30m
+    go test ./integration/climatrix/... -v -count=1 -timeout 20m
 
 # Run the client package's benchmarks (stream pipeline hot paths)
 bench:

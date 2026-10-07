@@ -85,7 +85,7 @@ func runIDInspect(cmd *cobra.Command, arg string) error {
 		}
 		vaultPrivKeyHex, err := client.UnlockVaultIdentity(password)
 		if err != nil {
-			return common.AuthError(cmd, err)
+			return keyresolve.VaultError(cmd, err)
 		}
 
 		entry, found, err := client.FindVaultEntry(result.Npub)
@@ -254,7 +254,7 @@ func runIDList(cmd *cobra.Command) error {
 		}
 		vaultPrivKeyHex, err = client.UnlockVaultIdentity(password)
 		if err != nil {
-			return common.AuthError(cmd, err)
+			return keyresolve.VaultError(cmd, err)
 		}
 	}
 

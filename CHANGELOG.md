@@ -38,6 +38,17 @@
   MAC" on the old entries). Relay contexts and Blossom servers were lost
   too. It now clears only the relays.
   ([#117](https://github.com/ohstr/ncli/pull/117))
+- With the vault key missing but identities still saved, `id --save`
+  silently started a new vault (orphaning them) and unlocking said "no
+  vault identity yet". Both now refuse with `not_found`, naming the
+  missing key. ([#117](https://github.com/ohstr/ncli/pull/117))
+- A missing vault label exits `not_found` (4), not `invalid_input`.
+  ([#117](https://github.com/ohstr/ncli/pull/117))
+- The `ncli-huddle` skill's frontmatter wasn't valid YAML, so skill
+  installers skipped it. ([#117](https://github.com/ohstr/ncli/pull/117))
+- `id delegate` tokens now verify under NIP-26 (the `nostr:delegation:`
+  string, fixed in nmilat). Re-issue tokens minted before.
+  ([#117](https://github.com/ohstr/ncli/pull/117))
 - Exit codes that misreported what went wrong:
   `apply` sync/inspect without a terminal and `apply -f` on a missing file
   are `usage` (were `internal`); `space join` without a terminal is `usage`

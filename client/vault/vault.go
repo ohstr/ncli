@@ -27,6 +27,11 @@ const vaultFileName = "vault.yaml"
 // with errors.Is instead of matching on message text.
 var ErrLabelExists = errors.New("vault label already exists")
 
+// ErrVaultKeyMissing is a vault whose key is gone from prefs.yaml while
+// identities saved with it remain: they can't be decrypted, and a new key
+// would orphan them, so nothing creates one.
+var ErrVaultKeyMissing = errors.New("the vault key is missing from prefs.yaml, so the identities saved with it can't be decrypted; restore prefs.yaml from a backup (a new vault key would orphan them)")
+
 // Entry is one identity saved in the local vault: label and npub are
 // plaintext (so listing/inspecting needs no password), but EncryptedNsec is
 // a NIP-44 payload only the unlocked vault identity can decrypt.
@@ -72,6 +77,11 @@ func CreateIdentity(password string) (npub, privKeyHex string, err error) {
 	if p.VaultIdentity != nil {
 		return "", "", errors.New("vault identity already exists")
 	}
+	// Entries already saved are encrypted to the old vault key; a new key
+	// would orphan them for good. Refuse instead of doing that silently.
+	if entries, err := LoadEntries(); err == nil && len(entries) > 0 {
+		return "", "", fmt.Errorf("%w (%d saved, in %s)", ErrVaultKeyMissing, len(entries), Path())
+	}
 
 	id, err := GenerateIdentity()
 	if err != nil {
@@ -97,6 +107,9 @@ func Unlock(password string) (string, error) {
 		return "", err
 	}
 	if p.VaultIdentity == nil {
+		if entries, err := LoadEntries(); err == nil && len(entries) > 0 {
+			return "", fmt.Errorf("%w (%d saved, in %s)", ErrVaultKeyMissing, len(entries), Path())
+		}
 		return "", errors.New("no vault identity yet; save an identity with `ncli id` to create one")
 	}
 

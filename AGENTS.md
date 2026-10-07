@@ -78,7 +78,8 @@ if *every* target fails to connect or times out, that's a `network` error
 means "queried successfully, found nothing," never "couldn't check."
 `ping` is the opposite: reachability is exactly what it's testing for, so
 *any* unreachable target is a failure (`internal`, exit 1), not tolerated
-and logged like it is elsewhere.
+and logged like it is elsewhere. Its per-relay results still go to stdout
+when it fails, so a script can see which targets were down.
 
 **Failures**: exactly one top-level error report, always on stderr, never
 stdout. In text mode it takes one of three shapes, and `--json` replaces

@@ -2,6 +2,7 @@ package client
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -90,6 +91,11 @@ func ResolveFindIdentifier(input string) (*FindIdentifier, error) {
 		return &FindIdentifier{ID: trimmed}, nil
 	}
 }
+
+// ErrUnknownIdentifier is ResolveIdentifier's error for input of no
+// identifier shape that isn't a saved vault label either -- most often a
+// mistyped or missing label.
+var ErrUnknownIdentifier = errors.New("unknown identifier")
 
 // ResolveIdentifier resolves input -- a saved vault label, an npub, a hex
 // pubkey, an nsec, an nprofile, or a nip-05 address -- to an
@@ -183,7 +189,7 @@ func ResolveIdentifier(input string) (*IdentityInspection, error) {
 		nip05Identifier = trimmed
 
 	default:
-		return nil, fmt.Errorf("%q is not a saved vault label, npub, hex pubkey, nsec, nprofile, or nip-05 identifier", trimmed)
+		return nil, fmt.Errorf("%w: %q is not a saved vault label, npub, hex pubkey, nsec, nprofile, or nip-05 identifier", ErrUnknownIdentifier, trimmed)
 	}
 
 	npub, err := nip19.EncodePublicKey(pubHex)

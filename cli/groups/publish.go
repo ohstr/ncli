@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/ohstr/ncli/cli/common"
 	"github.com/ohstr/ncli/client"
@@ -82,10 +83,32 @@ func printPublishReport(cmd *cobra.Command, report *client.PublishReport) {
 }
 
 // failedPublishErr turns a report with any failed attempt into the
-// command's own error return, nil otherwise.
+// command's own error return, nil otherwise. The relay's machine-readable
+// reason prefix (NIP-01) picks the error code, so "the group already
+// exists" or "you're not allowed" isn't reported as an internal failure.
 func failedPublishErr(cmd *cobra.Command, report *client.PublishReport) error {
 	if report.AllSucceeded() {
 		return nil
 	}
-	return common.RuntimeError(cmd, fmt.Errorf("%d of %d publish attempts failed", report.Failed, report.Attempted))
+	var reason string
+	for _, r := range report.Results {
+		if !r.Accepted {
+			reason = r.Error
+			break
+		}
+	}
+	err := fmt.Errorf("%d of %d publish attempts failed: %s", report.Failed, report.Attempted, reason)
+	_, msg, _ := strings.Cut(reason, "relay rejected event: ")
+	if msg == "" {
+		msg = reason
+	}
+	switch {
+	case strings.HasPrefix(msg, "duplicate:"):
+		return common.ConflictError(cmd, "", err)
+	case strings.HasPrefix(msg, "restricted:"), strings.HasPrefix(msg, "auth-required:"):
+		return common.AuthError(cmd, err)
+	case strings.HasPrefix(msg, "invalid:"):
+		return common.InvalidInputError(cmd, "", err)
+	}
+	return common.RuntimeError(cmd, err)
 }

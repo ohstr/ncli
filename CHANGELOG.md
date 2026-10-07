@@ -19,6 +19,10 @@
 
 ### Fixed
 
+- A `groups` write the relay rejects is classified by the relay's reason:
+  `duplicate:` exits `conflict` (5), `restricted:`/`auth-required:` exit
+  `auth` (7), `invalid:` exits `invalid_input` (3), instead of always
+  `internal` (1). ([#117](https://github.com/ohstr/ncli/pull/117))
 - Bare `ncli` exits 2 (`usage`) like every other group command; under
   `--json` it printed help on stdout and exited 0.
   ([#117](https://github.com/ohstr/ncli/pull/117))

@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.8.0-rc.11]
+
+### Added
+
+- `ncli id import` saves an existing private key (nsec, hex or ncryptsec)
+  to the vault. The key is read from stdin, `--file` or a hidden prompt,
+  never an argument; the first valid line is used. Re-running is a no-op;
+  `--force` relabels a key already saved under another label. A key is
+  never saved twice. ([#124](https://github.com/ohstr/ncli/pull/124))
+- `ncli id relabel <identifier> <new-label>` renames a saved identity
+  without its key. ([#124](https://github.com/ohstr/ncli/pull/124))
+- `ncli id rm <identifier>` removes a saved identity; it asks first, and
+  needs `--yes` with `--json` or no terminal.
+  ([#124](https://github.com/ohstr/ncli/pull/124))
+
 ## [0.8.0-rc.10]
 
 ### Changed

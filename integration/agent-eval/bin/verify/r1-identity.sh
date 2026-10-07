@@ -32,4 +32,20 @@ else
   add_check "npub_decodes_to_same_pubkey" false "could not read npub/pub_hex from vault lookup"
 fi
 
+LABELS="$(agent_exec 'ncli id list --json' 2>/dev/null | jq -r '.identities[].label' 2>/dev/null)"
+if grep -qx 'eval-kept' <<<"${LABELS}" && ! grep -qx 'eval-imported' <<<"${LABELS}"; then
+  add_check "imported_then_relabeled" true "eval-kept saved, eval-imported gone"
+else
+  add_check "imported_then_relabeled" false "vault labels: $(tr '\n' ' ' <<<"${LABELS}")"
+fi
+if ! grep -qx 'eval-temp' <<<"${LABELS}" && grep -qx 'eval-agent' <<<"${LABELS}"; then
+  add_check "removed_only_eval_temp" true "eval-temp gone, eval-agent kept"
+else
+  add_check "removed_only_eval_temp" false "vault labels: $(tr '\n' ' ' <<<"${LABELS}")"
+fi
+# Later rounds fall back to the vault's sole entry: leave only eval-agent.
+for l in eval-kept eval-imported eval-temp; do
+  agent_exec "ncli id rm ${l} --yes --json" >/dev/null 2>&1 || true
+done
+
 write_verify "${ROUND}" "${RUN_DIR}"

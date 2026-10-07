@@ -30,11 +30,19 @@ type (
 // vault.ErrLabelExists, so errors.Is works across both spellings.
 var ErrLabelExists = vault.ErrLabelExists
 
+// ErrKeyExists is vault.ErrKeyExists.
+var ErrKeyExists = vault.ErrKeyExists
+
 // ErrVaultKeyMissing is vault.ErrVaultKeyMissing.
 var ErrVaultKeyMissing = vault.ErrVaultKeyMissing
 
 // GenerateIdentity mints a new keypair. See vault.GenerateIdentity.
 func GenerateIdentity() (*Identity, error) { return vault.GenerateIdentity() }
+
+// IdentityFromPrivKey derives every form of a private key. See vault.IdentityFromPrivKey.
+func IdentityFromPrivKey(privHex string) (*Identity, error) {
+	return vault.IdentityFromPrivKey(privHex)
+}
 
 // VaultPath returns the path to vault.yaml. See vault.Path.
 func VaultPath() string { return vault.Path() }
@@ -59,6 +67,16 @@ func SaveVaultEntries(entries []VaultEntry) error { return vault.SaveEntries(ent
 // AddVaultEntry saves a new identity into the vault. See vault.AddEntry.
 func AddVaultEntry(vaultPrivKeyHex, label, entryPrivKeyHex string) (*VaultEntry, error) {
 	return vault.AddEntry(vaultPrivKeyHex, label, entryPrivKeyHex)
+}
+
+// RelabelVaultEntry renames a saved identity. See vault.RelabelEntry.
+func RelabelVaultEntry(npub, label string) (*VaultEntry, error) {
+	return vault.RelabelEntry(npub, label)
+}
+
+// RemoveVaultEntry deletes a saved identity. See vault.RemoveEntry.
+func RemoveVaultEntry(npub string) (*VaultEntry, error) {
+	return vault.RemoveEntry(npub)
 }
 
 // DecryptVaultEntry reverses AddVaultEntry. See vault.DecryptEntry.

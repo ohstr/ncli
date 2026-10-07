@@ -1,0 +1,97 @@
+# One row per ncli command. TestCoverage_EveryCommandListed fails on a
+# missing or stale row. modes: json (agent), text, tty (human), errors.
+# tests: test-name prefixes in this package. pending: why not yet covered.
+"apply": {pending: phase 3}
+"blossom": {pending: phase 3}
+"blossom download": {pending: phase 3}
+"blossom list": {pending: phase 3}
+"blossom mirror": {pending: phase 3}
+"blossom report": {pending: phase 3}
+"blossom rm": {pending: phase 3}
+"blossom servers": {pending: phase 3}
+"blossom servers add": {pending: phase 3}
+"blossom servers discover": {pending: phase 3}
+"blossom servers list": {pending: phase 3}
+"blossom servers remove": {pending: phase 3}
+"blossom upload": {pending: phase 3}
+"bunker": {pending: phase 3}
+"bunker attach": {pending: phase 3}
+"bunker connect": {pending: phase 3}
+"bunker history": {pending: phase 3}
+"bunker sessions": {pending: phase 3}
+"bunker sessions grants": {pending: phase 3}
+"bunker sessions list": {pending: phase 3}
+"bunker sessions rename": {pending: phase 3}
+"bunker sessions revoke": {pending: phase 3}
+"bunker sessions revoke-grant": {pending: phase 3}
+"bunker status": {pending: phase 3}
+"bunker stop": {pending: phase 3}
+"decode": {pending: phase 3}
+"dump": {pending: phase 3}
+"find": {pending: phase 3}
+"groups": {pending: phase 3}
+"groups create": {pending: phase 3}
+"groups delete": {pending: phase 3}
+"groups delete-event": {pending: phase 3}
+"groups edit": {pending: phase 3}
+"groups invite": {pending: phase 3}
+"groups join": {pending: phase 3}
+"groups leave": {pending: phase 3}
+"groups list": {pending: phase 3}
+"groups members": {pending: phase 3}
+"groups members add": {pending: phase 3}
+"groups members remove": {pending: phase 3}
+"groups pins": {pending: phase 3}
+"groups pins set": {pending: phase 3}
+"groups show": {pending: phase 3}
+"groups tree": {pending: phase 3}
+"huddle": {pending: phase 3}
+"huddle list": {pending: phase 3}
+"id": {pending: phase 3}
+"id delegate": {pending: phase 3}
+"id list": {pending: phase 3}
+"id sign": {pending: phase 3}
+"miner": {pending: phase 3}
+"miner check": {pending: phase 3}
+"miner mine": {pending: phase 3}
+"ping": {pending: phase 3}
+"prefs": {pending: phase 3}
+"prefs path": {pending: phase 3}
+"prefs relays": {pending: phase 3}
+"prefs relays add": {pending: phase 3}
+"prefs relays clear": {pending: phase 3}
+"prefs relays list": {pending: phase 3}
+"prefs relays remove": {pending: phase 3}
+"profile": {pending: phase 3}
+"publish": {pending: phase 3}
+"relay": {pending: phase 3}
+"relay clear": {pending: phase 3}
+"relay clear search": {pending: phase 3}
+"relay clear zaps": {pending: phase 3}
+"relay context": {pending: phase 3}
+"relay context add": {pending: phase 3}
+"relay context list": {pending: phase 3}
+"relay context remove": {pending: phase 3}
+"relay context use": {pending: phase 3}
+"relay invites": {pending: phase 3}
+"relay invites create": {pending: phase 3}
+"relay invites list": {pending: phase 3}
+"relay invites revoke": {pending: phase 3}
+"relay members": {pending: phase 3}
+"relay members add": {pending: phase 3}
+"relay members list": {pending: phase 3}
+"relay members remove": {pending: phase 3}
+"relay members show": {pending: phase 3}
+"relay reindex": {pending: phase 3}
+"relay reindex search": {pending: phase 3}
+"relay reindex zaps": {pending: phase 3}
+"relay roles": {pending: phase 3}
+"relay roles create": {pending: phase 3}
+"relay roles list": {pending: phase 3}
+"relay stats": {pending: phase 3}
+"space": {pending: phase 3}
+"space create": {pending: phase 3}
+"space join": {pending: phase 3}
+"space list": {pending: phase 3}
+"space show": {pending: phase 3}
+"version": {pending: phase 3}

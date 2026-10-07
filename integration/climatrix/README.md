@@ -17,6 +17,9 @@ go test -short ./integration/climatrix/   # fast subset (also in `just check`)
   identifiers look like `alice@127.0.0.1:<port>`.
 - **Isolation**: each `NewEnv` has its own config dir and no inherited
   `NCLI_*` variables.
+- **Coverage**: `coverage.yaml` has one row per command;
+  `TestCoverage_EveryCommandListed` fails on a missing or stale row, or a
+  row naming a test that doesn't exist.
 - **No public relays**: `TestNoPublicRelayInTests` fails on any test file
   naming one, unless listed as parse-only with a reason.
 

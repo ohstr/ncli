@@ -15,6 +15,10 @@
   each NIP-98 event is accepted once. `ncli` adds a `nonce` tag so repeated
   identical requests stay distinct; admin clients that send no `payload`
   tag are now refused. ([#117](https://github.com/ohstr/ncli/pull/117))
+- The NIP-86 management API accepts each NIP-98 event once, like the admin
+  API. ([#117](https://github.com/ohstr/ncli/pull/117))
+- `POST /query` returns what REQ would for its signer, private NIP-29
+  groups included. ([#117](https://github.com/ohstr/ncli/pull/117))
 
 ### Changed
 

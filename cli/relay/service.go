@@ -110,6 +110,7 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 	// able to end that member's live calls. The root handler closes over the
 	// variable and reads it per request, so the order here does not matter.
 	var nip86Handler *nip86.Handler
+	nip86Replay := newReplayGuard()
 
 	if nip86Enabled() {
 		// Advertised so a client can tell the API is there before trying it.
@@ -155,7 +156,7 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 		// by everything else.
 		switch {
 		case nip86Handler != nil && (nip86.IsManagementRequest(r) || r.Method == http.MethodOptions):
-			nip86Handler.ServeHTTP(w, r)
+			serveOnce(nip86Replay, nip86Handler, w, r)
 		case r.Header.Get("Accept") == nip11.ContentTypeHeader:
 			nip11Handler.ServeHTTP(w, r)
 		default:
@@ -173,7 +174,7 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 		// MembershipService: a NIP-43 join/leave processed over the
 		// WebSocket must be visible to /query immediately, not through a
 		// separate cache of the same store that updates on its own schedule.
-		mux.Handle("/query", relay.NewQueryHandler(store, &config.Nip11.Limitation, wsHandler.Membership()))
+		mux.Handle("/query", relay.NewQueryHandler(store, &config.Nip11.Limitation, wsHandler.Membership(), wsHandler.Groups()))
 	}
 
 	if eventsEnabled() {

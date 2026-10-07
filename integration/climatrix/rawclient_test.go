@@ -381,7 +381,6 @@ func Ev(t *testing.T, priv string, kind int, content string, tags ...[]string) *
 	return ev
 }
 
-
 func hasPrefix(msg string, prefixes ...string) bool {
 	for _, p := range prefixes {
 		if strings.HasPrefix(msg, p) {

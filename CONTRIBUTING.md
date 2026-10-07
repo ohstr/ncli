@@ -23,13 +23,8 @@ See the [README](README.md) for the full `just` command list.
 - Keep changes focused; unrelated formatting/refactors make review harder.
 - Add or update tests for behavior changes.
 
-One suite still hits a live relay: `cli/bunker`'s `TestLive_*`
-(`relay.ohstr.com`, behind an `integration` build tag). Run it with `just
-test-integration` when working on bunker/NIP-46 code. It's excluded from
-`just check` and CI because its outcome depends on third-party relay
-availability, and it skips itself when that relay is unreachable.
-
-Everything else is hermetic. Streaming and fan-in are covered by
+Every test is hermetic: no test dials a public relay
+(`TestNoPublicRelayInTests` enforces it). Streaming and fan-in are covered by
 `TestStreamIntegration`'s real relay containers, and negentropy by
 `TestSyncIntegration`'s `NegentropyPropagatesBetweenRelayInstances`, which
 runs the same relay config twice and moves a known event set from one

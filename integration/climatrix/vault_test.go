@@ -1,8 +1,11 @@
 package climatrix
 
 import (
+	"os"
 	"strings"
 	"testing"
+
+	"sigs.k8s.io/yaml"
 )
 
 // Commands that write prefs.yaml must keep the vault identity in it:
@@ -28,6 +31,42 @@ func TestVaultSurvivesPrefsWrites(t *testing.T) {
 		if res := e.Run(t, "id", "list", "--reveal", "--json"); res.Code != 0 {
 			t.Fatalf("after %s, saved identities no longer decrypt\n%s", strings.Join(args, " "), res)
 		}
+	}
+}
+
+// With the vault key gone (a lost or hand-edited prefs.yaml) but entries
+// still saved, nothing silently starts a new vault -- that would orphan
+// every saved identity -- and the error names the real problem.
+func TestVaultKeyMissing(t *testing.T) {
+	e := NewEnv(t)
+	e.MustOK(t, "id", "--save", "--label", "old", "--json")
+	var path struct{ Path string }
+	e.MustOK(t, "prefs", "path", "--json").JSON(t, &path)
+	raw, err := os.ReadFile(path.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prefs := map[string]any{}
+	if err := yaml.Unmarshal(raw, &prefs); err != nil {
+		t.Fatal(err)
+	}
+	delete(prefs, "vault_identity")
+	out, _ := yaml.Marshal(prefs)
+	if err := os.WriteFile(path.Path, out, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	er := e.Run(t, "id", "--save", "--label", "new", "--json").ExpectErr(t, "not_found")
+	if !strings.Contains(er.Error, "vault key is missing") {
+		t.Errorf("error doesn't name the missing vault key: %q", er.Error)
+	}
+	e.Run(t, "id", "list", "--reveal", "--json").ExpectErr(t, "not_found")
+	var list struct {
+		Identities []map[string]any `json:"identities"`
+	}
+	e.MustOK(t, "id", "list", "--json").JSON(t, &list)
+	if len(list.Identities) != 1 {
+		t.Errorf("saved entries changed: %v", list.Identities)
 	}
 }
 

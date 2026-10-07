@@ -30,6 +30,8 @@
   the background and prints its status. `bunker pending list/approve/reject`
   and `bunker sessions set-grant` do from scripts what the TUI does.
   ([#119](https://github.com/ohstr/ncli/pull/119))
+- The relay publishes its NIP-43 kind:13534 member list, with roles, on
+  every join and leave. ([#119](https://github.com/ohstr/ncli/pull/119))
 - `space join` without a terminal (or with `--json`) streams the call as
   JSON lines -- arrivals, departures, speaking, chat -- until `--duration`
   or an interrupt. `space chat send/list` post and read a space's
@@ -63,6 +65,12 @@
   not `null`. ([#119](https://github.com/ohstr/ncli/pull/119))
 - `bunker sessions grants --json` prints `[]` for an app with no grants,
   not `null`. ([#119](https://github.com/ohstr/ncli/pull/119))
+- A NIP-43 join (invite claim or `relay members add`) now applies to the
+  member's already-open connections; they were refused until they
+  reconnected. A private group read refused before AUTH says
+  `auth-required:`, not `restricted:`. The `membership.yaml` preset no
+  longer claims non-members can request their own invite.
+  ([#119](https://github.com/ohstr/ncli/pull/119))
 - An authenticated `groups list`/`find` could intermittently omit private
   groups: a REQ the relay answered before AUTH landed was taken as final.
   It is now retried once authenticated.

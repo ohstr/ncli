@@ -14,7 +14,7 @@
 set -euo pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-ALL_ROUNDS=(r0-bootstrap r1-identity r2-query r3-relay-ops r4-publish-apply r5-miner r6-bunker r7-blossom r8-error-contract)
+ALL_ROUNDS=(r0-bootstrap r1-identity r2-query r3-relay-ops r4-publish-apply r5-miner r6-bunker r7-blossom r8-error-contract r9-groups r10-space)
 ROUNDS=("${@:-${ALL_ROUNDS[@]}}")
 
 RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -93,6 +93,46 @@ for _ in $(seq 1 30); do
   sleep 1
 done
 
+# R10: a second participant (eval-peer) joins the agent's space headless
+# and posts in its chat, so the agent's own join stream has someone to see.
+# Long enough to still be there whenever the agent gets round to joining.
+prepare_r10() {
+  echo "==> [r10-space] preparing (eval-peer identity)"
+  docker compose exec -T agent bash -lc '
+    export PATH="$HOME/.local/bin:$PATH"
+    ncli id eval-peer --json >/dev/null 2>&1 || ncli id --save --label eval-peer --json >/dev/null
+  ' || echo "ERROR: [r10-space] could not create the eval-peer identity" >&2
+}
+
+run_r10() {
+  run_round r10-space &
+  local claude_pid=$!
+  local space=""
+  for _ in $(seq 1 120); do
+    if [ -s "report/r10-space.txt" ]; then
+      space="$(tr -d '[:space:]' < report/r10-space.txt)"
+      break
+    fi
+    sleep 2
+  done
+  if [ -n "${space}" ]; then
+    echo "==> [r10-space] peer joining ${space}"
+    docker compose exec -T agent bash -lc "export PATH=\"\$HOME/.local/bin:\$PATH\"; ncli space join '${space}' --relay ws://localhost:5500 --identity eval-peer --duration 300s --json" \
+      > "${RUN_DIR}/r10-peer.ndjson" 2> "${RUN_DIR}/r10-peer.stderr.log" &
+    local peer_pid=$!
+    for wait_s in 30 30 60; do
+      sleep "${wait_s}"
+      docker compose exec -T agent bash -lc "export PATH=\"\$HOME/.local/bin:\$PATH\"; ncli space chat send '${space}' 'hello from the peer' --relay ws://localhost:5500 --identity eval-peer --json" \
+        >> "${RUN_DIR}/r10-peer-chat.json" 2>&1 || true
+    done
+    wait "${peer_pid}" || true
+  else
+    echo "WARNING: [r10-space] agent never wrote the space coordinate" >&2
+  fi
+  wait "${claude_pid}" || true
+  cp "report/r10-space.txt" "${RUN_DIR}/r10-space.txt" 2>/dev/null || true
+}
+
 # Rounds write these into the /report mount root, and they're only copied
 # into ${RUN_DIR} afterwards -- so without clearing them first, a round can
 # read the previous run's file and report on stale data. Called from the
@@ -103,14 +143,22 @@ clear_flat_artifacts() {
   local round="$1"
   rm -f "report/${round}.self-report.json"
   case "${round}" in
+    r3-relay-ops) rm -f "report/r3-relay-stderr.log" ;;
     r6-bunker) rm -f "report/r6-bunker-uri.txt" ;;
+    r10-space) rm -f "report/r10-space.txt" "report/r10-join.ndjson" ;;
   esac
 }
 
 run_round() {
   local round="$1"
   local prompt
-  prompt="$(cat rounds/_preamble.md; echo; cat "rounds/${round}.md")"
+  prompt="$(cat rounds/_preamble.md; echo; cat "rounds/${round}.md"; echo
+    echo "## Self-report format"
+    echo
+    echo "Write the self-report as one JSON object with exactly these top-level keys"
+    echo "(extra round-specific keys are fine alongside them):"
+    echo
+    cat rounds/_report-schema.json)"
   echo "==> [${round}] running agent"
   docker compose exec -T agent claude -p "${prompt}" \
     --output-format stream-json --verbose \
@@ -146,47 +194,27 @@ prepare_r2() {
   fi
 }
 
-# R6 needs its bunker daemon pre-started outside the round (starting it
-# needs a real TTY -- see rounds/r6-bunker.md) and its NIP-46 counterparty
-# fixture run against whatever pairing URI the round produces, from
-# outside the round's own session, while it's still polling for the
-# pairing to land.
+# R6: the agent starts the bunker itself (no TTY). It needs the eval-agent
+# identity R1 saved, and no daemon left over from an earlier run. Its NIP-46
+# counterparty fixture runs from outside the round against whatever pairing
+# URI the round produces, while the round waits on it.
 prepare_r6() {
-  echo "==> [r6-bunker] pre-starting bunker daemon"
-  # The identity step's failure used to be invisible -- most often a wrong
-  # vault password -- surfacing only 15s later as the generic "daemon did
-  # not come up" warning. Check it and name the cause. Not captured via
-  # $(...): this spawns a detached daemon, and command substitution would
-  # block until every writer to the pipe closed.
+  echo "==> [r6-bunker] preparing (eval-agent identity, no running daemon)"
   if ! docker compose exec -T agent bash -lc '
     set -e
     export PATH="$HOME/.local/bin:$PATH"
     ncli id eval-agent --json >/dev/null 2>&1 || ncli id --save --label eval-agent --json >/dev/null
-    script -qec "ncli bunker --identity eval-agent --relay ws://localhost:5500" /home/evaluser/work/.r6-daemon-tty.log >/dev/null 2>&1 || true
+    ncli bunker stop --json >/dev/null 2>&1 || true
   '; then
-    echo "ERROR: [r6-bunker] could not create the eval-agent identity or start the daemon" >&2
+    echo "ERROR: [r6-bunker] could not create the eval-agent identity" >&2
   fi
-  for _ in $(seq 1 15); do
-    if docker compose exec -T agent bash -lc 'export PATH="$HOME/.local/bin:$PATH"; ncli bunker status --json' 2>/dev/null \
-        | grep -q '"running": *true'; then
-      return 0
-    fi
-    sleep 1
-  done
-  # The `|| true` above means a failed `ncli bunker` still exits 0, so the
-  # exit-status check can't see it -- the actual error only ever lands in
-  # the TTY log. Surface it here instead of leaving it to be dug out by
-  # hand (this is how an "invalid MAC" vault failure stayed invisible).
-  echo "WARNING: [r6-bunker] bunker daemon did not come up before the round started" >&2
-  docker compose exec -T agent bash -lc \
-    'tail -5 /home/evaluser/work/.r6-daemon-tty.log 2>/dev/null | tr -d "\r"' >&2 || true
 }
 
 run_r6() {
   run_round r6-bunker &
   local claude_pid=$!
   local paired=0
-  for _ in $(seq 1 40); do
+  for _ in $(seq 1 120); do
     if [ -s "report/r6-bunker-uri.txt" ]; then
       local uri
       uri="$(cat "report/r6-bunker-uri.txt")"
@@ -218,6 +246,10 @@ for round in "${ROUNDS[@]}"; do
       prepare_r6
       run_r6
       ;;
+    r10-space)
+      prepare_r10
+      run_r10
+      ;;
     *)
       run_round "${round}" || echo "WARNING: [${round}] claude invocation exited non-zero" >&2
       ;;
@@ -231,4 +263,14 @@ bin/judge.sh "${RUN_DIR}" "${ROUNDS[@]}"
 echo "==> assembling report"
 bin/report.sh "${RUN_DIR}" "${ROUNDS[@]}"
 
+echo "==> command coverage"
+coverage_ok=1
+bin/coverage.sh "${RUN_DIR}" || coverage_ok=0
+cat "${RUN_DIR}/coverage.md" >> "${RUN_DIR}/report.md" 2>/dev/null || true
+
 echo "==> done: ${RUN_DIR}/report.md"
+# Only a full run can be expected to cover every command.
+if [ "${coverage_ok}" -eq 0 ] && [ "${ROUNDS[*]}" = "${ALL_ROUNDS[*]}" ]; then
+  echo "FAIL: some commands were never run by an agent (see coverage.md)" >&2
+  exit 1
+fi

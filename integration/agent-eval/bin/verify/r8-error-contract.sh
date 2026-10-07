@@ -98,4 +98,34 @@ else
   add_check "agents_own_probes_self_consistent" false "self-report has code/exit_code mismatches: ${BAD_CLAIMS}"
 fi
 
+# --- independent probe 7: a missing space is not_found; a missing
+# group, to a non-member, is auth (the relay hides whether it exists) ---
+agent_exec 'ncli space show r8-no-such-space --relay ws://localhost:5500 --json' >"${OUT_F}" 2>"${ERR_F}"
+CODE=$?
+if [ "${CODE}" = "4" ] && [ ! -s "${OUT_F}" ] && jq -e '.code == "not_found"' >/dev/null 2>&1 <"${ERR_F}"; then
+  add_check "space_show_missing_is_not_found" true "exit 4, code=not_found, empty stdout"
+else
+  add_check "space_show_missing_is_not_found" false "exit=${CODE} stdout='$(cat "${OUT_F}")' stderr='$(cat "${ERR_F}")'"
+fi
+agent_exec 'ncli groups show r8-no-such-group --relay ws://localhost:5500 --json' >"${OUT_F}" 2>"${ERR_F}"
+CODE=$?
+if [ "${CODE}" = "7" ] && [ ! -s "${OUT_F}" ] && jq -e '.code == "auth"' >/dev/null 2>&1 <"${ERR_F}"; then
+  add_check "groups_show_missing_is_auth" true "anonymous: exit 7, code=auth (documented existence-oracle guard)"
+else
+  add_check "groups_show_missing_is_auth" false "exit=${CODE} stdout='$(cat "${OUT_F}")' stderr='$(cat "${ERR_F}")'"
+fi
+
+# --- independent probe 8: empty lists are [] never null ---
+for probe in 'groups list --relay ws://localhost:5500:groups' \
+             'groups tree --relay ws://localhost:5500:roots' \
+             'space list --relay ws://localhost:5500 --all:spaces'; do
+  args="${probe%:*}" key="${probe##*:}"
+  OUT="$(agent_exec "ncli ${args} --json" 2>/dev/null)"
+  if jq -e --arg k "${key}" '.[$k] | type == "array"' >/dev/null 2>&1 <<<"${OUT}"; then
+    add_check "list_is_array: ${args%% --*}" true ".${key} is an array"
+  else
+    add_check "list_is_array: ${args%% --*}" false "ncli ${args}: ${OUT}"
+  fi
+done
+
 write_verify "${ROUND}" "${RUN_DIR}"

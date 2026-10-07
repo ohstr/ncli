@@ -1,0 +1,3 @@
+# Commands bin/coverage.sh doesn't require an agent to run, one per line.
+# TUI-only by design: an agent drives the same daemon with status/sessions/pending.
+bunker attach

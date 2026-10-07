@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/flokiorg/go-flokicoin/crypto"
 	"github.com/ohstr/ncli/cli/common"
 	"github.com/ohstr/ncli/cli/keyresolve"
@@ -213,23 +213,23 @@ func initialModel() model {
 	ti.Placeholder = "nsec... or hex..."
 	ti.Focus()
 	ti.CharLimit = 156
-	ti.Width = 64
+	ti.SetWidth(64)
 
 	dei := textinput.New()
 	dei.Placeholder = "nsec... or hex..."
 	dei.CharLimit = 156
-	dei.Width = 64
+	dei.SetWidth(64)
 
 	ki := textinput.New()
 	ki.Placeholder = "10002, 30023"
 	ki.CharLimit = 100
-	ki.Width = 40
+	ki.SetWidth(40)
 
 	di := textinput.New()
 	di.Placeholder = "365"
 	di.SetValue("365")
 	di.CharLimit = 5
-	di.Width = 10
+	di.SetWidth(10)
 
 	return model{
 		state:           stateIssuerKey,
@@ -258,7 +258,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "ctrl+c", "q", "esc":
 			return m, tea.Quit
@@ -379,7 +379,7 @@ func (m model) process() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m model) View() string {
+func (m model) View() tea.View {
 	var s string
 
 	titleStyle := lipgloss.NewStyle().
@@ -454,7 +454,7 @@ func (m model) View() string {
 		}
 	}
 
-	return s + "\n"
+	return tea.NewView(s + "\n")
 }
 
 func RunWizard() error {

@@ -1,6 +1,6 @@
 ---
 name: ncli-space
-description: Create, list, show, and join NIP-53 meeting spaces with ncli space -- publish a kind:30312 space, see which ones a relay knows about (with or without a live call), inspect one's full detail, or join it to watch the roster, chat, and hear the call. Use when publishing a space for others to find, browsing what spaces/calls a relay hosts, or joining a call from the terminal.
+description: Create, list, show, and join NIP-53 meeting spaces with ncli space -- publish a kind:30312 space, see which ones a relay knows about (with or without a live call), inspect one's full detail, join it to watch the roster, chat, and hear the call (or, without a terminal, stream the call as JSON lines), and send/read its kind:1311 chat with space chat. Use when publishing a space for others to find, browsing what spaces/calls a relay hosts, or joining a call from the terminal.
 license: Unlicense
 ---
 
@@ -33,8 +33,10 @@ covers the space side: publishing one and discovering what's out there.
 |---|---|
 | `space create <id>` | Publishes kind:30312. `--service` defaults to `--relay` |
 | `space list [--all]` | Every open space by default; `--all` adds closed/private |
-| `space show <id>` | One space's full detail, every match if the id isn't unique |
-| `space join [id\|naddr\|room]` | Implemented in `cli/huddle`, mounted only here. Omit the argument entirely when `--relay` has exactly one open space |
+| `space show <id>` | One space's full detail, every match if the id isn't unique; `not_found` (exit 4) when none |
+| `space join [id\|naddr\|room]` | Implemented in `cli/huddle`, mounted only here. Omit the argument entirely when `--relay` has exactly one open space. Without a terminal or with `--json`: an NDJSON event stream (below) |
+| `space chat send <space> <text>` | Post a kind:1311 message; `--reply <id>`, `--quote <id>` (repeatable). Prints the publish report |
+| `space chat list <space>` | `{"activity","messages":[{id,pubkey,content,created_at,parent,quotes}]}`, oldest first; `--limit` (200) |
 
 `--relay` (falls back to the first configured prefs relay) and `--identity`
 (vault label/nsec/npub/hex/nprofile/nip-05, falling back to `space.identity`
@@ -49,7 +51,38 @@ ncli space list --relay wss://relay.example
 ncli space show standup
 ncli space join standup
 ncli space join --relay wss://relay.example   # joins the one open space, if there's exactly one
+ncli space chat send 30312:<pubkey>:standup "hello" --relay wss://relay.example
+ncli space chat list 30312:<pubkey>:standup --relay wss://relay.example --json
 ```
+
+`<space>` for `chat` is an naddr or a `30312:`/`30313:` coordinate — a bare
+id is `invalid_input`, since a 1311 message must name its activity. A bare
+coordinate carries no relay hint, so pass `--relay` (an naddr's own hints
+are used otherwise). A space that isn't found is `not_found`.
+
+## Joining without a terminal (agents)
+
+With stdout not a terminal, or `--json`, `space join` has no roster view.
+It prints one JSON object per line instead, until `--duration <d>` elapses
+or it's interrupted (SIGINT/SIGTERM), and never plays audio:
+
+```sh
+ncli space join 30312:<pubkey>:standup --relay wss://relay.example --duration 60s --json
+{"type":"joined","time":"...","room":"standup","activity":"30312:...","self":"<your pubkey>"}
+{"type":"participant_joined","time":"...","pubkey":"..."}
+{"type":"speaking_started","time":"...","pubkey":"..."}
+{"type":"chat","time":"...","id":"...","pubkey":"...","content":"hi","created_at":1700000000,"parent":"..."}
+{"type":"speaking_stopped","time":"...","pubkey":"..."}
+{"type":"participant_left","time":"...","pubkey":"..."}
+{"type":"ended","time":"...","reason":"duration"}
+```
+
+`ended`'s `reason` is `duration`, `interrupted`, or `disconnected` (the
+call dropped; the command then also fails `network`). Your own pubkey is
+never a `participant_*` event. `chat` lines appear only when joined by
+activity (not a bare room id) and without `--no-chat`; to post while
+joined, run `space chat send` alongside. `--duration` on a terminal is
+`usage`.
 
 ## "Voice is an option, not the point" — what `create` actually does
 

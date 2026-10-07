@@ -22,14 +22,16 @@ that priority order.
 | `ncli relay members/invites/roles` | Administer a *running* relay's NIP-43 membership over NIP-98 HTTP: enroll/remove members, issue/revoke invite codes, define roles |
 | `ncli relay context list/add/use/remove` | Save named relay `--config` shortcuts and switch the current one, so `relay` subcommands stop needing `--config` repeated on every call |
 | `ncli relay -c/--context <name>` | Run directly against a saved context by name (bypassing "current"); if `<name>` doesn't exist yet, offers (or `-q`/`--json` auto-confirms) to create a minimal relay backed by a fresh vault identity under `<AppConfigDir>/relays/<name>/` |
-| `ncli bunker` | Run as a NIP-46 remote signer: approve/reject other clients' signing requests from a live TUI, remembering per-app decisions so you aren't re-prompted every time |
+| `ncli bunker` | Run as a NIP-46 remote signer: approve/reject other clients' signing requests from a live TUI, remembering per-app decisions so you aren't re-prompted every time. Without a terminal (or with `--json`) it starts the signer in the background instead and prints its status — a second call reports the running one, `conflict` if `--identity` names a different key |
 | `ncli bunker attach/status/stop/sessions/connect` | Reattach to, query, stop, or pair a running bunker daemon without opening the TUI |
+| `ncli bunker pending list/approve/reject` / `ncli bunker sessions set-grant` | Everything the TUI decides, from a script: list requests awaiting a decision, approve or reject one by id (`--always` remembers it, with `--any-kind`, `--for <dur>` or `--uses <n>` like the TUI's buttons), or apply a `--grants` spec to an already-paired app |
 | `ncli blossom upload/download/list/rm/mirror/report` | Client for the Blossom protocol (BUD-01..12): content-addressed blob storage authenticated with a Nostr identity |
 | `ncli blossom servers add/remove/list/discover` | Manage the default Blossom server list, optionally publishing/discovering it as a signed kind:10063 (BUD-03) event |
 | `ncli huddle list` | List the ephemeral transport rooms that currently have someone in them, with peer count and the protocol version each is pinned to — a room id is otherwise out-of-band knowledge, and `space join` on an unused one opens it rather than failing |
 | `ncli space create <id>` | Publish a new NIP-53 meeting space (kind:30312). `--service` defaults to `--relay`, which is what makes the space joinable with `space join` afterward — point it elsewhere to describe a space on a transport ncli itself can't dial. `id` doubles as the huddle room id, so it's rejected up front if it contains `/`, `?`, `#` or `%` (put a human-readable name in `--summary` instead) |
 | `ncli space list` / `ncli space show <id>` | List every open space a relay knows about, or show one's full detail — a space with no live session is still shown, since the space is the durable thing, a live call is just a property of it |
-| `ncli space join [id\|naddr\|room]` | Join a space's voice/audio call and watch the live roster and who is speaking; plays the call in a `-tags huddleaudio` build (never captures a microphone). Given a NIP-53 activity instead of a room id (naddr, or a `30312:`/`30313:` coordinate) it resolves the space to find the relay and room, and opens the kind:1311 conversation beside the roster — reply with `<r>`, quote with `<y>`, or `--no-chat` to omit it. Omitting the argument entirely joins `--relay`'s one open space, if there's exactly one (errors listing every candidate if there's more than one). Chat needs an activity: a 1311 message must name one, and a bare room id is not an addressable event. (Implemented in `cli/huddle`, mounted only under `space` — voice is one option a space can enable, not a separate top-level thing to join) |
+| `ncli space join [id\|naddr\|room]` | Join a space's voice/audio call and watch the live roster and who is speaking; plays the call in a `-tags huddleaudio` build (never captures a microphone). Given a NIP-53 activity instead of a room id (naddr, or a `30312:`/`30313:` coordinate) it resolves the space to find the relay and room, and opens the kind:1311 conversation beside the roster — reply with `<r>`, quote with `<y>`, or `--no-chat` to omit it. Omitting the argument entirely joins `--relay`'s one open space, if there's exactly one (errors listing every candidate if there's more than one). Chat needs an activity: a 1311 message must name one, and a bare room id is not an addressable event. Without a terminal (or with `--json`) there is no roster view: it streams one JSON object per line (`joined`, `participant_joined`/`left`, `speaking_started`/`stopped`, `chat`, `ended`) until `--duration` or an interrupt. (Implemented in `cli/huddle`, mounted only under `space` — voice is one option a space can enable, not a separate top-level thing to join) |
+| `ncli space chat send/list <space>` | Post to or read a space's kind:1311 conversation without joining its call — `send` takes `--reply <id>`/`--quote <id>`, `list` prints `{"activity","messages":[...]}` oldest first |
 | `ncli groups create/edit/delete/invite/join/leave` | Self-service NIP-29 relay-hosted-group writes — each a plain signed event (no admin HTTP surface), with a `previous` tag attached automatically; `edit` reads the group's current metadata first and merges in only the flags passed, since the underlying event replaces metadata wholesale (including its subgroup `Children` list, always carried forward even when the edit doesn't touch it) |
 | `ncli groups create/edit --parent <id>` | NIP-29 Subgroups: links a group under a parent (`create --parent` is create+link in one call; `edit --parent ""` detaches to root). Relay-enforced: no self-reference/cycle, parent must exist, submitter must also admin the *new* parent, and both groups must share the same `--private`/`--public` setting (a signed kind:39000 can't be redacted per viewer, so a mixed-visibility link would permanently leak one group's id via the other's public side) |
 | `ncli groups tree` | Reads every visible kind:39000 and assembles the parent/child hierarchy locally (per NIP-29's own recommended assembly) — text tree or `--json` for a scripted caller |
@@ -56,7 +58,8 @@ parser never picks up log noise. `--json` and `-q/--quiet` are global flags
 than per-command. `id`, `id list`, `id sign`, `version`, `id delegate`, `relay
 stats`/`reindex`/`clear`, `relay members`/`invites`/`roles`, `ping`,
 `miner mine`/`check`, `publish`, `huddle list`, `space create`/
-`list`/`show`, `groups create`/`edit`/`delete`/`invite`/`join`/`leave`/
+`list`/`show`/`chat send`/`chat list`, `bunker`/`status`/`stop`/
+`connect`/`history`/`sessions`/`pending`, `groups create`/`edit`/`delete`/`invite`/`join`/`leave`/
 `members`/`pins`/`delete-event`/`list`/`show`, and `prefs relays add`/
 `remove`/`list`/`clear`/`prefs path` are human-readable text by default
 and switch their *success* output to structured JSON on stdout with
@@ -64,7 +67,11 @@ and switch their *success* output to structured JSON on stdout with
 separate success-mode toggle because it's JSON-only always, and its stdout
 is guaranteed to be exactly one JSON array on every successful run — `[]`
 when nothing matched, never bare `null` and never empty output — so a
-script never needs a no-result special case.
+script never needs a no-result special case. The same holds for every
+list in any command's `--json` output: an empty list is `[]`, never `null`.
+`space join` is the one streaming command: without a terminal or with
+`--json` its stdout is NDJSON (one JSON object per line, ending with an
+`ended` line), not a single document.
 `-q/--quiet` drops the stderr narration on any command (warnings/errors
 still show), for callers that can't rely on stdout/stderr being captured
 separately.

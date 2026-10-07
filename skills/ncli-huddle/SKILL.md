@@ -173,6 +173,10 @@ ncli space join 30313:<pubkey>:today           # a session, resolved via its par
 ncli space join 30312:<pubkey>:standup --no-chat
 ```
 
+Without a terminal (or with `--json`) there is no board: the call streams
+as JSON lines -- see "Joining without a terminal" in
+`skills/ncli-space/SKILL.md`.
+
 Given an activity, `--relay` is where the *space event* is looked up (naddr
 hints, then prefs relays, if it is omitted). Which relay and room get **dialed**
 comes from the space itself: a published `endpoint` naming a full

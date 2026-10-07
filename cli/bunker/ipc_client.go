@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -139,8 +140,13 @@ func (c *ipcClient) Logs() (LogSnapshot, error) {
 	return decode[LogSnapshot](c.call(ipcRequest{Cmd: "logs"}))
 }
 
+// Stop asks the daemon to exit. It may close the socket before its reply
+// is written; the connection ending is then the confirmation, not a failure.
 func (c *ipcClient) Stop() error {
 	_, err := c.call(ipcRequest{Cmd: "stop"})
+	if errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed) || errors.Is(err, syscall.ECONNRESET) {
+		return nil
+	}
 	return err
 }
 

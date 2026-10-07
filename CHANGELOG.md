@@ -32,6 +32,12 @@
 
 ### Fixed
 
+- `prefs relays clear` wiped all of `prefs.yaml`, not just the relay list --
+  including the vault key, so every identity saved in the vault became
+  unrecoverable and the next save silently started a new vault ("invalid
+  MAC" on the old entries). Relay contexts and Blossom servers were lost
+  too. It now clears only the relays.
+  ([#117](https://github.com/ohstr/ncli/pull/117))
 - Exit codes that misreported what went wrong:
   `apply` sync/inspect without a terminal and `apply -f` on a missing file
   are `usage` (were `internal`); `space join` without a terminal is `usage`

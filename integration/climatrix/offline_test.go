@@ -393,6 +393,17 @@ func TestBareGroupCommands(t *testing.T) {
 			}
 		})
 	}
+	t.Run("bare root", func(t *testing.T) {
+		r := e.Run(t, "--json")
+		r.ExpectErr(t, "usage")
+		if strings.Contains(r.Stdout+r.Stderr, "Usage:") {
+			t.Errorf("--json printed help")
+		}
+		if h := e.Run(t, "--help"); h.Code != 0 || !strings.Contains(h.Stdout, "Usage:") {
+			t.Errorf("--help: exit %d", h.Code)
+		}
+		e.Run(t, "nosuchcmd", "--json").ExpectErr(t, "usage")
+	})
 	t.Run("unknown subcommand", func(t *testing.T) {
 		e.Run(t, "prefs", "nope", "--json").ExpectErr(t, "usage")
 	})

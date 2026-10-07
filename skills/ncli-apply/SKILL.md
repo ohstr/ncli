@@ -76,7 +76,8 @@ spec:
   from:
     - relay: "wss://relay.ohstr.com"
       trusted: true
-    - "wss://relay.snort.social"   # shorthand form
+    # shorthand form
+    - "wss://relay.snort.social"
 
   to:
     - relay: "wss://relay.nostr.band"
@@ -84,24 +85,30 @@ spec:
     - path: "./data/relay2"
       ensure: "create"
 
-  filters:                 # optional; omit entirely to stream everything
+  # optional; omit entirely to stream everything
+  filters:
     - kinds: [1]
       limit: 100
     - kinds: [7]
-      since: "1h"           # looks backward by default — see ncli-query
+      # looks backward by default — see ncli-query
+      since: "1h"
 
-  timeouts:                 # optional, Go duration strings
+  # optional, Go duration strings
+  timeouts:
     handshake: "5s"
     ping: "30s"
     pong: "60s"
     write: "60s"
 
-  recovery:                 # optional; recovery is always on regardless
+  # optional; recovery is always on regardless
+  recovery:
     max_retries: 5
     retry_interval: "30s"
 
-  raw: false                # true disables the TUI, logs to stdout instead
-  strictPow: false          # optional, default false -- see "--strict-pow" above
+  # true disables the TUI, logs to stdout instead
+  raw: false
+  # optional, default false -- see "--strict-pow" above
+  strictPow: false
 ```
 
 ```sh
@@ -127,12 +134,17 @@ spec:
     relay: wss://relay.ohstr.com
     trusted: true
 
-  direction: down            # both (default) | up | down
-  maxReconcileRounds: 20      # optional, default 20
-  pullBatchSize: 100          # optional, default 100
-  strictPow: false            # optional, default false -- see "--strict-pow" above
+  # both (default) | up | down
+  direction: down
+  # optional, default 20
+  maxReconcileRounds: 20
+  # optional, default 100
+  pullBatchSize: 100
+  # optional, default false -- see "--strict-pow" above
+  strictPow: false
 
-  filters:                    # optional, defaults to matching everything
+  # optional, defaults to matching everything
+  filters:
     - kinds: [35500]
       since: "40d"
 ```
@@ -158,7 +170,8 @@ spec:
       trusted: true
     - path: ./data/db/notes.db
 
-  filters:                    # optional, defaults to matching everything
+  # optional, defaults to matching everything
+  filters:
     - kinds: [1]
       limit: 10
     - kinds: [7]

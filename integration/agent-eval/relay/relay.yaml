@@ -8,6 +8,10 @@ nip11:
   name: "ncli-agent-eval-relay"
   privkey: "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
   contact: "admin@example.com"
+  # NIP-42 AUTH checks the client's relay tag against this; without it every
+  # AUTH fails and private groups are invisible even to their creator. The
+  # agent shares the relay's network namespace, so it dials localhost.
+  url: "ws://localhost:5500"
 
 membership:
   enabled: true
@@ -18,3 +22,9 @@ membership:
 logdir: "/data/logs"
 store: "/data/db/notes.db"
 port: 5500
+
+# Huddles for R10 (space join/chat). Membership isn't required to join, so
+# the agent's identities need no enrollment first.
+huddle:
+  enabled: true
+  requireMembership: false

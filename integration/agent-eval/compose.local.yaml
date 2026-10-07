@@ -1,0 +1,15 @@
+# Local-build override: `NCLI_LOCAL=1 bin/run.sh` layers this on
+# compose.yaml. The relay runs the ncli binary bin/run.sh builds from this
+# checkout (./.local/ncli, static linux) instead of the published image's
+# own, and the agent gets the same binary at /opt/ncli-local/ncli, which
+# bin/run.sh installs over whatever the agent installed before each round.
+# Docs (PROMPT.md, skills) still come from the published site.
+services:
+  relay:
+    entrypoint: ["/opt/ncli-local/ncli"]
+    volumes:
+      - ./.local/ncli:/opt/ncli-local/ncli:ro
+
+  agent:
+    volumes:
+      - ./.local/ncli:/opt/ncli-local/ncli:ro

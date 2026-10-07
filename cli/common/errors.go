@@ -110,6 +110,17 @@ func PrintJSON(v any) {
 	fmt.Println(string(data))
 }
 
+// PrintJSONLine writes v as one compact JSON line to stdout -- for a
+// command that streams events (NDJSON) rather than printing one result.
+func PrintJSONLine(v any) {
+	data, err := json.Marshal(v)
+	if err != nil {
+		fmt.Println(`{"error":"failed to encode JSON output"}`)
+		return
+	}
+	fmt.Println(string(data))
+}
+
 // EmitError is main.go's single point for reporting rootCmd.ExecuteC()'s
 // returned error -- a *CLIError from one of this package's classifiers, or
 // a bare error cobra returns itself (e.g. a flag-parsing failure before

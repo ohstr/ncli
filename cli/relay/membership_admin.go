@@ -37,6 +37,9 @@ type adminInputError struct{ msg string }
 
 func (e adminInputError) Error() string { return e.msg }
 
+// errNotFound is a referenced thing (an invite code) that doesn't exist.
+var errNotFound = errors.New("not found")
+
 func badInput(format string, args ...any) error {
 	return adminInputError{msg: fmt.Sprintf(format, args...)}
 }
@@ -180,6 +183,15 @@ func (a membershipAdmin) listInvites() ([]*relay.InviteClaim, error) {
 func (a membershipAdmin) revokeInvite(code string) error {
 	if code == "" {
 		return badInput("invite code is required")
+	}
+	// The store's delete is a no-op for an unknown code; say so instead of
+	// reporting "revoked" for a code that never existed (a typo).
+	claim, err := a.store.GetInviteClaim(code)
+	if err != nil {
+		return err
+	}
+	if claim == nil {
+		return errNotFound
 	}
 	return a.store.DeleteInviteClaim(code)
 }

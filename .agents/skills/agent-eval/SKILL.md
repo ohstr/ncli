@@ -19,7 +19,7 @@ its self-report. Full architecture: `integration/agent-eval/README.md`.
 
 ```sh
 cd integration/agent-eval
-bin/run.sh                              # all 9 rounds (r0-bootstrap .. r8-error-contract)
+bin/run.sh                              # all 11 rounds (r0-bootstrap .. r10-space)
 bin/run.sh r0-bootstrap r2-query        # just these, in the order given
 ```
 
@@ -30,7 +30,7 @@ what it does and cleans up).
 
 **Before running, tell the user plainly**: each round is a real, billed
 Claude Code session against their subscription/API usage, not a mock --
-confirm they want to spend that before kicking off a full 9-round run.
+confirm they want to spend that before kicking off a full 11-round run.
 
 **A round with a tiny (few-KB) transcript and no self-report almost
 always means it hit a rate/spend limit mid-session, not that it failed

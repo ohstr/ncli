@@ -27,7 +27,22 @@ func ClassifyIdentifierError(cmd *cobra.Command, identifier string, err error) e
 	if strings.Contains(identifier, "@") {
 		return common.NetworkError(cmd, input, err)
 	}
+	// No identifier shape and no such vault label: the referenced entry
+	// doesn't exist (AGENTS.md's not_found), not a malformed value.
+	if errors.Is(err, client.ErrUnknownIdentifier) {
+		return common.NotFoundError(cmd, input, err)
+	}
 	return common.InvalidInputError(cmd, input, err)
+}
+
+// VaultError classifies a vault unlock/create failure: a vault key gone
+// missing (identities saved, key lost) is not_found; anything else -- a
+// wrong password -- is auth.
+func VaultError(cmd *cobra.Command, err error) error {
+	if errors.Is(err, client.ErrVaultKeyMissing) {
+		return common.NotFoundError(cmd, "", err)
+	}
+	return common.AuthError(cmd, err)
 }
 
 // ResolveVaultPassword sources the vault password from NCLI_VAULT_PASSWORD
@@ -79,6 +94,9 @@ func UnlockOrCreateVault(cmd *cobra.Command, jsonMode bool) (string, error) {
 		}
 		_, privHex, err := client.CreateVaultIdentity(password)
 		if err != nil {
+			if errors.Is(err, client.ErrVaultKeyMissing) {
+				return "", common.NotFoundError(cmd, "", err)
+			}
 			return "", fmt.Errorf("failed to create vault: %w", err)
 		}
 		return privHex, nil
@@ -90,7 +108,7 @@ func UnlockOrCreateVault(cmd *cobra.Command, jsonMode bool) (string, error) {
 	}
 	privHex, err := client.UnlockVaultIdentity(password)
 	if err != nil {
-		return "", common.AuthError(cmd, err)
+		return "", VaultError(cmd, err)
 	}
 	return privHex, nil
 }
@@ -252,7 +270,7 @@ func ResolveSigningKey(cmd *cobra.Command, jsonMode bool, resolved *client.Ident
 	}
 	vaultPrivKeyHex, err := client.UnlockVaultIdentity(password)
 	if err != nil {
-		return "", common.AuthError(cmd, err)
+		return "", VaultError(cmd, err)
 	}
 	entry, found, err := client.FindVaultEntry(resolved.Npub)
 	if err != nil {

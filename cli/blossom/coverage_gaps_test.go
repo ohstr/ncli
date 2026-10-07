@@ -450,11 +450,12 @@ func TestBlossomList_ResolvesNpubPositionalArg(t *testing.T) {
 	}
 }
 
-// TestBlossomList_UnresolvableIdentifierIsInvalidInput proves a malformed
-// positional identifier (garbage, not npub/hex/nsec/nprofile/nip-05
-// shaped) fails fast with invalid_input rather than being silently sent to
-// the server as a literal (and useless) pubkey string.
-func TestBlossomList_UnresolvableIdentifierIsInvalidInput(t *testing.T) {
+// TestBlossomList_UnresolvableIdentifierIsNotFound proves an identifier
+// that is no npub/hex/nsec/nprofile/nip-05 fails fast rather than being
+// sent to the server as a literal pubkey: it could only be a vault label,
+// and there's no such label, so not_found -- same as every command that
+// resolves an identifier.
+func TestBlossomList_UnresolvableIdentifierIsNotFound(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds and spawns the ncli binary; skipped in -short mode")
 	}
@@ -464,8 +465,8 @@ func TestBlossomList_UnresolvableIdentifierIsInvalidInput(t *testing.T) {
 	r.mustRun("blossom", "servers", "add", server.URL)
 
 	_, stderr, code := r.run("blossom", "list", "not-a-valid-identifier")
-	if code != 3 { // common.CodeInvalidInput's exit code
-		t.Errorf("exit code = %d, want 3 (invalid_input)", code)
+	if code != 4 { // common.CodeNotFound's exit code
+		t.Errorf("exit code = %d, want 4 (not_found)", code)
 	}
 	if stderr == "" {
 		t.Error("stderr is empty, want an error message")

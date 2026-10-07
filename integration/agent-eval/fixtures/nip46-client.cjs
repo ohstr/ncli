@@ -17,10 +17,21 @@
 'use strict';
 
 const { useWebSocketImplementation, SimplePool } = require('nostr-tools/pool');
-const { generateSecretKey, finalizeEvent } = require('nostr-tools/pure');
+const { generateSecretKey, getPublicKey } = require('nostr-tools/pure');
 const { BunkerSigner, parseBunkerInput } = require('nostr-tools/nip46');
 
 useWebSocketImplementation(WebSocket);
+
+// How long each out-of-grant request waits for the agent's decision.
+const DECISION_TIMEOUT_MS = 150000;
+
+function withTimeout(promise, ms) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`no decision within ${ms / 1000}s`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
 
 async function main() {
   const bunkerURI = process.argv[2];
@@ -43,14 +54,32 @@ async function main() {
     await signer.connect();
     const remotePubkey = await signer.getPublicKey();
 
-    const signed = await signer.signEvent({
-      kind: 1,
+    const sign = (kind, content) => signer.signEvent({
+      kind,
       created_at: Math.floor(Date.now() / 1000),
       tags: [],
-      content: 'nip46-client fixture probe (integration/agent-eval round R6)',
+      content,
     });
+    // Covered by the agent's --grants spec: answered with no decision.
+    const signed = await sign(1, 'nip46-client fixture probe (integration/agent-eval round R6)');
 
-    console.log(JSON.stringify({ ok: true, remote_pubkey: remotePubkey, signed_event: signed }));
+    // Not covered: these wait in `ncli bunker pending` until the agent
+    // approves the kind 7 and rejects the kind 30023.
+    const decided = async (kind, content) => {
+      try {
+        const ev = await withTimeout(sign(kind, content), DECISION_TIMEOUT_MS);
+        return { signed_event: ev };
+      } catch (err) {
+        return { error: String((err && err.message) || err) };
+      }
+    };
+    const approved = await decided(7, '+');
+    const rejected = await decided(30023, 'an article the agent should reject');
+
+    console.log(JSON.stringify({
+      ok: true, client_pubkey: getPublicKey(clientKey), remote_pubkey: remotePubkey,
+      signed_event: signed, approve_kind7: approved, reject_kind30023: rejected,
+    }));
   } finally {
     await signer.close();
     pool.close(bp.relays);

@@ -20,13 +20,19 @@ import (
 // latest copy a parameterized-replaceable kind is supposed to have.
 const showQueryLimit = 12
 
+// groupAdmin is nip29.Admin with JSON tags (the SDK type has none).
+type groupAdmin struct {
+	Pubkey string   `json:"pubkey"`
+	Roles  []string `json:"roles"`
+}
+
 // groupDetail is "groups show"'s --json shape; a kind that never showed up
 // (e.g. a relay that doesn't publish kind:39001) is simply omitted rather
 // than present-but-empty, since the spec says a client shouldn't assume
 // either kind is present at all.
 type groupDetail struct {
 	Metadata *groupSummary `json:"metadata,omitempty"`
-	Admins   []nip29.Admin `json:"admins,omitempty"`
+	Admins   []groupAdmin  `json:"admins,omitempty"`
 	Members  []string      `json:"members,omitempty"`
 }
 
@@ -117,7 +123,9 @@ func runShow(cmd *cobra.Command, args []string) error {
 		case nip29.KindGroupAdmins:
 			if detail.Admins == nil {
 				if admins, perr := nip29.ParseGroupAdmins(ev); perr == nil {
-					detail.Admins = admins.Admins
+					for _, a := range admins.Admins {
+						detail.Admins = append(detail.Admins, groupAdmin{Pubkey: a.Pubkey, Roles: a.Roles})
+					}
 				}
 			}
 		case nip29.KindGroupMembers:
@@ -129,18 +137,17 @@ func runShow(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	if detail.Metadata == nil && detail.Admins == nil && detail.Members == nil {
+		msg := fmt.Errorf("no group %q on %s", groupID, relayURL.Host)
+		if privKeyHex == "" {
+			msg = fmt.Errorf("%w -- a private group is invisible to an anonymous connection", msg)
+		}
+		return common.NotFoundError(cmd, groupID, msg)
+	}
+
 	jsonMode, _ := cmd.Flags().GetBool("json")
 	if jsonMode {
 		common.PrintJSON(detail)
-		return nil
-	}
-
-	if detail.Metadata == nil && detail.Admins == nil && detail.Members == nil {
-		if privKeyHex == "" {
-			fmt.Println("(nothing found -- a private group is invisible to an anonymous connection)")
-		} else {
-			fmt.Println("(nothing found)")
-		}
 		return nil
 	}
 

@@ -1,0 +1,66 @@
+[
+  {
+    "name": "operator",
+    "role": "relay's own privkey: signs 39xxx, 13534, 8000/8001",
+    "privkey": "0211d38af08becf117d9fb5875cbe4c925c52bb2f28e45c0275249fbaf0c02df",
+    "pubkey": "af967996392f3a8a4b2758108b953c427aa8b7d5ab5d475dbd33e4badd5c7ef2",
+    "nsec": "nsec1qgga8zhs30k0z97eldv8tjlyeyju22aj728ytsp82fylhtcvqt0sswwupk",
+    "npub": "npub147t8n93e9uag5je8tqggh9fugfa23d744dw5whdax0jt4h2u0meqmddp0s"
+  },
+  {
+    "name": "admin",
+    "role": "NIP-86 admin; relay members/invites/roles",
+    "privkey": "0a0f6815f5164bb01fea11229dc70287a38cbc067d004072d617aac0702fd17b",
+    "pubkey": "1b1b8f30e1b335e0f02fef1dbf5389b1da47c908af75dc3aee451834863aea1d",
+    "nsec": "nsec1pg8ks904ze9mq8l2zy3fm3czs73ce0qx05qyqukkz74vqup069as2df06v",
+    "npub": "npub1rvdc7v8pkv67pup0auwm75ufk8dy0jgg4a6acwhwg5vrfp36agwshmh4a0"
+  },
+  {
+    "name": "alice",
+    "role": "relay member; group admin; NIP-OA owner",
+    "privkey": "ca091c5c8726a6787485e429e87fe767294c1bfb6809b2f8b27bdac4f67d512a",
+    "pubkey": "180c1a67e139062ec4c58182926f7b7e55912227b10d3ab645fbb8c16bbd5e7b",
+    "nsec": "nsec1egy3chy8y6n8say9us57sll8vu55cxlmdqym979j00dvfana2y4qeu79ap",
+    "npub": "npub1rqxp5elp8yrza3x9sxpfymmm0e2ezg38kyxn4dj9lwuvz6aateasjxsxdy"
+  },
+  {
+    "name": "bob",
+    "role": "relay member; group member",
+    "privkey": "14e574ee1a67de50627aeeb9574225d7ac27b29d4ed687ea45f54fe97753283b",
+    "pubkey": "b3aaf3bc4240a773e6f91a969c822bcc5440c241c7cbb687d28dcd7c5b88daa7",
+    "nsec": "nsec1znjhfms6vl09qcn6a6u4ws3967kz0v5afmtg06j97487ja6n9qasyjnr50",
+    "npub": "npub1kw4080zzgznh8eher2tfeq3te32ypsjpcl9mdp7j3hxhckugm2nsuuywhq"
+  },
+  {
+    "name": "carol",
+    "role": "relay member, not in the group",
+    "privkey": "b2d6062ae449027383253846c93c1e7429a91d3a67b0f8f925d3d9667861268b",
+    "pubkey": "45fb3ac05e57106d569566b6f7311c5c65a0ef9bf5b386ab27c647e0a74b3bea",
+    "nsec": "nsec1kttqv2hyfyp88qe98prvj0q7ws56j8f6v7c037f960vkv7rpy69sztssvp",
+    "npub": "npub1ghan4sz72ugx6454v6m0wvgut3j6pmum7kecd2e8cer7pf6t804qse9k2x"
+  },
+  {
+    "name": "eve",
+    "role": "outsider: signs in, never enrolled",
+    "privkey": "349fe6034403beff6d3b0f509392c1380f1946aafdcd34646256a9a1fb02944b",
+    "pubkey": "10f7508ceadf39e26fecffea5e26941d0695856f2edd38602245872ae61ca7a6",
+    "nsec": "nsec1xj07vq6yqwl07mfmpagf8ykp8q83j342lhxngerz2656r7czj39s72954r",
+    "npub": "npub1zrm4pr82muu7ymlvll49uf55r5rftpt09mwnscpzgkrj4esu57nqgd45q4"
+  },
+  {
+    "name": "mallory",
+    "role": "member, then removed",
+    "privkey": "6d94ff4ce9fc326427a82c88c2f3361fa30fe0957e3e3c1b84ebdf01fbcc6818",
+    "pubkey": "2055a977d599b99433dd0f7f57f214d3d0cafdbd867bd036038d8abae5638ffb",
+    "nsec": "nsec1dk207n8flsexgfag9jyv9uekr73slcy40clrcxuya00sr77vdqvqzrj3u4",
+    "npub": "npub1yp26ja74nxuegv7apal40us560gv4ldaseaaqdsr3k9t4etr3laswcl0qs"
+  },
+  {
+    "name": "agent",
+    "role": "NIP-OA agent key owned by alice",
+    "privkey": "76232155f3900d85aede553c5e5b166e1267416e2e9aeb83646c379be89e0f88",
+    "pubkey": "7d899a75887357482f435cca415699c0dcf29807c604edf05e7b494de275d326",
+    "nsec": "nsec1wc3jz40njqxcttk72579ukckdcfxwstw96dwhqmydsmeh6y7p7yqqd48kf",
+    "npub": "npub10kye5avgwdt5st6rtn9yz45ecrw09xq8cczwmuz70dy5mcn46vnqruw9nk"
+  }
+]

@@ -1,6 +1,7 @@
 package groups
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/ohstr/nmilat/nip01"
@@ -91,5 +92,12 @@ func TestBuildTree_EmptyInput(t *testing.T) {
 
 	if len(result.Roots) != 0 || len(result.Nodes) != 0 {
 		t.Fatalf("buildTree(nil) = %+v, want empty", result)
+	}
+	b, err := json.Marshal(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(b); got != `{"roots":[],"nodes":{}}` {
+		t.Errorf("empty tree JSON = %s, want roots [] not null", got)
 	}
 }

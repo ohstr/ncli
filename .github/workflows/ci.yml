@@ -58,6 +58,9 @@ jobs:
       - name: Integration tests (stream, inspect, sync, huddle)
         run: go test ./client/... -run 'TestStreamIntegration|TestInspectIntegration|TestSyncIntegration|TestHuddleIntegration' -v -count=1 -timeout 30m
 
+      - name: Command matrix (local relays, blossom container)
+        run: go test ./integration/climatrix/... -v -count=1 -timeout 20m
+
   lint:
     runs-on: ubuntu-latest
     steps:

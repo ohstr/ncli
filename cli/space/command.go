@@ -48,6 +48,7 @@ valid space.`,
 	// newJoinCommand wraps huddle.NewJoinCommand -- mounted only here, not
 	// under "ncli huddle" -- see this package's own doc comment for why.
 	cmd.AddCommand(newJoinCommand())
+	cmd.AddCommand(newChatCommand())
 
 	return cmd
 }

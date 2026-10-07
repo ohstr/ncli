@@ -1,7 +1,9 @@
 package relay
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"sort"
 	"text/tabwriter"
@@ -122,6 +124,9 @@ func runContextAdd(cmd *cobra.Command, args []string) error {
 	}
 
 	abs, err := prefs.AddRelayContext(name, path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return common.NotFoundError(cmd, path, err)
+	}
 	if err != nil {
 		return common.InvalidInputError(cmd, path, err)
 	}
@@ -175,7 +180,7 @@ func runContextUse(cmd *cobra.Command, args []string) error {
 	}
 
 	if err := prefs.UseRelayContext(name); err != nil {
-		return common.InvalidInputError(cmd, name, err)
+		return common.NotFoundError(cmd, name, err)
 	}
 	if err := client.SavePrefs(prefs); err != nil {
 		return common.RuntimeError(cmd, err)

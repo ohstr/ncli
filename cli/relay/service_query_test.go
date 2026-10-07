@@ -199,7 +199,7 @@ func TestNewServer_QueryEnforcesMembershipRequired(t *testing.T) {
 	}
 	require.NoError(t, store.InsertEvents(ctx, []*nip01.Event{fixture}))
 
-	handler := relay.NewQueryHandler(store, &nip11.Limitation{MembershipRequired: true}, wsHandler.Membership())
+	handler := relay.NewQueryHandler(store, &nip11.Limitation{MembershipRequired: true}, wsHandler.Membership(), wsHandler.Groups())
 	body := []byte(`[{"kinds":[1]}]`)
 
 	queryAs := func(t *testing.T, privKey string) *httptest.ResponseRecorder {
@@ -238,7 +238,7 @@ func TestNewServer_QueryEnforcesMembershipRequired(t *testing.T) {
 func TestNewServer_QueryMembershipRequiredFailsClosedWithNoMembers(t *testing.T) {
 	wsHandler, store := newTestWSHandler(t)
 
-	handler := relay.NewQueryHandler(store, &nip11.Limitation{MembershipRequired: true}, wsHandler.Membership())
+	handler := relay.NewQueryHandler(store, &nip11.Limitation{MembershipRequired: true}, wsHandler.Membership(), wsHandler.Groups())
 	body := []byte(`[{"kinds":[1]}]`)
 	header, err := common.GenerateNIP98Header(testPrivKey, queryTestURL, http.MethodPost, body)
 	require.NoError(t, err)

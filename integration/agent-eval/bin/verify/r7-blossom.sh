@@ -27,4 +27,21 @@ else
   fi
 fi
 
+# Step 8: a kind:10063 by eval-agent naming the server is on the relay.
+PUB="$(agent_exec 'ncli id eval-agent --json | jq -r .pub_hex' 2>/dev/null)"
+LISTS="$(agent_exec "ncli find --authors ${PUB} --kinds 10063 -s ws://localhost:5500" 2>/dev/null)"
+if jq -e 'any(.[]; .kind == 10063 and any(.tags[]; .[0] == "server" and (.[1] | startswith("http://blossom:3000"))))' >/dev/null 2>&1 <<<"${LISTS}"; then
+  add_check "server_list_published" true "kind:10063 by ${PUB} names http://blossom:3000"
+else
+  add_check "server_list_published" false "find kind:10063: ${LISTS}"
+fi
+
+# Step 9: the default list ends empty.
+SERVERS="$(agent_exec 'ncli blossom servers list --json' 2>/dev/null)"
+if jq -e '.servers | type == "array" and length == 0' >/dev/null 2>&1 <<<"${SERVERS}"; then
+  add_check "server_removed" true "default server list is []"
+else
+  add_check "server_removed" false "servers list: ${SERVERS}"
+fi
+
 write_verify "${ROUND}" "${RUN_DIR}"

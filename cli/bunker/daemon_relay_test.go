@@ -1,16 +1,10 @@
-//go:build integration
-
-// Live-relay integration tests, run against a real external relay
-// (relay.ohstr.com) rather than a local mock -- kept behind the
-// "integration" build tag so the default `go test ./...`/CI run never
-// depends on network access or that relay's uptime. Run explicitly with:
-//
-//	go test -tags integration ./cli/bunker/... -run Live -v
+// NIP-46 round trips over a real, local, in-process relay.
 package bunker
 
 import (
 	"context"
 	"encoding/json"
+	"net/http/httptest"
 	"net/url"
 	"path/filepath"
 	"testing"
@@ -18,11 +12,35 @@ import (
 
 	"github.com/ohstr/ncli/client"
 	"github.com/ohstr/nmilat/nip01"
+	"github.com/ohstr/nmilat/nip11"
 	"github.com/ohstr/nmilat/nip46"
+	"github.com/ohstr/nmilat/relay"
 	relayclient "github.com/ohstr/nmilat/relay/client"
 )
 
-const liveRelayURL = "wss://relay.ohstr.com"
+// startLocalRelay runs a store-backed relay on a loopback port.
+func startLocalRelay(t *testing.T) string {
+	t.Helper()
+	srv := httptest.NewUnstartedServer(nil)
+	wsURL := "ws://" + srv.Listener.Addr().String()
+	metadata := &nip11.Metadata{
+		Name:       "bunker-test",
+		URL:        wsURL,
+		Limitation: nip11.Limitation{MaxMessageLength: 1024 * 1024},
+	}
+	store, err := relay.NewEventStore(filepath.Join(t.TempDir(), "relay.db"), &metadata.Limitation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(store.Close)
+	handler := relay.NewSessionHandler(store, metadata, nil)
+	handler.VerificationWorker.Start(1)
+	t.Cleanup(handler.VerificationWorker.Stop)
+	srv.Config.Handler = handler
+	srv.Start()
+	t.Cleanup(srv.Close)
+	return wsURL
+}
 
 func generateTestKeypair(t *testing.T) (privHex, pubHex string) {
 	t.Helper()
@@ -33,37 +51,38 @@ func generateTestKeypair(t *testing.T) (privHex, pubHex string) {
 	return id.PrivKeyHex, id.PubKeyHex
 }
 
-// liveTestClient plays the "app" side of a NIP-46 exchange directly
-// against the real relay -- its own keypair, its own connection, driving
+// relayTestClient plays the "app" side of a NIP-46 exchange directly
+// against the relay -- its own keypair, its own connection, driving
 // requests at a *Daemon under test the same way a real Nostr client would.
-type liveTestClient struct {
+type relayTestClient struct {
 	privKey string
 	pubKey  string
 	conn    *relayclient.Connection
 }
 
-func newLiveTestClient(t *testing.T, ctx context.Context) *liveTestClient {
+func newRelayTestClient(t *testing.T, ctx context.Context, relayURL string) *relayTestClient {
 	t.Helper()
 
 	priv, pub := generateTestKeypair(t)
 
-	u, err := url.Parse(liveRelayURL)
+	u, err := url.Parse(relayURL)
 	if err != nil {
 		t.Fatal(err)
 	}
 	conn, err := relayclient.Connect(ctx, u)
 	if err != nil {
-		t.Skipf("could not reach live relay %s: %v", liveRelayURL, err)
+		t.Fatalf("connecting to local relay %s: %v", relayURL, err)
 	}
 	t.Cleanup(conn.Close)
 
-	return &liveTestClient{privKey: priv, pubKey: pub, conn: conn}
+	return &relayTestClient{privKey: priv, pubKey: pub, conn: conn}
 }
 
-func TestLive_BunkerFlow_ConnectAndSignEvent(t *testing.T) {
+func TestRelay_BunkerFlow_ConnectAndSignEvent(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
+	relayURL := startLocalRelay(t)
 	signerPriv, signerPub := generateTestKeypair(t)
 
 	store, err := LoadStore(filepath.Join(t.TempDir(), "sessions.yaml"))
@@ -74,15 +93,15 @@ func TestLive_BunkerFlow_ConnectAndSignEvent(t *testing.T) {
 	daemon := NewDaemon(DaemonConfig{
 		IdentityPriv: signerPriv,
 		IdentityPub:  signerPub,
-		Relays:       []string{liveRelayURL},
+		Relays:       []string{relayURL},
 		Store:        store,
 		Queue:        NewQueue(0, time.Minute),
 		OnLog:        func(format string, args ...any) { t.Logf("daemon: "+format, args...) },
 	})
-	go daemon.Run(ctx)
+	go func() { _ = daemon.Run(ctx) }()
 	time.Sleep(2 * time.Second) // let the relay connection establish
 
-	testClient := newLiveTestClient(t, ctx)
+	testClient := newRelayTestClient(t, ctx, relayURL)
 
 	// "connect" itself goes through the same Decide/approval-queue
 	// pipeline as every other method (see handler.go's Handle) -- a
@@ -140,7 +159,7 @@ func TestLive_BunkerFlow_ConnectAndSignEvent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	unsigned := nip01.NewUnsignedEvent(1, signerPub, "hello from the live relay integration test")
+	unsigned := nip01.NewUnsignedEvent(1, signerPub, "hello from the local relay test")
 	rawEvent, _ := json.Marshal(unsigned)
 	signReq, signReqID, err := nip46.NewRequestEvent(testClient.privKey, signerPub, nip46.MethodSignEvent, []string{string(rawEvent)}, nip46.EncryptionNIP44V2)
 	if err != nil {
@@ -175,7 +194,7 @@ func TestLive_BunkerFlow_ConnectAndSignEvent(t *testing.T) {
 	}
 }
 
-func TestLive_SensitiveKindAlwaysAsksEvenUnderBroadGrant(t *testing.T) {
+func TestStore_SensitiveKindAlwaysAsksEvenUnderBroadGrant(t *testing.T) {
 	store, err := LoadStore(filepath.Join(t.TempDir(), "sessions.yaml"))
 	if err != nil {
 		t.Fatal(err)
@@ -195,7 +214,7 @@ func TestLive_SensitiveKindAlwaysAsksEvenUnderBroadGrant(t *testing.T) {
 	}
 }
 
-func TestLive_GrantSurvivesDaemonRestart(t *testing.T) {
+func TestStore_GrantSurvivesDaemonRestart(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sessions.yaml")
 	const appPub = "restart-test-app"
 
@@ -227,8 +246,8 @@ func bunkerURISecret(uri string) (string, error) {
 	return u.Query().Get("secret"), nil
 }
 
-func subscribeForResponses(ctx context.Context, c *liveTestClient) <-chan *nip01.Event {
-	subID := "live-test-" + c.pubKey[:8]
+func subscribeForResponses(ctx context.Context, c *relayTestClient) <-chan *nip01.Event {
+	subID := "relay-test-" + c.pubKey[:8]
 	c.conn.SubscribeWithID(subID, nip01.NewSubscriptionFilterGroup(&nip01.SubscriptionFilter{
 		Kinds: []int{nip46.KindRequest},
 		Tags:  map[string][]string{"p": {c.pubKey}},

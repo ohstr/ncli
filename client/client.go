@@ -115,16 +115,18 @@ func DumpFromTargets(ctx context.Context, targets *TargetsSpec, outPath string, 
 // instead.
 var ErrNoReachableTargets = errors.New("no target could be reached (every connection failed or timed out)")
 
+// ErrNeedsTerminal is returned by Process for a workflow kind that only
+// runs with a TUI (inspect, sync) when there is no terminal.
+var ErrNeedsTerminal = errors.New("this workflow's kind requires an interactive terminal (TUI) and can't run headlessly yet; rerun in a terminal, or use a stream workflow (with raw: true) for unattended/agent use")
+
 // ErrRestricted is returned by Find/DumpFromTargets/QueryTargetsWithAuth
 // when the merged result is empty AND at least one target closed the
 // query as "restricted: ..." (NIP-42 auth and/or NIP-43/NIP-29 membership)
 // rather than a plain EOSE -- distinguishing "the relay refused this" from
 // "nothing matched," the same way ErrNoReachableTargets distinguishes
-// "every target was unreachable" from a genuine empty result. Only
-// surfaces when identityHex was given: an anonymous caller's connections
-// never report restricted at all (relayclient.ReadEventsFromRelayWithAuth
-// has no such signal to give without an identity to retry with), so this
-// is unreachable for QueryTargets' own anonymous-only callers.
+// "every target was unreachable" from a genuine empty result. Anonymous
+// callers get it too: the reader reports a restricted CLOSED with or
+// without an identity.
 var ErrRestricted = errors.New("relay restricted this query (private/membership required)")
 
 // mergeEventsFromTargets fetches events matching filters from every target
@@ -452,7 +454,7 @@ func (c *Client) init() error {
 		// happen.
 		switch rs.Spec.(type) {
 		case *InspectSpec, *SyncSpec:
-			return fmt.Errorf("this workflow's kind requires an interactive terminal (TUI) and can't run headlessly yet; rerun in a terminal, or use a stream workflow (with raw: true) for unattended/agent use")
+			return ErrNeedsTerminal
 		}
 	}
 
@@ -736,10 +738,8 @@ func readEventsWithFallback(ctx context.Context, timeout time.Duration, primary,
 // readEventsWithTimeout bounds a single ReadEventsFromRelayWithAuth call to
 // timeout (0 disables the bound, waiting on ctx alone) -- so a relay that
 // accepts a subscription and then never sends EOSE or an error can't hang
-// the caller past this deadline. identityHex empty is the same anonymous
-// read as before this parameter existed (ReadEventsFromRelayWithAuth
-// delegates straight to ReadEventsFromRelay in that case, which always
-// reports restricted=false, having no such signal to give).
+// the caller past this deadline. identityHex empty reads anonymously and
+// still reports a restricted CLOSED.
 func readEventsWithTimeout(ctx context.Context, timeout time.Duration, relayURL *url.URL, filters *nip01.SubscriptionFilterGroup, identityHex string) ([]*nip01.Event, bool, error) {
 	if timeout <= 0 {
 		return relayclient.ReadEventsFromRelayWithAuth(ctx, relayURL, filters, identityHex)

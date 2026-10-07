@@ -1,0 +1,105 @@
+# One row per ncli command. TestCoverage_EveryCommandListed fails on a
+# missing or stale row. modes: json (agent), text, tty (human), errors.
+# tests: test-name prefixes in this package. pending: what's not covered yet.
+"apply": {modes: [json, errors], tests: [TestApply], pending: "stream workflow and TTY runs of sync/inspect (phase 5)"}
+"blossom": {modes: [errors], tests: [TestBareGroupCommands]}
+"blossom download": {modes: [json, text, errors], tests: [TestBlossom]}
+"blossom list": {modes: [errors], tests: [TestBlossom], pending: "success path needs a server with BUD-02 on"}
+"blossom mirror": {modes: [errors], tests: [TestBlossom], pending: "success path needs a public source URL"}
+"blossom report": {modes: [json, errors], tests: [TestBlossom]}
+"blossom rm": {modes: [json, errors], tests: [TestBlossom]}
+"blossom servers": {modes: [errors], tests: [TestBareGroupCommands]}
+"blossom servers add": {modes: [json, errors], tests: [TestBlossom]}
+"blossom servers discover": {modes: [json], tests: [TestBlossom]}
+"blossom servers list": {modes: [json], tests: [TestBlossom]}
+"blossom servers remove": {modes: [json], tests: [TestBlossom]}
+"blossom upload": {modes: [json, errors], tests: [TestBlossom]}
+"bunker": {modes: [json, tty, errors], tests: [TestBunkerHeadless, TestTTY_BunkerDaemon, TestTTY_BunkerApproveReject, TestBunkerWithoutDaemon]}
+"bunker attach": {modes: [errors], tests: [TestBunkerWithoutDaemon, TestBunkerHeadless], pending: "TUI (phase 5)"}
+"bunker connect": {modes: [json, errors], tests: [TestTTY_BunkerDaemon, TestTTY_BunkerApproveReject, TestBunkerWithoutDaemon]}
+"bunker pending": {modes: [errors], tests: [TestBunkerHeadless]}
+"bunker pending approve": {modes: [json, errors], tests: [TestBunkerHeadless]}
+"bunker pending list": {modes: [json, errors], tests: [TestBunkerHeadless]}
+"bunker pending reject": {modes: [json], tests: [TestBunkerHeadless]}
+"bunker history": {modes: [json, errors], tests: [TestTTY_BunkerDaemon, TestBunkerWithoutDaemon]}
+"bunker sessions": {modes: [errors], tests: [TestBareGroupCommands]}
+"bunker sessions grants": {modes: [json, errors], tests: [TestBunkerHeadless, TestTTY_BunkerDaemon, TestBunkerWithoutDaemon]}
+"bunker sessions list": {modes: [json, errors], tests: [TestTTY_BunkerDaemon, TestBunkerWithoutDaemon]}
+"bunker sessions rename": {modes: [json, errors], tests: [TestBunkerHeadless, TestBunkerWithoutDaemon]}
+"bunker sessions revoke": {modes: [json, errors], tests: [TestBunkerHeadless, TestTTY_BunkerDaemon, TestBunkerWithoutDaemon]}
+"bunker sessions revoke-grant": {modes: [json, errors], tests: [TestBunkerHeadless, TestBunkerWithoutDaemon]}
+"bunker sessions set-grant": {modes: [json, errors], tests: [TestBunkerHeadless]}
+"bunker status": {modes: [json], tests: [TestTTY_BunkerDaemon, TestBunkerWithoutDaemon]}
+"bunker stop": {modes: [json, errors], tests: [TestTTY_BunkerDaemon, TestBunkerWithoutDaemon]}
+"decode": {modes: [json, text, tty, errors], tests: [TestDecode, TestTTY_FailureShapes, TestTTY_Color]}
+"dump": {modes: [json, errors], tests: [TestQuery]}
+"find": {modes: [json, tty, errors], tests: [TestQuery, TestAddressableLookups, TestTTY_Spinner, TestTimeoutCoversHandshake]}
+"groups": {modes: [errors], tests: [TestBareGroupCommands]}
+"groups create": {modes: [json, errors], tests: [TestGroupsCLI]}
+"groups delete": {modes: [json, errors], tests: [TestGroupsModeration]}
+"groups delete-event": {modes: [json, errors], tests: [TestGroupsModeration]}
+"groups edit": {modes: [json, errors], tests: [TestGroupsCLI, TestGroupsModeration, TestGroupsPrivacy]}
+"groups invite": {modes: [json, errors], tests: [TestGroupsModeration]}
+"groups join": {modes: [json], tests: [TestGroupsModeration]}
+"groups leave": {modes: [json], tests: [TestGroupsModeration]}
+"groups list": {modes: [json], tests: [TestGroupsCLI]}
+"groups members": {modes: [errors], tests: [TestBareGroupCommands]}
+"groups members add": {modes: [json, errors], tests: [TestGroupsModeration, TestGroupsPrivacy]}
+"groups members remove": {modes: [json, errors], tests: [TestGroupsModeration]}
+"groups pins": {modes: [errors], tests: [TestBareGroupCommands]}
+"groups pins set": {modes: [json, errors], tests: [TestGroupsModeration]}
+"groups show": {modes: [json, errors], tests: [TestGroupsCLI]}
+"groups tree": {modes: [json], tests: [TestGroupsModeration]}
+"huddle": {modes: [errors], tests: [TestBareGroupCommands]}
+"huddle list": {modes: [json, errors], tests: [TestSpaceAndHuddle]}
+"id": {modes: [json, errors], tests: [TestID, TestHarness_ActorsAreConsistent]}
+"id delegate": {modes: [json, tty, errors], tests: [TestIDDelegate, TestTTY_DelegateWizard]}
+"id list": {modes: [json], tests: [TestID]}
+"id sign": {modes: [json, errors], tests: [TestIDSign]}
+"miner": {modes: [errors], tests: [TestBareGroupCommands]}
+"miner check": {modes: [json, errors], tests: [TestMinerFileMode, TestQuery]}
+"miner mine": {modes: [json, errors], tests: [TestMinerFileMode]}
+"ping": {modes: [json, tty, errors], tests: [TestPing, TestTTY_FailureShapes]}
+"prefs": {modes: [errors], tests: [TestBareGroupCommands]}
+"prefs path": {modes: [json], tests: [TestPrefs]}
+"prefs relays": {modes: [errors], tests: [TestBareGroupCommands]}
+"prefs relays add": {modes: [json, errors], tests: [TestPrefs]}
+"prefs relays clear": {modes: [json], tests: [TestPrefs]}
+"prefs relays list": {modes: [json], tests: [TestPrefs]}
+"prefs relays remove": {modes: [json], tests: [TestPrefs]}
+"profile": {modes: [json, errors], tests: [TestQuery]}
+"publish": {modes: [json, errors], tests: [TestPublish]}
+"relay": {modes: [json, errors], tests: [TestRelayAdmin, TestRelayJSONLogs, TestHarness_RelaySeedsCorpus], pending: "-c context creation (phase 5)"}
+"relay clear": {modes: [errors], tests: [TestBareGroupCommands]}
+"relay clear search": {modes: [errors], tests: [TestRelayAdmin]}
+"relay clear zaps": {modes: [json], tests: [TestRelayAdmin]}
+"relay context": {modes: [json], tests: [TestRelayContext]}
+"relay context add": {modes: [json, errors], tests: [TestRelayContext]}
+"relay context list": {modes: [json], tests: [TestRelayContext]}
+"relay context remove": {modes: [json], tests: [TestRelayContext]}
+"relay context use": {modes: [json, errors], tests: [TestRelayContext]}
+"relay invites": {modes: [errors], tests: [TestBareGroupCommands]}
+"relay invites create": {modes: [json, errors], tests: [TestRelayAdmin, TestAttack_NIP43Membership]}
+"relay invites list": {modes: [json], tests: [TestRelayAdmin]}
+"relay invites revoke": {modes: [json, errors], tests: [TestRelayAdmin, TestAttack_NIP43Membership]}
+"relay members": {modes: [errors], tests: [TestBareGroupCommands]}
+"relay members add": {modes: [json, errors], tests: [TestRelayAdmin, TestAttack_AdminHTTP]}
+"relay members list": {modes: [json, errors], tests: [TestRelayAdmin, TestAttack_AdminHTTP]}
+"relay members remove": {modes: [json], tests: [TestRelayAdmin, TestAttack_NIP43Membership]}
+"relay members show": {modes: [json, errors], tests: [TestRelayAdmin]}
+"relay reindex": {modes: [errors], tests: [TestBareGroupCommands]}
+"relay reindex search": {modes: [errors], tests: [TestRelayAdmin]}
+"relay reindex zaps": {modes: [json], tests: [TestRelayAdmin]}
+"relay roles": {modes: [errors], tests: [TestBareGroupCommands]}
+"relay roles create": {modes: [json], tests: [TestRelayAdmin]}
+"relay roles list": {modes: [json], tests: [TestRelayAdmin]}
+"relay stats": {modes: [json, text, errors], tests: [TestRelayAdmin, TestAttack_AdminHTTP]}
+"space": {modes: [errors], tests: [TestBareGroupCommands]}
+"space create": {modes: [json, errors], tests: [TestSpaceAndHuddle, TestAddressableLookups]}
+"space chat": {modes: [errors], tests: [TestSpaceAndHuddle]}
+"space chat list": {modes: [json, errors], tests: [TestSpaceAndHuddle]}
+"space chat send": {modes: [json, errors], tests: [TestSpaceAndHuddle]}
+"space join": {modes: [json, errors], tests: [TestSpaceAndHuddle], pending: "TUI roster view (phase 5)"}
+"space list": {modes: [json], tests: [TestSpaceAndHuddle]}
+"space show": {modes: [json, errors], tests: [TestSpaceAndHuddle, TestAddressableLookups]}
+"version": {modes: [json, text], tests: [TestVersion]}

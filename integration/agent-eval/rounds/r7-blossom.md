@@ -15,8 +15,17 @@ via BUD-11). Use your `eval-agent` identity.
 5. `ncli blossom mirror` the same blob's own URL on that server (yes,
    mirroring it back to itself is fine for this check) and note the
    report shape you get back.
-6. `ncli blossom rm` it with `--yes`, then confirm it no longer shows up
+6. Report the blob to the server as spam (any reason text). The server
+   may or may not accept reports; record exactly what happened.
+7. `ncli blossom rm` it with `--yes`, then confirm it no longer shows up
    in `list`.
+8. Make your server list discoverable by others: publish it as a signed
+   event to the relay at `ws://localhost:5500` (it needs to be one of your
+   default relays for that). Then discover `eval-agent`'s servers the way
+   someone else would, from its public key alone, and confirm
+   `http://blossom:3000` comes back.
+9. Finally remove `http://blossom:3000` from your own default server list
+   and confirm the list is empty.
 
 Write your self-report to `/report/r7-blossom.self-report.json`,
 including the blob's sha256.

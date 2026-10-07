@@ -1,5 +1,129 @@
 # Changelog
 
+## [0.8.0-rc.9]
+
+### Security
+
+- `blossom upload` signed an authorization token with no `x` (hash) tag,
+  valid for uploading any blob until it expired; servers that check the
+  tag (the reference blossom-server) refused every upload. Each token is
+  now scoped to its file's SHA-256. ([#117](https://github.com/ohstr/ncli/pull/117))
+- The relay's admin HTTP API (`/admin/...`) accepted a NIP-98 header with
+  no `payload` tag for any request body, and accepted the same header
+  again until it expired: a captured header could enroll an attacker as a
+  member or mint them an invite code. A `payload` tag is now required and
+  each NIP-98 event is accepted once. `ncli` adds a `nonce` tag so repeated
+  identical requests stay distinct; admin clients that send no `payload`
+  tag are now refused. ([#117](https://github.com/ohstr/ncli/pull/117))
+- The NIP-86 management API accepts each NIP-98 event once, like the admin
+  API. ([#117](https://github.com/ohstr/ncli/pull/117))
+- `POST /query` returns what REQ would for its signer, private NIP-29
+  groups included. ([#117](https://github.com/ohstr/ncli/pull/117))
+- Deleting a private NIP-29 group left its metadata, admin and member
+  lists stored and readable by anyone, and it kept showing in `groups
+  list`/`tree`. The relay now purges a deleted group's events.
+  ([#119](https://github.com/ohstr/ncli/pull/119))
+
+### Added
+
+- `ncli bunker` without a terminal (or with `--json`) starts the signer in
+  the background and prints its status. `bunker pending list/approve/reject`
+  and `bunker sessions set-grant` do from scripts what the TUI does.
+  ([#119](https://github.com/ohstr/ncli/pull/119))
+- The relay publishes its NIP-43 kind:13534 member list, with roles, on
+  every join and leave. ([#119](https://github.com/ohstr/ncli/pull/119))
+- `space join` without a terminal (or with `--json`) streams the call as
+  JSON lines -- arrivals, departures, speaking, chat -- until `--duration`
+  or an interrupt. `space chat send/list` post and read a space's
+  conversation without joining. ([#119](https://github.com/ohstr/ncli/pull/119))
+
+### Changed
+
+- Moved the `id delegate` wizard to Bubble Tea v2. v1 queried the terminal
+  for its background colour when the program started, so every `ncli`
+  command waited up to 5s on a terminal that doesn't answer (some
+  multiplexers, serial consoles, `script`).
+  ([#117](https://github.com/ohstr/ncli/pull/117))
+- `groups show --json` admin entries use `pubkey`/`roles` keys, not
+  `Pubkey`/`Roles`. ([#117](https://github.com/ohstr/ncli/pull/117))
+
+### Fixed
+
+- `prefs relays clear` wiped all of `prefs.yaml`, not just the relay list --
+  including the vault key, so every identity saved in the vault became
+  unrecoverable and the next save silently started a new vault ("invalid
+  MAC" on the old entries). Relay contexts and Blossom servers were lost
+  too. It now clears only the relays.
+  ([#117](https://github.com/ohstr/ncli/pull/117))
+- `ncli relay --json` logged in console format once the server started;
+  every stderr line is now JSON. ([#119](https://github.com/ohstr/ncli/pull/119))
+- `space show <id>` for a space that doesn't exist exits `not_found`
+  instead of succeeding with nothing; so does `space join` for a missing
+  space, instead of `internal`. ([#119](https://github.com/ohstr/ncli/pull/119))
+- `groups show` exits `not_found` when the relay returns nothing for the
+  group, instead of printing `{}`; `groups tree --json` prints `"roots": []`,
+  not `null`. ([#119](https://github.com/ohstr/ncli/pull/119))
+- `bunker sessions grants --json` prints `[]` for an app with no grants,
+  not `null`. ([#119](https://github.com/ohstr/ncli/pull/119))
+- A Blossom server's outright refusal (a 4xx other than 401/403/404/409/429,
+  e.g. a mirror of a private address) exits `invalid_input`, not a
+  retryable `network`, and no longer suggests the blob may exist anyway.
+  ([#119](https://github.com/ohstr/ncli/pull/119))
+- A NIP-43 join (invite claim or `relay members add`) now applies to the
+  member's already-open connections; they were refused until they
+  reconnected. A private group read refused before AUTH says
+  `auth-required:`, not `restricted:`. The `membership.yaml` preset no
+  longer claims non-members can request their own invite.
+  ([#119](https://github.com/ohstr/ncli/pull/119))
+- An authenticated `groups list`/`find` could intermittently omit private
+  groups: a REQ the relay answered before AUTH landed was taken as final.
+  It is now retried once authenticated.
+  ([#117](https://github.com/ohstr/ncli/pull/117))
+- With the vault key missing but identities still saved, `id --save`
+  silently started a new vault (orphaning them) and unlocking said "no
+  vault identity yet". Both now refuse with `not_found`, naming the
+  missing key. ([#117](https://github.com/ohstr/ncli/pull/117))
+- A missing vault label exits `not_found` (4), not `invalid_input`.
+  ([#117](https://github.com/ohstr/ncli/pull/117))
+- The `ncli-huddle` skill's frontmatter wasn't valid YAML, so skill
+  installers skipped it. ([#117](https://github.com/ohstr/ncli/pull/117))
+- `id delegate` tokens now verify under NIP-26 (the `nostr:delegation:`
+  string, fixed in nmilat). Re-issue tokens minted before.
+  ([#117](https://github.com/ohstr/ncli/pull/117))
+- Exit codes that misreported what went wrong:
+  `apply` sync/inspect without a terminal and `apply -f` on a missing file
+  are `usage` (were `internal`); `space join` without a terminal is `usage`
+  (was `unsupported`); `huddle list`/`space join` against a relay with
+  huddles off is `unsupported` (was `internal`); `relay invites revoke` of
+  an unknown code is `not_found` (reported `revoked`); `relay reindex
+  search`/`clear search` with search off are `usage` (reported success).
+  ([#117](https://github.com/ohstr/ncli/pull/117))
+- `blossom upload`/`rm`/`mirror` failing on every server exit with the
+  server's own code (`auth`, `not_found`, `network`) instead of `internal`.
+  ([#117](https://github.com/ohstr/ncli/pull/117))
+- `--json` left a config-file warning as a plain console line on stderr.
+  ([#117](https://github.com/ohstr/ncli/pull/117))
+- An anonymous `find`/`dump`/`groups show` that the relay refuses exits
+  `auth` (7) instead of printing `[]`/`{}` with exit 0, which read as
+  "nothing matched". ([#117](https://github.com/ohstr/ncli/pull/117))
+- `groups` writes to a private group carried no NIP-29 `previous` tags:
+  the timeline read behind them was anonymous, so it never saw the group.
+  It now reads as the writer. ([#117](https://github.com/ohstr/ncli/pull/117))
+- A `groups` write the relay rejects is classified by the relay's reason:
+  `duplicate:` exits `conflict` (5), `restricted:`/`auth-required:` exit
+  `auth` (7), `invalid:` exits `invalid_input` (3), instead of always
+  `internal` (1). ([#117](https://github.com/ohstr/ncli/pull/117))
+- Bare `ncli` exits 2 (`usage`) like every other group command; under
+  `--json` it printed help on stdout and exited 0.
+  ([#117](https://github.com/ohstr/ncli/pull/117))
+- `miner check -e` on a malformed file exits `invalid_input` (3), not
+  `internal` (1). ([#117](https://github.com/ohstr/ncli/pull/117))
+- `miner mine` rejects a `--difficulty` outside 0-256 instead of mining
+  with it. ([#117](https://github.com/ohstr/ncli/pull/117))
+- `relay context use <unknown>` and `relay context add` with a missing
+  config file exit `not_found` (4), not `invalid_input`.
+  ([#117](https://github.com/ohstr/ncli/pull/117))
+
 ## [0.8.0-rc.8]
 
 ### Fixed

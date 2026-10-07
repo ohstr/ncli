@@ -30,6 +30,9 @@ type (
 // vault.ErrLabelExists, so errors.Is works across both spellings.
 var ErrLabelExists = vault.ErrLabelExists
 
+// ErrVaultKeyMissing is vault.ErrVaultKeyMissing.
+var ErrVaultKeyMissing = vault.ErrVaultKeyMissing
+
 // GenerateIdentity mints a new keypair. See vault.GenerateIdentity.
 func GenerateIdentity() (*Identity, error) { return vault.GenerateIdentity() }
 

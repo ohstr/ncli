@@ -31,6 +31,14 @@ Probe at least these, each with `--json`:
    credentials / rejected signature), try it; otherwise note plainly that
    you couldn't exercise this one and why.
 
+7. `ncli space show` and `ncli groups show` for an id that doesn't exist
+   on `ws://localhost:5500` (no identity) -- check AGENTS.md for which
+   code each should give; they're not the same, and why.
+8. Lists on empty state: `groups list`, `groups tree`, `space list` and
+   `relay context list` against that relay (or locally) before anything
+   exists -- with `--json`, every list must be an empty array `[]` (or an
+   empty object for a name->value map), never `null` or missing.
+
 For every probe, record in your self-report: the exact command, the exit
 code, stdout (should be empty on failure), and the parsed JSON error
 object from stderr. If anything doesn't match AGENTS.md's table, call

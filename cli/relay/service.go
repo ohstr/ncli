@@ -110,6 +110,7 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 	// able to end that member's live calls. The root handler closes over the
 	// variable and reads it per request, so the order here does not matter.
 	var nip86Handler *nip86.Handler
+	nip86Replay := newReplayGuard()
 
 	if nip86Enabled() {
 		// Advertised so a client can tell the API is there before trying it.
@@ -155,7 +156,7 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 		// by everything else.
 		switch {
 		case nip86Handler != nil && (nip86.IsManagementRequest(r) || r.Method == http.MethodOptions):
-			nip86Handler.ServeHTTP(w, r)
+			serveOnce(nip86Replay, nip86Handler, w, r)
 		case r.Header.Get("Accept") == nip11.ContentTypeHeader:
 			nip11Handler.ServeHTTP(w, r)
 		default:
@@ -173,7 +174,7 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 		// MembershipService: a NIP-43 join/leave processed over the
 		// WebSocket must be visible to /query immediately, not through a
 		// separate cache of the same store that updates on its own schedule.
-		mux.Handle("/query", relay.NewQueryHandler(store, &config.Nip11.Limitation, wsHandler.Membership()))
+		mux.Handle("/query", relay.NewQueryHandler(store, &config.Nip11.Limitation, wsHandler.Membership(), wsHandler.Groups()))
 	}
 
 	if eventsEnabled() {
@@ -186,6 +187,7 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 	}
 
 	// ADMIN ENDPOINTS
+	adminReplay := newReplayGuard()
 	adminAuth := func(next http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			// Read the body here so the signature can be checked against it,
@@ -202,13 +204,18 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 				body = read
 				r.Body = io.NopCloser(bytes.NewReader(body))
 			}
-			// RequirePayload stays off: a payload tag is verified when present,
-			// so an older client that sends none still works.
+			// The payload tag is required: without it a captured header is
+			// good for any body at this URL and method until it expires.
 			if _, err := nip98.Verify(r, nip98.Options{
 				AllowedPubkeys: nip86Admins(),
 				Body:           body,
+				RequirePayload: true,
 			}); err != nil {
 				http.Error(w, err.Error(), http.StatusUnauthorized)
+				return
+			}
+			if !adminReplay.first(r.Header.Get("Authorization"), time.Now()) {
+				http.Error(w, "NIP-98 event already used", http.StatusUnauthorized)
 				return
 			}
 			next.ServeHTTP(w, r)
@@ -218,6 +225,10 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 	mux.HandleFunc("/admin/reindex/search", adminAuth(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if searchService == nil {
+			http.Error(w, "search is not enabled on this relay (cache.search.enabled)", http.StatusNotImplemented)
 			return
 		}
 		status := reindex.SearchState.GetStatus()
@@ -294,6 +305,10 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 	mux.HandleFunc("/admin/search", adminAuth(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "DELETE" {
 			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if searchService == nil {
+			http.Error(w, "search is not enabled on this relay (cache.search.enabled)", http.StatusNotImplemented)
 			return
 		}
 		if searchService != nil {

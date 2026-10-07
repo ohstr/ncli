@@ -1,6 +1,8 @@
 package ncli
 
 import (
+	"errors"
+	"os"
 	"os/signal"
 	"syscall"
 
@@ -48,7 +50,14 @@ var (
 				options.StrictPow = &strictPow
 			}
 
+			if _, err := os.Stat(fileName); err != nil {
+				return &common.CLIError{Err: err, Code: common.CodeUsage, Input: fileName}
+			}
+
 			if err := client.Process(ctx, fileName, options); err != nil {
+				if errors.Is(err, client.ErrNeedsTerminal) {
+					return common.UsageError(cmd, err)
+				}
 				return common.RuntimeError(cmd, err)
 			}
 			return nil

@@ -2,6 +2,8 @@ package blossom
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
@@ -77,6 +79,10 @@ the bytes as-is.`,
 			_ = common.WithSpinner(cmd, fmt.Sprintf("uploading %d file(s) to %d server(s)", len(args), len(servers)), func() error {
 				for _, path := range args {
 					contentType, err := detectContentType(path)
+					var sum string
+					if err == nil {
+						sum, err = fileSHA256(path)
+					}
 					if err != nil {
 						for _, server := range servers {
 							report.add(serverResult{Item: path, Server: server, Error: err.Error()})
@@ -91,7 +97,10 @@ the bytes as-is.`,
 						// signed at the start would then expire partway
 						// through instead of every request getting a full
 						// fresh window.
-						auth, err := buildAuth(privKeyHex, pubKeyHex, verb, nil, ttl)
+						// Scoped to this blob's hash (BUD-11 "x"): an unscoped
+						// token authorizes uploading anything until it
+						// expires, and servers that check it refuse it.
+						auth, err := buildAuth(privKeyHex, pubKeyHex, verb, []string{sum}, ttl)
 						if err != nil {
 							report.add(serverResult{Item: path, Server: server, Error: err.Error()})
 							continue
@@ -104,7 +113,7 @@ the bytes as-is.`,
 
 			printFanoutReport(jsonMode, report)
 			if !report.allSucceeded() {
-				return common.RuntimeError(cmd, fmt.Errorf("%d of %d uploads failed", report.Failed, report.Attempted))
+				return report.failure(cmd, "uploads")
 			}
 			return nil
 		},
@@ -142,6 +151,7 @@ func uploadOne(ctx context.Context, hc *bclient.Client, server, path, contentTyp
 	}
 	if err != nil {
 		res.Error = describeError(err) + uploadErrorHint
+		res.err = err
 		return res
 	}
 
@@ -151,6 +161,20 @@ func uploadOne(ctx context.Context, hc *bclient.Client, server, path, contentTyp
 	res.Size = descriptor.Size
 	res.Type = descriptor.Type
 	return res
+}
+
+// fileSHA256 streams path through SHA-256 and returns the hex digest.
+func fileSHA256(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = f.Close() }()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // detectContentType sniffs path's MIME type from its first 512 bytes (the

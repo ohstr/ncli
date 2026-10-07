@@ -149,6 +149,8 @@ type serverResult struct {
 	Size   int64  `json:"size,omitempty"`
 	Type   string `json:"type,omitempty"`
 	Error  string `json:"error,omitempty"`
+
+	err error // the operation's own error, for classifying the exit code
 }
 
 // fanoutReport summarizes a write operation's attempt against every (item,
@@ -172,6 +174,25 @@ func (r *fanoutReport) add(res serverResult) {
 }
 
 func (r *fanoutReport) allSucceeded() bool { return r.Failed == 0 }
+
+// failure is the command's error for a report with failed attempts, nil
+// otherwise. When nothing succeeded, the first server error picks the code
+// (refused -> auth, unreachable -> network, ...); a partial success stays
+// internal.
+func (r *fanoutReport) failure(cmd *cobra.Command, what string) error {
+	if r.allSucceeded() {
+		return nil
+	}
+	msg := fmt.Sprintf("%d of %d %s failed", r.Failed, r.Attempted, what)
+	if r.Succeeded == 0 {
+		for _, res := range r.Results {
+			if res.err != nil {
+				return classifyHTTPError(cmd, res.Server, fmt.Errorf("%s: %w", msg, res.err))
+			}
+		}
+	}
+	return common.RuntimeError(cmd, errors.New(msg))
+}
 
 // printFanoutReport prints report to stdout -- as JSON if jsonMode, else
 // one line per (item, server) result plus a summary line, matching

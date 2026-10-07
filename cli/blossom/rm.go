@@ -82,6 +82,7 @@ func newRmCommand() *cobra.Command {
 
 					if err := hc.Delete(ctx, server, hash, auth); err != nil {
 						res.Error = describeError(err)
+						res.err = err
 					} else {
 						res.OK = true
 					}
@@ -92,7 +93,7 @@ func newRmCommand() *cobra.Command {
 
 			printFanoutReport(jsonMode, report)
 			if !report.allSucceeded() {
-				return common.RuntimeError(cmd, fmt.Errorf("%d of %d deletes failed", report.Failed, report.Attempted))
+				return report.failure(cmd, "deletes")
 			}
 			return nil
 		},

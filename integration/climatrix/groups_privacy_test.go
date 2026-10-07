@@ -95,19 +95,28 @@ func TestGroupsPrivacy(t *testing.T) {
 				}
 			}
 
-			// Writing: members always post. NIP-29 gates non-member writes
-			// with a separate "restricted" flag, which nmilat doesn't
-			// support yet -- so today an outsider can post into every shape.
-			// Logged, not asserted, until that's decided.
+			// Writing: members always post; a non-member posts only into a
+			// public, open group -- never into a private or closed one.
 			post := Ev(t, bob.PrivHex, 9, "member posting into "+id, []string{"h", id})
 			if ok, why := DialAs(t, r.URL, bob.PrivHex).Publish(post); !ok {
 				t.Errorf("member posting refused: %s", why)
 			}
-			out := Ev(t, eve.PrivHex, 9, "outsider posting into "+id, []string{"h", id})
-			ok, why := DialAs(t, r.URL, eve.PrivHex).Publish(out)
-			t.Logf("outsider posting into %s: accepted=%v %s", shape.name, ok, why)
-			if ok && shape.private && sees(DialAs(t, r.URL, eve.PrivHex), out, F{"ids": []string{out.ID}}) {
-				t.Errorf("outsider can read back its own post in a private group")
+			wantOpen := !shape.private && !shape.closed
+			for _, w := range []struct {
+				who  string
+				conn *Raw
+			}{
+				{"outsider", DialAs(t, r.URL, eve.PrivHex)},
+				{"anonymous", Dial(t, r.URL)},
+			} {
+				out := Ev(t, eve.PrivHex, 9, w.who+" posting into "+id, []string{"h", id})
+				ok, why := w.conn.Publish(out)
+				if ok != wantOpen {
+					t.Errorf("%s posting: accepted=%v (%s), want %v", w.who, ok, why, wantOpen)
+				}
+				if !wantOpen && !hasPrefix(why, "restricted:") {
+					t.Errorf("%s posting refused with %q, want restricted:", w.who, why)
+				}
 			}
 
 			// Group metadata follows the same visibility.
@@ -115,6 +124,12 @@ func TestGroupsPrivacy(t *testing.T) {
 			evs, _ := DialAs(t, r.URL, eve.PrivHex).Req(meta)
 			if shape.private && len(evs) > 0 {
 				t.Errorf("outsider read private group metadata")
+			}
+
+			// A non-member can still ask to join (last: an open group admits).
+			join := Ev(t, eve.PrivHex, 9021, "", []string{"h", id})
+			if ok, why := DialAs(t, r.URL, eve.PrivHex).Publish(join); !ok && !shape.closed {
+				t.Errorf("join request into %s refused: %s", shape.name, why)
 			}
 		})
 	}

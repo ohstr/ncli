@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -14,8 +15,13 @@ import (
 // mined runs `ncli miner mine` at difficulty d and returns the event.
 func mined(t *testing.T, e *Env, priv string, d int) *nip01.Event {
 	t.Helper()
+	return minedContent(t, e, priv, d, "pow "+strconv.Itoa(d))
+}
+
+func minedContent(t *testing.T, e *Env, priv string, d int, content string) *nip01.Event {
+	t.Helper()
 	out := filepath.Join(e.Dir, "mined-"+strconv.Itoa(d)+".json")
-	e.MustOK(t, "miner", "mine", "--content", "pow "+strconv.Itoa(d), "--identity", priv, "-d", strconv.Itoa(d), "-o", out)
+	e.MustOK(t, "miner", "mine", "--content", content, "--identity", priv, "-d", strconv.Itoa(d), "-o", out)
 	b, err := os.ReadFile(out)
 	if err != nil {
 		t.Fatal(err)
@@ -38,8 +44,15 @@ func TestStrictPoW(t *testing.T) {
 	if ok, _ := c.Publish(Ev(t, alice.PrivHex, 1, "no work")); ok {
 		t.Errorf("unmined event accepted at min %d", min)
 	}
-	if ok, _ := c.Publish(mined(t, e, alice.Nsec, 8)); ok {
-		t.Errorf("8-bit event accepted at min %d", min)
+	// An 8-bit mine has 16+ zero bits about 1 time in 256, which the relay
+	// rightly accepts (it checks the id, not the claim); re-mine until the
+	// event really falls short.
+	weak := mined(t, e, alice.Nsec, 8)
+	for i := 0; leadingZeroBits(weak.ID) >= min; i++ {
+		weak = minedContent(t, e, alice.Nsec, 8, "pow 8 retry "+strconv.Itoa(i))
+	}
+	if ok, _ := c.Publish(weak); ok {
+		t.Errorf("%d-bit event accepted at min %d", leadingZeroBits(weak.ID), min)
 	}
 	if ok, msg := c.Publish(mined(t, e, alice.Nsec, min)); !ok {
 		t.Errorf("%d-bit event refused: %s", min, msg)
@@ -87,4 +100,21 @@ func TestEphemeralEvents(t *testing.T) {
 	if len(evs) != 0 {
 		t.Errorf("find returned an ephemeral event after the fact")
 	}
+}
+
+// leadingZeroBits is an event id's NIP-13 difficulty.
+func leadingZeroBits(id string) int {
+	n := 0
+	for _, c := range id {
+		v := strings.IndexRune("0123456789abcdef", c)
+		if v == 0 {
+			n += 4
+			continue
+		}
+		for b := 3; b >= 0 && v>>b&1 == 0; b-- {
+			n++
+		}
+		break
+	}
+	return n
 }

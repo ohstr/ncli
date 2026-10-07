@@ -43,7 +43,10 @@ func runIDRelabel(cmd *cobra.Command, args []string) error {
 
 	prev := entry.Label
 	status := "unchanged"
-	if label != prev && !(label == "" && prev == entry.Npub) {
+	if label == "" {
+		label = entry.Npub
+	}
+	if label != prev {
 		// Prompts need a terminal on stdin.
 		nonInteractive := jsonMode || !term.IsTerminal(int(os.Stdin.Fd()))
 		if _, err := keyresolve.UnlockOrCreateVault(cmd, nonInteractive); err != nil {

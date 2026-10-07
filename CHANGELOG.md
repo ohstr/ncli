@@ -42,6 +42,9 @@
   every stderr line is now JSON. ([#119](https://github.com/ohstr/ncli/pull/119))
 - `space show <id>` for a space that doesn't exist exits `not_found`
   instead of succeeding with nothing. ([#119](https://github.com/ohstr/ncli/pull/119))
+- `groups show` exits `not_found` when the relay returns nothing for the
+  group, instead of printing `{}`; `groups tree --json` prints `"roots": []`,
+  not `null`. ([#119](https://github.com/ohstr/ncli/pull/119))
 - An authenticated `groups list`/`find` could intermittently omit private
   groups: a REQ the relay answered before AUTH landed was taken as final.
   It is now retried once authenticated.

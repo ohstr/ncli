@@ -137,18 +137,17 @@ func runShow(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	if detail.Metadata == nil && detail.Admins == nil && detail.Members == nil {
+		msg := fmt.Errorf("no group %q on %s", groupID, relayURL.Host)
+		if privKeyHex == "" {
+			msg = fmt.Errorf("%w -- a private group is invisible to an anonymous connection", msg)
+		}
+		return common.NotFoundError(cmd, groupID, msg)
+	}
+
 	jsonMode, _ := cmd.Flags().GetBool("json")
 	if jsonMode {
 		common.PrintJSON(detail)
-		return nil
-	}
-
-	if detail.Metadata == nil && detail.Admins == nil && detail.Members == nil {
-		if privKeyHex == "" {
-			fmt.Println("(nothing found -- a private group is invisible to an anonymous connection)")
-		} else {
-			fmt.Println("(nothing found)")
-		}
 		return nil
 	}
 

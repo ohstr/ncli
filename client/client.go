@@ -115,6 +115,10 @@ func DumpFromTargets(ctx context.Context, targets *TargetsSpec, outPath string, 
 // instead.
 var ErrNoReachableTargets = errors.New("no target could be reached (every connection failed or timed out)")
 
+// ErrNeedsTerminal is returned by Process for a workflow kind that only
+// runs with a TUI (inspect, sync) when there is no terminal.
+var ErrNeedsTerminal = errors.New("this workflow's kind requires an interactive terminal (TUI) and can't run headlessly yet; rerun in a terminal, or use a stream workflow (with raw: true) for unattended/agent use")
+
 // ErrRestricted is returned by Find/DumpFromTargets/QueryTargetsWithAuth
 // when the merged result is empty AND at least one target closed the
 // query as "restricted: ..." (NIP-42 auth and/or NIP-43/NIP-29 membership)
@@ -450,7 +454,7 @@ func (c *Client) init() error {
 		// happen.
 		switch rs.Spec.(type) {
 		case *InspectSpec, *SyncSpec:
-			return fmt.Errorf("this workflow's kind requires an interactive terminal (TUI) and can't run headlessly yet; rerun in a terminal, or use a stream workflow (with raw: true) for unattended/agent use")
+			return ErrNeedsTerminal
 		}
 	}
 

@@ -226,6 +226,10 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 			return
 		}
+		if searchService == nil {
+			http.Error(w, "search is not enabled on this relay (cache.search.enabled)", http.StatusNotImplemented)
+			return
+		}
 		status := reindex.SearchState.GetStatus()
 		if status["is_running"].(bool) {
 			w.Header().Set("Content-Type", "application/json")
@@ -300,6 +304,10 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 	mux.HandleFunc("/admin/search", adminAuth(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "DELETE" {
 			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if searchService == nil {
+			http.Error(w, "search is not enabled on this relay (cache.search.enabled)", http.StatusNotImplemented)
 			return
 		}
 		if searchService != nil {

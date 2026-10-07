@@ -3,6 +3,7 @@ package relay
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
@@ -80,6 +81,10 @@ func decodeAdminBody(w http.ResponseWriter, r *http.Request, v interface{}) bool
 func writeAdminError(w http.ResponseWriter, err error) {
 	if isBadInput(err) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if errors.Is(err, errNotFound) {
+		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
 	http.Error(w, err.Error(), http.StatusInternalServerError)

@@ -97,6 +97,11 @@ func resolveConfigFile() string {
 // caller is responsible for letting individual leaf commands (e.g.
 // version) opt out.
 func InitConfig() {
+	// --json before anything can log: a config error below would otherwise
+	// print as a console line, the one non-JSON line on stderr.
+	jsonMode, _ := RootCmd.PersistentFlags().GetBool("json")
+	common.ConfigureLogging(common.WithConsole(), common.WithJSON(jsonMode))
+
 	if err := common.LoadViperConfig(resolveConfigFile()); err != nil {
 		log.Warn().Err(err).Msg("config error")
 	}
@@ -136,7 +141,6 @@ func InitConfig() {
 	// means every command's mid-run log narration (not just its final
 	// top-level failure, see common.EmitError) becomes JSON lines on
 	// stderr too, instead of only the last error being structured.
-	jsonMode, _ := RootCmd.PersistentFlags().GetBool("json")
 	common.ConfigureLogging(common.WithConsole(), common.WithFileWriter(LogWriter), common.WithJSON(jsonMode))
 
 	// Applying --quiet centrally, once, replaces what used to be find's

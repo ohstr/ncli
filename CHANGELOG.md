@@ -19,6 +19,16 @@
 
 ### Fixed
 
+- Exit codes that misreported what went wrong:
+  `apply` sync/inspect without a terminal and `apply -f` on a missing file
+  are `usage` (were `internal`); `space join` without a terminal is `usage`
+  (was `unsupported`); `huddle list`/`space join` against a relay with
+  huddles off is `unsupported` (was `internal`); `relay invites revoke` of
+  an unknown code is `not_found` (reported `revoked`); `relay reindex
+  search`/`clear search` with search off are `usage` (reported success).
+  ([#117](https://github.com/ohstr/ncli/pull/117))
+- `--json` left a config-file warning as a plain console line on stderr.
+  ([#117](https://github.com/ohstr/ncli/pull/117))
 - An anonymous `find`/`dump`/`groups show` that the relay refuses exits
   `auth` (7) instead of printing `[]`/`{}` with exit 0, which read as
   "nothing matched". ([#117](https://github.com/ohstr/ncli/pull/117))

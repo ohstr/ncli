@@ -4,89 +4,24 @@
 
 ### Changed
 
-- Consolidated the four top-level `huddle*` packages into
-  `huddle/{audio,client,rtp,sfu}` -- `huddleaudio`, `huddleclient`,
-  `huddlertp`, and `huddlesfu` were four separate repo-root directories for
-  what is really one feature's client half (audio decode/playback, room
-  join) and server half (RTP adaptation, the WebRTC SFU). Packages and
-  their main files are renamed to match (`package audio`/`client`/`rtp`/
-  `sfu`; `huddleaudio.go` -> `audio.go`, and so on), including each
-  package's `pkgname:`-prefixed error messages. Import paths change
-  accordingly (`github.com/ohstr/ncli/huddleclient` ->
-  `.../huddle/client`, and the same shape for the other three) -- a
-  breaking change for anything importing these packages directly. The
-  `-tags huddleaudio` build tag is unchanged: it names a build
-  constraint, not the package, and still gates the same cgo/ALSA-backed
-  playback code. ([#113](https://github.com/ohstr/ncli/pull/113))
-- `examples/relay/` is reorganized around real deployment scenarios instead
-  of individual tech features: `open.yaml`/`auth.yaml`/`cache-search.yaml`/
-  `ephemeral.yaml` are retired (folded into the files below or, for
-  ephemeral's NIP-16-is-automatic fact, into the `ncli-relay-ops` skill's
-  gotchas), `membership.yaml`/`pow.yaml`/`huddle.yaml` are renamed and
-  reframed as `community-membership-relay.yaml`/`anti-spam-relay.yaml`/
-  `community-voice-relay.yaml`, and four new scenarios are added:
-  `personal-relay.yaml`, `dev-test-relay.yaml`, `agent-swarm-relay.yaml`
-  (NIP-AA, filling in `agent_auth` for real), and `app-backend-relay.yaml`
-  (NIP-86 + the `httpBridge.query` POST /query bridge, both administered
-  by an app's own backend rather than a human at a terminal). `minimal.yaml`
-  and `full.yaml` are unchanged -- a quickstart skeleton and an every-field
-  reference aren't scenarios. README and the `ncli-relay-ops`/`ncli-huddle`
-  skills' cross-references are updated accordingly.
-- Four more `examples/relay/` scenarios, each exercising a combination of
-  existing fields the first 8 didn't: `accountability-relay.yaml`
-  (`auth_required` alone, no membership -- requires *some* signed-in
-  identity, not a specific one), `enterprise-compliance-relay.yaml`
-  (membership + auth + strict PoW + `nip86` together, not any one
-  mechanism in isolation), `family-private-relay.yaml` (same mechanism as
-  `community-membership-relay.yaml`, operated differently -- direct
-  enrollment only, no invite flow), and `tracked-membership-relay.yaml`
-  (`membership.enabled` with `membership_required` left off -- a roster
-  and roles for display/moderation tooling, not an admission gate).
-- `cli/relay` gains a test for every scenario's defining promise, booting
-  a real in-process relay per scenario (the same `bootX`+`httptest`
-  pattern `huddle_test.go`/`service_query_test.go` already use) and
-  driving it over a real WebSocket/HTTP connection: PoW actually rejects
-  a 0-difficulty event, `membership_required` actually refuses a
-  non-member and admits an enrolled one, NIP-AA actually grants (and
-  withholds) virtual membership from a NIP-OA credential, `nip86`/
-  `httpBridge.query` are mounted and auth-gated rather than 404, and
-  `cache.topZapped` answers a real cache REQ. A table-driven test also
-  loads every shipped `examples/relay/*.yaml` (not just the 8 named
-  scenarios) through the real config loader, the doc-drift guard that
-  would have caught the `httpBridge` bug below on its own.
-- `integration/agent-eval` gains two rounds (R11/R12): a fresh agent,
-  working only from the `ncli-relay-ops` skill's scenario table (never
-  handed the actual YAML files), authors and stands up each of the 8
-  named scenarios itself and demonstrates the promised behavior --
-  proving the documentation is sufficient, not just that the shipped
-  examples are self-consistent. R12's public-search scenario gets a real
-  Meilisearch pre-started in the agent container for this.
-  ([#115](https://github.com/ohstr/ncli/pull/115))
-- `cli/relay` gains three more scenario tests for the 4 new scenarios
-  above: `auth_required` alone admits any signed-in identity rather than
-  a specific one (`accountability-relay`, contrasting with
-  `membership_required`'s test); PoW still applies to an enrolled member
-  (`enterprise-compliance-relay` -- membership and PoW stack, neither
-  exempts the other); and `membership.enabled` without
-  `membership_required` gates nothing at all (`tracked-membership-relay`).
-  `family-private-relay` shares `community-membership-relay`'s own
-  already-tested mechanism, so it gets the doc-drift load only, not a
-  duplicate behavior test.
-- `integration/agent-eval` gains a third relay-scenarios round (R13) for
-  these same 4 scenarios, same shape as R11/R12 -- the agent authors each
-  config from the skill alone and demonstrates the promise, including the
-  defense-in-depth check that an enrolled member's unmined event is still
-  rejected for PoW.
+- The `huddleaudio`/`huddleclient`/`huddlertp`/`huddlesfu` packages moved
+  under `huddle/` as `audio`/`client`/`rtp`/`sfu`. Breaking only for code
+  importing them; the `-tags huddleaudio` build tag is unchanged.
+  ([#113](https://github.com/ohstr/ncli/pull/113))
+- `examples/relay/` is organized by deployment scenario: personal, dev/test,
+  public search, anti-spam, accountability, community membership, family,
+  tracked membership, enterprise compliance, agent swarm (NIP-AA), app
+  backend (NIP-86 + `POST /query`) and community voice, plus `minimal.yaml`
+  and `full.yaml`. `open`/`auth`/`cache-search`/`ephemeral.yaml` are retired;
+  `membership`/`pow`/`huddle.yaml` became `community-membership-relay`/
+  `anti-spam-relay`/`community-voice-relay.yaml`. The README lists them all.
+  ([#114](https://github.com/ohstr/ncli/pull/114))
 
 ### Fixed
 
-- `examples/relay/full.yaml` documented `query:` as a bare top-level key;
-  the real config shape (since the `httpBridge` grouping landed) is nested
-  under `httpBridge.query`/`httpBridge.events`. Viper silently drops an
-  unknown top-level key rather than erroring, so a config copied from the
-  old example loaded with no complaint and simply never mounted the
-  endpoint -- caught while building `app-backend-relay.yaml` above, which
-  depends on it actually working.
+- `examples/relay/full.yaml` showed `query:` as a top-level key; the real
+  shape is `httpBridge.query`/`httpBridge.events`, so a config copied from
+  it silently never mounted the endpoint.
   ([#114](https://github.com/ohstr/ncli/pull/114))
 
 ## [0.8.0-rc.9]

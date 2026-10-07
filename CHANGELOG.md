@@ -39,7 +39,9 @@
   too. It now clears only the relays.
   ([#117](https://github.com/ohstr/ncli/pull/117))
 - `ncli relay --json` logged in console format once the server started;
-  every stderr line is now JSON.
+  every stderr line is now JSON. ([#119](https://github.com/ohstr/ncli/pull/119))
+- `space show <id>` for a space that doesn't exist exits `not_found`
+  instead of succeeding with nothing. ([#119](https://github.com/ohstr/ncli/pull/119))
 - An authenticated `groups list`/`find` could intermittently omit private
   groups: a REQ the relay answered before AUTH landed was taken as final.
   It is now retried once authenticated.

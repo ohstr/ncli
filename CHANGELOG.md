@@ -38,6 +38,8 @@
   MAC" on the old entries). Relay contexts and Blossom servers were lost
   too. It now clears only the relays.
   ([#117](https://github.com/ohstr/ncli/pull/117))
+- `ncli relay --json` logged in console format once the server started;
+  every stderr line is now JSON.
 - An authenticated `groups list`/`find` could intermittently omit private
   groups: a REQ the relay answered before AUTH landed was taken as final.
   It is now retried once authenticated.

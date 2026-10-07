@@ -61,6 +61,15 @@ spec:
 	})
 }
 
+// TestRelayJSONLogs: the server's own logging honors --json once it starts.
+func TestRelayJSONLogs(t *testing.T) {
+	needsRelay(t)
+	r := StartRelayArgs(t, "", nil, "--json")
+	r.Seed(t)
+	NewEnv(t).MustOK(t, "find", "-s", r.URL, "--kinds", "1", "--json")
+	Result{Args: []string{"relay", "--json"}, Stderr: r.Log()}.ExpectCleanJSONStderr(t)
+}
+
 func TestRelayAdmin(t *testing.T) {
 	needsRelay(t)
 	r := StartRelay(t, "", map[string]any{"membership": map[string]any{"enabled": true}})

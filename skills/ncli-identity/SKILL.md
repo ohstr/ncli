@@ -1,15 +1,15 @@
 ---
 name: ncli-identity
-description: Generate, inspect, import, and manage Nostr keypairs with ncli's local vault (`ncli id`, `ncli id import`), decode any NIP-19 bech32 entity, NIP-CASH cash token, or NIP-CW circlehub1... connection (`ncli decode`), sign unsigned events with a vault/nsec identity (`ncli id sign`), and mint NIP-26 delegation tokens (`ncli id delegate`) for scripted or agent-driven signing. Use when generating, importing an existing nsec/hex/ncryptsec into the vault, or resolving a Nostr identity (hex/npub/nsec/NIP-05), decoding an npub/nsec/note/nprofile/nevent/naddr, a lokicash1...-style cash token, or a circlehub1... connection, signing a hand-authored or dumped unsigned event so it can be published, scripting vault access with NCLI_VAULT_PASSWORD, or non-interactively creating a delegation token with --issuer/NCLI_DELEGATE_ISSUER.
+description: Generate, inspect, import, and manage Nostr keypairs with ncli's local vault (`ncli id`, `ncli id import`, `ncli id relabel`), decode any NIP-19 bech32 entity, NIP-CASH cash token, or NIP-CW circlehub1... connection (`ncli decode`), sign unsigned events with a vault/nsec identity (`ncli id sign`), and mint NIP-26 delegation tokens (`ncli id delegate`) for scripted or agent-driven signing. Use when generating, importing an existing nsec/hex/ncryptsec into the vault, or resolving a Nostr identity (hex/npub/nsec/NIP-05), decoding an npub/nsec/note/nprofile/nevent/naddr, a lokicash1...-style cash token, or a circlehub1... connection, signing a hand-authored or dumped unsigned event so it can be published, scripting vault access with NCLI_VAULT_PASSWORD, or non-interactively creating a delegation token with --issuer/NCLI_DELEGATE_ISSUER.
 license: Unlicense
 ---
 
 <!-- Mirrors ohstr/ncli's cli/ncli/id.go, cli/ncli/id_sign.go,
-cli/ncli/id_import.go, cli/ncli/decode.go, client/decode.go, and cli/delegate/command.go as of
+cli/ncli/id_import.go, cli/ncli/id_relabel.go, cli/ncli/decode.go, client/decode.go, and cli/delegate/command.go as of
 writing. This skill is self-contained by design and won't see repo
 changes automatically — update by hand if flags/schemas change. -->
 
-# ncli id / ncli id import / ncli id sign / ncli id delegate
+# ncli id / ncli id import / ncli id relabel / ncli id sign / ncli id delegate
 
 `sign` and `delegate` are both subcommands of `id` (`ncli id sign`, `ncli id
 delegate`). Both resolve a vault label the same way `id --reveal` does:
@@ -79,6 +79,20 @@ NCLI_IMPORT_PASSWORD=pw ncli id import --label agent-key < key.ncryptsec
 - `--json` or a piped key never prompts: set `NCLI_VAULT_PASSWORD` (and
   `NCLI_IMPORT_PASSWORD` for an ncryptsec), or it's `usage`. A wrong
   ncryptsec password is `auth` (exit 7).
+
+## `ncli id relabel` — rename a saved identity
+
+```sh
+# by current label, npub or hex pubkey; no key needed
+NCLI_VAULT_PASSWORD=hunter2 ncli id relabel agent-key worker-1 --json
+```
+
+- Prints `{"npub","label","previous_label","status"}`, `status` being
+  `relabeled` or `unchanged` (already that label).
+- Not saved: `not_found` (exit 4). New label held by another key:
+  `conflict` (exit 5). A case-only rename of its own label is allowed.
+- Needs the vault password like any vault write (`NCLI_VAULT_PASSWORD`
+  under `--json`).
 
 ## `ncli decode` — decode any NIP-19 entity, cash token, or circlehub1... connection
 

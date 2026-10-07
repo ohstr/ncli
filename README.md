@@ -1048,6 +1048,9 @@ ncli id list --reveal
 # save an existing key (nsec, hex or ncryptsec), read from stdin or --file
 ncli id import --label mykey < key.txt
 
+# rename a saved identity
+ncli id relabel mykey work
+
 # non-interactive, vault password from NCLI_VAULT_PASSWORD
 ncli id --json --save --label mykey
 

@@ -80,6 +80,41 @@ func TestVaultWrongPassword(t *testing.T) {
 	e.Run(t, "id", "sign", "-e", e.WriteFile("u.json", `{"kind":1,"content":"x","created_at":1,"tags":[]}`), "-o", e.Dir+"/s.json", "--identity", "k", "--json").ExpectErr(t, "auth")
 }
 
+// id relabel renames by label or npub without the key; the key still
+// decrypts afterwards.
+func TestIDRelabel(t *testing.T) {
+	e := NewEnv(t)
+	var a, b struct{ Npub, Label string }
+	e.MustOK(t, "id", "--save", "--label", "alice", "--json").JSON(t, &a)
+	e.MustOK(t, "id", "--save", "--label", "bob", "--json").JSON(t, &b)
+
+	type out struct {
+		Npub, Label, Status string
+		PreviousLabel       string `json:"previous_label"`
+	}
+	var o out
+	e.MustOK(t, "id", "relabel", "alice", "carol", "--json").JSON(t, &o)
+	if o.Status != "relabeled" || o.Label != "carol" || o.PreviousLabel != "alice" || o.Npub != a.Npub {
+		t.Fatalf("relabel by label = %+v", o)
+	}
+	e.MustOK(t, "id", "relabel", a.Npub, "carol", "--json").JSON(t, &o)
+	if o.Status != "unchanged" {
+		t.Fatalf("relabel to same label = %+v", o)
+	}
+	if er := e.Run(t, "id", "relabel", "carol", "BOB", "--json").ExpectErr(t, "conflict"); er.Input != "BOB" {
+		t.Fatalf("conflict input = %q", er.Input)
+	}
+	e.Run(t, "id", "relabel", "alice", "x", "--json").ExpectErr(t, "not_found")
+	e.Run(t, "id", "relabel", "carol", "--json").ExpectErr(t, "usage")
+
+	// Case-only rename of its own label is allowed.
+	e.MustOK(t, "id", "relabel", "carol", "Carol", "--json").JSON(t, &o)
+	if o.Status != "relabeled" || o.Label != "Carol" {
+		t.Fatalf("case-only relabel = %+v", o)
+	}
+	e.MustOK(t, "id", "carol", "--reveal", "--json")
+}
+
 // id import: key from stdin or --file only, first valid line wins,
 // re-running is a no-op, and a key is never saved twice.
 func TestIDImport(t *testing.T) {

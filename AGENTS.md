@@ -39,6 +39,7 @@ that priority order.
 | `ncli groups list` / `ncli groups show <group-id>` | Read a relay's groups (metadata) or one group's full detail (metadata/admins/members); `--identity` authenticates (NIP-42) so a member can see their own private group; omitted, it falls back to `groups.identity` or the vault's sole entry, else stays anonymous. `show` names one group, so the relay refuses it outright (exit `7`, `auth`) without membership — and, as of the relay's own existence-oracle fix, identically for a group that doesn't exist at all, not just a private one; `list` names none, so it silently drops private groups you're not a member of instead |
 | `ncli id [identifier]` | Generate or inspect a Nostr keypair (local vault) |
 | `ncli id import` | Save an existing private key (nsec/hex/ncryptsec) to the vault, read from stdin or `--file`, never an argument; first valid line wins; re-running is a no-op and a key is never saved twice (`--force` relabels it) |
+| `ncli id relabel <label\|npub> <new-label>` | Rename a saved vault identity without supplying its key |
 | `ncli id delegate` | Mint a NIP-26 delegation token |
 | `ncli id sign -e <events.json> -o <signed.json>` | Sign one or more unsigned events with a vault/nsec identity |
 | `ncli decode <entity>` | Decode any NIP-19 bech32 entity (npub/nsec/note/nprofile/nevent/naddr), a NIP-CASH cash-token-family string, or a NIP-CW circlehub1... connection |
@@ -56,7 +57,7 @@ Every command's actual result goes to **stdout only**; progress narration
 and errors go to **stderr** — so piping stdout into `jq` or a script's
 parser never picks up log noise. `--json` and `-q/--quiet` are global flags
 (declared once on the root command, available on every subcommand) rather
-than per-command. `id`, `id list`, `id import`, `id sign`, `version`, `id delegate`, `relay
+than per-command. `id`, `id list`, `id import`, `id relabel`, `id sign`, `version`, `id delegate`, `relay
 stats`/`reindex`/`clear`, `relay members`/`invites`/`roles`, `ping`,
 `miner mine`/`check`, `publish`, `huddle list`, `space create`/
 `list`/`show`/`chat send`/`chat list`, `bunker`/`status`/`stop`/

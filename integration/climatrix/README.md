@@ -23,5 +23,11 @@ go test -short ./integration/climatrix/   # fast subset (also in `just check`)
 - **No public relays**: `TestNoPublicRelayInTests` fails on any test file
   naming one, unless listed as parse-only with a reason.
 
+- **Examples**: `TestRelayExamples` boots every `examples/relay/*.yaml`;
+  `CLIMATRIX_EXAMPLES=<dir>` points it at another set (e.g. a branch's).
+- **Docker**: Blossom runs in a container; set `CLIMATRIX_DOCKER_HOST` when
+  published ports aren't on localhost (Docker-out-of-Docker).
+- **Terminal**: `RunTTY`/`startTTY` use `script(1)` for a real pty.
+
 Inside a parent `go.work` that maps this module elsewhere, run with
 `GOWORK=off`.

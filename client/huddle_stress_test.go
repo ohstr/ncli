@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ohstr/ncli/huddleclient"
+	"github.com/ohstr/ncli/huddle/client"
 	"github.com/ohstr/nmilat/huddle/room"
 	"github.com/ohstr/nmilat/huddle/wire"
 	"github.com/stretchr/testify/require"
@@ -50,9 +50,9 @@ func frameLatency(payload []byte, now time.Time) (time.Duration, bool) {
 	return now.Sub(time.Unix(0, int64(binary.BigEndian.Uint64(payload)))), true
 }
 
-func dialHuddleStressPeer(t *testing.T, ctx context.Context, roomID string, i int) *huddleclient.Client {
+func dialHuddleStressPeer(t *testing.T, ctx context.Context, roomID string, i int) *client.Client {
 	t.Helper()
-	c, err := huddleclient.Dial(ctx, huddleclient.Config{
+	c, err := client.Dial(ctx, client.Config{
 		Endpoint: huddleStressRelayURL + "/huddle/" + roomID + "/audio",
 		RelayURL: huddleStressRelayURL,
 		PrivKey:  huddlePeerKey(i),
@@ -140,7 +140,7 @@ func testHuddleLatencySoak(t *testing.T, roomID string, speakers int, minDeliver
 
 	goroutinesBefore := runtime.NumGoroutine()
 
-	clients := make([]*huddleclient.Client, huddleStressPeers)
+	clients := make([]*client.Client, huddleStressPeers)
 	for i := range clients {
 		clients[i] = dialHuddleStressPeer(t, ctx, roomID, i)
 	}

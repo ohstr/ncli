@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/ohstr/ncli/cli/huddle"
-	"github.com/ohstr/ncli/huddleclient"
+	"github.com/ohstr/ncli/huddle/client"
 	"github.com/ohstr/nmilat/huddle/wire"
 	"github.com/stretchr/testify/require"
 )
@@ -18,7 +18,7 @@ import (
 // dialHuddle joins roomID on ts as privKey, through the production client and
 // the production endpoint builder -- so this exercises the URL shape the `ncli
 // huddle join` command actually produces, not a hand-written copy of it.
-func dialHuddle(t *testing.T, ctx context.Context, ts *httptest.Server, roomID, privKey string) *huddleclient.Client {
+func dialHuddle(t *testing.T, ctx context.Context, ts *httptest.Server, roomID, privKey string) *client.Client {
 	t.Helper()
 
 	base, err := url.Parse("ws" + strings.TrimPrefix(ts.URL, "http"))
@@ -27,7 +27,7 @@ func dialHuddle(t *testing.T, ctx context.Context, ts *httptest.Server, roomID, 
 	endpoint, err := huddle.Endpoint(base, roomID)
 	require.NoError(t, err)
 
-	client, err := huddleclient.Dial(ctx, huddleclient.Config{
+	client, err := client.Dial(ctx, client.Config{
 		Endpoint: endpoint,
 		RelayURL: huddleRelayURL,
 		PrivKey:  privKey,
@@ -157,7 +157,7 @@ func TestHuddleBoardReportsARefusedRoom(t *testing.T) {
 	endpoint, err := huddle.Endpoint(base, "board-room")
 	require.NoError(t, err)
 
-	_, err = huddleclient.Dial(ctx, huddleclient.Config{
+	_, err = client.Dial(ctx, client.Config{
 		Endpoint: endpoint,
 		RelayURL: huddleRelayURL,
 		PrivKey:  alicePriv,
@@ -167,7 +167,7 @@ func TestHuddleBoardReportsARefusedRoom(t *testing.T) {
 	// The endpoint is not mounted at all, so this is a 404 rather than a
 	// protocol-level refusal. `ncli huddle join` keys its "this relay has no
 	// huddles" message off exactly this, so the status has to survive the dial.
-	var notUpgraded *huddleclient.DialError
+	var notUpgraded *client.DialError
 	require.ErrorAs(t, err, &notUpgraded)
 	require.Equal(t, http.StatusNotFound, notUpgraded.Status,
 		"a relay with huddles off must 404 the upgrade, not fail some other way")

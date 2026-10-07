@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ohstr/ncli/huddleclient"
+	"github.com/ohstr/ncli/huddle/client"
 	"github.com/ohstr/nmilat/huddle/wire"
 )
 
@@ -45,7 +45,7 @@ type Participant struct {
 type roster struct {
 	mu        sync.Mutex
 	self      string
-	present   map[string]huddleclient.Peer
+	present   map[string]client.Peer
 	lastSpoke map[string]time.Time
 	lastLevel map[string]int8
 	heard     map[string]bool
@@ -64,7 +64,7 @@ func newRoster(self string, hold time.Duration, threshold int8, now func() time.
 	}
 	return &roster{
 		self:      self,
-		present:   make(map[string]huddleclient.Peer),
+		present:   make(map[string]client.Peer),
 		lastSpoke: make(map[string]time.Time),
 		lastLevel: make(map[string]int8),
 		heard:     make(map[string]bool),
@@ -81,11 +81,11 @@ func newRoster(self string, hold time.Duration, threshold int8, now func() time.
 // It reports who left, because anything holding per-peer state keyed off the
 // roster -- an Opus decoder, say -- has to drop it or it accumulates one entry
 // per person who has ever been in the room.
-func (r *roster) sync(peers []huddleclient.Peer) (departed []string) {
+func (r *roster) sync(peers []client.Peer) (departed []string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	present := make(map[string]huddleclient.Peer, len(peers))
+	present := make(map[string]client.Peer, len(peers))
 	for _, p := range peers {
 		present[p.Pubkey] = p
 	}
@@ -108,7 +108,7 @@ func (r *roster) sync(peers []huddleclient.Peer) (departed []string) {
 // frames are ignored: with no pubkey there is no row to light up, and guessing
 // from the routing index alone is exactly the misattribution the epoch exists to
 // prevent.
-func (r *roster) heardFrame(f huddleclient.Frame) {
+func (r *roster) heardFrame(f client.Frame) {
 	if !f.Attributed {
 		return
 	}

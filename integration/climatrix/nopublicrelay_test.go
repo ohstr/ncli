@@ -22,8 +22,8 @@ var publicHostParseOnly = map[string]string{
 	"cli/relay/huddle_test.go":                    "AUTH event naming another relay",
 	"client/prefs/relayurl_test.go":               "relay URL normalization",
 	"client/prefs_test.go":                        "prefs file round-trip",
-	"huddleclient/huddleclient_test.go":           "AUTH event naming another relay",
-	"huddlesfu/huddlesfu_test.go":                 "AUTH event naming another relay",
+	"huddle/client/client_test.go":                "AUTH event naming another relay",
+	"huddle/sfu/sfu_test.go":                      "AUTH event naming another relay",
 }
 
 var (

@@ -4,6 +4,20 @@
 
 ### Changed
 
+- Consolidated the four top-level `huddle*` packages into
+  `huddle/{audio,client,rtp,sfu}` -- `huddleaudio`, `huddleclient`,
+  `huddlertp`, and `huddlesfu` were four separate repo-root directories for
+  what is really one feature's client half (audio decode/playback, room
+  join) and server half (RTP adaptation, the WebRTC SFU). Packages and
+  their main files are renamed to match (`package audio`/`client`/`rtp`/
+  `sfu`; `huddleaudio.go` -> `audio.go`, and so on), including each
+  package's `pkgname:`-prefixed error messages. Import paths change
+  accordingly (`github.com/ohstr/ncli/huddleclient` ->
+  `.../huddle/client`, and the same shape for the other three) -- a
+  breaking change for anything importing these packages directly. The
+  `-tags huddleaudio` build tag is unchanged: it names a build
+  constraint, not the package, and still gates the same cgo/ALSA-backed
+  playback code. ([#113](https://github.com/ohstr/ncli/pull/113))
 - `examples/relay/` is reorganized around real deployment scenarios instead
   of individual tech features: `open.yaml`/`auth.yaml`/`cache-search.yaml`/
   `ephemeral.yaml` are retired (folded into the files below or, for

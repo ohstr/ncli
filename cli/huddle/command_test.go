@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/ohstr/ncli/huddleclient"
+	"github.com/ohstr/ncli/huddle/client"
 	"github.com/ohstr/nmilat/huddle/wsaudio"
 	"github.com/spf13/cobra"
 )
@@ -74,7 +74,7 @@ func TestRefusalHint(t *testing.T) {
 	}
 	seen := map[string]string{}
 	for _, code := range codes {
-		hint := refusalHint(&huddleclient.RefusedError{Code: code})
+		hint := refusalHint(&client.RefusedError{Code: code})
 		if hint == "" {
 			t.Errorf("code %q has no hint", code)
 			continue
@@ -87,17 +87,17 @@ func TestRefusalHint(t *testing.T) {
 
 	// An unrecognized code must yield nothing, so the caller shows the relay's
 	// own message rather than a made-up explanation.
-	if hint := refusalHint(&huddleclient.RefusedError{Code: "something_new"}); hint != "" {
+	if hint := refusalHint(&client.RefusedError{Code: "something_new"}); hint != "" {
 		t.Errorf("want no hint for an unknown code, got %q", hint)
 	}
 
 	// The version mismatch is the one hint with real detail to carry.
 	v := uint8(2)
-	withVersion := refusalHint(&huddleclient.RefusedError{Code: wsaudio.CodeUpgradeRequired, CurrentVersion: &v})
+	withVersion := refusalHint(&client.RefusedError{Code: wsaudio.CodeUpgradeRequired, CurrentVersion: &v})
 	if !strings.Contains(withVersion, "v2") {
 		t.Errorf("want the room's version in the hint, got %q", withVersion)
 	}
-	without := refusalHint(&huddleclient.RefusedError{Code: wsaudio.CodeUpgradeRequired})
+	without := refusalHint(&client.RefusedError{Code: wsaudio.CodeUpgradeRequired})
 	if without == withVersion {
 		t.Error("the hint should say more when the relay reported its version")
 	}

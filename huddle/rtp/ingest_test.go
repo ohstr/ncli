@@ -1,4 +1,4 @@
-package huddlertp
+package rtp
 
 import (
 	"bytes"

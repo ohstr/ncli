@@ -1,6 +1,6 @@
 //go:build huddleaudio
 
-package huddleaudio
+package audio
 
 import (
 	"encoding/binary"
@@ -41,7 +41,7 @@ func NewPlayer() (Player, error) {
 		Format:       oto.FormatSignedInt16LE,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("huddleaudio: opening the audio device: %w", err)
+		return nil, fmt.Errorf("audio: opening the audio device: %w", err)
 	}
 	<-ready
 

@@ -11,8 +11,8 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/ohstr/ncli/client/tui"
-	"github.com/ohstr/ncli/huddleaudio"
-	"github.com/ohstr/ncli/huddleclient"
+	"github.com/ohstr/ncli/huddle/audio"
+	hclient "github.com/ohstr/ncli/huddle/client"
 	"github.com/ohstr/nmilat/nip01"
 	"github.com/ohstr/nmilat/nip19"
 )
@@ -26,20 +26,20 @@ import (
 // redrawing a table of at most 25 rows ten times a second is cheap.
 const refreshInterval = 100 * time.Millisecond
 
-// Client is the part of *huddleclient.Client the board consumes, as an
+// Client is the part of *client.Client the board consumes, as an
 // interface so the board can be driven by a scripted fake in tests with no
 // relay and no network.
 type Client interface {
-	Self() huddleclient.Peer
-	Roster() []huddleclient.Peer
-	Frames() <-chan huddleclient.Frame
+	Self() hclient.Peer
+	Roster() []hclient.Peer
+	Frames() <-chan hclient.Frame
 	Err() error
 	Close() error
 }
 
 // Compile-time proof the real client still satisfies what the board asks of it,
-// so a signature change in huddleclient fails here rather than at a call site.
-var _ Client = (*huddleclient.Client)(nil)
+// so a signature change in the client package fails here rather than at a call site.
+var _ Client = (*hclient.Client)(nil)
 
 // Board is ncli's huddle view: who is in the room, who is talking, and how
 // loudly. It implements tui.ChildProvider, tui.FooterHintsProvider and
@@ -47,7 +47,7 @@ var _ Client = (*huddleclient.Client)(nil)
 //
 // It never captures a microphone, so joining puts no audio into the room. It can
 // play the call when given a player (see PlayAudio), which the default build
-// cannot supply -- see huddleaudio.
+// cannot supply -- see audio.
 //
 // Mute and raise-hand are deliberately absent rather than present and inert:
 // muting means gating a microphone this build does not have, and raising a hand
@@ -97,7 +97,7 @@ func NewBoard(app *tui.App, client Client, room string) *Board {
 		client: client,
 		room:   room,
 		roster: newRoster(client.Self().Pubkey, SpeakingHold,
-			huddleclient.DefaultSpeakingThreshold, time.Now),
+			hclient.DefaultSpeakingThreshold, time.Now),
 	}
 
 	b.table = tview.NewTable()
@@ -139,7 +139,7 @@ func (b *Board) Participants() []Participant {
 // PlayAudio turns the board from watch-only into listen-and-watch, decoding and
 // mixing the call into player. Call it before Run. The board takes ownership of
 // player and closes it on Leave.
-func (b *Board) PlayAudio(player huddleaudio.Player) {
+func (b *Board) PlayAudio(player audio.Player) {
 	b.audio = newAudioPump(player)
 }
 

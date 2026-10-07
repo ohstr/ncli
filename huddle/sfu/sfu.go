@@ -1,13 +1,13 @@
-// Package huddlesfu serves huddle audio to WebRTC peers, so a browser can sit in
+// Package sfu serves huddle audio to WebRTC peers, so a browser can sit in
 // the same room as a peer on the huddle WebSocket.
 //
-//	browser --DTLS/SRTP--> huddlesfu --+
+//	browser --DTLS/SRTP--> sfu --------+
 //	                                   |  one room.Room
 //	buzz client --WS binary--> wsaudio -+
 //
 // It is a selective forwarding unit, not a mixer: a speaker's Opus is
-// repacketized between RTP and huddle frames by huddlertp and never decoded, so
-// no codec is linked here either.
+// repacketized between RTP and huddle frames by huddle/rtp and never decoded,
+// so no codec is linked here either.
 //
 // # Signalling
 //
@@ -26,7 +26,7 @@
 //
 // The client offers first because it owns the microphone. The server offers only
 // to add a newly-heard speaker's track, and the client is expected to answer.
-package huddlesfu
+package sfu
 
 import (
 	"context"

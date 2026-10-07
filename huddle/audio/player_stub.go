@@ -1,6 +1,6 @@
 //go:build !huddleaudio
 
-package huddleaudio
+package audio
 
 const available = false
 

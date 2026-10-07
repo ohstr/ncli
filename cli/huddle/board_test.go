@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ohstr/ncli/huddleclient"
+	"github.com/ohstr/ncli/huddle/client"
 	"github.com/ohstr/nmilat/huddle/wire"
 )
 
@@ -19,32 +19,32 @@ const (
 )
 
 type fakeClient struct {
-	self   huddleclient.Peer
-	frames chan huddleclient.Frame
+	self   client.Peer
+	frames chan client.Frame
 
 	mu     sync.Mutex
-	roster []huddleclient.Peer
+	roster []client.Peer
 	err    error
 	closes int
 }
 
 func newFakeClient() *fakeClient {
 	return &fakeClient{
-		self:   huddleclient.Peer{Pubkey: selfPub, Index: 0},
-		frames: make(chan huddleclient.Frame, 8),
-		roster: []huddleclient.Peer{{Pubkey: selfPub, Index: 0}},
+		self:   client.Peer{Pubkey: selfPub, Index: 0},
+		frames: make(chan client.Frame, 8),
+		roster: []client.Peer{{Pubkey: selfPub, Index: 0}},
 	}
 }
 
-func (f *fakeClient) Self() huddleclient.Peer { return f.self }
+func (f *fakeClient) Self() client.Peer { return f.self }
 
-func (f *fakeClient) Roster() []huddleclient.Peer {
+func (f *fakeClient) Roster() []client.Peer {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return append([]huddleclient.Peer(nil), f.roster...)
+	return append([]client.Peer(nil), f.roster...)
 }
 
-func (f *fakeClient) Frames() <-chan huddleclient.Frame { return f.frames }
+func (f *fakeClient) Frames() <-chan client.Frame { return f.frames }
 
 func (f *fakeClient) Err() error {
 	f.mu.Lock()
@@ -59,7 +59,7 @@ func (f *fakeClient) Close() error {
 	return nil
 }
 
-func (f *fakeClient) setRoster(peers ...huddleclient.Peer) {
+func (f *fakeClient) setRoster(peers ...client.Peer) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.roster = peers
@@ -168,14 +168,14 @@ func cellText(t *testing.T, b *Board, row, col int) string {
 func TestBoardRendersTheRoster(t *testing.T) {
 	fc := newFakeClient()
 	fc.setRoster(
-		huddleclient.Peer{Pubkey: selfPub, Index: 0},
-		huddleclient.Peer{Pubkey: peerPub, Index: 3},
+		client.Peer{Pubkey: selfPub, Index: 0},
+		client.Peer{Pubkey: peerPub, Index: 3},
 	)
 	b := NewBoard(nil, fc, "room-1")
 
 	b.roster.sync(fc.Roster())
-	b.roster.heardFrame(huddleclient.Frame{
-		Author:     huddleclient.Peer{Pubkey: peerPub},
+	b.roster.heardFrame(client.Frame{
+		Author:     client.Peer{Pubkey: peerPub},
 		Header:     wire.FrameHeader{LevelDbov: -12},
 		Attributed: true,
 	})
@@ -210,8 +210,8 @@ func TestBoardRendersTheRoster(t *testing.T) {
 func TestBoardOpensWithTheRosterAlreadyPopulated(t *testing.T) {
 	fc := newFakeClient()
 	fc.setRoster(
-		huddleclient.Peer{Pubkey: selfPub, Index: 0},
-		huddleclient.Peer{Pubkey: peerPub, Index: 1},
+		client.Peer{Pubkey: selfPub, Index: 0},
+		client.Peer{Pubkey: peerPub, Index: 1},
 	)
 
 	// No Run, no tick: whatever is on screen here is the very first paint.
@@ -285,8 +285,8 @@ func TestBoardLeaveIsIdempotent(t *testing.T) {
 func TestBoardRunClearsSpeakingWhenAPeerGoesQuiet(t *testing.T) {
 	fc := newFakeClient()
 	fc.setRoster(
-		huddleclient.Peer{Pubkey: selfPub, Index: 0},
-		huddleclient.Peer{Pubkey: peerPub, Index: 1},
+		client.Peer{Pubkey: selfPub, Index: 0},
+		client.Peer{Pubkey: peerPub, Index: 1},
 	)
 	b := NewBoard(nil, fc, "room-1")
 
@@ -298,8 +298,8 @@ func TestBoardRunClearsSpeakingWhenAPeerGoesQuiet(t *testing.T) {
 		b.Run(ctx)
 	}()
 
-	fc.frames <- huddleclient.Frame{
-		Author:     huddleclient.Peer{Pubkey: peerPub},
+	fc.frames <- client.Frame{
+		Author:     client.Peer{Pubkey: peerPub},
 		Header:     wire.FrameHeader{LevelDbov: -12},
 		Attributed: true,
 	}

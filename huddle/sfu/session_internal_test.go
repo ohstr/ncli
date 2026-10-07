@@ -1,4 +1,4 @@
-package huddlesfu
+package sfu
 
 import (
 	"encoding/json"

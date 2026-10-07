@@ -1,4 +1,4 @@
-package huddleclient_test
+package client_test
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ohstr/ncli/huddleclient"
+	"github.com/ohstr/ncli/huddle/client"
 	"github.com/ohstr/nmilat/huddle/room"
 	"github.com/ohstr/nmilat/huddle/wire"
 	"github.com/ohstr/nmilat/huddle/wsaudio"
@@ -51,9 +51,9 @@ func (h *harness) endpoint(roomID string) string {
 	return "ws" + strings.TrimPrefix(h.srv.URL, "http") + "/huddle/" + roomID + "/audio"
 }
 
-func (h *harness) dial(roomID, privKey string) *huddleclient.Client {
+func (h *harness) dial(roomID, privKey string) *client.Client {
 	h.t.Helper()
-	c, err := huddleclient.Dial(context.Background(), huddleclient.Config{
+	c, err := client.Dial(context.Background(), client.Config{
 		Endpoint: h.endpoint(roomID), RelayURL: relayURL, PrivKey: privKey,
 	})
 	if err != nil {
@@ -87,10 +87,10 @@ func TestDialJoinsAndReportsSelf(t *testing.T) {
 
 func TestDialRequiresAPrivateKey(t *testing.T) {
 	h := newHarness(t, nil)
-	_, err := huddleclient.Dial(context.Background(), huddleclient.Config{
+	_, err := client.Dial(context.Background(), client.Config{
 		Endpoint: h.endpoint("room-1"), RelayURL: relayURL,
 	})
-	if !errors.Is(err, huddleclient.ErrNoPrivateKey) {
+	if !errors.Is(err, client.ErrNoPrivateKey) {
 		t.Fatalf("err = %v, want ErrNoPrivateKey", err)
 	}
 }
@@ -102,13 +102,13 @@ func TestDialSurfacesTheRelaysRefusalCode(t *testing.T) {
 		c.Authorize = func(context.Context, string, string) error { return errors.New("nope") }
 	})
 
-	_, err := huddleclient.Dial(context.Background(), huddleclient.Config{
+	_, err := client.Dial(context.Background(), client.Config{
 		Endpoint: h.endpoint("room-1"), RelayURL: relayURL, PrivKey: alicePriv,
 	})
-	if !errors.Is(err, huddleclient.ErrRefused) {
+	if !errors.Is(err, client.ErrRefused) {
 		t.Fatalf("err = %v, want it to wrap ErrRefused", err)
 	}
-	var refused *huddleclient.RefusedError
+	var refused *client.RefusedError
 	if !errors.As(err, &refused) {
 		t.Fatalf("err = %v, want a *RefusedError", err)
 	}
@@ -120,10 +120,10 @@ func TestDialSurfacesTheRelaysRefusalCode(t *testing.T) {
 func TestDialFailsOnABadAuthEvent(t *testing.T) {
 	h := newHarness(t, nil)
 	// Signing for a different relay: the endpoint validates the relay tag.
-	_, err := huddleclient.Dial(context.Background(), huddleclient.Config{
+	_, err := client.Dial(context.Background(), client.Config{
 		Endpoint: h.endpoint("room-1"), RelayURL: "wss://somewhere.else", PrivKey: alicePriv,
 	})
-	var refused *huddleclient.RefusedError
+	var refused *client.RefusedError
 	if !errors.As(err, &refused) || refused.Code != wsaudio.CodeAuthFailed {
 		t.Fatalf("err = %v, want auth_failed", err)
 	}
@@ -182,7 +182,7 @@ func TestFramesArriveAttributedToTheSpeaker(t *testing.T) {
 			if frame.Header.LevelDbov != -20 {
 				t.Errorf("LevelDbov = %d, want -20", frame.Header.LevelDbov)
 			}
-			if !frame.Speaking(huddleclient.DefaultSpeakingThreshold) {
+			if !frame.Speaking(client.DefaultSpeakingThreshold) {
 				t.Error("Speaking() = false for a -20 dBov frame")
 			}
 			return
@@ -244,7 +244,7 @@ func TestSpeakingThreshold(t *testing.T) {
 	}{
 		{name: "loud speech", level: -20, want: true},
 		{name: "just above the threshold", level: -54, want: true},
-		{name: "at the threshold", level: huddleclient.DefaultSpeakingThreshold},
+		{name: "at the threshold", level: client.DefaultSpeakingThreshold},
 		{name: "below the threshold", level: -80},
 		{name: "silence floor", level: wire.LevelSilenceFloor},
 		// Comfort noise is not speech however loud the level claims to be.
@@ -256,8 +256,8 @@ func TestSpeakingThreshold(t *testing.T) {
 			if tc.dtx {
 				header.Flags |= wire.FlagDTX
 			}
-			frame := huddleclient.Frame{Header: header}
-			if got := frame.Speaking(huddleclient.DefaultSpeakingThreshold); got != tc.want {
+			frame := client.Frame{Header: header}
+			if got := frame.Speaking(client.DefaultSpeakingThreshold); got != tc.want {
 				t.Errorf("Speaking() = %v, want %v", got, tc.want)
 			}
 		})
@@ -274,7 +274,7 @@ func TestCloseIsIdempotentAndStopsSending(t *testing.T) {
 	if err := c.Close(); err != nil {
 		t.Fatalf("second Close: %v", err)
 	}
-	if err := c.Send(wire.FrameHeader{}, []byte{0x01}); !errors.Is(err, huddleclient.ErrClosed) {
+	if err := c.Send(wire.FrameHeader{}, []byte{0x01}); !errors.Is(err, client.ErrClosed) {
 		t.Errorf("Send after Close = %v, want ErrClosed", err)
 	}
 	// A clean close is not an error.

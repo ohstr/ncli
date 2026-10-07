@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ohstr/ncli/huddleclient"
+	"github.com/ohstr/ncli/huddle/client"
 	"github.com/ohstr/nmilat/huddle/wire"
 )
 
@@ -80,7 +80,7 @@ func TestAudioPumpSkipsUnattributedFrames(t *testing.T) {
 
 	// No pubkey means no decoder can be chosen. Guessing would feed one speaker's
 	// stream into another's decoder and corrupt both.
-	pump.add(huddleclient.Frame{
+	pump.add(client.Frame{
 		Header:     wire.FrameHeader{},
 		Opus:       []byte{0x01, 0x02, 0x03},
 		Attributed: false,
@@ -93,7 +93,7 @@ func TestAudioPumpSkipsUnattributedFrames(t *testing.T) {
 	}
 
 	// An empty payload is a header-only frame, also nothing to decode.
-	pump.add(huddleclient.Frame{Author: huddleclient.Peer{Pubkey: "alice"}, Attributed: true})
+	pump.add(client.Frame{Author: client.Peer{Pubkey: "alice"}, Attributed: true})
 	if got := pump.mixer.Speakers(); got != 0 {
 		t.Errorf("an empty payload created %d decoder(s), want 0", got)
 	}
@@ -103,8 +103,8 @@ func TestAudioPumpSurvivesAnUndecodableFrame(t *testing.T) {
 	pump := newAudioPump(&recordingPlayer{})
 
 	// One peer sending something unplayable must not end the call for anyone.
-	pump.add(huddleclient.Frame{
-		Author:     huddleclient.Peer{Pubkey: "alice"},
+	pump.add(client.Frame{
+		Author:     client.Peer{Pubkey: "alice"},
 		Opus:       []byte{0xFF, 0xFF, 0xFF, 0xFF},
 		Attributed: true,
 	})

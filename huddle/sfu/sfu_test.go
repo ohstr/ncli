@@ -1,4 +1,4 @@
-package huddlesfu_test
+package sfu_test
 
 import (
 	"bytes"
@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/ohstr/ncli/huddlesfu"
+	"github.com/ohstr/ncli/huddle/sfu"
 	"github.com/ohstr/nmilat/huddle/room"
 	"github.com/ohstr/nmilat/huddle/wire"
 	"github.com/ohstr/nmilat/nip01"
@@ -73,11 +73,11 @@ type harness struct {
 // logs returns everything the handler has logged so far.
 func (h *harness) logs() string { return h.sink.String() }
 
-func newHarness(t *testing.T, mutate func(*huddlesfu.Config)) *harness {
+func newHarness(t *testing.T, mutate func(*sfu.Config)) *harness {
 	t.Helper()
 	rooms := room.NewManager(0)
 	sink := &logSink{}
-	cfg := huddlesfu.Config{
+	cfg := sfu.Config{
 		Enabled:  true,
 		RelayURL: relayURL,
 		Rooms:    rooms,
@@ -87,7 +87,7 @@ func newHarness(t *testing.T, mutate func(*huddlesfu.Config)) *harness {
 		mutate(&cfg)
 	}
 	mux := http.NewServeMux()
-	mux.Handle("/huddle/{id}/rtc", huddlesfu.NewHandler(cfg))
+	mux.Handle("/huddle/{id}/rtc", sfu.NewHandler(cfg))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return &harness{t: t, srv: srv, rooms: cfg.Rooms, sink: sink}
@@ -203,7 +203,7 @@ func TestRTCHandshakeRejections(t *testing.T) {
 			}
 
 			msg := readMessage(t, conn)
-			if msg.Type != "error" || msg.Code != huddlesfu.CodeAuthFailed {
+			if msg.Type != "error" || msg.Code != sfu.CodeAuthFailed {
 				t.Fatalf("got %+v, want auth_failed", msg)
 			}
 			if h.rooms.Len() != 0 {
@@ -214,16 +214,16 @@ func TestRTCHandshakeRejections(t *testing.T) {
 }
 
 func TestRTCDisabledSaysSo(t *testing.T) {
-	h := newHarness(t, func(c *huddlesfu.Config) { c.Enabled = false })
+	h := newHarness(t, func(c *sfu.Config) { c.Enabled = false })
 	msg := readMessage(t, h.dial("room-1"))
-	if msg.Type != "error" || msg.Code != huddlesfu.CodeAudioUnavailable {
+	if msg.Type != "error" || msg.Code != sfu.CodeAudioUnavailable {
 		t.Fatalf("got %+v, want huddle_audio_unavailable", msg)
 	}
 }
 
 func TestRTCRequiresARoomID(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.Handle("/huddle/rtc", huddlesfu.NewHandler(huddlesfu.Config{
+	mux.Handle("/huddle/rtc", sfu.NewHandler(sfu.Config{
 		Enabled: true, RelayURL: relayURL, Rooms: room.NewManager(0), Logger: zerolog.Nop(),
 	}))
 	srv := httptest.NewServer(mux)

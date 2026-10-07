@@ -1,4 +1,4 @@
-package huddlesfu
+package sfu
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/ohstr/ncli/huddlertp"
+	"github.com/ohstr/ncli/huddle/rtp"
 	"github.com/ohstr/nmilat/huddle/room"
 	"github.com/ohstr/nmilat/huddle/wire"
 	"github.com/ohstr/nmilat/nip42"
@@ -34,7 +34,7 @@ type session struct {
 	version uint8
 	room    *room.Room
 	peer    *room.Peer
-	sink    *huddlertp.Sink
+	sink    *rtp.Sink
 	pc      *webrtc.PeerConnection
 
 	// hub carries video between the WebRTC peers of a room. Audio does not use
@@ -152,7 +152,7 @@ func (s *session) handshake(ctx context.Context) bool {
 	s.pc = pc
 	s.wirePeerConnection()
 
-	sink, err := huddlertp.New(huddlertp.Config{NewTrack: s.newSpeakerTrack})
+	sink, err := rtp.New(rtp.Config{NewTrack: s.newSpeakerTrack})
 	if err != nil {
 		s.writeError(CodeNegotiationFailed, "could not build the audio sink", nil)
 		return false
@@ -178,9 +178,9 @@ func (s *session) handshake(ctx context.Context) bool {
 	return true
 }
 
-// newSpeakerTrack is huddlertp's TrackFactory: one outbound track per speaker,
+// newSpeakerTrack is rtp's TrackFactory: one outbound track per speaker,
 // added to the peer connection, which triggers renegotiation.
-func (s *session) newSpeakerTrack(author room.PeerInfo) (huddlertp.PacketWriter, error) {
+func (s *session) newSpeakerTrack(author room.PeerInfo) (rtp.PacketWriter, error) {
 	// Channels is 2, not wire.Channels. Those describe different things:
 	// wire.Channels is how many channels the audio actually has (mono), while
 	// this is the SDP codec parameter, which for Opus is conventionally 2
@@ -242,7 +242,7 @@ func (s *session) publishInbound(track *webrtc.TrackRemote, receiver *webrtc.RTP
 	// the answer rather than assuming the conventional value.
 	var levelExtID uint8
 	for _, ext := range receiver.GetParameters().HeaderExtensions {
-		if ext.URI == huddlertp.AudioLevelExtensionURI {
+		if ext.URI == rtp.AudioLevelExtensionURI {
 			levelExtID = uint8(ext.ID)
 			break
 		}
@@ -259,7 +259,7 @@ func (s *session) publishInbound(track *webrtc.TrackRemote, receiver *webrtc.RTP
 			s.log.Debug().Err(err).Msg("inbound track ended")
 			return
 		}
-		frame, ok := huddlertp.FrameFromRTP(packet, levelExtID)
+		frame, ok := rtp.FrameFromRTP(packet, levelExtID)
 		if !ok {
 			continue
 		}

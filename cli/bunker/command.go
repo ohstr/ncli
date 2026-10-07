@@ -375,7 +375,11 @@ func newSessionsCommand() *cobra.Command {
 				return common.NotFoundError(cmd, args[0], fmt.Errorf("no remembered session for %q", args[0]))
 			}
 			if jsonMode {
-				common.PrintJSON(found.Grants)
+				grants := found.Grants
+				if grants == nil {
+					grants = []Grant{}
+				}
+				common.PrintJSON(grants)
 				return nil
 			}
 			if len(found.Grants) == 0 {

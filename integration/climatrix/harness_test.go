@@ -177,6 +177,24 @@ func (r Result) JSON(t *testing.T, v any) {
 	}
 }
 
+// ExpectJSONArray asserts stdout's top-level value (key "") or its key
+// field is a JSON array: lists are [] when empty, never null or missing.
+func (r Result) ExpectJSONArray(t *testing.T, key string) {
+	t.Helper()
+	var v any
+	r.JSON(t, &v)
+	if key != "" {
+		obj, ok := v.(map[string]any)
+		if !ok {
+			t.Fatalf("stdout is not a JSON object\n%s", r)
+		}
+		v = obj[key]
+	}
+	if _, ok := v.([]any); !ok {
+		t.Errorf("%q is %v, want a JSON array\n%s", key, v, r)
+	}
+}
+
 // ErrReport is the --json failure line on stderr.
 type ErrReport struct {
 	Error     string `json:"error"`

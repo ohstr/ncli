@@ -79,6 +79,7 @@ func newMirrorCommand() *cobra.Command {
 					descriptor, err := hc.Mirror(ctx, server, sourceURL, auth)
 					if err != nil {
 						res.Error = describeError(err) + uploadErrorHint
+						res.err = err
 					} else {
 						res.OK = true
 						res.URL = descriptor.URL
@@ -93,7 +94,7 @@ func newMirrorCommand() *cobra.Command {
 
 			printFanoutReport(jsonMode, report)
 			if !report.allSucceeded() {
-				return common.RuntimeError(cmd, fmt.Errorf("%d of %d mirrors failed", report.Failed, report.Attempted))
+				return report.failure(cmd, "mirrors")
 			}
 			return nil
 		},

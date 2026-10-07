@@ -4,6 +4,10 @@
 
 ### Security
 
+- `blossom upload` signed an authorization token with no `x` (hash) tag,
+  valid for uploading any blob until it expired; servers that check the
+  tag (the reference blossom-server) refused every upload. Each token is
+  now scoped to its file's SHA-256. ([#117](https://github.com/ohstr/ncli/pull/117))
 - The relay's admin HTTP API (`/admin/...`) accepted a NIP-98 header with
   no `payload` tag for any request body, and accepted the same header
   again until it expired: a captured header could enroll an attacker as a
@@ -26,6 +30,9 @@
   huddles off is `unsupported` (was `internal`); `relay invites revoke` of
   an unknown code is `not_found` (reported `revoked`); `relay reindex
   search`/`clear search` with search off are `usage` (reported success).
+  ([#117](https://github.com/ohstr/ncli/pull/117))
+- `blossom upload`/`rm`/`mirror` failing on every server exit with the
+  server's own code (`auth`, `not_found`, `network`) instead of `internal`.
   ([#117](https://github.com/ohstr/ncli/pull/117))
 - `--json` left a config-file warning as a plain console line on stderr.
   ([#117](https://github.com/ohstr/ncli/pull/117))

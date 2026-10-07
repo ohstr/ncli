@@ -49,9 +49,11 @@ func TestGroupsCLI(t *testing.T) {
 
 	t.Run("re-creating an existing id is no takeover", func(t *testing.T) {
 		res := groupsCLI(t, r, bob.Nsec, "create", "team")
-		// The relay OKs the duplicate kind:9007, so the CLI reports success
-		// for what was a no-op.
-		known(t, "relay-accepts-duplicate-group-create", res.Code == 0, "second create of team by bob exited 0")
+		// The id is taken: conflict, with the per-relay report on stdout.
+		res.expectErr(t, "conflict", true)
+		if again := groupsCLI(t, r, alice.Nsec, "create", "team"); again.Code != 0 {
+			t.Errorf("owner's own retry of create failed\n%s", again)
+		}
 		var d struct {
 			Admins []map[string]any `json:"admins"`
 		}

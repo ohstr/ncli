@@ -237,6 +237,27 @@ func saveIdentity(cmd *cobra.Command, jsonMode bool, id *client.Identity, label 
 	return entry, nil
 }
 
+// findVaultTarget resolves target -- a label, npub, hex pubkey, nprofile or
+// nip-05 address -- to the vault entry holding that key.
+func findVaultTarget(cmd *cobra.Command, target string) (*client.VaultEntry, error) {
+	resolved, err := client.ResolveIdentifier(target)
+	if err != nil {
+		return nil, keyresolve.ClassifyIdentifierError(cmd, target, err)
+	}
+	if resolved.InVault {
+		entries, err := client.LoadVaultEntries()
+		if err != nil {
+			return nil, common.RuntimeError(cmd, err)
+		}
+		for i := range entries {
+			if entries[i].Npub == resolved.Npub {
+				return &entries[i], nil
+			}
+		}
+	}
+	return nil, common.NotFoundError(cmd, common.RedactSecretInput(target), fmt.Errorf("%s not saved in vault", resolved.Npub))
+}
+
 func runIDList(cmd *cobra.Command) error {
 	jsonMode, _ := cmd.Flags().GetBool("json")
 	reveal, _ := cmd.Flags().GetBool("reveal")

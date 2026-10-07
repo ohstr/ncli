@@ -9,9 +9,9 @@
   never an argument; the first valid line is used. Re-running is a no-op;
   `--force` relabels a key already saved under another label. A key is
   never saved twice. ([#124](https://github.com/ohstr/ncli/pull/124))
-- `ncli id relabel <label|npub> <new-label>` renames a saved identity
+- `ncli id relabel <identifier> <new-label>` renames a saved identity
   without its key. ([#124](https://github.com/ohstr/ncli/pull/124))
-- `ncli id rm <label|npub>` removes a saved identity; it asks first, and
+- `ncli id rm <identifier>` removes a saved identity; it asks first, and
   needs `--yes` with `--json` or no terminal.
   ([#124](https://github.com/ohstr/ncli/pull/124))
 

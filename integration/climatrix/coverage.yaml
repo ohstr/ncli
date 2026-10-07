@@ -56,8 +56,8 @@
 "id delegate": {modes: [json, tty, errors], tests: [TestIDDelegate, TestTTY_DelegateWizard]}
 "id import": {modes: [json, errors], tests: [TestIDImport]}
 "id list": {modes: [json], tests: [TestID]}
-"id relabel": {modes: [json, errors], tests: [TestIDRelabel]}
-"id rm": {modes: [json, errors], tests: [TestIDRm]}
+"id relabel": {modes: [json, errors], tests: [TestIDRelabel, TestIDRelabelRmByIdentifier]}
+"id rm": {modes: [json, errors], tests: [TestIDRm, TestIDRelabelRmByIdentifier]}
 "id sign": {modes: [json, errors], tests: [TestIDSign]}
 "miner": {modes: [errors], tests: [TestBareGroupCommands]}
 "miner check": {modes: [json, errors], tests: [TestMinerFileMode, TestQuery]}

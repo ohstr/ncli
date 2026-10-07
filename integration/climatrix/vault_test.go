@@ -115,6 +115,43 @@ func TestIDRelabel(t *testing.T) {
 	e.MustOK(t, "id", "carol", "--reveal", "--json")
 }
 
+// relabel and rm find an entry by hex pubkey or nip-05 too, and never
+// prompt when piped; a pubkey that isn't saved is not_found.
+func TestIDRelabelRmByIdentifier(t *testing.T) {
+	e := NewEnv(t)
+	var a, b struct {
+		Npub   string
+		PubHex string `json:"pub_hex"`
+	}
+	e.MustOK(t, "id", "--save", "--label", "alice", "--json").JSON(t, &a)
+	e.MustOK(t, "id", "--save", "--label", "bob", "--json").JSON(t, &b)
+	nip05 := StartNip05(t, map[string]string{"alice": a.PubHex, "stranger": strings.Repeat("ab", 32)})
+	e.TrustNip05(nip05)
+
+	var o struct{ Label, Status string }
+	e.MustOK(t, "id", "relabel", a.PubHex, "a2", "--json").JSON(t, &o)
+	if o.Status != "relabeled" || o.Label != "a2" {
+		t.Fatalf("relabel by hex = %+v", o)
+	}
+	e.MustOK(t, "id", "relabel", nip05.ID("alice"), "a3", "--json").JSON(t, &o)
+	if o.Status != "relabeled" || o.Label != "a3" {
+		t.Fatalf("relabel by nip-05 = %+v", o)
+	}
+	e.Run(t, "id", "rm", nip05.ID("stranger"), "--yes", "--json").ExpectErr(t, "not_found")
+	e.MustOK(t, "id", "rm", nip05.ID("alice"), "--yes", "--json").JSON(t, &o)
+	if o.Status != "removed" || o.Label != "a3" {
+		t.Fatalf("rm by nip-05 = %+v", o)
+	}
+	e.MustOK(t, "id", "rm", b.PubHex, "--yes", "--json")
+
+	// Piped, no --json, no password: a clean usage error, not a prompt.
+	e.MustOK(t, "id", "--save", "--label", "c", "--json")
+	e.Setenv("NCLI_VAULT_PASSWORD", "")
+	if r := e.Run(t, "id", "relabel", "c", "d"); r.Code != 2 {
+		t.Fatalf("piped relabel without password: want exit 2\n%s", r)
+	}
+}
+
 // id rm needs --yes without a terminal, removes only the named entry, and
 // is not_found once gone.
 func TestIDRm(t *testing.T) {

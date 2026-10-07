@@ -80,10 +80,30 @@ NCLI_IMPORT_PASSWORD=pw ncli id import --label agent-key < key.ncryptsec
   `NCLI_IMPORT_PASSWORD` for an ncryptsec), or it's `usage`. A wrong
   ncryptsec password is `auth` (exit 7).
 
+## Vault lifecycle without prompts (agents)
+
+```sh
+export NCLI_VAULT_PASSWORD=hunter2
+# import a key handed over in a file
+ncli id import --file key.txt --label worker --json
+# safe to re-run: status "unchanged"
+ncli id import --file key.txt --label worker --json
+# list what's saved
+ncli id list --json
+# rename, by label/npub/hex/nprofile/nip-05
+ncli id relabel worker worker-1 --json
+# remove; --yes is mandatory here
+ncli id rm worker-1 --yes --json
+```
+
+Every step is `--json` in, one JSON object out, typed `code` on failure:
+retry on `conflict`/`network`, otherwise fix the input. A nip-05
+identifier that fails to resolve is `network`.
+
 ## `ncli id relabel` — rename a saved identity
 
 ```sh
-# by current label, npub or hex pubkey; no key needed
+# by label, npub, hex pubkey, nprofile or nip-05; no key needed
 NCLI_VAULT_PASSWORD=hunter2 ncli id relabel agent-key worker-1 --json
 ```
 

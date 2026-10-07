@@ -14,17 +14,20 @@ import (
 )
 
 var idRmCmd = &cobra.Command{
-	Use:     "rm <label|npub>",
+	Use:     "rm <identifier>",
 	Aliases: []string{"remove"},
 	Short:   "Remove a saved vault identity",
-	Long: `Remove a saved vault identity, found by its label, npub or hex pubkey.
-This deletes the vault's copy of the private key: back it up first
-(ncli id <label> --reveal) if it isn't stored anywhere else.
+	Long: `Remove a saved vault identity, found by its label, npub, hex pubkey,
+nprofile or nip-05 address. This deletes the vault's copy of the private
+key: back it up first (ncli id <label> --reveal) if it isn't stored
+anywhere else.
 
 Asks for confirmation; --yes skips it, and is required with --json or
-without a terminal.`,
+without a terminal, where the vault password comes from
+NCLI_VAULT_PASSWORD.`,
 	Example: `  ncli id rm alice
-  ncli id rm npub1... --yes --json`,
+  ncli id rm alice@example.com
+  NCLI_VAULT_PASSWORD=pw ncli id rm npub1... --yes --json`,
 	Args: common.ExactArgs(1),
 	RunE: runIDRm,
 }
@@ -39,12 +42,9 @@ func runIDRm(cmd *cobra.Command, args []string) error {
 	yes, _ := cmd.Flags().GetBool("yes")
 	target := args[0]
 
-	entry, found, err := client.FindVaultEntry(target)
+	entry, err := findVaultTarget(cmd, target)
 	if err != nil {
-		return common.RuntimeError(cmd, err)
-	}
-	if !found {
-		return common.NotFoundError(cmd, common.RedactSecretInput(target), errors.New("identity not saved in vault"))
+		return err
 	}
 
 	interactive := !jsonMode && term.IsTerminal(int(os.Stdin.Fd()))

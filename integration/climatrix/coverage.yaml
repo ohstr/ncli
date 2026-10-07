@@ -14,9 +14,9 @@
 "blossom servers list": {modes: [json], tests: [TestBlossom]}
 "blossom servers remove": {modes: [json], tests: [TestBlossom]}
 "blossom upload": {modes: [json, errors], tests: [TestBlossom]}
-"bunker": {modes: [tty, errors], tests: [TestTTY_BunkerDaemon, TestBunkerWithoutDaemon], pending: "TUI approve/reject keystrokes"}
+"bunker": {modes: [tty, errors], tests: [TestTTY_BunkerDaemon, TestTTY_BunkerApproveReject, TestBunkerWithoutDaemon]}
 "bunker attach": {modes: [errors], tests: [TestBunkerWithoutDaemon], pending: "TUI (phase 5)"}
-"bunker connect": {modes: [json, errors], tests: [TestTTY_BunkerDaemon, TestBunkerWithoutDaemon], pending: "completing a pairing needs a second NIP-46 client"}
+"bunker connect": {modes: [json, errors], tests: [TestTTY_BunkerDaemon, TestTTY_BunkerApproveReject, TestBunkerWithoutDaemon]}
 "bunker history": {modes: [json, errors], tests: [TestTTY_BunkerDaemon, TestBunkerWithoutDaemon]}
 "bunker sessions": {modes: [errors], tests: [TestBareGroupCommands]}
 "bunker sessions grants": {modes: [errors], tests: [TestTTY_BunkerDaemon, TestBunkerWithoutDaemon]}
@@ -48,7 +48,7 @@
 "huddle": {modes: [errors], tests: [TestBareGroupCommands]}
 "huddle list": {modes: [json, errors], tests: [TestSpaceAndHuddle]}
 "id": {modes: [json, errors], tests: [TestID, TestHarness_ActorsAreConsistent]}
-"id delegate": {modes: [json, errors], tests: [TestIDDelegate], pending: "interactive wizard (phase 5)"}
+"id delegate": {modes: [json, tty, errors], tests: [TestIDDelegate, TestTTY_DelegateWizard]}
 "id list": {modes: [json], tests: [TestID]}
 "id sign": {modes: [json, errors], tests: [TestIDSign]}
 "miner": {modes: [errors], tests: [TestBareGroupCommands]}

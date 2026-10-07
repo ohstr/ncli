@@ -38,6 +38,10 @@
   MAC" on the old entries). Relay contexts and Blossom servers were lost
   too. It now clears only the relays.
   ([#117](https://github.com/ohstr/ncli/pull/117))
+- An authenticated `groups list`/`find` could intermittently omit private
+  groups: a REQ the relay answered before AUTH landed was taken as final.
+  It is now retried once authenticated.
+  ([#117](https://github.com/ohstr/ncli/pull/117))
 - With the vault key missing but identities still saved, `id --save`
   silently started a new vault (orphaning them) and unlocking said "no
   vault identity yet". Both now refuse with `not_found`, naming the

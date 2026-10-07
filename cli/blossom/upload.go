@@ -150,7 +150,7 @@ func uploadOne(ctx context.Context, hc *bclient.Client, server, path, contentTyp
 		descriptor, err = hc.Upload(ctx, server, req)
 	}
 	if err != nil {
-		res.Error = describeError(err) + uploadErrorHint
+		res.Error = uploadFailure(err)
 		res.err = err
 		return res
 	}

@@ -1,97 +1,97 @@
 # One row per ncli command. TestCoverage_EveryCommandListed fails on a
 # missing or stale row. modes: json (agent), text, tty (human), errors.
-# tests: test-name prefixes in this package. pending: why not yet covered.
-"apply": {pending: phase 3}
-"blossom": {pending: phase 3}
-"blossom download": {pending: phase 3}
-"blossom list": {pending: phase 3}
-"blossom mirror": {pending: phase 3}
-"blossom report": {pending: phase 3}
-"blossom rm": {pending: phase 3}
-"blossom servers": {pending: phase 3}
-"blossom servers add": {pending: phase 3}
-"blossom servers discover": {pending: phase 3}
-"blossom servers list": {pending: phase 3}
-"blossom servers remove": {pending: phase 3}
-"blossom upload": {pending: phase 3}
-"bunker": {pending: phase 3}
-"bunker attach": {pending: phase 3}
-"bunker connect": {pending: phase 3}
-"bunker history": {pending: phase 3}
-"bunker sessions": {pending: phase 3}
-"bunker sessions grants": {pending: phase 3}
-"bunker sessions list": {pending: phase 3}
-"bunker sessions rename": {pending: phase 3}
-"bunker sessions revoke": {pending: phase 3}
-"bunker sessions revoke-grant": {pending: phase 3}
-"bunker status": {pending: phase 3}
-"bunker stop": {pending: phase 3}
-"decode": {pending: phase 3}
-"dump": {pending: phase 3}
-"find": {pending: phase 3}
-"groups": {pending: phase 3}
-"groups create": {pending: phase 3}
-"groups delete": {pending: phase 3}
-"groups delete-event": {pending: phase 3}
-"groups edit": {pending: phase 3}
-"groups invite": {pending: phase 3}
-"groups join": {pending: phase 3}
-"groups leave": {pending: phase 3}
-"groups list": {pending: phase 3}
-"groups members": {pending: phase 3}
-"groups members add": {pending: phase 3}
-"groups members remove": {pending: phase 3}
-"groups pins": {pending: phase 3}
-"groups pins set": {pending: phase 3}
-"groups show": {pending: phase 3}
-"groups tree": {pending: phase 3}
-"huddle": {pending: phase 3}
-"huddle list": {pending: phase 3}
-"id": {pending: phase 3}
-"id delegate": {pending: phase 3}
-"id list": {pending: phase 3}
-"id sign": {pending: phase 3}
-"miner": {pending: phase 3}
-"miner check": {pending: phase 3}
-"miner mine": {pending: phase 3}
-"ping": {pending: phase 3}
-"prefs": {pending: phase 3}
-"prefs path": {pending: phase 3}
-"prefs relays": {pending: phase 3}
-"prefs relays add": {pending: phase 3}
-"prefs relays clear": {pending: phase 3}
-"prefs relays list": {pending: phase 3}
-"prefs relays remove": {pending: phase 3}
-"profile": {pending: phase 3}
-"publish": {pending: phase 3}
-"relay": {pending: phase 3}
-"relay clear": {pending: phase 3}
-"relay clear search": {pending: phase 3}
-"relay clear zaps": {pending: phase 3}
-"relay context": {pending: phase 3}
-"relay context add": {pending: phase 3}
-"relay context list": {pending: phase 3}
-"relay context remove": {pending: phase 3}
-"relay context use": {pending: phase 3}
-"relay invites": {pending: phase 3}
-"relay invites create": {pending: phase 3}
-"relay invites list": {pending: phase 3}
-"relay invites revoke": {pending: phase 3}
-"relay members": {pending: phase 3}
-"relay members add": {pending: phase 3}
-"relay members list": {pending: phase 3}
-"relay members remove": {pending: phase 3}
-"relay members show": {pending: phase 3}
-"relay reindex": {pending: phase 3}
-"relay reindex search": {pending: phase 3}
-"relay reindex zaps": {pending: phase 3}
-"relay roles": {pending: phase 3}
-"relay roles create": {pending: phase 3}
-"relay roles list": {pending: phase 3}
-"relay stats": {pending: phase 3}
-"space": {pending: phase 3}
-"space create": {pending: phase 3}
-"space join": {pending: phase 3}
-"space list": {pending: phase 3}
-"space show": {pending: phase 3}
-"version": {pending: phase 3}
+# tests: test-name prefixes in this package. pending: what's not covered yet.
+"apply": {modes: [json, errors], tests: [TestApply], pending: "stream workflow and TTY runs of sync/inspect (phase 5)"}
+"blossom": {modes: [errors], tests: [TestBareGroupCommands]}
+"blossom download": {modes: [json, text, errors], tests: [TestBlossom]}
+"blossom list": {modes: [errors], tests: [TestBlossom], pending: "success path needs a server with BUD-02 on"}
+"blossom mirror": {modes: [errors], tests: [TestBlossom], pending: "success path needs a public source URL"}
+"blossom report": {modes: [json, errors], tests: [TestBlossom]}
+"blossom rm": {modes: [json, errors], tests: [TestBlossom]}
+"blossom servers": {modes: [errors], tests: [TestBareGroupCommands]}
+"blossom servers add": {modes: [json, errors], tests: [TestBlossom]}
+"blossom servers discover": {modes: [json], tests: [TestBlossom]}
+"blossom servers list": {modes: [json], tests: [TestBlossom]}
+"blossom servers remove": {modes: [json], tests: [TestBlossom]}
+"blossom upload": {modes: [json, errors], tests: [TestBlossom]}
+"bunker": {modes: [errors], tests: [TestBunkerWithoutDaemon], pending: "TUI (phase 5)"}
+"bunker attach": {modes: [errors], tests: [TestBunkerWithoutDaemon], pending: "TUI (phase 5)"}
+"bunker connect": {modes: [errors], tests: [TestBunkerWithoutDaemon], pending: "running daemon (phase 5)"}
+"bunker history": {modes: [errors], tests: [TestBunkerWithoutDaemon], pending: "running daemon (phase 5)"}
+"bunker sessions": {modes: [errors], tests: [TestBareGroupCommands]}
+"bunker sessions grants": {modes: [errors], tests: [TestBunkerWithoutDaemon], pending: "running daemon (phase 5)"}
+"bunker sessions list": {modes: [errors], tests: [TestBunkerWithoutDaemon], pending: "running daemon (phase 5)"}
+"bunker sessions rename": {modes: [errors], tests: [TestBunkerWithoutDaemon], pending: "running daemon (phase 5)"}
+"bunker sessions revoke": {modes: [errors], tests: [TestBunkerWithoutDaemon], pending: "running daemon (phase 5)"}
+"bunker sessions revoke-grant": {modes: [errors], tests: [TestBunkerWithoutDaemon], pending: "running daemon (phase 5)"}
+"bunker status": {modes: [json], tests: [TestBunkerWithoutDaemon], pending: "running daemon (phase 5)"}
+"bunker stop": {modes: [errors], tests: [TestBunkerWithoutDaemon], pending: "running daemon (phase 5)"}
+"decode": {modes: [json, text, errors], tests: [TestDecode]}
+"dump": {modes: [json, errors], tests: [TestQuery]}
+"find": {modes: [json, errors], tests: [TestQuery, TestAddressableLookups]}
+"groups": {modes: [errors], tests: [TestBareGroupCommands]}
+"groups create": {modes: [json, errors], tests: [TestGroupsCLI]}
+"groups delete": {modes: [json, errors], tests: [TestGroupsModeration]}
+"groups delete-event": {modes: [json, errors], tests: [TestGroupsModeration]}
+"groups edit": {modes: [json, errors], tests: [TestGroupsCLI, TestGroupsModeration, TestGroupsPrivacy]}
+"groups invite": {modes: [json, errors], tests: [TestGroupsModeration]}
+"groups join": {modes: [json], tests: [TestGroupsModeration]}
+"groups leave": {modes: [json], tests: [TestGroupsModeration]}
+"groups list": {modes: [json], tests: [TestGroupsCLI]}
+"groups members": {modes: [errors], tests: [TestBareGroupCommands]}
+"groups members add": {modes: [json, errors], tests: [TestGroupsModeration, TestGroupsPrivacy]}
+"groups members remove": {modes: [json, errors], tests: [TestGroupsModeration]}
+"groups pins": {modes: [errors], tests: [TestBareGroupCommands]}
+"groups pins set": {modes: [json, errors], tests: [TestGroupsModeration]}
+"groups show": {modes: [json, errors], tests: [TestGroupsCLI]}
+"groups tree": {modes: [json], tests: [TestGroupsModeration]}
+"huddle": {modes: [errors], tests: [TestBareGroupCommands]}
+"huddle list": {modes: [json, errors], tests: [TestSpaceAndHuddle]}
+"id": {modes: [json, errors], tests: [TestID, TestHarness_ActorsAreConsistent]}
+"id delegate": {modes: [json, errors], tests: [TestIDDelegate], pending: "interactive wizard (phase 5)"}
+"id list": {modes: [json], tests: [TestID]}
+"id sign": {modes: [json, errors], tests: [TestIDSign]}
+"miner": {modes: [errors], tests: [TestBareGroupCommands]}
+"miner check": {modes: [json, errors], tests: [TestMinerFileMode, TestQuery]}
+"miner mine": {modes: [json, errors], tests: [TestMinerFileMode]}
+"ping": {modes: [json, errors], tests: [TestPing]}
+"prefs": {modes: [errors], tests: [TestBareGroupCommands]}
+"prefs path": {modes: [json], tests: [TestPrefs]}
+"prefs relays": {modes: [errors], tests: [TestBareGroupCommands]}
+"prefs relays add": {modes: [json, errors], tests: [TestPrefs]}
+"prefs relays clear": {modes: [json], tests: [TestPrefs]}
+"prefs relays list": {modes: [json], tests: [TestPrefs]}
+"prefs relays remove": {modes: [json], tests: [TestPrefs]}
+"profile": {modes: [json, errors], tests: [TestQuery]}
+"publish": {modes: [json, errors], tests: [TestPublish]}
+"relay": {modes: [errors], tests: [TestRelayAdmin, TestHarness_RelaySeedsCorpus], pending: "-c context creation (phase 5)"}
+"relay clear": {modes: [errors], tests: [TestBareGroupCommands]}
+"relay clear search": {modes: [errors], tests: [TestRelayAdmin]}
+"relay clear zaps": {modes: [json], tests: [TestRelayAdmin]}
+"relay context": {modes: [json], tests: [TestRelayContext]}
+"relay context add": {modes: [json, errors], tests: [TestRelayContext]}
+"relay context list": {modes: [json], tests: [TestRelayContext]}
+"relay context remove": {modes: [json], tests: [TestRelayContext]}
+"relay context use": {modes: [json, errors], tests: [TestRelayContext]}
+"relay invites": {modes: [errors], tests: [TestBareGroupCommands]}
+"relay invites create": {modes: [json, errors], tests: [TestRelayAdmin, TestAttack_NIP43Membership]}
+"relay invites list": {modes: [json], tests: [TestRelayAdmin]}
+"relay invites revoke": {modes: [json, errors], tests: [TestRelayAdmin, TestAttack_NIP43Membership]}
+"relay members": {modes: [errors], tests: [TestBareGroupCommands]}
+"relay members add": {modes: [json, errors], tests: [TestRelayAdmin, TestAttack_AdminHTTP]}
+"relay members list": {modes: [json, errors], tests: [TestRelayAdmin, TestAttack_AdminHTTP]}
+"relay members remove": {modes: [json], tests: [TestRelayAdmin, TestAttack_NIP43Membership]}
+"relay members show": {modes: [json, errors], tests: [TestRelayAdmin]}
+"relay reindex": {modes: [errors], tests: [TestBareGroupCommands]}
+"relay reindex search": {modes: [errors], tests: [TestRelayAdmin]}
+"relay reindex zaps": {modes: [json], tests: [TestRelayAdmin]}
+"relay roles": {modes: [errors], tests: [TestBareGroupCommands]}
+"relay roles create": {modes: [json], tests: [TestRelayAdmin]}
+"relay roles list": {modes: [json], tests: [TestRelayAdmin]}
+"relay stats": {modes: [json, text, errors], tests: [TestRelayAdmin, TestAttack_AdminHTTP]}
+"space": {modes: [errors], tests: [TestBareGroupCommands]}
+"space create": {modes: [json, errors], tests: [TestSpaceAndHuddle, TestAddressableLookups]}
+"space join": {modes: [errors], tests: [TestSpaceAndHuddle], pending: "TUI (phase 5)"}
+"space list": {modes: [json], tests: [TestSpaceAndHuddle]}
+"space show": {modes: [json], tests: [TestSpaceAndHuddle, TestAddressableLookups]}
+"version": {modes: [json, text], tests: [TestVersion]}

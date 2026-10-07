@@ -74,6 +74,11 @@ func RelabelVaultEntry(npub, label string) (*VaultEntry, error) {
 	return vault.RelabelEntry(npub, label)
 }
 
+// RemoveVaultEntry deletes a saved identity. See vault.RemoveEntry.
+func RemoveVaultEntry(npub string) (*VaultEntry, error) {
+	return vault.RemoveEntry(npub)
+}
+
 // DecryptVaultEntry reverses AddVaultEntry. See vault.DecryptEntry.
 func DecryptVaultEntry(vaultPrivKeyHex string, entry VaultEntry) (string, error) {
 	return vault.DecryptEntry(vaultPrivKeyHex, entry)

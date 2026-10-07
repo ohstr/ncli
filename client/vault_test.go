@@ -245,6 +245,38 @@ func TestRelabelVaultEntry(t *testing.T) {
 	}
 }
 
+func TestRemoveVaultEntry(t *testing.T) {
+	withTempConfigDir(t)
+
+	_, vaultPrivHex, err := CreateVaultIdentity("hunter2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := make([]*Identity, 3)
+	for i, label := range []string{"a", "b", "c"} {
+		ids[i], _ = GenerateIdentity()
+		if _, err := AddVaultEntry(vaultPrivHex, label, ids[i].PrivKeyHex); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	removed, err := RemoveVaultEntry(ids[1].Npub)
+	if err != nil || removed.Label != "b" {
+		t.Fatalf("RemoveVaultEntry() = (%+v, %v), want b", removed, err)
+	}
+	entries, _ := LoadVaultEntries()
+	if len(entries) != 2 || entries[0].Label != "a" || entries[1].Label != "c" {
+		t.Fatalf("entries after remove = %+v, want a, c", entries)
+	}
+	if _, err := RemoveVaultEntry(ids[1].Npub); err == nil {
+		t.Fatal("second RemoveVaultEntry() error = nil")
+	}
+	// The removed key can be saved again.
+	if _, err := AddVaultEntry(vaultPrivHex, "b", ids[1].PrivKeyHex); err != nil {
+		t.Fatalf("re-add after remove: %v", err)
+	}
+}
+
 func TestIdentityFromPrivKey(t *testing.T) {
 	id, _ := GenerateIdentity()
 	got, err := IdentityFromPrivKey(id.PrivKeyHex)

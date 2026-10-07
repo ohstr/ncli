@@ -40,6 +40,7 @@ that priority order.
 | `ncli id [identifier]` | Generate or inspect a Nostr keypair (local vault) |
 | `ncli id import` | Save an existing private key (nsec/hex/ncryptsec) to the vault, read from stdin or `--file`, never an argument; first valid line wins; re-running is a no-op and a key is never saved twice (`--force` relabels it) |
 | `ncli id relabel <label\|npub> <new-label>` | Rename a saved vault identity without supplying its key |
+| `ncli id rm <label\|npub>` | Remove a saved vault identity (deletes the vault's copy of its key); confirms first, `--yes` required with `--json` or no terminal |
 | `ncli id delegate` | Mint a NIP-26 delegation token |
 | `ncli id sign -e <events.json> -o <signed.json>` | Sign one or more unsigned events with a vault/nsec identity |
 | `ncli decode <entity>` | Decode any NIP-19 bech32 entity (npub/nsec/note/nprofile/nevent/naddr), a NIP-CASH cash-token-family string, or a NIP-CW circlehub1... connection |
@@ -57,7 +58,7 @@ Every command's actual result goes to **stdout only**; progress narration
 and errors go to **stderr** — so piping stdout into `jq` or a script's
 parser never picks up log noise. `--json` and `-q/--quiet` are global flags
 (declared once on the root command, available on every subcommand) rather
-than per-command. `id`, `id list`, `id import`, `id relabel`, `id sign`, `version`, `id delegate`, `relay
+than per-command. `id`, `id list`, `id import`, `id relabel`, `id rm`, `id sign`, `version`, `id delegate`, `relay
 stats`/`reindex`/`clear`, `relay members`/`invites`/`roles`, `ping`,
 `miner mine`/`check`, `publish`, `huddle list`, `space create`/
 `list`/`show`/`chat send`/`chat list`, `bunker`/`status`/`stop`/

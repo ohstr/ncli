@@ -1051,6 +1051,9 @@ ncli id import --label mykey < key.txt
 # rename a saved identity
 ncli id relabel mykey work
 
+# remove a saved identity (asks first)
+ncli id rm work
+
 # non-interactive, vault password from NCLI_VAULT_PASSWORD
 ncli id --json --save --label mykey
 

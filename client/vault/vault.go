@@ -260,6 +260,23 @@ func RelabelEntry(npub, label string) (*Entry, error) {
 	return &entries[idx], nil
 }
 
+// RemoveEntry deletes the entry holding npub and returns it.
+func RemoveEntry(npub string) (*Entry, error) {
+	entries, err := LoadEntries()
+	if err != nil {
+		return nil, err
+	}
+	for i, e := range entries {
+		if e.Npub == npub {
+			if err := SaveEntries(append(entries[:i:i], entries[i+1:]...)); err != nil {
+				return nil, err
+			}
+			return &e, nil
+		}
+	}
+	return nil, fmt.Errorf("%s not saved in vault", npub)
+}
+
 // DecryptEntry reverses AddEntry, given the already-unlocked
 // vault private key.
 func DecryptEntry(vaultPrivKeyHex string, entry Entry) (string, error) {

@@ -11,6 +11,9 @@
   never saved twice. ([#124](https://github.com/ohstr/ncli/pull/124))
 - `ncli id relabel <label|npub> <new-label>` renames a saved identity
   without its key. ([#124](https://github.com/ohstr/ncli/pull/124))
+- `ncli id rm <label|npub>` removes a saved identity; it asks first, and
+  needs `--yes` with `--json` or no terminal.
+  ([#124](https://github.com/ohstr/ncli/pull/124))
 
 ## [0.8.0-rc.10]
 

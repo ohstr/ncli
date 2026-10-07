@@ -115,6 +115,33 @@ func TestIDRelabel(t *testing.T) {
 	e.MustOK(t, "id", "carol", "--reveal", "--json")
 }
 
+// id rm needs --yes without a terminal, removes only the named entry, and
+// is not_found once gone.
+func TestIDRm(t *testing.T) {
+	e := NewEnv(t)
+	var a struct{ Npub string }
+	e.MustOK(t, "id", "--save", "--label", "alice", "--json").JSON(t, &a)
+	e.MustOK(t, "id", "--save", "--label", "bob", "--json")
+
+	e.Run(t, "id", "rm", "alice", "--json").ExpectErr(t, "usage")
+	e.Run(t, "id", "rm", "nobody", "--yes", "--json").ExpectErr(t, "not_found")
+
+	var o struct{ Npub, Label, Status string }
+	e.MustOK(t, "id", "rm", a.Npub, "--yes", "--json").JSON(t, &o)
+	if o.Status != "removed" || o.Label != "alice" || o.Npub != a.Npub {
+		t.Fatalf("rm = %+v", o)
+	}
+	e.Run(t, "id", "remove", "alice", "--yes", "--json").ExpectErr(t, "not_found")
+
+	var list struct {
+		Identities []struct{ Label string } `json:"identities"`
+	}
+	e.MustOK(t, "id", "list", "--reveal", "--json").JSON(t, &list)
+	if len(list.Identities) != 1 || list.Identities[0].Label != "bob" {
+		t.Fatalf("after rm, vault = %+v, want only bob", list.Identities)
+	}
+}
+
 // id import: key from stdin or --file only, first valid line wins,
 // re-running is a no-op, and a key is never saved twice.
 func TestIDImport(t *testing.T) {

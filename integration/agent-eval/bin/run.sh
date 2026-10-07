@@ -62,6 +62,16 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# --- NCLI_LOCAL=1: run this checkout's ncli instead of the published one --
+# Built on the host so go.mod's own resolution (a local replace included)
+# applies; compose.local.yaml mounts it into the relay and the agent.
+if [ "${NCLI_LOCAL:-}" = "1" ]; then
+  echo "==> building local ncli"
+  mkdir -p .local
+  (cd ../.. && GOWORK=off CGO_ENABLED=0 GOOS=linux go build -o integration/agent-eval/.local/ncli ./cmd/ncli)
+  export COMPOSE_FILE=compose.yaml:compose.local.yaml
+fi
+
 echo "==> building agent image"
 docker compose build agent
 
@@ -195,6 +205,10 @@ run_r6() {
 
 for round in "${ROUNDS[@]}"; do
   clear_flat_artifacts "${round}"
+  if [ "${NCLI_LOCAL:-}" = "1" ]; then
+    # Over whatever the agent installed (R0 installs the published one).
+    docker compose exec -T agent bash -lc 'mkdir -p ~/.local/bin && install -m755 /opt/ncli-local/ncli ~/.local/bin/ncli'
+  fi
   case "${round}" in
     r2-query)
       prepare_r2

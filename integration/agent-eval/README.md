@@ -55,6 +55,16 @@ bin/run.sh r0-bootstrap r1-identity     # just these, in order given
 
 Output lands in `report/<UTC-timestamp>/`.
 
+To run this checkout's ncli instead of the published one (relay and agent
+alike; docs still come from the published site):
+
+```sh
+NCLI_LOCAL=1 bin/run.sh
+```
+
+It builds a static binary on the host (`go.mod`'s own resolution, a local
+`replace` included) and layers `compose.local.yaml` on top.
+
 **Cost**: each round is a real, billed Claude Code session, not a mock
 -- a full 9-round run costs about as much as a handful of normal coding
 turns.

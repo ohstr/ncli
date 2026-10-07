@@ -2,3 +2,4 @@
 report/*
 !report/.gitkeep
 followup/
+.local/

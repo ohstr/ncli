@@ -155,11 +155,15 @@ func TestID(t *testing.T) {
 		e2.Run(t, "id", "list", "--reveal", "--json").ExpectErr(t, "auth")
 	})
 
-	t.Run("not an identifier", func(t *testing.T) {
-		er := e.Run(t, "id", "nosuchlabel", "--json").ExpectErr(t, "invalid_input")
+	// AGENTS.md: a missing vault entry is not_found; a malformed key is
+	// invalid_input.
+	t.Run("missing vault label", func(t *testing.T) {
+		er := e.Run(t, "id", "nosuchlabel", "--json").ExpectErr(t, "not_found")
 		if er.Input != "nosuchlabel" {
 			t.Errorf("input = %q", er.Input)
 		}
+		e.Run(t, "id", "sign", "-e", e.WriteFile("u1.json", `{"kind":1,"content":"x","created_at":1,"tags":[]}`), "-o", e.Dir+"/s1.json", "--identity", "nosuchlabel", "--json").ExpectErr(t, "not_found")
+		e.Run(t, "id", "npub1notvalid", "--json").ExpectErr(t, "invalid_input")
 	})
 
 	t.Run("inspect nprofile and hex", func(t *testing.T) {

@@ -54,6 +54,7 @@
 "huddle list": {modes: [json, errors], tests: [TestSpaceAndHuddle]}
 "id": {modes: [json, errors], tests: [TestID, TestHarness_ActorsAreConsistent]}
 "id delegate": {modes: [json, tty, errors], tests: [TestIDDelegate, TestTTY_DelegateWizard]}
+"id import": {modes: [json, errors], tests: [TestIDImport]}
 "id list": {modes: [json], tests: [TestID]}
 "id sign": {modes: [json, errors], tests: [TestIDSign]}
 "miner": {modes: [errors], tests: [TestBareGroupCommands]}

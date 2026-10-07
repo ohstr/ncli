@@ -79,3 +79,66 @@ func TestVaultWrongPassword(t *testing.T) {
 	e.Run(t, "id", "--save", "--label", "k2", "--json").ExpectErr(t, "auth")
 	e.Run(t, "id", "sign", "-e", e.WriteFile("u.json", `{"kind":1,"content":"x","created_at":1,"tags":[]}`), "-o", e.Dir+"/s.json", "--identity", "k", "--json").ExpectErr(t, "auth")
 }
+
+// id import: key from stdin or --file only, first valid line wins,
+// re-running is a no-op, and a key is never saved twice.
+func TestIDImport(t *testing.T) {
+	e := NewEnv(t)
+	var key struct {
+		Nsec, Npub string
+		PrivHex    string `json:"priv_hex"`
+	}
+	e.MustOK(t, "id", "--json").JSON(t, &key)
+
+	type out struct {
+		Npub, Label, Status string
+		PreviousLabel       string `json:"previous_label"`
+		SkippedLines        int    `json:"skipped_lines"`
+	}
+	imp := func(stdin string, args ...string) Result {
+		return e.RunStdin(t, stdin, append([]string{"id", "import", "--json"}, args...)...)
+	}
+	ok := func(r Result) out {
+		t.Helper()
+		if r.Code != 0 {
+			t.Fatalf("want exit 0\n%s", r)
+		}
+		var o out
+		r.JSON(t, &o)
+		return o
+	}
+
+	if o := ok(imp("# backup\n\n  "+key.Nsec+"  \nnsec1ignored\n", "--label", "alice")); o.Status != "imported" || o.Npub != key.Npub || o.SkippedLines != 1 {
+		t.Fatalf("import = %+v", o)
+	}
+	if o := ok(imp(key.PrivHex)); o.Status != "unchanged" || o.Label != "alice" {
+		t.Fatalf("re-import = %+v", o)
+	}
+	if er := imp(key.Nsec, "--label", "bob").ExpectErr(t, "conflict"); er.Input != "alice" {
+		t.Fatalf("conflict input = %q, want alice", er.Input)
+	}
+	if o := ok(imp(key.Nsec, "--label", "bob", "--force")); o.Status != "relabeled" || o.PreviousLabel != "alice" {
+		t.Fatalf("--force = %+v", o)
+	}
+	if o := ok(e.Run(t, "id", "import", "--json", "--file", e.WriteFile("k.txt", key.Nsec+"\n"))); o.Status != "unchanged" || o.Label != "bob" {
+		t.Fatalf("--file re-import = %+v", o)
+	}
+
+	r := imp("", key.Nsec)
+	r.ExpectErr(t, "usage")
+	if strings.Contains(r.Stdout+r.Stderr, key.Nsec) {
+		t.Fatalf("positional key echoed back\n%s", r)
+	}
+	imp("npub1notakey\n").ExpectErr(t, "invalid_input")
+
+	var list struct {
+		Identities []map[string]any `json:"identities"`
+	}
+	e.MustOK(t, "id", "list", "--json").JSON(t, &list)
+	if len(list.Identities) != 1 {
+		t.Fatalf("vault holds %d entries, want 1", len(list.Identities))
+	}
+
+	// The imported key signs under its label.
+	e.MustOK(t, "id", "sign", "-e", e.WriteFile("u.json", `{"kind":1,"content":"x","created_at":1,"tags":[]}`), "-o", e.Dir+"/s.json", "--identity", "bob", "--json")
+}

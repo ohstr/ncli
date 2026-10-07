@@ -42,6 +42,9 @@ var RootCmd = &cobra.Command{
 	// classifyRootErr the single sink for those too.
 	SilenceUsage:  true,
 	SilenceErrors: true,
+
+	// Bare "ncli" is a group invocation like any other: help, but exit 2.
+	RunE: common.RequireSubcommand,
 }
 
 func init() {

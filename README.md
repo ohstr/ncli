@@ -254,8 +254,10 @@ what actually rejects events, both under-difficulty ones and ones whose
 
 ```yaml
 pow:
-  strict: false # true rejects under-difficulty and self-contradictory nonce tags
-  min: 20       # required leading-zero-bit difficulty; 0 = no requirement
+  # true rejects under-difficulty and self-contradictory nonce tags
+  strict: false
+  # required leading-zero-bit difficulty; 0 = no requirement
+  min: 20
 ```
 
 See [`examples/relay/anti-spam-relay.yaml`](examples/relay/anti-spam-relay.yaml)
@@ -270,7 +272,8 @@ nip11:
   url: "wss://relay.example" # required: a joining client's auth event names it
 huddle:
   enabled: true
-  rtc: true # also serve browsers, which is what carries video and screen sharing
+  # also serve browsers, which is what carries video and screen sharing
+  rtc: true
 ```
 
 The relay forwards audio without decoding it, so it links no codec. See
@@ -278,10 +281,28 @@ The relay forwards audio without decoding it, so it links no codec. See
 for the documented preset, and [`ncli huddle`](#huddle) for joining a call
 from a terminal.
 
-More scenarios (a personal outbox, a membership-gated community, a public
-search-and-trending relay, an agent-friendly relay, an app's own backend
-administering over HTTP, a throwaway dev/test instance) live under
-[`examples/relay/`](examples/relay/).
+### Example configs
+
+Every file under [`examples/relay/`](examples/relay/) is a working config,
+commented top to bottom. Pick the scenario closest to yours and start from
+it:
+
+| File | For |
+|---|---|
+| [`minimal.yaml`](examples/relay/minimal.yaml) | the smallest config that runs |
+| [`full.yaml`](examples/relay/full.yaml) | every field, at its default, documented |
+| [`personal-relay.yaml`](examples/relay/personal-relay.yaml) | your own outbox/backup relay |
+| [`dev-test-relay.yaml`](examples/relay/dev-test-relay.yaml) | a throwaway relay for local dev or CI |
+| [`public-search-relay.yaml`](examples/relay/public-search-relay.yaml) | a public relay with profile search and zap-ranked trending |
+| [`anti-spam-relay.yaml`](examples/relay/anti-spam-relay.yaml) | a public relay that requires proof-of-work |
+| [`accountability-relay.yaml`](examples/relay/accountability-relay.yaml) | anyone posts, but only signed in (NIP-42) |
+| [`community-membership-relay.yaml`](examples/relay/community-membership-relay.yaml) | members only, joined by invite (NIP-43) |
+| [`family-private-relay.yaml`](examples/relay/family-private-relay.yaml) | a closed circle the operator enrolls by hand |
+| [`tracked-membership-relay.yaml`](examples/relay/tracked-membership-relay.yaml) | open to all, with a member roster and roles |
+| [`enterprise-compliance-relay.yaml`](examples/relay/enterprise-compliance-relay.yaml) | members + proof-of-work + NIP-86 admin, stacked |
+| [`agent-swarm-relay.yaml`](examples/relay/agent-swarm-relay.yaml) | AI agents posting under their owner's membership (NIP-AA) |
+| [`app-backend-relay.yaml`](examples/relay/app-backend-relay.yaml) | an app's backend administering and querying over HTTP |
+| [`community-voice-relay.yaml`](examples/relay/community-voice-relay.yaml) | voice calls and meeting spaces (huddles) |
 
 ## `relay context`
 

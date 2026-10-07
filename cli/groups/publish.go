@@ -20,7 +20,7 @@ import (
 // hand the report to printPublishReport, but one (invite) has its own
 // extra field to report alongside it.
 func signAndPublish(ctx context.Context, cmd *cobra.Command, relayURL *url.URL, groupID string, ev *nip01.Event, privKeyHex string) (*client.PublishReport, error) {
-	if err := attachPreviousTags(ctx, relayURL, groupID, ev); err != nil {
+	if err := attachPreviousTags(ctx, relayURL, groupID, ev, privKeyHex); err != nil {
 		if errors.Is(err, client.ErrNoReachableTargets) {
 			return nil, common.NetworkError(cmd, relayURL.String(), err)
 		}

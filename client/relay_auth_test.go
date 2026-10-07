@@ -201,9 +201,10 @@ func TestMergeEventsFromTargets_AnonymousGetsNothingFromGatedRelay(t *testing.T)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
+	// Refused, and says so: an empty result would read as "nothing matched".
 	events, err := mergeEventsFromTargets(ctx, targets, filters, 0, "")
-	if err != nil {
-		t.Fatalf("mergeEventsFromTargets() with no identity error = %v", err)
+	if !errors.Is(err, ErrRestricted) {
+		t.Fatalf("mergeEventsFromTargets() with no identity error = %v, want ErrRestricted", err)
 	}
 	if len(events) != 0 {
 		t.Fatalf("mergeEventsFromTargets() events = %v, want none against a gated relay with no identity", events)
@@ -314,11 +315,9 @@ func TestQueryTargetsWithAuth_ReturnsErrRestrictedWhenAuthenticatedButDenied(t *
 		t.Fatalf("QueryTargetsWithAuth() error = %v, want ErrRestricted", err)
 	}
 
-	// QueryTargets' own anonymous-only contract is unaffected: no identity,
-	// no restricted signal to observe, so it never returns ErrRestricted
-	// even against the same relay.
-	if _, err := QueryTargets(ctx, targets, filters, 0); errors.Is(err, ErrRestricted) {
-		t.Error("QueryTargets() (anonymous) returned ErrRestricted, want it to stay unobservable without an identity")
+	// Anonymous gets the same signal: refused, not "nothing matched".
+	if _, err := QueryTargets(ctx, targets, filters, 0); !errors.Is(err, ErrRestricted) {
+		t.Errorf("QueryTargets() (anonymous) error = %v, want ErrRestricted", err)
 	}
 }
 

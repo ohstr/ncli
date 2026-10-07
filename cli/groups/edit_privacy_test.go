@@ -2,6 +2,7 @@ package groups
 
 import (
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/ohstr/ncli/client"
@@ -72,13 +73,10 @@ func TestGroupsEdit_PreservesPrivacyOnUnrelatedField(t *testing.T) {
 		t.Errorf("private=%v closed=%v after an unrelated --name edit, want both still true", got.Metadata.Private, got.Metadata.Closed)
 	}
 
+	// Still private: an anonymous show is refused outright, not answered.
 	anonStdout, err := execGroupsCmd(t, relayURL, "show", groupID)
-	if err != nil {
-		t.Fatalf("anonymous show %s: %v", groupID, err)
-	}
-	anon := decodeGroupShow(t, anonStdout)
-	if anon.Metadata != nil {
-		t.Errorf("anonymous show %s = %q, want no metadata -- the group must still be private", groupID, anonStdout)
+	if !errors.Is(err, client.ErrRestricted) {
+		t.Errorf("anonymous show %s: err = %v, stdout %q -- want the relay's restriction, the group must still be private", groupID, err, anonStdout)
 	}
 }
 

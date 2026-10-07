@@ -11,7 +11,8 @@
    stderr going to `/report/r3-relay-stderr.log`.
 3. Confirm it's actually serving -- e.g. `ncli ping localhost:6500` or
    fetching its NIP-11 document -- then register it with
-   `ncli relay context add`, and list your contexts.
+   `ncli relay context add`, make it your current context, and list your
+   contexts.
 4. Stop the background process cleanly, then remove the context you added
    and confirm it's gone, before moving to Part B.
 

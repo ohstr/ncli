@@ -23,7 +23,9 @@ your bunker to sign things.
    They expire after about 5 minutes, so don't wait long between looking
    and deciding.
 6. Show the app's remembered grants, and the history of decided requests
-   (it should show both of your decisions).
+   (it should show both of your decisions). Then, without re-pairing, also
+   grant the app `sign_event` for kind 7 from a grants file, and show the
+   grants again.
 7. Give the app's session the name `eval-app`, revoke its kind 1 grant,
    then confirm both changes, then revoke the whole session.
 8. Stop the signer, and confirm it's no longer running.

@@ -53,10 +53,13 @@ ncli groups invite standup
 ncli groups join standup --invite-code <code>
 ncli groups members add standup <pubkey> admin
 ncli groups list --relay wss://relay.example
-ncli groups list --identity mykey --mine     # only groups mykey belongs to
-ncli groups list --member <pubkey>           # only groups that pubkey belongs to
+# only groups mykey belongs to
+ncli groups list --identity mykey --mine
+# only groups that pubkey belongs to
+ncli groups list --member <pubkey>
 ncli groups show standup
-ncli groups show standup --identity mykey   # authenticated, if standup is private
+# authenticated, if standup is private
+ncli groups show standup --identity mykey
 ```
 
 Output matches `ncli publish`'s own shape: a `published <id> to <relay>`
@@ -131,7 +134,8 @@ PUB=$(ncli id mykey --json | jq -r .pub_hex)
 jq -n --arg p "$PUB" '[{kind:9, pubkey:$p, created_at:(now|floor),
   content:"hello group", tags:[["h","standup"]]}]' > msg.json
 ncli id sign -e msg.json -o signed.json --identity mykey
-ncli publish -e signed.json -s wss://relay.example --json   # .results[0].id is the event id
+# .results[0].id is the event id
+ncli publish -e signed.json -s wss://relay.example --json
 ```
 
 That id is what `groups pins set --event` and `groups delete-event` take.
@@ -185,11 +189,16 @@ names another group's id). `--parent` on `create`/`edit` sets it;
 `groups tree` renders the whole hierarchy.
 
 ```sh
-ncli groups create standup-notes --parent standup   # create, then link in one call
-ncli groups edit standup-notes --parent standup      # link an existing group
-ncli groups edit standup-notes --parent ""           # detach to root
-ncli groups tree                                     # render the hierarchy
-ncli groups tree --identity mykey --json             # same, scripted
+# create, then link in one call
+ncli groups create standup-notes --parent standup
+# link an existing group
+ncli groups edit standup-notes --parent standup
+# detach to root
+ncli groups edit standup-notes --parent ""
+# render the hierarchy
+ncli groups tree
+# same, scripted
+ncli groups tree --identity mykey --json
 ```
 
 `create --parent` is sugar for two events (9007, then 9002) -- under

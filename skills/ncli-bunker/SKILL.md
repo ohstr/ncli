@@ -18,9 +18,12 @@ encrypted signing requests over a relay; you approve or reject each one
 ## Starting it
 
 ```sh
-ncli bunker --identity agent-key                          # vault label
-ncli bunker --identity nsec1...                            # raw nsec, no vault
-ncli bunker                                                 # falls back to bunker.identity config / NCLI_BUNKER_IDENTITY / the vault's sole entry
+# vault label
+ncli bunker --identity agent-key
+# raw nsec, no vault
+ncli bunker --identity nsec1...
+# falls back to bunker.identity config / NCLI_BUNKER_IDENTITY / the vault's sole entry
+ncli bunker
 ncli bunker --relay wss://relay.example --identity agent-key
 ```
 
@@ -128,15 +131,23 @@ and Background, which always work) rather than every key from every
 panel at once.
 
 ```sh
-ncli bunker attach              # reattach to an already-running daemon; errors clearly if none is running
-ncli bunker status --json       # {"running": bool, "identity_pub", "identity_name", "identity_nip05", "vault_label", "relays", "pending_count", "session_count"}
-ncli bunker stop                # shut it down
+# reattach to an already-running daemon; errors clearly if none is running
+ncli bunker attach
+# {"running": bool, "identity_pub", "identity_name", "identity_nip05", "vault_label", "relays", "pending_count", "session_count"}
+ncli bunker status --json
+# shut it down
+ncli bunker stop
 ncli bunker sessions list --json
-ncli bunker sessions revoke <pubkey>              # every grant for this app, all at once
-ncli bunker sessions grants <pubkey> --json       # this app's grants individually, not the summarized Grants column
-ncli bunker sessions revoke-grant <pubkey> --method sign_event --kind 1   # just this one grant (omit --kind for the any-kind grant)
-ncli bunker sessions rename <pubkey> <name>       # "" clears it
-ncli bunker history --json      # recent resolved requests, most recent first
+# every grant for this app, all at once
+ncli bunker sessions revoke <pubkey>
+# this app's grants individually, not the summarized Grants column
+ncli bunker sessions grants <pubkey> --json
+# just this one grant (omit --kind for the any-kind grant)
+ncli bunker sessions revoke-grant <pubkey> --method sign_event --kind 1
+# "" clears it
+ncli bunker sessions rename <pubkey> <name>
+# recent resolved requests, most recent first
+ncli bunker history --json
 ```
 
 Plain-text `status`/`stop` (no `--json`) print the identity's full npub
@@ -278,7 +289,8 @@ URI** opens a text field to paste one in. Or, from another terminal /a
 script:
 
 ```sh
-ncli bunker connect              # generates and prints a fresh bunker:// URI -- paste this into the OTHER app
+# generates and prints a fresh bunker:// URI -- paste this into the OTHER app
+ncli bunker connect
 ncli bunker connect "nostrconnect://<client-pubkey>?relay=...&relay=...&secret=...&perms=...&name=..."
 ```
 
@@ -338,19 +350,23 @@ The file is a `kind: bunker` YAML spec, the same `kind:`/`spec:` envelope
 ```yaml
 kind: bunker
 spec:
-  nickname: "My App"          # optional -- becomes this app's Trusted Apps name on pairing
+  # optional -- becomes this app's Trusted Apps name on pairing
+  nickname: "My App"
   grants:
     - method: ping
     - method: get_public_key
     - method: sign_event
-      kinds: [1, 6, 7]        # notes, reposts, reactions
+      # notes, reposts, reactions
+      kinds: [1, 6, 7]
       expires: 30d
     - method: sign_event
-      kinds: any              # every kind except 0/3/5 -- see the sensitive-kinds rule above
+      # every kind except 0/3/5 -- see the sensitive-kinds rule above
+      kinds: any
       uses: 20
     - method: sign_event
       kinds: [3]
-      verdict: deny           # block this specific kind outright, rather than leaving it to prompt
+      # block this specific kind outright, rather than leaving it to prompt
+      verdict: deny
 ```
 
 - `method` is the exact NIP-46 method name (`ping`, `get_public_key`,
@@ -427,14 +443,22 @@ Everything the TUI's approval dialog does is a command:
 ncli bunker pending list --json
 # [{"id":"...","app":"<pubkey>","app_name":"...","method":"sign_event","kind":1,
 #   "created_at":"...","expires_at":"...","event":{...unsigned event...}}]   ([] when empty)
-ncli bunker pending approve <id>                       # once
-ncli bunker pending approve <id> --always              # this kind (or method), until revoked
-ncli bunker pending approve <id> --always --for 24h    # ... for a duration
-ncli bunker pending approve <id> --always --uses 10    # ... for N requests
-ncli bunker pending approve <id> --always --any-kind   # every non-sensitive kind
-ncli bunker pending reject <id>                        # once
-ncli bunker pending reject <id> --always               # this method, from now on
-ncli bunker sessions set-grant <pubkey> --grants grants.yaml   # like connect --grants, for an app already paired
+# once
+ncli bunker pending approve <id>
+# this kind (or method), until revoked
+ncli bunker pending approve <id> --always
+# ... for a duration
+ncli bunker pending approve <id> --always --for 24h
+# ... for N requests
+ncli bunker pending approve <id> --always --uses 10
+# every non-sensitive kind
+ncli bunker pending approve <id> --always --any-kind
+# once
+ncli bunker pending reject <id>
+# this method, from now on
+ncli bunker pending reject <id> --always
+# like connect --grants, for an app already paired
+ncli bunker sessions set-grant <pubkey> --grants grants.yaml
 ```
 
 `approve --json` prints `{"approved":true,"remembered":<bool>}`, `reject`

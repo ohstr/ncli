@@ -61,10 +61,14 @@ tell "refused" apart from "genuinely nothing matched" from `$?`/the
 
 ```sh
 ncli dump -s wss://relay.ohstr.com -o out.json
-ncli dump -s wss://relay.ohstr.com,./data/db/notes.db -o out.json   # comma-separated: merge a relay + a local store
-ncli dump -s ./data/db/notes.db -k 1 --since 7d -o out.json        # inline filters against a local store (-k = --kinds)
-ncli dump -t targets.yaml -o out.json                              # relays + filters from one file
-ncli dump -o out.json                                               # -s/-t omitted: every `ncli prefs` relay, merged
+# comma-separated: merge a relay + a local store
+ncli dump -s wss://relay.ohstr.com,./data/db/notes.db -o out.json
+# inline filters against a local store (-k = --kinds)
+ncli dump -s ./data/db/notes.db -k 1 --since 7d -o out.json
+# relays + filters from one file
+ncli dump -t targets.yaml -o out.json
+# -s/-t omitted: every `ncli prefs` relay, merged
+ncli dump -o out.json
 ```
 
 `-o/--out` is required (`.json`/`.jsonp`). Results are merged and deduped
@@ -78,11 +82,16 @@ silent empty/missing output file.
 ```sh
 ncli find <event-id> -t targets.yaml
 ncli find <event-id> -s wss://relay.primal.net
-ncli find note1... -s wss://relay.primal.net                          # positional also decodes note1.../nevent1... NIP-19 strings
-ncli find npub1...                                                  # author-shaped positional: no other filters, so just their profile (kind 0); uses `ncli prefs` relays
-ncli find alice@example.com -k 1 -l 5 -s wss://relay.primal.net       # nip-05 too, widened past the kind-0 default and ANDed with -k/-l
-ncli find -k 1 -a alice@example.com -s wss://relay.primal.net         # --authors flag form still available (-a short form)
-ncli find <event-id>                                                # -t/-s omitted: uses `ncli prefs` relays
+# positional also decodes note1.../nevent1... NIP-19 strings
+ncli find note1... -s wss://relay.primal.net
+# author-shaped positional: no other filters, so just their profile (kind 0); uses `ncli prefs` relays
+ncli find npub1...
+# nip-05 too, widened past the kind-0 default and ANDed with -k/-l
+ncli find alice@example.com -k 1 -l 5 -s wss://relay.primal.net
+# --authors flag form still available (-a short form)
+ncli find -k 1 -a alice@example.com -s wss://relay.primal.net
+# -t/-s omitted: uses `ncli prefs` relays
+ncli find <event-id>
 ```
 
 At least one of a positional identifier, an inline filter flag, or
@@ -152,7 +161,8 @@ four records, rendered as a readable card instead of raw JSON.
 ```sh
 ncli profile npub1...
 ncli profile name@example.com
-ncli profile satoshi --json          # a vault label works too
+# a vault label works too
+ncli profile satoshi --json
 ncli profile npub1... -s wss://relay.example.com --no-verify
 ```
 
@@ -183,12 +193,18 @@ relays`.
 ## `ping`
 
 ```sh
-ncli ping relay.ohstr.com                                     # no flag needed -- scheme optional too, tries wss:// then falls back to ws://
-ncli ping relay.ohstr.com relay.snort.social                  # space-separated, not comma -- each is its own positional argument
-ncli ping -t targets.yaml                                    # relays from a file (its filters, if any, are ignored)
-ncli ping                                                    # no relays, no --targets: every `ncli prefs` relay
-ncli ping relay.ohstr.com --json                              # structured report on stdout, no narration
-ncli ping relay.ohstr.com relay.snort.social --tui             # live interactive board instead of plain log lines
+# no flag needed -- scheme optional too, tries wss:// then falls back to ws://
+ncli ping relay.ohstr.com
+# space-separated, not comma -- each is its own positional argument
+ncli ping relay.ohstr.com relay.snort.social
+# relays from a file (its filters, if any, are ignored)
+ncli ping -t targets.yaml
+# no relays, no --targets: every `ncli prefs` relay
+ncli ping
+# structured report on stdout, no narration
+ncli ping relay.ohstr.com --json
+# live interactive board instead of plain log lines
+ncli ping relay.ohstr.com relay.snort.social --tui
 ```
 
 Connects to every target and issues a Limit-1, match-everything
@@ -267,7 +283,8 @@ spec:
   filters:
     - kinds: [1]
       authors:
-        - alice@example.com   # nip-05 addresses resolve to hex automatically
+        # nip-05 addresses resolve to hex automatically
+        - alice@example.com
       limit: 10
 ```
 
@@ -282,11 +299,13 @@ Full filter field list and the `since`/`until` sign table:
 
 ```sh
 ncli prefs relays add wss://relay.ohstr.com
-ncli prefs relays add relay.primal.net     # scheme optional here too -- see -s/--relays above
+# scheme optional here too -- see -s/--relays above
+ncli prefs relays add relay.primal.net
 ncli prefs relays list
 ncli prefs relays remove wss://relay.ohstr.com
 ncli prefs relays clear
-ncli prefs path            # print prefs.yaml's location
+# print prefs.yaml's location
+ncli prefs path
 ```
 
 This is the fallback `find`/`dump`/`miner check` use when **both**

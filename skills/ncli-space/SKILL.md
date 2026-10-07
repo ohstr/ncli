@@ -50,7 +50,8 @@ ncli space create standup --summary "Daily sync" --hashtag standup
 ncli space list --relay wss://relay.example
 ncli space show standup
 ncli space join standup
-ncli space join --relay wss://relay.example   # joins the one open space, if there's exactly one
+# joins the one open space, if there's exactly one
+ncli space join --relay wss://relay.example
 ncli space chat send 30312:<pubkey>:standup "hello" --relay wss://relay.example
 ncli space chat list 30312:<pubkey>:standup --relay wss://relay.example --json
 ```

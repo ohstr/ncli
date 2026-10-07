@@ -80,9 +80,11 @@ on every admin call. Save each relay's config under a name instead:
 
 ```sh
 ncli relay context add bee_community ~/relays/bee-community.yaml
-ncli relay context use bee_community  # every relay command now targets bee_community
+# every relay command now targets bee_community
+ncli relay context use bee_community
 
-ncli relay context                    # list saved contexts, "*" = current
+# list saved contexts, "*" = current
+ncli relay context
 ncli relay context remove bee_community
 ```
 
@@ -102,17 +104,25 @@ define roles — all against the relay's live `MembershipService`, so changes
 take effect for already-connected clients immediately.
 
 ```sh
-ncli relay members list                              # every enrolled member
-ncli relay members show <pubkey>                      # one member's record (404 if not a member)
-ncli relay members add <pubkey> --role vip             # admin bypass: enroll directly, no invite code
-ncli relay members remove <pubkey>                     # idempotent — no error if already not a member
+# every enrolled member
+ncli relay members list
+# one member's record (404 if not a member)
+ncli relay members show <pubkey>
+# admin bypass: enroll directly, no invite code
+ncli relay members add <pubkey> --role vip
+# idempotent — no error if already not a member
+ncli relay members remove <pubkey>
 
-ncli relay invites create --ttl 24h --max-uses 1        # issue a code to hand out out-of-band
-ncli relay invites list                                 # every currently-stored code
-ncli relay invites revoke <code>                        # idempotent
+# issue a code to hand out out-of-band
+ncli relay invites create --ttl 24h --max-uses 1
+# every currently-stored code
+ncli relay invites list
+# idempotent
+ncli relay invites revoke <code>
 
 ncli relay roles list
-ncli relay roles create <id> --label "VIP" --color 280   # NIP-43 has no "delete role" — see reference doc
+# NIP-43 has no "delete role" — see reference doc
+ncli relay roles create <id> --label "VIP" --color 280
 ```
 
 Same `--json`/error-classification convention as stats/reindex/clear, plus
@@ -133,12 +143,15 @@ NIP-98 against a list of admin pubkeys:
 
 ```yaml
 membership:
-  enabled: true          # required: every NIP-86 method here administers NIP-43
+  # required: every NIP-86 method here administers NIP-43
+  enabled: true
 nip86:
   enabled: true
-  admins:                # in addition to nip11.pubkey, which is always allowed
+  # in addition to nip11.pubkey, which is always allowed
+  admins:
     - <host hex pubkey>
-  allowedOrigins:        # omit to answer any origin
+  # omit to answer any origin
+  allowedOrigins:
     - https://app.example
 ```
 
@@ -182,11 +195,16 @@ relay this config describes. Requires `nip11.privkey` in config to sign
 requests as admin.
 
 ```sh
-ncli relay stats                      # live reindexer + verification-worker metrics
-ncli relay reindex search             # trigger a live search reindex (202 Accepted, runs async)
-ncli relay reindex zaps               # trigger a live zap-stats reindex
-ncli relay clear search               # delete the search index on the live relay
-ncli relay clear zaps                 # delete zap counters on the live relay
+# live reindexer + verification-worker metrics
+ncli relay stats
+# trigger a live search reindex (202 Accepted, runs async)
+ncli relay reindex search
+# trigger a live zap-stats reindex
+ncli relay reindex zaps
+# delete the search index on the live relay
+ncli relay clear search
+# delete zap counters on the live relay
+ncli relay clear zaps
 ```
 
 All subcommands take `--json` (a global flag) for scripted use: the

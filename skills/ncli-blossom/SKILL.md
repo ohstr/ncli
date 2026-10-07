@@ -49,8 +49,10 @@ identity's most recently published kind:10063 event and prints the
 servers it declares, optionally merging them into your own list:
 
 ```sh
-ncli blossom servers discover alice@example.com              # just show them
-ncli blossom servers discover alice@example.com --add        # and adopt them locally
+# just show them
+ncli blossom servers discover alice@example.com
+# and adopt them locally
+ncli blossom servers discover alice@example.com --add
 ```
 
 This only finds something if `alice` has actually run `servers add
@@ -74,8 +76,10 @@ that she hasn't announced where it lives.
 
 ```sh
 ncli blossom upload photo.jpg --identity mykey
-ncli blossom upload *.jpg --identity mykey                    # one auth token per (file, server) pair, not one for the whole batch
-ncli blossom upload photo.jpg --identity mykey --optimize      # ask the server to transcode/optimize it (BUD-05)
+# one auth token per (file, server) pair, not one for the whole batch
+ncli blossom upload *.jpg --identity mykey
+# ask the server to transcode/optimize it (BUD-05)
+ncli blossom upload photo.jpg --identity mykey --optimize
 ```
 
 Content-type is sniffed from the file's own bytes (like `file(1)`/net/http's
@@ -93,11 +97,15 @@ every upload/mirror failure message says so explicitly. Check with
 ## Downloading
 
 ```sh
-ncli blossom download <hash>                        # writes ./<hash>.<ext> if the server reports one
+# writes ./<hash>.<ext> if the server reports one
+ncli blossom download <hash>
 ncli blossom download <hash> -o photo.jpg
-ncli blossom download <hash> -o -                    # stream to stdout, nothing else printed
-ncli blossom download "blossom:<hash>.jpg"           # BUD-10 URI
-ncli blossom download "https://server/<hash>.jpg"    # a full server URL also works
+# stream to stdout, nothing else printed
+ncli blossom download <hash> -o -
+# BUD-10 URI
+ncli blossom download "blossom:<hash>.jpg"
+# a full server URL also works
+ncli blossom download "https://server/<hash>.jpg"
 ```
 
 Any of a bare hash, a `blossom:` URI, or a hash-shaped URL is accepted
@@ -108,9 +116,12 @@ order. Most servers don't require auth for a plain `GET`; pass
 ## Listing
 
 ```sh
-ncli blossom list --identity mykey                 # your own media
-ncli blossom list alice@example.com                # someone else's, by npub/hex/nprofile/nip-05
-ncli blossom list --identity mykey --all           # merge across every configured server
+# your own media
+ncli blossom list --identity mykey
+# someone else's, by npub/hex/nprofile/nip-05
+ncli blossom list alice@example.com
+# merge across every configured server
+ncli blossom list --identity mykey --all
 ncli blossom list --identity mykey --limit 20 --cursor <c> --since <ts> --until <ts>
 ```
 

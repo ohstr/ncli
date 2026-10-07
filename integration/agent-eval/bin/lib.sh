@@ -21,9 +21,24 @@ add_check() {
   fi
 }
 
+# check_report_schema <round> <run_dir> -- the self-report has the
+# _report-schema.json keys, so report.sh can read its outcome and summary.
+check_report_schema() {
+  local round="$1" run_dir="$2" f="${run_dir}/${round}.self-report.json"
+  [ -s "${f}" ] || return 0
+  if jq -e --arg r "${round}" '.round == $r and (.outcome | IN("pass","partial","fail"))
+      and (.summary | type == "string" and length > 0) and (.steps | type == "array")
+      and (.issues | type == "array")' "${f}" >/dev/null 2>&1; then
+    add_check self_report_matches_schema true "round/outcome/summary/steps/issues present"
+  else
+    add_check self_report_matches_schema false "keys: $(jq -c 'keys' "${f}" 2>/dev/null || echo 'not JSON')"
+  fi
+}
+
 # write_verify <round> <run_dir>
 write_verify() {
   local round="$1" run_dir="$2"
+  check_report_schema "${round}" "${run_dir}"
   local verified
   verified="$(jq '(length > 0) and all(.[]; .pass)' <<<"${CHECKS_JSON}")"
   jq -n --arg round "${round}" --argjson checks "${CHECKS_JSON}" --argjson verified "${verified}" \

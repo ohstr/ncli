@@ -6,12 +6,14 @@
    (if you pulled it in R0) the relay-ops skill for exactly which fields
    are required -- at minimum you'll need a `store` path, `logdir`, and
    either `nip11.pubkey` or `nip11.privkey`.
-2. Start `ncli relay --config <your-file>` as a background process on
-   port `6500` (nothing else on this machine uses that port).
+2. Start `ncli relay --config <your-file> --json` as a background process
+   on port `6500` (nothing else on this machine uses that port), with its
+   stderr going to `/report/r3-relay-stderr.log`.
 3. Confirm it's actually serving -- e.g. `ncli ping localhost:6500` or
    fetching its NIP-11 document -- then register it with
-   `ncli relay context add`.
-4. Stop the background process cleanly before moving to Part B.
+   `ncli relay context add`, and list your contexts.
+4. Stop the background process cleanly, then remove the context you added
+   and confirm it's gone, before moving to Part B.
 
 ## Part B -- administer the shared relay
 
@@ -29,9 +31,11 @@ is the credential here).
    add`), list members, show that one member's record specifically, then
    remove it again.
 4. List roles, then create one new role.
-5. Trigger `ncli relay reindex search` and confirm the request was
-   accepted (it's async -- check `relay stats` to see it start, you don't
-   need to wait for it to finish).
+5. Rebuild the relay's zap counters, confirm it was accepted, then clear
+   them.
+6. Try rebuilding, then clearing, the search index too. This relay may
+   not have search set up; report exactly what ncli tells you for each
+   (error code and exit code) rather than working around it.
 
 Write your self-report to `/report/r3-relay-ops.self-report.json`,
 covering both parts.

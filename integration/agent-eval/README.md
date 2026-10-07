@@ -21,10 +21,11 @@ docs drifting from what's actually shipped.
   network namespace, since ncli's admin commands hard-target
   `localhost` with no `--url` override.
 
-Nine rounds (`rounds/r0-bootstrap.md` .. `r8-error-contract.md`) cover
+Eleven rounds (`rounds/r0-bootstrap.md` .. `r10-space.md`) cover
 install, identity, relay queries, relay admin, publish/apply,
-PoW mining, NIP-46 bunker signing, Blossom, and the documented
-error-code contract. Each round is a fresh, non-interactive `claude -p`
+PoW mining, NIP-46 bunker signing (started and driven with no TTY),
+Blossom, the documented error-code contract, NIP-29 groups, and NIP-53
+spaces (a headless call plus chat). Each round is a fresh, non-interactive `claude -p`
 call with no memory of prior rounds, though the container filesystem
 persists between them (R0's install, R1's identity, etc. are still
 there).
@@ -40,6 +41,12 @@ Every claim gets independently re-checked, never trusted as-is:
 `bin/report.sh` merges both into `report/<run-id>/report.md`, plus a
 one-line summary appended to `report/history.jsonl` for diffing across
 releases.
+
+Every verifier also checks the self-report against
+`rounds/_report-schema.json` (appended to every prompt). Afterwards
+**`bin/coverage.sh`** counts which `ncli` commands the agents actually ran
+and appends that table to the report; a full run fails if any command
+outside `coverage-allow.txt` was never run.
 
 ## Running it
 
@@ -66,7 +73,7 @@ It builds a static binary on the host (`go.mod`'s own resolution, a local
 `replace` included) and layers `compose.local.yaml` on top.
 
 **Cost**: each round is a real, billed Claude Code session, not a mock
--- a full 9-round run costs about as much as a handful of normal coding
+-- a full 11-round run costs about as much as a handful of normal coding
 turns.
 
 ## Credentials

@@ -96,7 +96,10 @@
 "relay stats": {modes: [json, text, errors], tests: [TestRelayAdmin, TestAttack_AdminHTTP]}
 "space": {modes: [errors], tests: [TestBareGroupCommands]}
 "space create": {modes: [json, errors], tests: [TestSpaceAndHuddle, TestAddressableLookups]}
-"space join": {modes: [errors], tests: [TestSpaceAndHuddle], pending: "TUI (phase 5)"}
+"space chat": {modes: [errors], tests: [TestSpaceAndHuddle]}
+"space chat list": {modes: [json, errors], tests: [TestSpaceAndHuddle]}
+"space chat send": {modes: [json, errors], tests: [TestSpaceAndHuddle]}
+"space join": {modes: [json, errors], tests: [TestSpaceAndHuddle], pending: "TUI roster view (phase 5)"}
 "space list": {modes: [json], tests: [TestSpaceAndHuddle]}
-"space show": {modes: [json], tests: [TestSpaceAndHuddle, TestAddressableLookups]}
+"space show": {modes: [json, errors], tests: [TestSpaceAndHuddle, TestAddressableLookups]}
 "version": {modes: [json, text], tests: [TestVersion]}

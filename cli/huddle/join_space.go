@@ -13,6 +13,9 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// errActivityNotFound: no queried relay has the space or session.
+var errActivityNotFound = errors.New("not found on any queried relay")
+
 // spaceLookupTimeout bounds the per-relay query for the space event.
 const spaceLookupTimeout = 10 * time.Second
 
@@ -122,7 +125,7 @@ func fetchAddressable(ctx context.Context, ref activityRef, targets *client.Targ
 		}
 	}
 	if newest == nil {
-		return nil, fmt.Errorf("%s was not found on any queried relay", ref.Address())
+		return nil, fmt.Errorf("%s was %w", ref.Address(), errActivityNotFound)
 	}
 	return newest, nil
 }

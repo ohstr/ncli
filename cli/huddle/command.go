@@ -68,7 +68,12 @@ to, and a bare room id is not an addressable event, so joining by room id
 gives the roster only -- there would be nothing valid to tag a message with.
 
 Ctrl+C (or q) asks before leaving, so a stray keystroke does not drop the
-call.`,
+call.
+
+Without a terminal, or with --json, there is no roster view: each change is
+printed as one JSON line instead (joined, participant_joined/left,
+speaking_started/stopped, chat, ended), until --duration elapses or the
+process is interrupted. Audio is never played in this mode.`,
 		Example: `  ncli space join standup --relay wss://relay.example
   ncli space join 30312:<pubkey>:standup
   ncli space join naddr1...`,
@@ -78,6 +83,7 @@ call.`,
 
 	cmd.Flags().String("relay", "", "Relay hosting the huddle (falls back to the first configured prefs relay)")
 	cmd.Flags().Bool("no-chat", false, "Join without the conversation panel, even when joining by space")
+	cmd.Flags().Duration("duration", 0, "Without a terminal or with --json: leave after this long (default: until interrupted)")
 
 	return cmd
 }
@@ -85,12 +91,14 @@ call.`,
 func runJoin(cmd *cobra.Command, args []string) error {
 	room := args[0]
 
-	// Checked before anything else: the roster view is the whole command, so
-	// without a terminal there is nothing to fall back to. Refusing here beats
-	// authenticating, joining a real room, and only then finding there is
-	// nowhere to draw it.
-	if !term.IsTerminal(int(os.Stdout.Fd())) {
-		return common.UsageError(cmd, errors.New("the roster view needs a terminal, and stdout is not one"))
+	jsonMode, _ := cmd.Flags().GetBool("json")
+	headless := jsonMode || !term.IsTerminal(int(os.Stdout.Fd()))
+	duration, _ := cmd.Flags().GetDuration("duration")
+	if duration < 0 {
+		return common.InvalidInputError(cmd, duration.String(), errors.New("--duration must be positive"))
+	}
+	if duration > 0 && !headless {
+		return common.InvocationError(cmd, errors.New("--duration applies only without a terminal or with --json"))
 	}
 
 	identityFlag, _ := cmd.Flags().GetString("identity")
@@ -122,6 +130,9 @@ func runJoin(cmd *cobra.Command, args []string) error {
 		if resolveErr != nil {
 			if errors.Is(resolveErr, client.ErrNoReachableTargets) {
 				return common.NetworkError(cmd, room, resolveErr)
+			}
+			if errors.Is(resolveErr, errActivityNotFound) {
+				return common.NotFoundError(cmd, room, resolveErr)
 			}
 			return common.RuntimeError(cmd, resolveErr)
 		}
@@ -199,6 +210,18 @@ func runJoin(cmd *cobra.Command, args []string) error {
 		} else {
 			chat = cc
 		}
+	}
+
+	if headless {
+		durationCtx, cancel := context.WithCancel(ctx)
+		if duration > 0 {
+			durationCtx, cancel = context.WithTimeout(ctx, duration)
+		}
+		defer cancel()
+		if err := runHeadless(ctx, durationCtx, hc, room, chatActivityOf(target), chat, func(e joinEvent) { common.PrintJSONLine(e) }); err != nil {
+			return common.NetworkError(cmd, endpoint, err)
+		}
+		return nil
 	}
 
 	return runBoard(cmd, ctx, hc, room, chatActivityOf(target), chat)

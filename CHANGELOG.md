@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.8.0-rc.9]
+
+### Fixed
+
+- `miner check -e` on a malformed file exits `invalid_input` (3), not
+  `internal` (1). ([#117](https://github.com/ohstr/ncli/pull/117))
+- `miner mine` rejects a `--difficulty` outside 0-256 instead of mining
+  with it. ([#117](https://github.com/ohstr/ncli/pull/117))
+- `relay context use <unknown>` and `relay context add` with a missing
+  config file exit `not_found` (4), not `invalid_input`.
+  ([#117](https://github.com/ohstr/ncli/pull/117))
+
 ## [0.8.0-rc.8]
 
 ### Fixed

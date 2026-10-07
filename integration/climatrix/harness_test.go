@@ -127,15 +127,16 @@ func (r Result) String() string {
 }
 
 // Run executes ncli with args in this Env, from its own directory.
-func (e *Env) Run(args ...string) Result {
-	return e.RunStdin("", args...)
+func (e *Env) Run(t *testing.T, args ...string) Result {
+	t.Helper()
+	return e.RunStdin(t, "", args...)
 }
 
-func (e *Env) RunStdin(stdin string, args ...string) Result {
-	e.t.Helper()
+func (e *Env) RunStdin(t *testing.T, stdin string, args ...string) Result {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, bin(e.t), args...)
+	cmd := exec.CommandContext(ctx, bin(t), args...)
 	cmd.Dir = e.Dir
 	cmd.Env = e.environ()
 	cmd.Stdin = strings.NewReader(stdin)
@@ -146,20 +147,20 @@ func (e *Env) RunStdin(stdin string, args ...string) Result {
 	if ee, ok := err.(*exec.ExitError); ok {
 		r.Code = ee.ExitCode()
 	} else if err != nil {
-		e.t.Fatalf("running ncli %v: %v", args, err)
+		t.Fatalf("running ncli %v: %v", args, err)
 	}
 	if ctx.Err() != nil {
-		e.t.Fatalf("ncli %v timed out\n%s", args, r)
+		t.Fatalf("ncli %v timed out\n%s", args, r)
 	}
 	return r
 }
 
 // MustOK runs and fails the test on a non-zero exit.
-func (e *Env) MustOK(args ...string) Result {
-	e.t.Helper()
-	r := e.Run(args...)
+func (e *Env) MustOK(t *testing.T, args ...string) Result {
+	t.Helper()
+	r := e.Run(t, args...)
 	if r.Code != 0 {
-		e.t.Fatalf("want exit 0\n%s", r)
+		t.Fatalf("want exit 0\n%s", r)
 	}
 	return r
 }
@@ -194,7 +195,14 @@ var exitCodes = map[string]int{
 // JSON, exactly one error report with this code and the matching exit.
 func (r Result) ExpectErr(t *testing.T, code string) ErrReport {
 	t.Helper()
-	if r.Stdout != "" {
+	return r.expectErr(t, code, false)
+}
+
+// expectErr is ExpectErr; stdoutOK allows a result on stdout alongside
+// the failure (ping's per-relay table).
+func (r Result) expectErr(t *testing.T, code string, stdoutOK bool) ErrReport {
+	t.Helper()
+	if r.Stdout != "" && !stdoutOK {
 		t.Errorf("failure wrote to stdout\n%s", r)
 	}
 	var reports []ErrReport
@@ -476,7 +484,7 @@ func (r *Relay) AdminConfig(t *testing.T, privHex string) string {
 // event was accepted.
 func (r *Relay) Seed(t *testing.T) {
 	t.Helper()
-	res := NewEnv(t).Run("publish", "-e", CorpusPath(), "-s", r.URL, "--json")
+	res := NewEnv(t).Run(t, "publish", "-e", CorpusPath(), "-s", r.URL, "--json")
 	var rep struct {
 		Succeeded int `json:"succeeded"`
 		Failed    int `json:"failed"`

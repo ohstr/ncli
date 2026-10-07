@@ -42,7 +42,7 @@ func commandTree(t *testing.T) []string {
 	var out []string
 	var walk func(path []string)
 	walk = func(path []string) {
-		r := e.Run(append(append([]string{}, path...), "--help")...)
+		r := e.Run(t, append(append([]string{}, path...), "--help")...)
 		inList := false
 		sc := bufio.NewScanner(strings.NewReader(r.Stdout + r.Stderr))
 		var subs []string

@@ -156,6 +156,13 @@ func (c *chatLog) add(event *nip01.Event) bool {
 	return true
 }
 
+// get returns the held message with id (zero value if none).
+func (c *chatLog) get(id string) chatMessage {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.byID[id]
+}
+
 // len is how many messages are held.
 func (c *chatLog) len() int {
 	c.mu.Lock()

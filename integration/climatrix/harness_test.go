@@ -177,6 +177,24 @@ func (r Result) JSON(t *testing.T, v any) {
 	}
 }
 
+// ExpectJSONArray asserts stdout's top-level value (key "") or its key
+// field is a JSON array: lists are [] when empty, never null or missing.
+func (r Result) ExpectJSONArray(t *testing.T, key string) {
+	t.Helper()
+	var v any
+	r.JSON(t, &v)
+	if key != "" {
+		obj, ok := v.(map[string]any)
+		if !ok {
+			t.Fatalf("stdout is not a JSON object\n%s", r)
+		}
+		v = obj[key]
+	}
+	if _, ok := v.([]any); !ok {
+		t.Errorf("%q is %v, want a JSON array\n%s", key, v, r)
+	}
+}
+
 // ErrReport is the --json failure line on stderr.
 type ErrReport struct {
 	Error     string `json:"error"`
@@ -328,6 +346,7 @@ type Relay struct {
 	ConfigPath string
 	LogPath    string
 	Dir        string
+	args       []string
 	cmd        *exec.Cmd
 	env        *Env
 }
@@ -352,6 +371,12 @@ func allocPort(t *testing.T) int {
 // and logs.filename are always set by the harness; nip11.privkey defaults
 // to the operator actor.
 func StartRelay(t *testing.T, base string, overrides map[string]any) *Relay {
+	t.Helper()
+	return StartRelayArgs(t, base, overrides)
+}
+
+// StartRelayArgs is StartRelay with extra `ncli relay` flags (e.g. --json).
+func StartRelayArgs(t *testing.T, base string, overrides map[string]any, args ...string) *Relay {
 	t.Helper()
 	cfg := map[string]any{}
 	if base != "" {
@@ -394,6 +419,7 @@ func StartRelay(t *testing.T, base string, overrides map[string]any) *Relay {
 	r := &Relay{Port: port, URL: url, Dir: dir,
 		ConfigPath: filepath.Join(dir, "relay.yaml"),
 		LogPath:    filepath.Join(dir, "relay.out"),
+		args:       args,
 		env:        NewEnv(t)}
 	if err := os.WriteFile(r.ConfigPath, b, 0o600); err != nil {
 		t.Fatal(err)
@@ -408,7 +434,7 @@ func (r *Relay) start(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r.cmd = exec.Command(bin(t), "relay", "--config", r.ConfigPath)
+	r.cmd = exec.Command(bin(t), append([]string{"relay", "--config", r.ConfigPath}, r.args...)...)
 	r.cmd.Dir = r.Dir
 	r.cmd.Env = r.env.environ()
 	r.cmd.Stdout, r.cmd.Stderr = logf, logf

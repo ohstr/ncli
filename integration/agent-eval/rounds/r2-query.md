@@ -3,7 +3,8 @@
 `ws://localhost:5500` is a Nostr relay running alongside you, already
 seeded with kind:1 events. Use it as your target for this round.
 
-1. Add it as a default relay: `ncli prefs relays add`.
+1. Find out which file your preferences are stored in, then add the relay
+   as a default relay: `ncli prefs relays add`.
 2. `ncli ping` it and confirm it reports reachable.
 3. `ncli find` a small number (2-5) of recent kind:1 events from it.
 4. `ncli dump` a small batch of kind:1 events to a JSON file and confirm

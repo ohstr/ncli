@@ -340,7 +340,8 @@ func NewRelayCommand() *cobra.Command {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := RunRelay(); err != nil {
+			jsonMode, _ := cmd.Flags().GetBool("json")
+			if err := RunRelay(jsonMode); err != nil {
 				return common.RuntimeError(cmd, err)
 			}
 			return nil
@@ -563,7 +564,7 @@ func initConfig() error {
 // calls bypassed the CLIError/JSON-error path entirely, so a --json caller
 // got a bare styled log line on stderr instead of the same structured
 // {"error","code"} shape every other failure produces.
-func RunRelay() error {
+func RunRelay(jsonMode bool) error {
 	// Initialize Logging
 	cwd, _ := os.Getwd()
 	var logWriter *lumberjack.Logger
@@ -589,7 +590,7 @@ func RunRelay() error {
 		}
 	}
 
-	common.ConfigureLogging(common.WithConsole(), common.WithFileWriter(logWriter))
+	common.ConfigureLogging(common.WithConsole(), common.WithFileWriter(logWriter), common.WithJSON(jsonMode))
 	// Log the effective rotation settings actually in force -- not
 	// config.Logs directly, which is nil whenever the config omits the
 	// optional `logs:` block (i.e. whenever the defaults above are the ones

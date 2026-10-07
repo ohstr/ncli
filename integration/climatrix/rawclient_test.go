@@ -381,19 +381,6 @@ func Ev(t *testing.T, priv string, kind int, content string, tags ...[]string) *
 	return ev
 }
 
-// known tracks a confirmed bug that lives outside this repo (or isn't
-// fixed yet): while it reproduces the test logs and passes; once it stops
-// reproducing the test fails, so the marker gets removed and the check
-// becomes a plain assertion.
-func known(t *testing.T, bug string, reproduces bool, detail string) {
-	t.Helper()
-	if reproduces {
-		t.Logf("KNOWN BUG %s still reproduces: %s", bug, detail)
-		return
-	}
-	t.Errorf("known bug %s no longer reproduces -- replace this marker with an assertion", bug)
-}
-
 func hasPrefix(msg string, prefixes ...string) bool {
 	for _, p := range prefixes {
 		if strings.HasPrefix(msg, p) {

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -109,15 +110,15 @@ func TestBlossom(t *testing.T) {
 		e.Run(t, "blossom", "download", hash, "--server", srv, "--json").ExpectErr(t, "not_found")
 	})
 
-	t.Run("mirror refused by the server is reported, not internal", func(t *testing.T) {
+	t.Run("mirror refused by the server is invalid_input, not retryable", func(t *testing.T) {
 		// The reference server refuses private source addresses (SSRF
-		// guard), which is all a local test has.
+		// guard) with a 400, which is all a local test has. Retrying
+		// can't change that answer.
+		// Like ping, the per-server report still goes to stdout.
 		res := e.Run(t, "blossom", "mirror", srv+"/"+hash, "--identity", alice.Nsec, "--server", srv, "--json")
-		if res.Code == 0 {
-			t.Fatalf("mirror from a private address accepted\n%s", res)
-		}
-		if res.Code == exitCodes["internal"] {
-			t.Errorf("mirror refusal exited internal\n%s", res)
+		res.expectErr(t, "invalid_input", true)
+		if strings.Contains(res.Stdout+res.Stderr, "before retrying") {
+			t.Errorf("a definite refusal carries the may-already-exist hint\n%s", res)
 		}
 	})
 

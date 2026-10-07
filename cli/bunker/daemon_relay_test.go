@@ -98,7 +98,7 @@ func TestRelay_BunkerFlow_ConnectAndSignEvent(t *testing.T) {
 		Queue:        NewQueue(0, time.Minute),
 		OnLog:        func(format string, args ...any) { t.Logf("daemon: "+format, args...) },
 	})
-	go daemon.Run(ctx)
+	go func() { _ = daemon.Run(ctx) }()
 	time.Sleep(2 * time.Second) // let the relay connection establish
 
 	testClient := newRelayTestClient(t, ctx, relayURL)

@@ -140,7 +140,7 @@ func buildTree(events []*nip01.Event) treeResult {
 	// recommended assembly -- not copied from the relay's own Children
 	// tag, so a node whose parent this connection can't see still ends
 	// up correctly listed as a root below rather than silently dropped.
-	var roots []string
+	roots := []string{}
 	for id, node := range nodes {
 		if node.Parent == "" || nodes[node.Parent] == nil {
 			roots = append(roots, id)

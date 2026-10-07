@@ -119,6 +119,23 @@ group already had; a flag you did pass overrides it. This means:
   whole edit with the same exit `7`/`"relay restricted this query"` shape
   `show` uses, rather than quietly falling back to a blank slate.
 
+## Posting a message into a group
+
+There's no `groups post`: a group message is an ordinary event carrying
+the group's `h` tag (kind 9 for chat), signed and published like any
+other. The relay accepts it only from a member (closed or private group);
+it checks the signed author, so `publish` needs no `--identity`.
+
+```sh
+PUB=$(ncli id mykey --json | jq -r .pub_hex)
+jq -n --arg p "$PUB" '[{kind:9, pubkey:$p, created_at:(now|floor),
+  content:"hello group", tags:[["h","standup"]]}]' > msg.json
+ncli id sign -e msg.json -o signed.json --identity mykey
+ncli publish -e signed.json -s wss://relay.example --json   # .results[0].id is the event id
+```
+
+That id is what `groups pins set --event` and `groups delete-event` take.
+
 ## `groups pins set` is a whole-list replace too
 
 Same shape, no read-before-write mitigation: `--event`/`--address` name

@@ -193,6 +193,10 @@ func TestClassifyHTTPError_MapsStatusToCode(t *testing.T) {
 		{"401 -> auth", &bclient.HTTPError{StatusCode: http.StatusUnauthorized}, common.CodeAuth},
 		{"403 -> auth", &bclient.HTTPError{StatusCode: http.StatusForbidden}, common.CodeAuth},
 		{"404 -> not_found", &bclient.HTTPError{StatusCode: http.StatusNotFound}, common.CodeNotFound},
+		{"400 -> invalid_input", &bclient.HTTPError{StatusCode: http.StatusBadRequest}, common.CodeInvalidInput},
+		{"413 -> invalid_input", &bclient.HTTPError{StatusCode: http.StatusRequestEntityTooLarge}, common.CodeInvalidInput},
+		{"409 -> conflict", &bclient.HTTPError{StatusCode: http.StatusConflict}, common.CodeConflict},
+		{"429 -> network", &bclient.HTTPError{StatusCode: http.StatusTooManyRequests}, common.CodeNetwork},
 		{"500 -> network", &bclient.HTTPError{StatusCode: http.StatusInternalServerError}, common.CodeNetwork},
 		{"402 payment required -> network", &bclient.PaymentRequiredError{HTTPError: bclient.HTTPError{StatusCode: http.StatusPaymentRequired}}, common.CodeNetwork},
 	}

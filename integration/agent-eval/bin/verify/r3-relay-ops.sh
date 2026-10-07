@@ -41,9 +41,32 @@ else
   add_check "role_actually_created" false "roles list: ${ROLES}"
 fi
 
-# Part A (the agent's own relay on :6500) is necessarily gone by the time
-# we check -- the round has it stopped before finishing -- so there's no
-# durable ground truth left to re-check there beyond what's in the
-# transcript; the judge pass covers that half instead.
+# Part A ran its relay with --json: every stderr line must be JSON.
+LOG="report/r3-relay-stderr.log"
+cp "${LOG}" "${RUN_DIR}/r3-relay-stderr.log" 2>/dev/null || true
+if [ ! -s "${LOG}" ]; then
+  add_check "relay_json_logs_are_json" false "no ${LOG} captured"
+else
+  BAD="$(grep -v '^[[:space:]]*$' "${LOG}" | while IFS= read -r l; do jq -e . >/dev/null 2>&1 <<<"${l}" || echo "${l}"; done | head -3)"
+  if [ -z "${BAD}" ] && grep -q 'listening' "${LOG}"; then
+    add_check "relay_json_logs_are_json" true "$(grep -vc '^[[:space:]]*$' "${LOG}") lines, all JSON"
+  else
+    add_check "relay_json_logs_are_json" false "non-JSON lines: ${BAD:-none, but no listening line}"
+  fi
+fi
+
+CONTEXTS="$(agent_exec 'ncli relay context list --json' 2>/dev/null)"
+if jq -e '(.contexts | type == "object") and (.contexts | length == 0)' >/dev/null 2>&1 <<<"${CONTEXTS}"; then
+  add_check "context_removed" true "no relay contexts remain"
+else
+  add_check "context_removed" false "context list: ${CONTEXTS}"
+fi
+
+SEARCH="$(agent_exec 'ncli relay reindex search --config /relay/relay.yaml --json 2>&1 >/dev/null; echo "exit=$?"' 2>/dev/null)"
+if grep -q '"code":"usage"' <<<"${SEARCH}" && grep -q 'exit=2' <<<"${SEARCH}"; then
+  add_check "search_off_is_usage" true "reindex search without search: usage, exit 2"
+else
+  add_check "search_off_is_usage" false "${SEARCH}"
+fi
 
 write_verify "${ROUND}" "${RUN_DIR}"

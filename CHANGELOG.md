@@ -19,6 +19,23 @@
   API. ([#117](https://github.com/ohstr/ncli/pull/117))
 - `POST /query` returns what REQ would for its signer, private NIP-29
   groups included. ([#117](https://github.com/ohstr/ncli/pull/117))
+- Deleting a private NIP-29 group left its metadata, admin and member
+  lists stored and readable by anyone, and it kept showing in `groups
+  list`/`tree`. The relay now purges a deleted group's events.
+  ([#119](https://github.com/ohstr/ncli/pull/119))
+
+### Added
+
+- `ncli bunker` without a terminal (or with `--json`) starts the signer in
+  the background and prints its status. `bunker pending list/approve/reject`
+  and `bunker sessions set-grant` do from scripts what the TUI does.
+  ([#119](https://github.com/ohstr/ncli/pull/119))
+- The relay publishes its NIP-43 kind:13534 member list, with roles, on
+  every join and leave. ([#119](https://github.com/ohstr/ncli/pull/119))
+- `space join` without a terminal (or with `--json`) streams the call as
+  JSON lines -- arrivals, departures, speaking, chat -- until `--duration`
+  or an interrupt. `space chat send/list` post and read a space's
+  conversation without joining. ([#119](https://github.com/ohstr/ncli/pull/119))
 
 ### Changed
 
@@ -38,6 +55,26 @@
   MAC" on the old entries). Relay contexts and Blossom servers were lost
   too. It now clears only the relays.
   ([#117](https://github.com/ohstr/ncli/pull/117))
+- `ncli relay --json` logged in console format once the server started;
+  every stderr line is now JSON. ([#119](https://github.com/ohstr/ncli/pull/119))
+- `space show <id>` for a space that doesn't exist exits `not_found`
+  instead of succeeding with nothing; so does `space join` for a missing
+  space, instead of `internal`. ([#119](https://github.com/ohstr/ncli/pull/119))
+- `groups show` exits `not_found` when the relay returns nothing for the
+  group, instead of printing `{}`; `groups tree --json` prints `"roots": []`,
+  not `null`. ([#119](https://github.com/ohstr/ncli/pull/119))
+- `bunker sessions grants --json` prints `[]` for an app with no grants,
+  not `null`. ([#119](https://github.com/ohstr/ncli/pull/119))
+- A Blossom server's outright refusal (a 4xx other than 401/403/404/409/429,
+  e.g. a mirror of a private address) exits `invalid_input`, not a
+  retryable `network`, and no longer suggests the blob may exist anyway.
+  ([#119](https://github.com/ohstr/ncli/pull/119))
+- A NIP-43 join (invite claim or `relay members add`) now applies to the
+  member's already-open connections; they were refused until they
+  reconnected. A private group read refused before AUTH says
+  `auth-required:`, not `restricted:`. The `membership.yaml` preset no
+  longer claims non-members can request their own invite.
+  ([#119](https://github.com/ohstr/ncli/pull/119))
 - An authenticated `groups list`/`find` could intermittently omit private
   groups: a REQ the relay answered before AUTH landed was taken as final.
   It is now retried once authenticated.

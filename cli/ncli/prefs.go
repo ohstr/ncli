@@ -138,7 +138,15 @@ var prefsRelaysClearCmd = &cobra.Command{
 	Example: `  ncli prefs relays clear`,
 	Args:    common.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := client.SavePrefs(&client.Prefs{}); err != nil {
+		// Only the relay list: prefs.yaml also holds the vault key, relay
+		// contexts and Blossom servers, and saving a blank Prefs lost them --
+		// with the vault key gone, every saved identity is unrecoverable.
+		prefs, err := client.LoadPrefs()
+		if err != nil {
+			return common.RuntimeError(cmd, err)
+		}
+		prefs.Relays = nil
+		if err := client.SavePrefs(prefs); err != nil {
 			return common.RuntimeError(cmd, err)
 		}
 

@@ -1,6 +1,7 @@
 package client
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -185,6 +186,82 @@ func TestAddVaultEntry_DuplicateLabel(t *testing.T) {
 	}
 	if _, err := AddVaultEntry(vaultPrivHex, "ALICE", id2.PrivKeyHex); err == nil {
 		t.Fatalf("second AddVaultEntry() with case-different duplicate label error = nil, want an error")
+	}
+}
+
+func TestAddVaultEntry_DuplicateKey(t *testing.T) {
+	withTempConfigDir(t)
+
+	_, vaultPrivHex, err := CreateVaultIdentity("hunter2")
+	if err != nil {
+		t.Fatalf("CreateVaultIdentity() error = %v", err)
+	}
+
+	id, _ := GenerateIdentity()
+	if _, err := AddVaultEntry(vaultPrivHex, "alice", id.PrivKeyHex); err != nil {
+		t.Fatalf("first AddVaultEntry() error = %v", err)
+	}
+	_, err = AddVaultEntry(vaultPrivHex, "bob", id.PrivKeyHex)
+	if !errors.Is(err, ErrKeyExists) {
+		t.Fatalf("AddVaultEntry() same key, new label error = %v, want ErrKeyExists", err)
+	}
+	entries, _ := LoadVaultEntries()
+	if len(entries) != 1 {
+		t.Fatalf("vault holds %d entries, want 1", len(entries))
+	}
+}
+
+func TestRelabelVaultEntry(t *testing.T) {
+	withTempConfigDir(t)
+
+	_, vaultPrivHex, err := CreateVaultIdentity("hunter2")
+	if err != nil {
+		t.Fatalf("CreateVaultIdentity() error = %v", err)
+	}
+	id1, _ := GenerateIdentity()
+	id2, _ := GenerateIdentity()
+	if _, err := AddVaultEntry(vaultPrivHex, "alice", id1.PrivKeyHex); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := AddVaultEntry(vaultPrivHex, "bob", id2.PrivKeyHex); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := RelabelVaultEntry(id1.Npub, "BOB"); !errors.Is(err, ErrLabelExists) {
+		t.Fatalf("RelabelVaultEntry() onto a taken label error = %v, want ErrLabelExists", err)
+	}
+
+	entry, err := RelabelVaultEntry(id1.Npub, "carol")
+	if err != nil || entry.Label != "carol" {
+		t.Fatalf("RelabelVaultEntry() = (%+v, %v), want label carol", entry, err)
+	}
+	got, found, _ := FindVaultEntry("carol")
+	if !found || got.Npub != id1.Npub {
+		t.Fatalf("FindVaultEntry(carol) = (%+v, %v), want id1", got, found)
+	}
+	privHex, err := DecryptVaultEntry(vaultPrivHex, *got)
+	if err != nil || privHex != id1.PrivKeyHex {
+		t.Fatalf("DecryptVaultEntry() after relabel = (%q, %v), want id1's key", privHex, err)
+	}
+}
+
+func TestIdentityFromPrivKey(t *testing.T) {
+	id, _ := GenerateIdentity()
+	got, err := IdentityFromPrivKey(id.PrivKeyHex)
+	if err != nil || *got != *id {
+		t.Fatalf("IdentityFromPrivKey() = (%+v, %v), want %+v", got, err, id)
+	}
+
+	for _, bad := range []string{
+		"",
+		"zz",
+		strings.Repeat("0", 64),
+		strings.Repeat("f", 64), // >= curve order
+		strings.Repeat("1", 62),
+	} {
+		if _, err := IdentityFromPrivKey(bad); err == nil {
+			t.Errorf("IdentityFromPrivKey(%q) error = nil, want an error", bad)
+		}
 	}
 }
 

@@ -27,6 +27,10 @@ const vaultFileName = "vault.yaml"
 // with errors.Is instead of matching on message text.
 var ErrLabelExists = errors.New("vault label already exists")
 
+// ErrKeyExists is wrapped into AddEntry's error when the key is already
+// saved, under any label: a key is never stored twice.
+var ErrKeyExists = errors.New("key already saved in vault")
+
 // ErrVaultKeyMissing is a vault whose key is gone from prefs.yaml while
 // identities saved with it remain: they can't be decrypted, and a new key
 // would orphan them, so nothing creates one.
@@ -195,6 +199,9 @@ func AddEntry(vaultPrivKeyHex, label, entryPrivKeyHex string) (*Entry, error) {
 		return nil, err
 	}
 	for _, e := range entries {
+		if e.Npub == npub {
+			return nil, fmt.Errorf("key already saved as %q: %w", e.Label, ErrKeyExists)
+		}
 		if strings.EqualFold(e.Label, label) {
 			return nil, fmt.Errorf("label %q already exists in vault: %w", label, ErrLabelExists)
 		}
@@ -220,6 +227,37 @@ func AddEntry(vaultPrivKeyHex, label, entryPrivKeyHex string) (*Entry, error) {
 		return nil, err
 	}
 	return &entry, nil
+}
+
+// RelabelEntry renames the entry holding npub. A blank label defaults to
+// the npub, as in AddEntry.
+func RelabelEntry(npub, label string) (*Entry, error) {
+	label = strings.TrimSpace(label)
+	if label == "" {
+		label = npub
+	}
+
+	entries, err := LoadEntries()
+	if err != nil {
+		return nil, err
+	}
+	idx := -1
+	for i, e := range entries {
+		if e.Npub == npub {
+			idx = i
+		} else if strings.EqualFold(e.Label, label) {
+			return nil, fmt.Errorf("label %q already exists in vault: %w", label, ErrLabelExists)
+		}
+	}
+	if idx < 0 {
+		return nil, fmt.Errorf("%s not saved in vault", npub)
+	}
+
+	entries[idx].Label = label
+	if err := SaveEntries(entries); err != nil {
+		return nil, err
+	}
+	return &entries[idx], nil
 }
 
 // DecryptEntry reverses AddEntry, given the already-unlocked

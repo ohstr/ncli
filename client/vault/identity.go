@@ -2,6 +2,7 @@ package vault
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
 
 	btcec "github.com/flokiorg/go-flokicoin/crypto"
@@ -28,7 +29,19 @@ func GenerateIdentity() (*Identity, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate key: %w", err)
 	}
-	privHex := hex.EncodeToString(priv.Serialize())
+	return IdentityFromPrivKey(hex.EncodeToString(priv.Serialize()))
+}
+
+// IdentityFromPrivKey returns every display form of an existing private key.
+func IdentityFromPrivKey(privHex string) (*Identity, error) {
+	b, err := hex.DecodeString(privHex)
+	if err != nil || len(b) != 32 {
+		return nil, errors.New("invalid private key: want 32 bytes of hex")
+	}
+	var k btcec.ModNScalar
+	if overflow := k.SetByteSlice(b); overflow || k.IsZero() {
+		return nil, errors.New("invalid private key: out of range")
+	}
 
 	pubHex, err := utils.GetPublicKey(privHex)
 	if err != nil {

@@ -14,21 +14,21 @@
 "blossom servers list": {modes: [json], tests: [TestBlossom]}
 "blossom servers remove": {modes: [json], tests: [TestBlossom]}
 "blossom upload": {modes: [json, errors], tests: [TestBlossom]}
-"bunker": {modes: [errors], tests: [TestBunkerWithoutDaemon], pending: "TUI (phase 5)"}
+"bunker": {modes: [tty, errors], tests: [TestTTY_BunkerDaemon, TestBunkerWithoutDaemon], pending: "TUI approve/reject keystrokes"}
 "bunker attach": {modes: [errors], tests: [TestBunkerWithoutDaemon], pending: "TUI (phase 5)"}
-"bunker connect": {modes: [errors], tests: [TestBunkerWithoutDaemon], pending: "running daemon (phase 5)"}
-"bunker history": {modes: [errors], tests: [TestBunkerWithoutDaemon], pending: "running daemon (phase 5)"}
+"bunker connect": {modes: [json, errors], tests: [TestTTY_BunkerDaemon, TestBunkerWithoutDaemon], pending: "completing a pairing needs a second NIP-46 client"}
+"bunker history": {modes: [json, errors], tests: [TestTTY_BunkerDaemon, TestBunkerWithoutDaemon]}
 "bunker sessions": {modes: [errors], tests: [TestBareGroupCommands]}
-"bunker sessions grants": {modes: [errors], tests: [TestBunkerWithoutDaemon], pending: "running daemon (phase 5)"}
-"bunker sessions list": {modes: [errors], tests: [TestBunkerWithoutDaemon], pending: "running daemon (phase 5)"}
+"bunker sessions grants": {modes: [errors], tests: [TestTTY_BunkerDaemon, TestBunkerWithoutDaemon]}
+"bunker sessions list": {modes: [json, errors], tests: [TestTTY_BunkerDaemon, TestBunkerWithoutDaemon]}
 "bunker sessions rename": {modes: [errors], tests: [TestBunkerWithoutDaemon], pending: "running daemon (phase 5)"}
-"bunker sessions revoke": {modes: [errors], tests: [TestBunkerWithoutDaemon], pending: "running daemon (phase 5)"}
+"bunker sessions revoke": {modes: [errors], tests: [TestTTY_BunkerDaemon, TestBunkerWithoutDaemon]}
 "bunker sessions revoke-grant": {modes: [errors], tests: [TestBunkerWithoutDaemon], pending: "running daemon (phase 5)"}
-"bunker status": {modes: [json], tests: [TestBunkerWithoutDaemon], pending: "running daemon (phase 5)"}
-"bunker stop": {modes: [errors], tests: [TestBunkerWithoutDaemon], pending: "running daemon (phase 5)"}
-"decode": {modes: [json, text, errors], tests: [TestDecode]}
+"bunker status": {modes: [json], tests: [TestTTY_BunkerDaemon, TestBunkerWithoutDaemon]}
+"bunker stop": {modes: [json, errors], tests: [TestTTY_BunkerDaemon, TestBunkerWithoutDaemon]}
+"decode": {modes: [json, text, tty, errors], tests: [TestDecode, TestTTY_FailureShapes, TestTTY_Color]}
 "dump": {modes: [json, errors], tests: [TestQuery]}
-"find": {modes: [json, errors], tests: [TestQuery, TestAddressableLookups]}
+"find": {modes: [json, tty, errors], tests: [TestQuery, TestAddressableLookups, TestTTY_Spinner, TestTimeoutCoversHandshake]}
 "groups": {modes: [errors], tests: [TestBareGroupCommands]}
 "groups create": {modes: [json, errors], tests: [TestGroupsCLI]}
 "groups delete": {modes: [json, errors], tests: [TestGroupsModeration]}
@@ -54,7 +54,7 @@
 "miner": {modes: [errors], tests: [TestBareGroupCommands]}
 "miner check": {modes: [json, errors], tests: [TestMinerFileMode, TestQuery]}
 "miner mine": {modes: [json, errors], tests: [TestMinerFileMode]}
-"ping": {modes: [json, errors], tests: [TestPing]}
+"ping": {modes: [json, tty, errors], tests: [TestPing, TestTTY_FailureShapes]}
 "prefs": {modes: [errors], tests: [TestBareGroupCommands]}
 "prefs path": {modes: [json], tests: [TestPrefs]}
 "prefs relays": {modes: [errors], tests: [TestBareGroupCommands]}

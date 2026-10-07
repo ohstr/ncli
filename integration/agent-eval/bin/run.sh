@@ -14,7 +14,7 @@
 set -euo pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-ALL_ROUNDS=(r0-bootstrap r1-identity r2-query r3-relay-ops r4-publish-apply r5-miner r6-bunker r7-blossom r8-error-contract r9-groups r10-space)
+ALL_ROUNDS=(r0-bootstrap r1-identity r2-query r3-relay-ops r4-publish-apply r5-miner r6-bunker r7-blossom r8-error-contract r9-groups r10-space r11-relay-scenarios-write r12-relay-scenarios-serve r13-relay-scenarios-write-2)
 ROUNDS=("${@:-${ALL_ROUNDS[@]}}")
 
 RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -194,6 +194,33 @@ prepare_r2() {
   fi
 }
 
+# R12 needs a real Meilisearch reachable at localhost:7700 before the
+# round starts, matching public-search-relay.yaml's own doc literally (a
+# co-located instance, not a network trick). The binary is baked into the
+# agent image (see agent/Dockerfile); this just starts it detached and
+# waits for its health check, the same shape as prepare_r6's daemon
+# pre-start below. A failure here is a warning, not a hard stop -- the
+# round still runs and will simply find the scenario's search half
+# unreachable, which is itself a legitimate (if degraded) finding.
+prepare_r12() {
+  echo "==> [r12-relay-scenarios-serve] pre-starting Meilisearch"
+  docker compose exec -T agent bash -lc '
+    nohup meilisearch --http-addr 0.0.0.0:7700 --master-key masterKey --no-analytics \
+      >/home/evaluser/work/.r12-meilisearch.log 2>&1 &
+    disown
+  ' || true
+  for _ in $(seq 1 15); do
+    if docker compose exec -T agent bash -lc 'curl -fsS http://localhost:7700/health' 2>/dev/null \
+        | grep -q '"available"'; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "WARNING: [r12-relay-scenarios-serve] meilisearch did not come up before the round started" >&2
+  docker compose exec -T agent bash -lc \
+    'tail -5 /home/evaluser/work/.r12-meilisearch.log 2>/dev/null' >&2 || true
+}
+
 # R6: the agent starts the bunker itself (no TTY). It needs the eval-agent
 # identity R1 saved, and no daemon left over from an earlier run. Its NIP-46
 # counterparty fixture runs from outside the round against whatever pairing
@@ -249,6 +276,10 @@ for round in "${ROUNDS[@]}"; do
     r10-space)
       prepare_r10
       run_r10
+      ;;
+    r12-relay-scenarios-serve)
+      prepare_r12
+      run_round "${round}" || echo "WARNING: [${round}] claude invocation exited non-zero" >&2
       ;;
     *)
       run_round "${round}" || echo "WARNING: [${round}] claude invocation exited non-zero" >&2

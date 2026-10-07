@@ -54,22 +54,27 @@ In `relay.yaml`:
 
 ```yaml
 nip11:
-  url: wss://relay.example      # required once huddle.enabled is true
+  # required once huddle.enabled is true
+  url: wss://relay.example
   privkey: <hex>
 huddle:
   enabled: true
   maxRooms: 100
-  requireMembership: false      # true = only NIP-43 relay members may join
-  allowedOrigins: []            # browser origins; empty allows any
+  # true = only NIP-43 relay members may join
+  requireMembership: false
+  # browser origins; empty allows any
+  allowedOrigins: []
   authTimeout: 5s
   pingInterval: 30s
-  rtc: true                     # also mount /huddle/{id}/rtc
+  # also mount /huddle/{id}/rtc
+  rtc: true
   iceServers:
     - urls: ["stun:stun.example:3478"]
     - urls: ["turn:turn.example:3478"]
       username: user
       credential: secret
-  udpPortRange: "21600-21650"   # pin media ports; needed in a container
+  # pin media ports; needed in a container
+  udpPortRange: "21600-21650"
 ```
 
 `examples/relay/community-voice-relay.yaml` is a ready-made preset;
@@ -126,7 +131,8 @@ publishing a space is `ncli space create`, covered in
 
 ```sh
 ncli huddle list --relay wss://relay.example
-ncli huddle list --relay ws://localhost:7777 --identity satoshi   # members-only relay
+# members-only relay
+ncli huddle list --relay ws://localhost:7777 --identity satoshi
 ncli huddle list --relay wss://relay.example --json
 ```
 
@@ -164,12 +170,15 @@ resolution, and everything below in this section are otherwise unchanged.
 ```sh
 ncli space join standup --relay wss://relay.example
 ncli space join standup --relay ws://localhost:7777 --identity satoshi
-ncli space join standup                       # --relay falls back to the first configured prefs relay
+# --relay falls back to the first configured prefs relay
+ncli space join standup
 
 # By NIP-53 activity: resolves the space for the relay and room, and opens chat
 ncli space join 30312:<pubkey>:standup --relay wss://relay.example
-ncli space join naddr1...                     # relay hints come from the naddr
-ncli space join 30313:<pubkey>:today           # a session, resolved via its parent space
+# relay hints come from the naddr
+ncli space join naddr1...
+# a session, resolved via its parent space
+ncli space join 30313:<pubkey>:today
 ncli space join 30312:<pubkey>:standup --no-chat
 ```
 
@@ -230,8 +239,10 @@ deliberately confirmed, so one stray keystroke does not drop a call.
 Playback is compiled in only under a build tag:
 
 ```sh
-go build -tags huddleaudio ./cmd/ncli                  # macOS, Windows: still cgo-free
-CGO_ENABLED=1 go build -tags huddleaudio ./cmd/ncli    # Linux, needs libasound2-dev
+# macOS, Windows: still cgo-free
+go build -tags huddleaudio ./cmd/ncli
+# Linux, needs libasound2-dev
+CGO_ENABLED=1 go build -tags huddleaudio ./cmd/ncli
 ```
 
 Decoding is pure Go (`pion/opus`) and builds everywhere. **Output is not**:

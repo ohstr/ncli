@@ -23,8 +23,10 @@ vault label) if you have a raw private key rather than hex.
 ## `ncli id` — generate
 
 ```sh
-ncli id                                        # interactive: shows the key once, prompts to save
-ncli id --json --save --label agent-key        # scripted: no prompts, saves under an explicit label
+# interactive: shows the key once, prompts to save
+ncli id
+# scripted: no prompts, saves under an explicit label
+ncli id --json --save --label agent-key
 ```
 
 `--json` disables every prompt: saving only happens with `--save`, the
@@ -35,10 +37,14 @@ interactive in JSON mode.
 ## `ncli id <identifier>` — inspect
 
 ```sh
-ncli id npub1...                               # or a hex pubkey, nsec, vault label, or name@domain (NIP-05)
-ncli id agent-key --json --reveal              # decrypt and include the private key (vault-saved only)
-ncli id list                                    # list saved vault identities
-ncli id list --json --reveal                    # list with decrypted keys
+# or a hex pubkey, nsec, vault label, or name@domain (NIP-05)
+ncli id npub1...
+# decrypt and include the private key (vault-saved only)
+ncli id agent-key --json --reveal
+# list saved vault identities
+ncli id list
+# list with decrypted keys
+ncli id list --json --reveal
 ```
 
 `--reveal` only works on identities actually saved in the vault — resolving
@@ -56,15 +62,24 @@ adjacent bech32-TLV formats from cashctl's own protocols, NIP-CASH and
 NIP-CW:
 
 ```sh
-ncli decode npub1...              # -> pubkey
-ncli decode nsec1...              # -> privkey
-ncli decode note1...               # -> event id
-ncli decode nprofile1...           # -> pubkey + relay hints
-ncli decode nevent1...             # -> event id + optional relays/author/kind
-ncli decode naddr1...              # -> identifier + pubkey + kind + relay hints
-ncli decode lokicash1...           # -> hrp + wallet pubkey + relays + identity_required/mint_signature/attested_amount_millis
-ncli decode circlehub1...          # -> hrp + wallet pubkey + relays + label
-ncli decode npub1... --json        # structured JSON instead of text
+# -> pubkey
+ncli decode npub1...
+# -> privkey
+ncli decode nsec1...
+# -> event id
+ncli decode note1...
+# -> pubkey + relay hints
+ncli decode nprofile1...
+# -> event id + optional relays/author/kind
+ncli decode nevent1...
+# -> identifier + pubkey + kind + relay hints
+ncli decode naddr1...
+# -> hrp + wallet pubkey + relays + identity_required/mint_signature/attested_amount_millis
+ncli decode lokicash1...
+# -> hrp + wallet pubkey + relays + label
+ncli decode circlehub1...
+# structured JSON instead of text
+ncli decode npub1... --json
 ```
 
 No vault interaction, no prompts, no network — pure local decoding.
@@ -105,7 +120,8 @@ came from one authoritative source.
 
 ```sh
 ncli id sign --identity agent-key -e draft.json -o signed.json --json
-ncli id sign --identity nsec1... -e draft.json -o signed.json --json    # raw nsec, no vault involved
+# raw nsec, no vault involved
+ncli id sign --identity nsec1... -e draft.json -o signed.json --json
 NCLI_VAULT_PASSWORD=hunter2 ncli id sign --identity agent-key -e draft.json -o signed.json --json
 ```
 
@@ -134,7 +150,8 @@ by another tool, or a PoW-mined-but-unsigned draft (`miner mine` without
 `--identity`, or with a pubkey-only one):
 
 ```sh
-ncli miner mine -e draft.json -o mined.json -d 20        # PoW only, stays unsigned
+# PoW only, stays unsigned
+ncli miner mine -e draft.json -o mined.json -d 20
 ncli id sign --identity agent-key -e mined.json -o signed.json --json
 ncli publish -e signed.json -s wss://relay.primal.net
 ```
@@ -142,9 +159,12 @@ ncli publish -e signed.json -s wss://relay.primal.net
 ## `ncli id delegate` — mint a NIP-26 token
 
 ```sh
-ncli id delegate                                                    # interactive Bubble Tea wizard (needs a real tty)
-ncli id delegate --issuer agent-key --delegatee relay-signer --json # vault labels, NCLI_VAULT_PASSWORD to unlock
-ncli id delegate --issuer nsec1... --delegatee nsec1... --json      # raw nsecs, no vault involved
+# interactive Bubble Tea wizard (needs a real tty)
+ncli id delegate
+# vault labels, NCLI_VAULT_PASSWORD to unlock
+ncli id delegate --issuer agent-key --delegatee relay-signer --json
+# raw nsecs, no vault involved
+ncli id delegate --issuer nsec1... --delegatee nsec1... --json
 ncli id delegate --issuer agent-key --delegatee relay-signer \
   --kinds 25521,10002 --duration 365 --json
 ```

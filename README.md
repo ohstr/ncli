@@ -24,7 +24,9 @@ events.**
 - [`ncli prefs`](#prefs) — Set default relays for `find`/`dump`/`miner check`/`publish`
 - [`ncli miner`](#miner) — Mine NIP-13 proof-of-work into an event, or verify it on published events
 - [`ncli bunker`](#bunker) — Run as a NIP-46 remote signer
-- [`ncli huddle`](#huddle) — Join a voice room hosted by a relay
+- [`ncli space`](#space) — Create, find, and join NIP-53 meeting spaces, with voice and chat
+- [`ncli huddle`](#huddle) — List the voice rooms a relay is hosting
+- [`ncli groups`](#groups) — Create and run NIP-29 relay-hosted groups
 - [`ncli blossom`](#blossom) — Upload, fetch, and manage content on Blossom media servers
 - [`ncli id`](#id) — Generate or inspect a Nostr keypair
 - [`ncli decode`](#decode) — Decode any NIP-19 bech32 entity (npub/nsec/note/nprofile/nevent/naddr)
@@ -81,6 +83,12 @@ docker run --rm ghcr.io/ohstr/ncli:latest --help
 ```
 
 **From source** — see [Development](#development).
+
+Check what you're running, and where ncli keeps its files:
+
+```sh
+ncli version
+```
 
 ## `relay`
 
@@ -269,7 +277,8 @@ WebSocket endpoint, so a client connects to that as well as the Nostr socket:
 
 ```yaml
 nip11:
-  url: "wss://relay.example" # required: a joining client's auth event names it
+  # required: a joining client's auth event names it
+  url: "wss://relay.example"
 huddle:
   enabled: true
   # also serve browsers, which is what carries video and screen sharing
@@ -353,12 +362,19 @@ ncli relay members add <pubkey> --role vip --config examples/relay/community-mem
 
 # who's currently enrolled
 ncli relay members list --config examples/relay/community-membership-relay.yaml
+# one member's record, then un-enroll them
+ncli relay members show <pubkey> --config examples/relay/community-membership-relay.yaml
+ncli relay members remove <pubkey> --config examples/relay/community-membership-relay.yaml
 
 # issue a code to hand out out-of-band (a signup email, a Discord invite)
 ncli relay invites create --ttl 24h --max-uses 1 --config examples/relay/community-membership-relay.yaml
+# every live code, then cancel one
+ncli relay invites list --config examples/relay/community-membership-relay.yaml
+ncli relay invites revoke <code> --config examples/relay/community-membership-relay.yaml
 
-# define a role
+# define a role, and list them
 ncli relay roles create vip --label "VIP" --color 280 --config examples/relay/community-membership-relay.yaml
+ncli relay roles list --config examples/relay/community-membership-relay.yaml
 ```
 
 NIP-43 has no "delete role" event, so `roles create` re-run with the same
@@ -489,9 +505,11 @@ spec:
   relays:
     - wss://relay.ohstr.com
     - relay: wss://relay.snort.social
-      trusted: true  # skip re-verifying this source's signatures (default false)
+      # skip re-verifying this source's signatures (default false)
+      trusted: true
     - path: ./data/db/notes.db
-      ensure: create # create if missing (default), or "exists" to error if missing
+      # create if missing (default), or "exists" to error if missing
+      ensure: create
 
   # filters (optional, omit entirely to match everything): same NIP-01
   # fields as examples/filters.yaml. Multiple filters are OR'd together;
@@ -509,8 +527,10 @@ one query, four records, printed as a card instead of raw JSON:
 ```sh
 ncli profile npub1...
 ncli profile jack@primal.net
-ncli profile mykey                 # a vault label works too
-ncli profile npub1... --json       # structured, for scripts
+# a vault label works too
+ncli profile mykey
+# structured, for scripts
+ncli profile npub1... --json
 ```
 
 ```
@@ -646,8 +666,10 @@ kind: stream
 spec:
   from:
     - relay: "wss://relay.ohstr.com"
-      trusted: true  # skip re-verifying this source's signatures (default false)
-    - wss://relay.snort.social      # bare-string shorthand for a remote relay also works
+      # skip re-verifying this source's signatures (default false)
+      trusted: true
+    # bare-string shorthand for a remote relay also works
+    - wss://relay.snort.social
   to:
     - path: "./data/mirror.db"
       ensure: create
@@ -671,7 +693,8 @@ spec:
     ensure: create
   to:
     relay: "wss://relay.ohstr.com"
-    trusted: true  # skip re-verifying this source's signatures (default false)
+    # skip re-verifying this source's signatures (default false)
+    trusted: true
   direction: both
 ```
 
@@ -766,7 +789,8 @@ structured event file instead:
 ```yaml
 # examples/event.yaml
 pubkey: 3c1db3dd55e2ff09ba5317dd8eec2339797e9e2ddf74591172735c47f3a2ad6e
-created_at: 1719759720 # <-- replace with the current unix time, e.g. `date +%s`
+# <-- replace with the current unix time, e.g. `date +%s`
+created_at: 1719759720
 kind: 1
 tags:
   - ["t", "nostr"]
@@ -816,6 +840,10 @@ ncli bunker attach
 ncli bunker status --json
 # every app with a remembered permission
 ncli bunker sessions list
+# one app's permissions; name it; drop one permission, or the whole app
+ncli bunker sessions grants <pubkey>
+ncli bunker sessions rename <pubkey> "my agent"
+ncli bunker sessions revoke-grant <pubkey> --method sign_event --kind 1
 ncli bunker sessions revoke <pubkey>
 # recently resolved requests, most recent first
 ncli bunker history
@@ -839,21 +867,67 @@ ncli bunker connect "nostrconnect://..."
 ncli bunker connect --grants examples/bunker/agent.yaml
 ```
 
+Everything the TUI does also works without a terminal, for scripts and
+agents. With no TTY (or with `--json`), `ncli bunker` starts the signer in
+the background and prints its status:
+
+```sh
+# start headless; prints the same JSON as `bunker status --json`
+ncli bunker --identity mykey --relay wss://relay.example --json
+# requests no grant covers, waiting for a decision
+ncli bunker pending list --json
+# approve once
+ncli bunker pending approve <id>
+# approve and remember it for 24h, like the TUI's "Always" button
+ncli bunker pending approve <id> --always --for 24h
+ncli bunker pending reject <id>
+# add or replace an already-paired app's permissions
+ncli bunker sessions set-grant <pubkey> --grants grants.yaml
+```
+
 See [`skills/ncli-bunker/SKILL.md`](skills/ncli-bunker/SKILL.md) for the
 full walkthrough, including the Windows platform gap, the grants-spec
 format, and pairing an AI agent for unattended signing.
 
-## `huddle`
+## `space`
 
-Real-time voice rooms hosted by the relay itself. Enable the `huddle:` block
-(shape: [`examples/relay/community-voice-relay.yaml`](examples/relay/community-voice-relay.yaml)), then join
-from another terminal:
+A meeting space (NIP-53, kind:30312) is a published record of where a
+meeting lives. It lasts even when nobody is in it, and joining it opens its
+voice call (a huddle) plus its chat.
 
 ```sh
-ncli huddle join standup --relay wss://relay.example --identity mykey
+ncli space create standup --summary "Daily sync" --relay wss://relay.example --identity mykey
+ncli space list --relay wss://relay.example
+ncli space show standup --relay wss://relay.example
+# join the call: live roster, who is speaking, and the chat
+ncli space join standup --relay wss://relay.example --identity mykey
 ```
 
-The view shows who is in the room and who is speaking, read from the level
+Without a terminal (or with `--json`), `space join` streams the call as
+JSON lines instead (`joined`, `participant_joined`/`left`,
+`speaking_started`/`stopped`, `chat`, `ended`) until `--duration` or an
+interrupt. The chat also works on its own, without joining:
+
+```sh
+ncli space join 30312:<pubkey>:standup --relay wss://relay.example --duration 60s --json
+ncli space chat send 30312:<pubkey>:standup "hello" --relay wss://relay.example --identity mykey
+ncli space chat list 30312:<pubkey>:standup --relay wss://relay.example --json
+```
+
+See [`skills/ncli-space/SKILL.md`](skills/ncli-space/SKILL.md).
+
+## `huddle`
+
+The voice rooms behind spaces, hosted by the relay itself. Enable the
+`huddle:` block (shape:
+[`examples/relay/community-voice-relay.yaml`](examples/relay/community-voice-relay.yaml)),
+then see which rooms have someone in them:
+
+```sh
+ncli huddle list --relay wss://relay.example
+```
+
+Join a room with [`ncli space join`](#space). The view shows who is in the room and who is speaking, read from the level
 telemetry every audio frame already carries. It never captures a microphone, so
 joining puts no audio into the room.
 
@@ -871,13 +945,48 @@ only lock out browsers while every CLI client kept working.
 Hearing the call needs a build with audio output:
 
 ```sh
-go build -tags huddleaudio ./cmd/ncli                # macOS, Windows
-CGO_ENABLED=1 go build -tags huddleaudio ./cmd/ncli  # Linux, needs libasound2-dev
+# macOS, Windows
+go build -tags huddleaudio ./cmd/ncli
+# Linux, needs libasound2-dev
+CGO_ENABLED=1 go build -tags huddleaudio ./cmd/ncli
 ```
 
 Output needs cgo and ALSA on Linux and the release binaries are built without
 cgo, so it is not in the default build. Without the tag the roster still works
 and the status line says `watching only`.
+
+## `groups`
+
+NIP-29 groups hosted by the relay: private and closed by default, joined by
+invite code, with admins, roles, pins, and subgroups.
+
+```sh
+ncli groups create standup --relay wss://relay.example --identity mykey
+ncli groups edit standup --name "Standup" --about "Daily sync" --relay wss://relay.example --identity mykey
+# an invite code for someone to join with
+ncli groups invite standup --relay wss://relay.example --identity mykey
+ncli groups join standup --invite-code <code> --relay wss://relay.example --identity friend
+# groups this identity belongs to
+ncli groups list --mine --relay wss://relay.example --identity mykey
+ncli groups show standup --relay wss://relay.example --identity mykey
+# every visible group, as a parent/child tree
+ncli groups tree --relay wss://relay.example
+
+# admins: add or remove a member (optionally with roles)
+ncli groups members add standup <pubkey> moderator --relay wss://relay.example --identity mykey
+ncli groups members remove standup <pubkey> --relay wss://relay.example --identity mykey
+# replace the pinned list (passing nothing clears it)
+ncli groups pins set standup --event <event-id> --relay wss://relay.example --identity mykey
+# delete one message from the group, or the whole group
+ncli groups delete-event standup <event-id> --relay wss://relay.example --identity mykey
+ncli groups delete standup --relay wss://relay.example --identity mykey
+# a member leaving
+ncli groups leave standup --relay wss://relay.example --identity friend
+```
+
+A private group is invisible without `--identity`: `list` silently leaves it
+out, and `show` is refused (`auth`). See
+[`skills/ncli-groups/SKILL.md`](skills/ncli-groups/SKILL.md).
 
 ## `blossom`
 
@@ -892,6 +1001,14 @@ ncli blossom upload photo.jpg --identity mykey
 ncli blossom list --identity mykey
 ncli blossom download <hash> -o photo.jpg
 ncli blossom rm <hash> --identity mykey --yes
+# copy a blob from another URL onto your servers
+ncli blossom mirror https://other.example/<hash> --identity mykey
+# report a blob to its server (BUD-09)
+ncli blossom report <hash> --type spam --reason "bot spam" --identity mykey
+
+# your default servers; drop one
+ncli blossom servers list
+ncli blossom servers remove https://blossom.example
 ```
 
 `upload`/`rm`/`mirror` fan out to every configured server and report a

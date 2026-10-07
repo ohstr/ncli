@@ -52,7 +52,8 @@ addressable event's `d` tag, richer tags, ...):
 ```yaml
 # examples/event.yaml
 pubkey: 3c1db3dd55e2ff09ba5317dd8eec2339797e9e2ddf74591172735c47f3a2ad6e
-created_at: 1719759720 # <-- replace with the current unix time, e.g. `date +%s`
+# <-- replace with the current unix time, e.g. `date +%s`
+created_at: 1719759720
 kind: 1
 tags:
   - ["t", "nostr"]
@@ -156,7 +157,8 @@ one), `ncli id sign` is the general-purpose sign step -- see
 `miner check` with no reshaping:
 
 ```sh
-ncli miner mine -e draft.json -o mined.json -d 20        # PoW only, no --identity
+# PoW only, no --identity
+ncli miner mine -e draft.json -o mined.json -d 20
 ncli id sign --identity mykey -e mined.json -o signed.json
 ncli publish -e signed.json -s wss://relay.primal.net
 ```
@@ -184,7 +186,8 @@ declare both `relays:` and `filters:`, or `--relays`/inline filter flags:
 ncli miner check --targets targets.yaml
 # or, with no file at all:
 ncli miner check --relays wss://relay.primal.net --kinds 1 --since 7d
-ncli miner check -s wss://relay.primal.net -k 1 --since 7d   # same, short forms (-s/-k = --relays/--kinds)
+# same, short forms (-s/-k = --relays/--kinds)
+ncli miner check -s wss://relay.primal.net -k 1 --since 7d
 # --targets/--relays both omitted: falls back to `ncli prefs relays add`
 ncli miner check --kinds 1 --since 7d
 ```

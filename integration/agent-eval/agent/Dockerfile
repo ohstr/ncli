@@ -29,6 +29,16 @@ WORKDIR /home/evaluser
 RUN curl -fsSL https://claude.ai/install.sh | bash
 ENV PATH="/home/evaluser/.local/bin:${PATH}"
 
+# Meilisearch binary for R12's public-search-relay scenario. Installed
+# here (not fetched by the round itself) so `localhost:7700` is literally
+# true the way that scenario's own doc says -- a co-located instance, not
+# a network trick. Not always-on: bin/run.sh's prepare_r10 starts it as a
+# background process only before that round, the same way prepare_r6
+# pre-starts the bunker daemon.
+RUN mkdir -p /home/evaluser/.local/bin \
+    && curl -fsSL https://install.meilisearch.com | sh \
+    && mv ./meilisearch /home/evaluser/.local/bin/meilisearch
+
 # Deps for fixtures/nip46-client.cjs (R6's NIP-46 counterparty). Baked in
 # at a fixed path rather than installed under the /fixtures bind mount, so
 # mounting that directory read-only at runtime doesn't require an

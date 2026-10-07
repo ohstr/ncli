@@ -19,6 +19,10 @@
   API. ([#117](https://github.com/ohstr/ncli/pull/117))
 - `POST /query` returns what REQ would for its signer, private NIP-29
   groups included. ([#117](https://github.com/ohstr/ncli/pull/117))
+- Deleting a private NIP-29 group left its metadata, admin and member
+  lists stored and readable by anyone, and it kept showing in `groups
+  list`/`tree`. The relay now purges a deleted group's events.
+  ([#119](https://github.com/ohstr/ncli/pull/119))
 
 ### Added
 

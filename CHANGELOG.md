@@ -18,6 +18,11 @@
 
 ### Changed
 
+- Moved the `id delegate` wizard to Bubble Tea v2. v1 queried the terminal
+  for its background colour when the program started, so every `ncli`
+  command waited up to 5s on a terminal that doesn't answer (some
+  multiplexers, serial consoles, `script`).
+  ([#117](https://github.com/ohstr/ncli/pull/117))
 - `groups show --json` admin entries use `pubkey`/`roles` keys, not
   `Pubkey`/`Roles`. ([#117](https://github.com/ohstr/ncli/pull/117))
 

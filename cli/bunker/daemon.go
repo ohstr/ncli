@@ -660,8 +660,8 @@ func (d *Daemon) serveConn(ctx context.Context, conn *relayclient.Connection) {
 // clean try-and-fail rather than an unreachable branch.
 //
 // Duplicates a handful of lines of decrypt/unmarshal logic nip46 keeps
-// unexported, the same reason handler.go's nip44ConversationKey
-// duplicates its key-derivation pair. Returns the scheme that actually
+// unexported, the same reason nipcrypto.ConversationKey
+// exists. Returns the scheme that actually
 // decrypted successfully alongside the parsed request, so handleIncoming's
 // response goes back encrypted the way the client can actually read it --
 // not whatever nip46 originally guessed.

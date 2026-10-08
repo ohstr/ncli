@@ -14,7 +14,6 @@ import (
 // ConfigMaps/Secrets) that swap files without a SIGHUP. A bad file keeps
 // the active policy; its error is logged once per distinct content.
 func (s *Server) Watch(ctx context.Context, interval time.Duration) {
-	last := hashFiles(s.Policy().Files)
 	failed := ""
 	t := time.NewTicker(interval)
 	defer t.Stop()
@@ -24,8 +23,11 @@ func (s *Server) Watch(ctx context.Context, interval time.Duration) {
 			return
 		case <-t.C:
 		}
-		cur := hashFiles(s.Policy().Files)
-		if cur == last || cur == failed {
+		// Compare against what the active policy actually read, so a change
+		// landing before the first tick is still picked up.
+		p := s.Policy()
+		cur := hashFiles(p.Files)
+		if cur == p.snapshot() || cur == failed {
 			continue
 		}
 		if err := s.Reload(); err != nil {
@@ -33,8 +35,6 @@ func (s *Server) Watch(ctx context.Context, interval time.Duration) {
 			continue
 		}
 		failed = ""
-		// The new policy may name different authors files.
-		last = hashFiles(s.Policy().Files)
 	}
 }
 

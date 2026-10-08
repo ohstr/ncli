@@ -74,8 +74,9 @@ type Server struct {
 
 	// signMu serializes evaluate -> consume -> sign so two requests can't
 	// spend the same attestation.
-	signMu sync.Mutex
-	logMu  sync.Mutex
+	signMu  sync.Mutex
+	logMu   sync.Mutex
+	connSeq atomic.Uint64
 
 	allowUID map[int]bool
 	allowGID map[int]bool
@@ -211,6 +212,7 @@ func (s *Server) serveConn(ctx context.Context, conn net.Conn) {
 	defer stop()
 
 	peer := peerCredOf(conn)
+	peer.Conn = s.connSeq.Add(1)
 	if !s.peerAllowed(peer) {
 		s.record(Record{Method: "connect", Client: peer, Decision: "deny", Reason: "peer uid/gid not allowed"})
 		return

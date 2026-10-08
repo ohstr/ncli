@@ -8,6 +8,9 @@ type Peer struct {
 	UID *int `json:"uid,omitempty"`
 	GID *int `json:"gid,omitempty"`
 	PID *int `json:"pid,omitempty"`
+	// Conn numbers connections since the signer started, so log lines
+	// stay distinct when clients reuse request ids.
+	Conn uint64 `json:"conn"`
 }
 
 // ErrPeerCredUnsupported is returned when a caller allow-list is set on a

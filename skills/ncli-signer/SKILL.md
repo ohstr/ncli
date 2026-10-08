@@ -49,7 +49,9 @@ NCLI_VAULT_PASSWORD=... ncli signer serve --socket /run/signer/agent.sock \
 - **`--allow-catch-all`** permits an `allow` rule with an empty selector.
   Without it, such a policy is refused at load.
 - **Logs.** stdout carries one JSON line per decision:
-  `{time, req_id, method, kind, event_id, client:{uid,gid,pid}, counterpart, decision, rule, reason, attestations}`.
+  `{time, req_id, method, kind, event_id, client:{uid,gid,pid,conn}, counterpart, decision, rule, reason, attestations}`.
+  `client.conn` numbers connections since start. Clients number their own
+  requests, so `req_id` alone repeats across connections.
   It never includes content or key material. `--denials-file` also
   appends denials alone. `ping`, `get_public_key` and `signer_status`
   are not logged. Narration goes to stderr.
@@ -157,6 +159,12 @@ Keep the signer in a separate container with a separate uid and
 memory has the key.
 
 ## Gotchas
+
+- **Don't print the key you're about to protect.** Under `--json`,
+  `ncli id --save --label agent-key` prints the new `nsec` and
+  `priv_hex`. An agent creating its own signer key should keep only
+  public fields: `ncli id --save --label agent-key --json | jq '{npub,
+  pub_hex}'`. Better still, have the operator create the key.
 
 - **Scope auth kinds.** An unscoped 22242 (NIP-42) or 27235 (NIP-98)
   rule lets the agent log in as this key on any relay or HTTP service.

@@ -116,8 +116,9 @@ type AttestationSpec struct {
 	MaxAge      Duration `json:"max_age"`
 	Binds       []Bind   `json:"binds"`
 
-	authors map[string]bool
-	bindsID bool
+	authors    map[string]bool
+	authorsSum string // sha256 of authors_file as read
+	bindsID    bool
 }
 
 // Require lists what an allow rule needs beyond its selector.
@@ -155,8 +156,19 @@ type Policy struct {
 	// SHA256 is the hex digest of the policy file's bytes.
 	SHA256 string `json:"-"`
 	// Files lists the policy file and every authors_file it read, for
-	// change detection.
-	Files []string `json:"-"`
+	// change detection; fileSums holds each one's sha256 as read.
+	Files    []string `json:"-"`
+	fileSums []string
+}
+
+// snapshot renders Files with the hashes they had when this policy was
+// read, in hashFiles' format.
+func (p *Policy) snapshot() string {
+	parts := make([]string, len(p.Files))
+	for i, f := range p.Files {
+		parts[i] = f + "=" + p.fileSums[i]
+	}
+	return strings.Join(parts, "\n")
 }
 
 // Skew is the policy-wide max_clock_skew.
@@ -204,6 +216,7 @@ func LoadPolicy(path string, opts LoadOptions) (*Policy, error) {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	p.Files = append([]string{path}, p.Files...)
+	p.fileSums = append([]string{p.SHA256}, p.fileSums...)
 	return p, nil
 }
 
@@ -293,6 +306,7 @@ func (p *Policy) validateRule(r *Rule, baseDir string, opts LoadOptions) error {
 			seen[a.Name] = true
 			if a.AuthorsFile != "" {
 				p.Files = append(p.Files, resolvePath(baseDir, a.AuthorsFile))
+				p.fileSums = append(p.fileSums, a.authorsSum)
 			}
 		}
 	}
@@ -382,10 +396,11 @@ func validateAttestation(a *AttestationSpec, baseDir string, opts LoadOptions) e
 		a.authors[hexKey] = true
 	}
 	if a.AuthorsFile != "" {
-		keys, err := readAuthorsFile(resolvePath(baseDir, a.AuthorsFile))
+		keys, sum, err := readAuthorsFile(resolvePath(baseDir, a.AuthorsFile))
 		if err != nil {
 			return err
 		}
+		a.authorsSum = sum
 		for _, k := range keys {
 			a.authors[k] = true
 		}
@@ -471,11 +486,12 @@ func resolvePath(baseDir, p string) string {
 // readAuthorsFile reads one npub or hex pubkey per line. Blank lines and
 // lines starting with # are skipped; anything else that isn't a key fails
 // the load.
-func readAuthorsFile(path string) ([]string, error) {
+func readAuthorsFile(path string) ([]string, string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("authors_file: %w", err)
+		return nil, "", fmt.Errorf("authors_file: %w", err)
 	}
+	sum := sha256.Sum256(data)
 	var keys []string
 	for i, line := range bytes.Split(data, []byte("\n")) {
 		s := strings.TrimSpace(string(line))
@@ -484,11 +500,11 @@ func readAuthorsFile(path string) ([]string, error) {
 		}
 		k, err := ParsePubkey(s)
 		if err != nil {
-			return nil, fmt.Errorf("authors_file %s line %d: %w", path, i+1, err)
+			return nil, "", fmt.Errorf("authors_file %s line %d: %w", path, i+1, err)
 		}
 		keys = append(keys, k)
 	}
-	return keys, nil
+	return keys, hex.EncodeToString(sum[:]), nil
 }
 
 // ParsePubkey accepts an npub or 64-char hex pubkey and returns lowercase hex.

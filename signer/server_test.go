@@ -301,7 +301,7 @@ func TestListen(t *testing.T) {
 	if err != nil || info.Mode().Perm() != 0o660 {
 		t.Fatalf("mode = %v, %v", info.Mode().Perm(), err)
 	}
-	if _, err := Listen(path, 0o660, -1, -1); err == nil || !strings.Contains(err.Error(), "already listening") {
+	if _, err := Listen(path, 0o660, -1, -1); err == nil || !errors.Is(err, ErrAlreadyListening) {
 		t.Fatalf("live socket: %v", err)
 	}
 	_ = l.Close()

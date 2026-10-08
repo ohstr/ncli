@@ -3,6 +3,7 @@ package signer
 import (
 	"bufio"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -327,15 +328,9 @@ func (s *Server) handleSign(req nip46.Request, peer Peer, ok, fail func(string) 
 	if ev.PubKey != "" && !strings.EqualFold(ev.PubKey, s.pub) {
 		return denyWith(Decision{Reason: "event pubkey does not match the signer"})
 	}
-	ev.PubKey, ev.ID, ev.Sig = s.pub, "", ""
-	if ev.Tags == nil {
-		ev.Tags = [][]string{}
+	if err := PrepareTarget(&ev, s.pub); err != nil {
+		return invalid(err.Error())
 	}
-	id, err := ev.HashID()
-	if err != nil {
-		return invalid("cannot hash event: " + err.Error())
-	}
-	ev.ID = fmt.Sprintf("%x", id)
 	rec.EventID = ev.ID
 
 	if s.guard.ContainsEvent(&ev) {
@@ -464,6 +459,24 @@ func (s *Server) record(r Record) {
 	}
 }
 
+// ErrAlreadyListening means another signer holds the socket.
+var ErrAlreadyListening = errors.New("a signer is already listening on this socket")
+
+// PrepareTarget sets ev's pubkey to the signer's, clears any signature,
+// and computes the id that attestations bind to.
+func PrepareTarget(ev *nip01.Event, signerPub string) error {
+	ev.PubKey, ev.ID, ev.Sig = strings.ToLower(signerPub), "", ""
+	if ev.Tags == nil {
+		ev.Tags = [][]string{}
+	}
+	id, err := ev.HashID()
+	if err != nil {
+		return fmt.Errorf("cannot hash event: %w", err)
+	}
+	ev.ID = hex.EncodeToString(id)
+	return nil
+}
+
 // Listen binds a unix socket at path with mode, chowning it to uid/gid
 // when either is >= 0. It refuses to replace a symlink or a live socket and
 // removes a stale one. The parent directory is left alone: it is usually a
@@ -476,7 +489,7 @@ func Listen(path string, mode os.FileMode, uid, gid int) (net.Listener, error) {
 		case info.Mode()&os.ModeSocket == 0:
 			return nil, fmt.Errorf("%s exists and is not a socket", path)
 		case socketIsLive(path):
-			return nil, fmt.Errorf("a signer is already listening on %s", path)
+			return nil, fmt.Errorf("%w (%s)", ErrAlreadyListening, path)
 		}
 		if err := os.Remove(path); err != nil {
 			return nil, fmt.Errorf("removing stale socket %s: %w", path, err)

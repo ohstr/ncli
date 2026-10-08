@@ -146,7 +146,7 @@ func TestIDSignSignerFlagErrors(t *testing.T) {
 		args []string
 		code int
 	}{
-		"both --identity and --signer": {[]string{"--identity", nsec, "--signer", "bunker+unix:///tmp/x.sock"}, 2},
+		"both --identity and --signer":  {[]string{"--identity", nsec, "--signer", "bunker+unix:///tmp/x.sock"}, 2},
 		"--attestations without socket": {[]string{"--identity", nsec, "--attestations", draft}, 2},
 		"relative socket path":          {[]string{"--signer", "bunker+unix://x.sock"}, 3},
 		"no signer listening":           {[]string{"--signer", "bunker+unix:///nonexistent/ncli-test.sock"}, 6},

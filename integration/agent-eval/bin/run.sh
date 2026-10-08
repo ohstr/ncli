@@ -14,7 +14,7 @@
 set -euo pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-ALL_ROUNDS=(r0-bootstrap r1-identity r2-query r3-relay-ops r4-publish-apply r5-miner r6-bunker r7-blossom r8-error-contract r9-groups r10-space r11-relay-scenarios-write r12-relay-scenarios-serve r13-relay-scenarios-write-2)
+ALL_ROUNDS=(r0-bootstrap r1-identity r2-query r3-relay-ops r4-publish-apply r5-miner r6-bunker r7-blossom r8-error-contract r9-groups r10-space r11-relay-scenarios-write r12-relay-scenarios-serve r13-relay-scenarios-write-2 r14-signer)
 ROUNDS=("${@:-${ALL_ROUNDS[@]}}")
 
 RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -146,6 +146,7 @@ clear_flat_artifacts() {
     r3-relay-ops) rm -f "report/r3-relay-stderr.log" ;;
     r6-bunker) rm -f "report/r6-bunker-uri.txt" ;;
     r10-space) rm -f "report/r10-space.txt" "report/r10-join.ndjson" ;;
+    r14-signer) rm -f "report/r14-signer-approval.json" ;;
   esac
 }
 
@@ -191,6 +192,20 @@ prepare_r2() {
     ncli publish -e "$signed" -s ws://localhost:5500 >/dev/null
   '; then
     echo "ERROR: [r2-query] could not seed the relay -- R2 will have nothing to query (ncli is installed by r0-bootstrap; running this round on its own skips that)" >&2
+  fi
+}
+
+# R14 needs a second vault identity standing in for the human maintainer
+# whose approval the signer policy requires. The agent never needs it
+# except to sign that one approval.
+prepare_r14() {
+  echo "==> [r14-signer] saving the eval-maintainer identity"
+  if ! docker compose exec -T agent bash -lc '
+    set -e
+    export PATH="$HOME/.local/bin:$PATH"
+    ncli id eval-maintainer --json >/dev/null 2>&1 || ncli id --save --label eval-maintainer --json >/dev/null
+  '; then
+    echo "ERROR: [r14-signer] could not save eval-maintainer (ncli is installed by r0-bootstrap; running this round on its own skips that)" >&2
   fi
 }
 
@@ -276,6 +291,10 @@ for round in "${ROUNDS[@]}"; do
     r10-space)
       prepare_r10
       run_r10
+      ;;
+    r14-signer)
+      prepare_r14
+      run_round "${round}" || echo "WARNING: [${round}] claude invocation exited non-zero" >&2
       ;;
     r12-relay-scenarios-serve)
       prepare_r12

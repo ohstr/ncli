@@ -99,8 +99,8 @@
 "relay stats": {modes: [json, text, errors], tests: [TestRelayAdmin, TestAttack_AdminHTTP]}
 "signer": {modes: [errors], tests: [TestBareGroupCommands]}
 "signer check": {modes: [json, errors], tests: [TestSignerCLI]}
-"signer serve": {modes: [json, errors], tests: [TestSignerCLI, TestSignerPublish, TestSignerServeErrors]}
-"signer status": {modes: [json, text, errors], tests: [TestSignerCLI]}
+"signer serve": {modes: [json, errors], tests: [TestSignerCLI, TestSignerPublish, TestSignerServeErrors, TestSignerServeVault]}
+"signer status": {modes: [json, text, errors], tests: [TestSignerCLI, TestSignerServeVault]}
 "skills": {modes: [errors], tests: [TestBareGroupCommands]}
 "skills install": {modes: [json, errors], tests: [TestSkillsCmd]}
 "skills list": {modes: [json, text], tests: [TestSkillsCmd]}

@@ -40,7 +40,12 @@ func startSigner(t *testing.T, e *Env, policy string, extra ...string) *signerPr
 	}
 	keyFile := e.WriteFile("agent.ncryptsec", enc+"\n")
 	pwFile := e.WriteFile("signer.pw", "signer-pw\n")
+	return startSignerWith(t, e, []string{"--identity", "file:" + keyFile, "--password-file", pwFile}, policy, extra...)
+}
 
+// startSignerWith runs "signer serve" with the given key flags.
+func startSignerWith(t *testing.T, e *Env, keyArgs []string, policy string, extra ...string) *signerProc {
+	t.Helper()
 	dir, err := os.MkdirTemp("", "sg")
 	if err != nil {
 		t.Fatal(err)
@@ -62,8 +67,8 @@ func startSigner(t *testing.T, e *Env, policy string, extra ...string) *signerPr
 		t.Fatal(err)
 	}
 	args := append([]string{"signer", "serve", "--socket", s.Socket, "--policy", policy,
-		"--identity", "file:" + keyFile, "--password-file", pwFile,
-		"--state-dir", filepath.Join(e.Dir, "signer-state"), "--denials-file", s.Denials}, extra...)
+		"--state-dir", filepath.Join(e.Dir, "signer-state"), "--denials-file", s.Denials}, keyArgs...)
+	args = append(args, extra...)
 	s.cmd = exec.Command(bin(t), args...)
 	s.cmd.Dir = e.Dir
 	s.cmd.Env = e.environ()
@@ -227,4 +232,54 @@ func TestSignerServeErrors(t *testing.T) {
 	e.Run(t, "signer", "serve", "--socket", s.Socket, "--policy", policy, "--identity", "file:"+key, "--password-file", pw,
 		"--state-dir", filepath.Join(e.Dir, "st2"), "--json").ExpectErr(t, "conflict")
 	e.Run(t, "signer", "serve", "--socket", s.Socket+"2", "--policy", policy, "--identity", "file:"+key, "--password-file", pw, "--json").ExpectErr(t, "usage")
+}
+
+// TestSignerServeVault starts the signer from a vault label and checks the
+// socket flags and --watch from the command line.
+func TestSignerServeVault(t *testing.T) {
+	e := NewEnv(t)
+	agent := A(t, "agent")
+	e.MustOK(t, "id", "import", "--label", "agent-key", "--file", e.WriteFile("agent.key", agent.Nsec+"\n"), "--json")
+
+	policy := e.WriteFile("policy.yaml", "kind: signer-policy\nrules: [{name: notes, allow: {kinds: [1]}}]\n")
+	s := startSignerWith(t, e, []string{"--identity", "agent-key"}, policy,
+		"--watch", "--watch-interval", "100ms", "--socket-mode", "0600", "--socket-gid", fmt.Sprint(os.Getgid()))
+
+	info, err := os.Stat(s.Socket)
+	if err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("socket mode = %v, %v", info.Mode().Perm(), err)
+	}
+	var st struct {
+		Pubkey string `json:"pubkey"`
+		Policy string `json:"policy_sha256"`
+	}
+	e.MustOK(t, "signer", "status", "--socket", s.URI, "--json").JSON(t, &st)
+	if st.Pubkey != agent.PubHex {
+		t.Fatalf("vault key not loaded: %+v", st)
+	}
+
+	now := time.Now().Unix()
+	reaction := e.WriteFile("reaction.json", fmt.Sprintf(`{"kind":7,"created_at":%d,"tags":[],"content":"+"}`, now))
+	out := filepath.Join(e.Dir, "signed.json")
+	e.Run(t, "id", "sign", "--signer", s.URI, "-e", reaction, "-o", out, "--json").ExpectErr(t, "auth")
+
+	// --watch picks up the edit without a SIGHUP.
+	if err := os.WriteFile(policy, []byte("kind: signer-policy\nrules: [{name: notes, allow: {kinds: [1, 7]}}]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		var now2 struct {
+			Policy string `json:"policy_sha256"`
+		}
+		e.MustOK(t, "signer", "status", "--socket", s.URI, "--json").JSON(t, &now2)
+		if now2.Policy != st.Policy {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("--watch never reloaded the policy")
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	e.MustOK(t, "id", "sign", "--signer", s.URI, "-e", reaction, "-o", out, "--json")
 }

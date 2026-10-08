@@ -46,6 +46,7 @@ that priority order.
 | `ncli decode <entity>` | Decode any NIP-19 bech32 entity (npub/nsec/note/nprofile/nevent/naddr), a NIP-CASH cash-token-family string, or a NIP-CW circlehub1... connection |
 | `ncli miner -e <event.yaml>` | Mine or check NIP-13 proof-of-work on an event |
 | `ncli version` | Build info + on-disk paths |
+| `ncli skills list/show/install` | List, print or install the agent skills built into the binary (the `skills/` guides below, matching the installed version); `install` copies them to `~/.claude/skills` or `--dir`, refusing to overwrite a differing file without `--force` |
 
 Every relay input (`-s/--relays`, `prefs relays add`, `targets.yaml`, `apply`
 flow entries) accepts a bare host with no `ws(s)://` scheme —
@@ -58,7 +59,7 @@ Every command's actual result goes to **stdout only**; progress narration
 and errors go to **stderr** — so piping stdout into `jq` or a script's
 parser never picks up log noise. `--json` and `-q/--quiet` are global flags
 (declared once on the root command, available on every subcommand) rather
-than per-command. `id`, `id list`, `id import`, `id relabel`, `id rm`, `id sign`, `version`, `id delegate`, `relay
+than per-command. `id`, `id list`, `id import`, `id relabel`, `id rm`, `id sign`, `version`, `skills list`/`show`/`install`, `id delegate`, `relay
 stats`/`reindex`/`clear`, `relay members`/`invites`/`roles`, `ping`,
 `miner mine`/`check`, `publish`, `huddle list`, `space create`/
 `list`/`show`/`chat send`/`chat list`, `bunker`/`status`/`stop`/
@@ -180,5 +181,6 @@ or invoking a command in that area:
   `list`/`show`) → `skills/ncli-groups/SKILL.md`
 
 These skills assume only the `ncli` binary is available — no access to this
-source tree. (Building/contributing to `ncli` itself is a different task —
+source tree. Each is also built into the binary: `ncli skills show <name>`
+prints it, `ncli skills install` copies them into an agent's skills dir. (Building/contributing to `ncli` itself is a different task —
 see CONTRIBUTING.md and `.agents/skills/local-verify`.)

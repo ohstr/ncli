@@ -73,6 +73,9 @@ For YAML examples and gotchas beyond `--help`, install the skills instead
 of re-deriving them:
 
 ```sh
+# from the ncli binary itself, matching its version (default ~/.claude/skills)
+ncli skills install
+
 # any agentskills.io-compatible agent
 npx skills add ohstr/ncli --all -y
 

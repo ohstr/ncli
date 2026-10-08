@@ -50,7 +50,7 @@ var skillsListCmd = &cobra.Command{
 
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 		for _, s := range all {
-			fmt.Fprintf(w, "%s\t%s\n", s.Name, firstSentence(s.Description))
+			_, _ = fmt.Fprintf(w, "%s\t%s\n", s.Name, firstSentence(s.Description))
 		}
 		return w.Flush()
 	},
@@ -157,7 +157,7 @@ install with nothing written, unless --force.`,
 		}
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 		for _, r := range results {
-			fmt.Fprintf(w, "%s\t%s\t%s\n", r.Status, r.Name, r.Path)
+			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n", r.Status, r.Name, r.Path)
 		}
 		return w.Flush()
 	},

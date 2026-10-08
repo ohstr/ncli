@@ -47,6 +47,9 @@ func ParseURI(s string) (string, error) {
 	return filepath.Clean(path), nil
 }
 
+// ErrConnClosed means the signer hung up without answering.
+var ErrConnClosed = errors.New("signer closed the connection")
+
 // RemoteError is an error response from the signer.
 type RemoteError struct {
 	Msg string
@@ -124,7 +127,7 @@ func (c *Client) Call(ctx context.Context, method string, params ...string) (str
 		if err := c.sc.Err(); err != nil {
 			return "", err
 		}
-		return "", errors.New("signer closed the connection")
+		return "", ErrConnClosed
 	}
 	var resp nip46.Response
 	if err := json.Unmarshal(c.sc.Bytes(), &resp); err != nil {

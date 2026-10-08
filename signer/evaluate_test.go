@@ -32,7 +32,7 @@ func TestEvaluateExamplePolicy(t *testing.T) {
 		{"ncryptsec in tag", 1111, "ok", [][]string{{"x", "ncryptsec1abc"}}, false, "chat", "tag value matches deny_matching pattern #2"},
 		{"relay auth, our relay", 22242, "", [][]string{{"relay", "wss://relay.example"}, {"challenge", "c"}}, true, "relay-auth", ""},
 		{"relay auth, our relay path", 22242, "", [][]string{{"relay", "wss://relay.example/ws"}}, true, "relay-auth", ""},
-		{"relay auth, lookalike host", 22242, "", [][]string{{"relay", "wss://relay.example.evil.com"}}, false, "everything-else", "denied by rule"},
+		{"relay auth, lookalike host", 22242, "", [][]string{{"relay", "wss://relay.example.evil.example"}}, false, "everything-else", "denied by rule"},
 		{"relay auth, other relay", 22242, "", [][]string{{"relay", "wss://other.example"}}, false, "everything-else", "denied by rule"},
 		{"relay auth, no relay tag", 22242, "", nil, false, "everything-else", "denied by rule"},
 		{"http auth, git host GET", 27235, "", [][]string{{"u", "https://git.example/repo.git/info/refs"}, {"method", "GET"}}, true, "http-auth", ""},

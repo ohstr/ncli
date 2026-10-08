@@ -12,6 +12,9 @@
   `signer check` dry-runs a policy. `id sign` and `publish` sign through
   it with `--signer bunker+unix:///path.sock`.
   ([#128](https://github.com/ohstr/ncli/pull/128))
+- Relay config `pprofAddr` serves `net/http/pprof` on its own listener,
+  so a stuck relay can be profiled without killing it.
+  ([#131](https://github.com/ohstr/ncli/pull/131))
 
 ### Changed
 

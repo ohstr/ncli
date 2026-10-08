@@ -364,6 +364,10 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 		},
 	}
 
+	if config.PprofAddr != "" {
+		startPprof(config.PprofAddr)
+	}
+
 	go s.serve()
 
 	return s

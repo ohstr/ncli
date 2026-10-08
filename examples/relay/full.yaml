@@ -201,6 +201,10 @@ outgoingBufferSize: 1024      # per-session outgoing message channel buffer size
 maxConcurrentStoreTasks: 2048 # cap on concurrent event-store operations
 verificationWorkers: 50       # number of signature-verification worker goroutines
 
+# Serve net/http/pprof here (optional, off when unset). Unauthenticated:
+# keep it on loopback.
+# pprofAddr: 127.0.0.1:6060
+
 # Custom log rotation (optional). If omitted, logs go to
 # <logdir>/nrelay.log with the same defaults shown here.
 logs:

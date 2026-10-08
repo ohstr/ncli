@@ -10,6 +10,7 @@
   new events and wake on writes, and a REQ that can't be served within
   10s gets `CLOSED` `error: relay busy, try again later`.
   (nmilat v0.5.0-rc.13)
+  ([#133](https://github.com/ohstr/ncli/pull/133))
 
 ## [0.8.0-rc.13]
 

@@ -117,7 +117,8 @@ func TestID(t *testing.T) {
 
 	t.Run("save, conflict, list, reveal", func(t *testing.T) {
 		var saved map[string]any
-		e.MustOK(t, "id", "--save", "--label", "seed", "--json").JSON(t, &saved)
+		// --reveal so the saved key can be compared with list --reveal below.
+		e.MustOK(t, "id", "--save", "--label", "seed", "--reveal", "--json").JSON(t, &saved)
 		if saved["saved"] != true || saved["label"] != "seed" {
 			t.Fatalf("save result: %v", saved)
 		}

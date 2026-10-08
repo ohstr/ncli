@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.8.0-rc.13]
+
+### Changed
+
+- `ncli id --save` no longer prints the new private key (`nsec`,
+  `priv_hex`), in text or `--json`. It's in the vault, so printing it only
+  put it in transcripts and logs. Add `--reveal` to print it anyway, or
+  run `ncli id <label> --reveal` later.
+
 ## [0.8.0-rc.12]
 
 ### Added

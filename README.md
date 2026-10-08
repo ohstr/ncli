@@ -1033,8 +1033,10 @@ Generate or inspect a Nostr identity: no argument generates a new keypair
 (hex, nsec, npub); an argument resolves/inspects an existing one.
 
 ```sh
-# generate an identity, save it to the local vault
+# generate an identity, save it to the local vault (prints only the public key)
 ncli id --save --label mykey
+# same, and also print the new private key
+ncli id --save --label mykey --reveal
 
 # inspect an identity by npub
 ncli id npub1...

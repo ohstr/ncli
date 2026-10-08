@@ -97,6 +97,10 @@
 "relay roles create": {modes: [json], tests: [TestRelayAdmin]}
 "relay roles list": {modes: [json], tests: [TestRelayAdmin]}
 "relay stats": {modes: [json, text, errors], tests: [TestRelayAdmin, TestAttack_AdminHTTP]}
+"skills": {modes: [errors], tests: [TestBareGroupCommands]}
+"skills install": {modes: [json, errors], tests: [TestSkillsCmd]}
+"skills list": {modes: [json, text], tests: [TestSkillsCmd]}
+"skills show": {modes: [json, text, errors], tests: [TestSkillsCmd]}
 "space": {modes: [errors], tests: [TestBareGroupCommands]}
 "space create": {modes: [json, errors], tests: [TestSpaceAndHuddle, TestAddressableLookups]}
 "space chat": {modes: [errors], tests: [TestSpaceAndHuddle]}

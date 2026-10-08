@@ -1093,6 +1093,9 @@ under [`skills/`](skills/) (one per command group, usable standalone with
 just the `ncli` binary on `PATH`).
 
 ```
+# from the ncli binary itself, matching its version (default ~/.claude/skills)
+ncli skills install
+
 # any agentskills.io-compatible agent
 npx skills add ohstr/ncli --all -y
 

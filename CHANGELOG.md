@@ -8,6 +8,7 @@
   binary, so an agent with only `ncli` on `PATH` gets guidance matching its
   version. `install` copies them to `~/.claude/skills` (or `--dir`) and
   won't overwrite a differing file without `--force`.
+  ([#126](https://github.com/ohstr/ncli/pull/126))
 
 ## [0.8.0-rc.11]
 

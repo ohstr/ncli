@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.8.0-rc.14]
+
+### Fixed
+
+- `ncli relay` no longer starves reads when many subscriptions are open.
+  Every open REQ re-walked its whole index on each live tick, so feeds
+  stopped getting EOSE on a large store. Live subscriptions now read only
+  new events and wake on writes, and a REQ that can't be served within
+  10s gets `CLOSED` `error: relay busy, try again later`.
+  (nmilat v0.5.0-rc.13)
+
 ## [0.8.0-rc.13]
 
 ### Added

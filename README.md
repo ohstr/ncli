@@ -24,6 +24,7 @@ events.**
 - [`ncli prefs`](#prefs) — Set default relays for `find`/`dump`/`miner check`/`publish`
 - [`ncli miner`](#miner) — Mine NIP-13 proof-of-work into an event, or verify it on published events
 - [`ncli bunker`](#bunker) — Run as a NIP-46 remote signer
+- [`ncli signer`](#signer) — Sign for local processes over a unix socket, gated by a policy
 - [`ncli space`](#space) — Create, find, and join NIP-53 meeting spaces, with voice and chat
 - [`ncli huddle`](#huddle) — List the voice rooms a relay is hosting
 - [`ncli groups`](#groups) — Create and run NIP-29 relay-hosted groups
@@ -888,6 +889,132 @@ ncli bunker sessions set-grant <pubkey> --grants grants.yaml
 See [`skills/ncli-bunker/SKILL.md`](skills/ncli-bunker/SKILL.md) for the
 full walkthrough, including the Windows platform gap, the grants-spec
 format, and pairing an AI agent for unattended signing.
+
+## `signer`
+
+A local signer for processes on the same machine or pod: `ncli` holds the
+key in memory and signs over a unix socket, as a policy allows. No relay,
+no network listener. A sign round trip takes under a millisecond.
+
+Built for AI agents: the key sits in a sidecar container, and the
+agent's tools ask it to sign. A prompt-injected agent can't read the key
+and can't sign what the policy forbids.
+
+```sh
+# key from an ncryptsec file (or --identity <vault label>)
+ncli signer serve --socket /run/signer/agent.sock \
+  --identity file:/etc/signer/key.ncryptsec --password-file /etc/signer/password \
+  --policy examples/signer/agent-policy.yaml --state-dir /var/lib/signer
+# sign through it; the key never enters this process
+ncli id sign --signer bunker+unix:///run/signer/agent.sock -e draft.json -o signed.json
+ncli publish -e draft.json --signer bunker+unix:///run/signer/agent.sock
+# health probe: exits 6 when nothing answers
+ncli signer status --socket /run/signer/agent.sock
+# dry-run a policy in CI: exits 7 on a denial
+ncli signer check --policy policy.yaml -e event.json --pubkey npub1...
+```
+
+**Policy** (`kind: signer-policy`): rules are tried in order, the first
+whose selector matches decides, and anything unmatched is denied.
+
+```yaml
+kind: signer-policy
+rules:
+  - name: chat
+    allow: {kinds: [9, 7, 1111]}
+    deny_matching: ['nsec1[02-9ac-hj-np-z]{58}']
+    rate: 60/m
+  - name: relay-auth
+    allow: {kinds: [22242], tags: {relay: ["wss://relay.example", "wss://relay.example/*"]}}
+  - name: repo-state
+    allow: {kinds: [30617, 30618]}
+    require:
+      attestations:
+        - name: maintainer-approval
+          kinds: [9]
+          authors_file: approvers.txt
+          max_age: 15m
+          binds: [{content: "approve {id}"}]
+  - name: everything-else
+    deny: {}
+```
+
+- **Selectors** match on `methods`, `kinds`, `counterparts` (for
+  encrypt/decrypt) and `tags`. A tag value matches exactly, or as a prefix
+  when it ends in `*`.
+- **`require: attestations`** lists other signed events the request must
+  carry, such as a human approval or a CI result. An attestation binds to
+  the target in one of three ways: `{tag: e, from: id}`,
+  `{tag: d, from: "tag:d"}`, or `{content: "approve {id}"}` /
+  `{content_contains: ...}`. Each attestation is single-use.
+- **Built in, always on:**
+  - An event whose content or tags contain the signer's own key is never
+    signed.
+  - An attestation signed by the signer's own key never counts.
+  - An attestation created before the signer started never counts.
+
+The full reference is in
+[`skills/ncli-signer/references/policy.md`](skills/ncli-signer/references/policy.md).
+
+**Threat model.** Any process that can open the socket is a client, so
+the socket's file mode, owner and `--allow-uid`/`--allow-gid` are the
+authentication.
+
+| A compromised client can | It cannot |
+|---|---|
+| sign whatever the policy allows, up to the rate limits | read the key, which never crosses the socket |
+| decrypt messages from the counterparts the policy lists | get the key into a signed event or an encrypted message |
+| fill the decision log or keep the signer busy | satisfy an attestation, which needs another key |
+| | replay an attestation, within a run or across restarts |
+
+Residual risks:
+- If another process runs as the signer's uid or shares its PID
+  namespace, it can read the key from memory. Use a separate container,
+  a separate uid and `shareProcessNamespace: false`.
+- An approver's key is as powerful as the rule it unlocks.
+- An attestation made within `max_clock_skew` before a restart may still
+  validate once if `--state-dir` was lost, so keep the skew small on
+  rules that need attestations.
+- Unscoped auth kinds (22242, 27235) let a client log in as the signer
+  anywhere. Scope them with `tags`.
+
+**Protocol.** The NIP-46 method set (`get_public_key`, `sign_event`,
+`nip04_*`, `nip44_*`, `ping`) is sent as one JSON object per line:
+`{"id","method","params"}` in, `{"id","result"|"error"}` out. There is
+no kind-24133 wrapper and no encryption.
+- `connect`, `get_relays`, `switch_relays` and `logout` get no-op acks.
+- `sign_event` takes an optional `params[1]`, a JSON array of attestation
+  events.
+- Error strings start with `denied: ` (policy) or `invalid: ` (malformed
+  request).
+- `signer_status` is ncli's own addition.
+
+**Failure modes:**
+
+| Situation | Result |
+|---|---|
+| Signer down | `network` (exit 6) |
+| Request denied | `auth` (exit 7) with the rule's reason |
+| Bad policy at start | `serve` exits |
+| Bad policy on SIGHUP or `--watch` | old policy kept |
+| Used set can't be written | request denied |
+
+Every decision goes to stdout as one JSON line, with no content or key
+material. `--denials-file` collects denials alone.
+
+**For client authors** (ngit, buzz CLI, buzz-acp, ...):
+- Accept `bunker+unix:///abs/path.sock` (and `unix://`) wherever you
+  accept `bunker://`.
+- Dial the path and write NIP-46 request JSON, one per line, without
+  encrypting it or wrapping it in an event. Read one response line per
+  request.
+- To pass attestations, send them as `params[1]` of `sign_event`.
+- Treat `denied: ...` as a refusal, not a transport error.
+
+`examples/signer/` has a full agent policy and a Kubernetes pod manifest
+with the sidecar.
+
+See [`skills/ncli-signer/SKILL.md`](skills/ncli-signer/SKILL.md).
 
 ## `space`
 

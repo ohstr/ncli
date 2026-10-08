@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.8.0-rc.13]
+
+### Added
+
+- `ncli signer serve` runs a local signer on a unix socket. It holds one
+  key in memory and answers the NIP-46 method set, so an agent can sign
+  without holding the key. A `kind: signer-policy` file decides what gets
+  signed (default deny), including required attestations such as a
+  maintainer's signed "approve <id>". `signer status` probes it;
+  `signer check` dry-runs a policy. `id sign` and `publish` sign through
+  it with `--signer bunker+unix:///path.sock`.
+
 ## [0.8.0-rc.12]
 
 ### Added

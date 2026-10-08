@@ -110,6 +110,10 @@ type RelayConfig struct {
 	OutgoingBufferSize      int `mapstructure:"outgoingBufferSize"`
 	MaxConcurrentStoreTasks int `mapstructure:"maxConcurrentStoreTasks"`
 	VerificationWorkers     int `mapstructure:"verificationWorkers"`
+
+	// PprofAddr, when set (e.g. "127.0.0.1:6060"), serves net/http/pprof
+	// there. Unauthenticated: keep it on loopback.
+	PprofAddr string `mapstructure:"pprofAddr"`
 }
 
 // PowConfig configures NIP-13 proof-of-work enforcement for published

@@ -23,6 +23,7 @@ of writing. Update by hand if the Go types change. -->
 | `outgoingBufferSize` | int | `1024` | Session engine tuning |
 | `maxConcurrentStoreTasks` | int | `2048` | Session engine tuning |
 | `verificationWorkers` | int | `50` | Session engine tuning |
+| `pprofAddr` | `host:port` | unset (off) | Serves `net/http/pprof`, e.g. `curl 127.0.0.1:6060/debug/pprof/goroutine?debug=2`. Unauthenticated: keep it on loopback |
 
 ## `nip11`
 

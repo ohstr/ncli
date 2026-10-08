@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0-rc.13]
+
+### Added
+
+- Relay config `pprofAddr` serves `net/http/pprof` on its own listener,
+  so a stuck relay can be profiled without killing it.
+
 ## [0.8.0-rc.12]
 
 ### Added

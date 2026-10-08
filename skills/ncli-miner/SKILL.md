@@ -142,6 +142,9 @@ ncli publish -e events.json -s relay.primal.net,relay.snort.social --json
   final error, if any.
 - Exits non-zero if **any** `(event, relay)` pair fails -- same
   composes-into-CI/scripts convention as `miner check`.
+- `--signer <bunker+unix:///path.sock|identity>` signs every event that
+  has no `sig` before sending. A socket signer's policy denial exits 7
+  before anything is published. See skill `ncli-signer`.
 
 End-to-end, from a plain note to a published event:
 

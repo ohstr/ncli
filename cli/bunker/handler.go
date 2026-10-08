@@ -2,18 +2,14 @@ package bunker
 
 import (
 	"crypto/subtle"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
 	"time"
 
-	btcec "github.com/flokiorg/go-flokicoin/crypto"
-	"github.com/flokiorg/go-flokicoin/crypto/schnorr"
+	"github.com/ohstr/ncli/client/nipcrypto"
 	"github.com/ohstr/nmilat/nip01"
-	"github.com/ohstr/nmilat/nip04"
-	"github.com/ohstr/nmilat/nip44"
 	"github.com/ohstr/nmilat/nip46"
 )
 
@@ -391,54 +387,11 @@ func (h *Handler) relaysJSON() string {
 }
 
 func (h *Handler) crypto(method string, params []string) (string, error) {
-	if len(params) < 2 {
-		return "", errors.New("expected [pubkey, text] params")
-	}
-	peerPub, text := params[0], params[1]
-
-	switch method {
-	case nip46.MethodNIP04Encrypt:
-		return nip04.Encrypt(text, h.IdentityPriv, peerPub)
-	case nip46.MethodNIP04Decrypt:
-		return nip04.Decrypt(text, peerPub, h.IdentityPriv)
-	case nip46.MethodNIP44Encrypt:
-		key, err := h.nip44ConversationKey(peerPub)
-		if err != nil {
-			return "", err
-		}
-		return nip44.Encrypt(text, key)
-	case nip46.MethodNIP44Decrypt:
-		key, err := h.nip44ConversationKey(peerPub)
-		if err != nil {
-			return "", err
-		}
-		return nip44.Decrypt(text, key)
-	default:
-		return "", fmt.Errorf("unsupported method %q", method)
-	}
+	return nipcrypto.Do(method, h.IdentityPriv, params)
 }
 
-// nip44ConversationKey mirrors nip46's own (unexported) deriveKeys +
-// GenerateConversationKey pairing -- duplicated rather than imported since
-// nip46 doesn't export that pair, and it's a handful of lines of pure key
-// parsing, not protocol logic worth a cross-module change for.
 func (h *Handler) nip44ConversationKey(peerPubkeyHex string) ([]byte, error) {
-	privBytes, err := hex.DecodeString(h.IdentityPriv)
-	if err != nil {
-		return nil, fmt.Errorf("invalid identity private key: %w", err)
-	}
-	priv, _ := btcec.PrivKeyFromBytes(privBytes)
-
-	pubBytes, err := hex.DecodeString(peerPubkeyHex)
-	if err != nil {
-		return nil, fmt.Errorf("invalid peer public key: %w", err)
-	}
-	pub, err := schnorr.ParsePubKey(pubBytes)
-	if err != nil {
-		return nil, fmt.Errorf("invalid peer public key: %w", err)
-	}
-
-	return nip44.GenerateConversationKey(priv, pub)
+	return nipcrypto.ConversationKey(h.IdentityPriv, peerPubkeyHex)
 }
 
 func parseSignEventParams(params []string) (*nip01.Event, error) {

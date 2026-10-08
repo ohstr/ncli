@@ -1,0 +1,114 @@
+# An AI agent pod whose Nostr key lives only in a signer sidecar.
+#
+# - The socket is on an emptyDir shared by both containers.
+# - --state-dir (used attestations) is on a PVC subPath, mounted only in
+#   the signer, so a restart can't replay an approval.
+# - The key Secret (ncryptsec + password) is mounted only in the signer.
+# - The agent signs with: ncli id sign --signer bunker+unix:///run/signer/agent.sock ...
+#
+# Create the Secret and ConfigMap first:
+#   kubectl create secret generic agent-signer-key \
+#     --from-file=key.ncryptsec --from-file=password
+#   kubectl create configmap agent-signer-policy \
+#     --from-file=agent-policy.yaml --from-file=approvers.txt
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: agent-signer-state
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 16Mi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: agent
+spec:
+  # Separate PID namespaces: the agent must not see the signer's process.
+  shareProcessNamespace: false
+  securityContext:
+    # Group owning the socket; both containers get it as a supplementary group.
+    fsGroup: 2000
+    seccompProfile:
+      type: RuntimeDefault
+  volumes:
+    - name: signer-socket
+      emptyDir:
+        medium: Memory
+    - name: signer-state
+      persistentVolumeClaim:
+        claimName: agent-signer-state
+    - name: signer-key
+      secret:
+        secretName: agent-signer-key
+        # root:fsGroup; readable by the signer, and only the signer mounts it.
+        defaultMode: 0440
+    - name: signer-policy
+      configMap:
+        name: agent-signer-policy
+  containers:
+    - name: signer
+      image: ghcr.io/ohstr/ncli:latest
+      args:
+        - signer
+        - serve
+        - --socket=/run/signer/agent.sock
+        - --socket-gid=2000
+        - --allow-uid=1000
+        - --identity=file:/etc/signer/key/key.ncryptsec
+        - --password-file=/etc/signer/key/password
+        - --policy=/etc/signer/policy/agent-policy.yaml
+        - --watch
+        - --state-dir=/var/lib/signer
+        - --denials-file=/var/lib/signer/denials.ndjson
+      securityContext:
+        runAsUser: 10001
+        runAsGroup: 10001
+        runAsNonRoot: true
+        readOnlyRootFilesystem: true
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: [ALL]
+      volumeMounts:
+        - name: signer-socket
+          mountPath: /run/signer
+        - name: signer-state
+          mountPath: /var/lib/signer
+          subPath: agent
+        - name: signer-key
+          mountPath: /etc/signer/key
+          readOnly: true
+        - name: signer-policy
+          mountPath: /etc/signer/policy
+          readOnly: true
+      readinessProbe:
+        exec:
+          command: [ncli, signer, status, --socket, /run/signer/agent.sock]
+        periodSeconds: 10
+      livenessProbe:
+        exec:
+          command: [ncli, signer, status, --socket, /run/signer/agent.sock]
+        periodSeconds: 30
+      resources:
+        requests: {cpu: 10m, memory: 32Mi}
+        limits: {memory: 128Mi}
+
+    - name: agent
+      # Your agent image, with ncli (or another bunker+unix:// client) on PATH.
+      image: example.com/agent:latest
+      env:
+        - name: NOSTR_SIGNER
+          value: bunker+unix:///run/signer/agent.sock
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: [ALL]
+      volumeMounts:
+        # The socket only: no key, no state, no policy.
+        - name: signer-socket
+          mountPath: /run/signer

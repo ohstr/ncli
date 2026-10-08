@@ -414,7 +414,7 @@ func TestBareGroupCommands(t *testing.T) {
 	for _, c := range []string{
 		"blossom", "blossom servers", "bunker sessions", "groups", "groups members",
 		"groups pins", "huddle", "miner", "prefs", "prefs relays", "relay clear",
-		"relay invites", "relay members", "relay reindex", "relay roles", "skills", "space",
+		"relay invites", "relay members", "relay reindex", "relay roles", "signer", "skills", "space",
 	} {
 		t.Run(c, func(t *testing.T) {
 			r := e.Run(t, append(strings.Fields(c), "--json")...)

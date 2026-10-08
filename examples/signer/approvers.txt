@@ -1,0 +1,3 @@
+# Keys whose signed "approve <event id>" counts as a maintainer approval.
+# One npub or hex pubkey per line. Replace this example key.
+npub1gd7jjx9tv4efehnh4detqa7r6a7mvl8ulttnmv4vjnmx7ufupq3s8n63lx

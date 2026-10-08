@@ -27,6 +27,7 @@
   a valid event could get no reply at all; one still queued after 10s now
   gets `error: relay busy`, and a failing event no longer rejects the
   others written with it. (nmilat v0.5.0-rc.12)
+  ([#132](https://github.com/ohstr/ncli/pull/132))
 
 ## [0.8.0-rc.12]
 

@@ -25,7 +25,7 @@ vault label) if you have a raw private key rather than hex.
 ```sh
 # interactive: shows the key once, prompts to save
 ncli id
-# scripted: no prompts, saves under an explicit label
+# scripted: no prompts, saves under an explicit label; prints only public fields
 ncli id --json --save --label agent-key
 ```
 
@@ -33,6 +33,12 @@ ncli id --json --save --label agent-key
 label only comes from `--label` (falls back to the npub if omitted), and
 the vault password only comes from `NCLI_VAULT_PASSWORD` — never
 interactive in JSON mode.
+
+With `--save`, the output omits the private key (`nsec`/`priv_hex`). It
+stays in the vault, so it never lands in a transcript or log. Add
+`--reveal` to print it anyway, or show it later with `ncli id <label>
+--reveal`. Without `--save`, `ncli id` still prints the key, since that's
+the only copy.
 
 ## `ncli id <identifier>` — inspect
 

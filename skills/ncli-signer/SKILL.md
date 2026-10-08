@@ -160,11 +160,11 @@ memory has the key.
 
 ## Gotchas
 
-- **Don't print the key you're about to protect.** Under `--json`,
-  `ncli id --save --label agent-key` prints the new `nsec` and
-  `priv_hex`. An agent creating its own signer key should keep only
-  public fields: `ncli id --save --label agent-key --json | jq '{npub,
-  pub_hex}'`. Better still, have the operator create the key.
+- **Don't print the key you're about to protect.** Create the signer's
+  key with `ncli id --save --label agent-key`, which keeps it in the vault
+  without printing it. Don't add `--reveal`, and don't use bare `ncli id`,
+  since both print the key. Better still, have the operator create the
+  key.
 
 - **Scope auth kinds.** An unscoped 22242 (NIP-42) or 27235 (NIP-98)
   rule lets the agent log in as this key on any relay or HTTP service.

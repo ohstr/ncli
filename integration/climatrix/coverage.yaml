@@ -58,7 +58,7 @@
 "id list": {modes: [json], tests: [TestID]}
 "id relabel": {modes: [json, errors], tests: [TestIDRelabel, TestIDRelabelRmByIdentifier]}
 "id rm": {modes: [json, errors], tests: [TestIDRm, TestIDRelabelRmByIdentifier]}
-"id sign": {modes: [json, errors], tests: [TestIDSign]}
+"id sign": {modes: [json, errors], tests: [TestIDSign, TestSignerCLI]}
 "miner": {modes: [errors], tests: [TestBareGroupCommands]}
 "miner check": {modes: [json, errors], tests: [TestMinerFileMode, TestQuery]}
 "miner mine": {modes: [json, errors], tests: [TestMinerFileMode]}
@@ -71,7 +71,7 @@
 "prefs relays list": {modes: [json], tests: [TestPrefs]}
 "prefs relays remove": {modes: [json], tests: [TestPrefs]}
 "profile": {modes: [json, errors], tests: [TestQuery]}
-"publish": {modes: [json, errors], tests: [TestPublish]}
+"publish": {modes: [json, errors], tests: [TestPublish, TestSignerPublish]}
 "relay": {modes: [json, errors], tests: [TestRelayAdmin, TestRelayJSONLogs, TestHarness_RelaySeedsCorpus], pending: "-c context creation (phase 5)"}
 "relay clear": {modes: [errors], tests: [TestBareGroupCommands]}
 "relay clear search": {modes: [errors], tests: [TestRelayAdmin]}
@@ -97,6 +97,10 @@
 "relay roles create": {modes: [json], tests: [TestRelayAdmin]}
 "relay roles list": {modes: [json], tests: [TestRelayAdmin]}
 "relay stats": {modes: [json, text, errors], tests: [TestRelayAdmin, TestAttack_AdminHTTP]}
+"signer": {modes: [errors], tests: [TestBareGroupCommands]}
+"signer check": {modes: [json, errors], tests: [TestSignerCLI]}
+"signer serve": {modes: [json, errors], tests: [TestSignerCLI, TestSignerPublish, TestSignerServeErrors, TestSignerServeVault]}
+"signer status": {modes: [json, text, errors], tests: [TestSignerCLI, TestSignerServeVault]}
 "skills": {modes: [errors], tests: [TestBareGroupCommands]}
 "skills install": {modes: [json, errors], tests: [TestSkillsCmd]}
 "skills list": {modes: [json, text], tests: [TestSkillsCmd]}

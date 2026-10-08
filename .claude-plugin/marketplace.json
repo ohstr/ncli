@@ -60,6 +60,15 @@
       "keywords": ["ncli", "nostr", "bunker", "nip-46", "remote-signer", "nsecbunker"]
     },
     {
+      "name": "ncli-signer",
+      "source": "./",
+      "skills": ["./skills/ncli-signer"],
+      "strict": false,
+      "description": "Run ncli as a local policy signer on a unix socket — keep an AI agent's Nostr key in a sidecar, write signer-policy files (selectors, rate limits, required approvals), and sign through it with a bunker+unix:// URI.",
+      "license": "Unlicense",
+      "keywords": ["ncli", "nostr", "signer", "nip-46", "unix-socket", "kubernetes", "policy"]
+    },
+    {
       "name": "ncli-blossom",
       "source": "./",
       "skills": ["./skills/ncli-blossom"],

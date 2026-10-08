@@ -23,11 +23,15 @@ var idCmd = &cobra.Command{
 	Long: `Generate a new keypair, or resolve and display an existing identity
 given a vault label, npub, hex pubkey, nsec, nprofile or nip-05 address.
 
+--save keeps the new private key in the vault without printing it; add
+--reveal to print it too, or show it later with "ncli id <label> --reveal".
+
 --json disables interactive prompts and reads the vault password from
 NCLI_VAULT_PASSWORD.`,
 	Example: `  ncli id
   ncli id satoshi
-  ncli id --save --label satoshi`,
+  ncli id --save --label satoshi
+  ncli id --save --label satoshi --reveal`,
 	Args: common.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
@@ -60,7 +64,7 @@ func init() {
 	// actually uses below.
 	idCmd.Flags().Bool("save", false, "generate: save the new identity to the vault")
 	idCmd.Flags().String("label", "", "generate: label to save the new identity under")
-	idCmd.Flags().Bool("reveal", false, "inspect/list: decrypt and include the private key of vault-saved identities")
+	idCmd.Flags().Bool("reveal", false, "inspect/list: decrypt and include the private key of vault-saved identities; generate with --save: also print the new private key")
 
 	idListCmd.Flags().Bool("reveal", false, "Decrypt and include the private key of vault-saved identities")
 }
@@ -136,6 +140,7 @@ func runIDGenerate(cmd *cobra.Command) error {
 	jsonMode, _ := cmd.Flags().GetBool("json")
 	save, _ := cmd.Flags().GetBool("save")
 	labelFlag, _ := cmd.Flags().GetString("label")
+	reveal, _ := cmd.Flags().GetBool("reveal")
 
 	id, err := client.GenerateIdentity()
 	if err != nil {
@@ -155,10 +160,25 @@ func runIDGenerate(cmd *cobra.Command) error {
 		if err != nil {
 			return common.RuntimeError(cmd, err)
 		}
-		common.PrintJSON(map[string]any{
-			"priv_hex": id.PrivKeyHex, "pub_hex": id.PubKeyHex,
-			"nsec": id.Nsec, "npub": id.Npub, "saved": true, "label": entry.Label,
-		})
+		// A saved key stays in the vault: printing it would put it in
+		// whatever captures stdout (an agent's transcript, CI logs).
+		out := map[string]any{"pub_hex": id.PubKeyHex, "npub": id.Npub, "saved": true, "label": entry.Label}
+		if reveal {
+			out["priv_hex"], out["nsec"] = id.PrivKeyHex, id.Nsec
+		}
+		common.PrintJSON(out)
+		return nil
+	}
+
+	if save && !reveal {
+		entry, err := saveIdentity(cmd, jsonMode, id, labelFlag)
+		if err != nil {
+			return common.RuntimeError(cmd, err)
+		}
+		fmt.Println("hex pubkey: ", id.PubKeyHex)
+		fmt.Println("npub:       ", id.Npub)
+		fmt.Printf("vault:       saved (label: %s)\n", entry.Label)
+		log.Info().Msgf("private key kept in the vault; show it with: ncli id %s --reveal", entry.Label)
 		return nil
 	}
 

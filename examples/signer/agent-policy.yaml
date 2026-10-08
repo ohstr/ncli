@@ -1,0 +1,52 @@
+# Policy for an AI agent's signer sidecar.
+#
+# Chat and NIP-34 proposals (patches, PRs, issues, status) are signed
+# freely. Repository announcements and state (kinds 30617/30618) need a
+# maintainer to post "approve <event id>" first.
+#
+#   ncli signer serve --socket /run/signer/agent.sock \
+#     --policy agent-policy.yaml --state-dir /var/lib/signer --watch
+kind: signer-policy
+max_clock_skew: 10m
+rules:
+  - name: chat
+    allow: {kinds: [9, 7, 1111]}
+    deny_matching:
+      - 'nsec1[02-9ac-hj-np-z]{58}'
+      - 'ncryptsec1'
+    rate: 60/m
+
+  # NIP-42 auth, only for our relay. An unscoped rule would let the agent
+  # log in as this key on any relay.
+  - name: relay-auth
+    allow:
+      kinds: [22242]
+      tags: {relay: ["wss://relay.example", "wss://relay.example/*"]}
+
+  # NIP-98 HTTP auth, only for our git host.
+  - name: http-auth
+    allow:
+      kinds: [27235]
+      tags: {u: ["https://git.example/*"], method: ["GET", "POST"]}
+
+  - name: git-proposals
+    allow: {kinds: [1617, 1618, 1619, 1621, 1630, 1631, 1632, 1633]}
+    deny_matching:
+      - 'nsec1[02-9ac-hj-np-z]{58}'
+      - 'ncryptsec1'
+    rate: 30/m
+
+  - name: repo-state
+    allow: {kinds: [30617, 30618]}
+    max_clock_skew: 2m
+    require:
+      attestations:
+        - name: maintainer-approval
+          kinds: [9]
+          authors_file: approvers.txt
+          max_age: 15m
+          binds:
+            - content: "approve {id}"
+
+  - name: everything-else
+    deny: {}

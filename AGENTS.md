@@ -25,6 +25,8 @@ that priority order.
 | `ncli bunker` | Run as a NIP-46 remote signer: approve/reject other clients' signing requests from a live TUI, remembering per-app decisions so you aren't re-prompted every time. Without a terminal (or with `--json`) it starts the signer in the background instead and prints its status — a second call reports the running one, `conflict` if `--identity` names a different key |
 | `ncli bunker attach/status/stop/connect/history` / `ncli bunker sessions list/grants/rename/revoke/revoke-grant/set-grant` | Reattach to, query, stop, or pair a running bunker daemon without opening the TUI; review resolved requests; manage each app's remembered permissions |
 | `ncli bunker pending list/approve/reject` / `ncli bunker sessions set-grant` | Everything the TUI decides, from a script: list requests awaiting a decision, approve or reject one by id (`--always` remembers it, with `--any-kind`, `--for <dur>` or `--uses <n>` like the TUI's buttons), or apply a `--grants` spec to an already-paired app |
+| `ncli signer serve` / `status` / `check` | Local policy signer on a unix socket: holds one key in memory and answers the NIP-46 method set as newline-delimited JSON (no relay, no encryption; socket permissions plus optional `--allow-uid`/`--allow-gid` authenticate). A `kind: signer-policy` file decides (default deny; selectors, `deny_matching`, rate limits, `require: attestations` such as a signed "approve <id>"). Built in: never signs its own key, never counts a self-signed or pre-start attestation, single-use attestations persisted in `--state-dir`. `status` probes it (exit 6 when down); `check` dry-runs a policy offline (exit 7 on any denial) |
+| `ncli id sign --signer` / `ncli publish --signer` | Sign through a socket signer: `bunker+unix:///abs/path.sock` (or `unix://`); `--signer` also takes an identity. `id sign --attestations <file>` passes events a policy requires. A policy denial is `auth` (exit 7) |
 | `ncli blossom upload/download/list/rm/mirror/report` | Client for the Blossom protocol (BUD-01..12): content-addressed blob storage authenticated with a Nostr identity |
 | `ncli blossom servers add/remove/list/discover` | Manage the default Blossom server list, optionally publishing/discovering it as a signed kind:10063 (BUD-03) event |
 | `ncli huddle list` | List the ephemeral transport rooms that currently have someone in them, with peer count and the protocol version each is pinned to — a room id is otherwise out-of-band knowledge, and `space join` on an unused one opens it rather than failing |
@@ -63,7 +65,7 @@ than per-command. `id`, `id list`, `id import`, `id relabel`, `id rm`, `id sign`
 stats`/`reindex`/`clear`, `relay members`/`invites`/`roles`, `ping`,
 `miner mine`/`check`, `publish`, `huddle list`, `space create`/
 `list`/`show`/`chat send`/`chat list`, `bunker`/`status`/`stop`/
-`connect`/`history`/`sessions`/`pending`, `groups create`/`edit`/`delete`/`invite`/`join`/`leave`/
+`connect`/`history`/`sessions`/`pending`, `signer status`/`check`, `groups create`/`edit`/`delete`/`invite`/`join`/`leave`/
 `members`/`pins`/`delete-event`/`list`/`show`, and `prefs relays add`/
 `remove`/`list`/`clear`/`prefs path` are human-readable text by default
 and switch their *success* output to structured JSON on stdout with
@@ -73,9 +75,11 @@ is guaranteed to be exactly one JSON array on every successful run — `[]`
 when nothing matched, never bare `null` and never empty output — so a
 script never needs a no-result special case. The same holds for every
 list in any command's `--json` output: an empty list is `[]`, never `null`.
-`space join` is the one streaming command: without a terminal or with
-`--json` its stdout is NDJSON (one JSON object per line, ending with an
-`ended` line), not a single document.
+`space join` and `signer serve` are the streaming commands. Without a
+terminal or with `--json`, `space join`'s stdout is NDJSON (one JSON
+object per line, ending with an `ended` line), not a single document.
+`signer serve` always writes one decision object per line, for as long as
+it runs.
 `-q/--quiet` drops the stderr narration on any command (warnings/errors
 still show), for callers that can't rely on stdout/stderr being captured
 separately.
@@ -167,6 +171,10 @@ or invoking a command in that area:
   status/stop/sessions/history/connect`), including pairing an agent as
   its NIP-46 client so it can get events signed without holding a raw
   key → `skills/ncli-bunker/SKILL.md`
+- Running a local policy signer for an agent (`signer serve`/`status`/
+  `check`, a `signer-policy` file, a Kubernetes sidecar) or signing
+  through one (`id sign --signer`, `publish --signer`) →
+  `skills/ncli-signer/SKILL.md`
 - Uploading/fetching/managing content on Blossom media servers
   (`blossom upload/download/list/rm/mirror/report/servers`) →
   `skills/ncli-blossom/SKILL.md`

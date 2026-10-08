@@ -25,7 +25,7 @@ vault label) if you have a raw private key rather than hex.
 ```sh
 # interactive: shows the key once, prompts to save
 ncli id
-# scripted: no prompts, saves under an explicit label
+# scripted: no prompts, saves under an explicit label; prints only public fields
 ncli id --json --save --label agent-key
 ```
 
@@ -33,6 +33,12 @@ ncli id --json --save --label agent-key
 label only comes from `--label` (falls back to the npub if omitted), and
 the vault password only comes from `NCLI_VAULT_PASSWORD` — never
 interactive in JSON mode.
+
+With `--save`, the output omits the private key (`nsec`/`priv_hex`). It
+stays in the vault, so it never lands in a transcript or log. Add
+`--reveal` to print it anyway, or show it later with `ncli id <label>
+--reveal`. Without `--save`, `ncli id` still prints the key, since that's
+the only copy.
 
 ## `ncli id <identifier>` — inspect
 
@@ -202,7 +208,12 @@ ncli id sign --identity nsec1... -e draft.json -o signed.json --json
 NCLI_VAULT_PASSWORD=hunter2 ncli id sign --identity agent-key -e draft.json -o signed.json --json
 ```
 
-- `--identity <vault-label|nsec>` (required) must resolve to a **private**
+- `--signer bunker+unix:///path/to.sock` signs through an `ncli signer
+  serve` socket instead, so the key never enters this process. Pass a
+  policy's required approvals with `--attestations <file>`. A denial is
+  `code: "auth"` (exit 7). Use exactly one of `--identity` or `--signer`.
+  See skill `ncli-signer`.
+- `--identity <vault-label|nsec>` must resolve to a **private**
   key -- a vault label (needs `NCLI_VAULT_PASSWORD` under `--json`, same as
   `id --reveal`) or a raw `nsec1...`. A pubkey-only identity (npub/hex/
   nprofile/nip-05, not vault-saved) has no key to sign with and fails

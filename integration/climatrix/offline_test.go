@@ -117,7 +117,8 @@ func TestID(t *testing.T) {
 
 	t.Run("save, conflict, list, reveal", func(t *testing.T) {
 		var saved map[string]any
-		e.MustOK(t, "id", "--save", "--label", "seed", "--json").JSON(t, &saved)
+		// --reveal so the saved key can be compared with list --reveal below.
+		e.MustOK(t, "id", "--save", "--label", "seed", "--reveal", "--json").JSON(t, &saved)
 		if saved["saved"] != true || saved["label"] != "seed" {
 			t.Fatalf("save result: %v", saved)
 		}
@@ -413,7 +414,7 @@ func TestBareGroupCommands(t *testing.T) {
 	for _, c := range []string{
 		"blossom", "blossom servers", "bunker sessions", "groups", "groups members",
 		"groups pins", "huddle", "miner", "prefs", "prefs relays", "relay clear",
-		"relay invites", "relay members", "relay reindex", "relay roles", "skills", "space",
+		"relay invites", "relay members", "relay reindex", "relay roles", "signer", "skills", "space",
 	} {
 		t.Run(c, func(t *testing.T) {
 			r := e.Run(t, append(strings.Fields(c), "--json")...)

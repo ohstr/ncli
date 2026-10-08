@@ -11,6 +11,7 @@ import (
 	"github.com/ohstr/ncli/cli/huddle"
 	"github.com/ohstr/ncli/cli/ncli"
 	relaycli "github.com/ohstr/ncli/cli/relay"
+	signercli "github.com/ohstr/ncli/cli/signer"
 	"github.com/ohstr/ncli/cli/space"
 	"github.com/spf13/cobra"
 )
@@ -33,6 +34,10 @@ func init() {
 	// "attach"/"status"/"stop"/"sessions"/"connect" as its own children;
 	// see NewBunkerCommand.
 	ncli.RootCmd.AddCommand(bunker.NewBunkerCommand())
+
+	// Register the local unix-socket signer ("signer") -- mounts
+	// "serve"/"status"/"check".
+	ncli.RootCmd.AddCommand(signercli.NewSignerCommand())
 
 	// Register the Blossom media-server ("blossom") command -- mounts
 	// "upload"/"download"/"list"/"rm"/"mirror"/"servers"/"report" as its

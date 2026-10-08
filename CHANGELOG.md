@@ -11,6 +11,7 @@
   maintainer's signed "approve <id>". `signer status` probes it;
   `signer check` dry-runs a policy. `id sign` and `publish` sign through
   it with `--signer bunker+unix:///path.sock`.
+  ([#128](https://github.com/ohstr/ncli/pull/128))
 
 ## [0.8.0-rc.12]
 

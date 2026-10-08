@@ -21,6 +21,13 @@
   run `ncli id <label> --reveal` later.
   ([#130](https://github.com/ohstr/ncli/pull/130))
 
+### Fixed
+
+- `ncli relay` answers every EVENT with exactly one OK. Under heavy load
+  a valid event could get no reply at all; one still queued after 10s now
+  gets `error: relay busy`, and a failing event no longer rejects the
+  others written with it. (nmilat v0.5.0-rc.12)
+
 ## [0.8.0-rc.12]
 
 ### Added

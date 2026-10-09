@@ -18,6 +18,7 @@ import (
 	"github.com/ohstr/nmilat/nip01"
 	"github.com/ohstr/nmilat/nip19"
 	"github.com/ohstr/nmilat/nip46"
+	"github.com/ohstr/nmilat/nipLS"
 )
 
 // syncBuffer is a goroutine-safe bytes.Buffer for decision logs.
@@ -87,7 +88,7 @@ func startServer(t *testing.T, cfg Config) *running {
 		t.Fatal(err)
 	}
 	path := filepath.Join(sockDir(t), "s.sock")
-	l, err := Listen(path, 0o660, -1, -1)
+	l, err := nipLS.Listen(path, nipLS.ListenOptions{Mode: 0o660})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,15 +107,15 @@ func startServer(t *testing.T, cfg Config) *running {
 		})
 	}
 	t.Cleanup(r.stop)
-	r.srv, r.uri = srv, URIScheme+"://"+path
+	r.srv, r.uri = srv, nipLS.FormatURI(path)
 	return r
 }
 
-func dial(t *testing.T, uri string) *Client {
+func dial(t *testing.T, uri string) *nipLS.Client {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	c, err := Dial(ctx, uri)
+	c, err := nipLS.Dial(ctx, uri)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,14 +183,13 @@ func TestServerRoundTrip(t *testing.T) {
 		}
 	}
 
-	st, err := c.Status(ctx)
+	st, err := FetchStatus(ctx, c)
 	if err != nil || st.PubKey != pub || st.Rules != 2 || st.PolicySHA256 != r.srv.Policy().SHA256 || st.Version != "test" {
 		t.Fatalf("status = %+v, %v", st, err)
 	}
 
 	_, err = c.Call(ctx, "get_secret_key")
-	var re *RemoteError
-	if !errors.As(err, &re) || !re.Invalid() {
+	if !errors.Is(err, nipLS.ErrInvalid) {
 		t.Fatalf("unknown method: %v", err)
 	}
 }
@@ -217,8 +217,7 @@ func TestServerDenials(t *testing.T) {
 	}
 	for _, tc := range cases {
 		err := c.Sign(ctx, tc.ev)
-		var re *RemoteError
-		if !errors.As(err, &re) || !re.Denied() || !strings.Contains(re.Msg, tc.reason) {
+		if !errors.Is(err, nipLS.ErrDenied) || !strings.Contains(err.Error(), tc.reason) {
 			t.Errorf("%s: err = %v, want denial containing %q", tc.name, err, tc.reason)
 		}
 	}
@@ -276,14 +275,14 @@ func TestServerRateLimit(t *testing.T) {
 func TestServerOversizedLine(t *testing.T) {
 	priv, _ := testKey(t, "signer")
 	r := startServer(t, Config{PrivKeyHex: priv, PolicyPath: writePolicy(t, "kind: signer-policy\nrules: [{name: n, deny: {}}]")})
-	path, _ := ParseURI(r.uri)
+	path, _ := nipLS.ParseURI(r.uri)
 	conn, err := net.Dial("unix", path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = conn.Close() }()
 	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
-	go func() { _, _ = conn.Write(bytes.Repeat([]byte("x"), MaxMessageSize+10)) }()
+	go func() { _, _ = conn.Write(bytes.Repeat([]byte("x"), nipLS.MaxMessageSize+10)) }()
 	buf := make([]byte, 64)
 	if n, err := conn.Read(buf); err == nil {
 		t.Fatalf("server answered an oversized line: %q", buf[:n])
@@ -293,7 +292,7 @@ func TestServerOversizedLine(t *testing.T) {
 func TestListen(t *testing.T) {
 	dir := sockDir(t)
 	path := filepath.Join(dir, "s.sock")
-	l, err := Listen(path, 0o660, -1, -1)
+	l, err := nipLS.Listen(path, nipLS.ListenOptions{Mode: 0o660})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -301,7 +300,7 @@ func TestListen(t *testing.T) {
 	if err != nil || info.Mode().Perm() != 0o660 {
 		t.Fatalf("mode = %v, %v", info.Mode().Perm(), err)
 	}
-	if _, err := Listen(path, 0o660, -1, -1); err == nil || !errors.Is(err, ErrAlreadyListening) {
+	if _, err := nipLS.Listen(path, nipLS.ListenOptions{Mode: 0o660}); err == nil || !errors.Is(err, nipLS.ErrAlreadyListening) {
 		t.Fatalf("live socket: %v", err)
 	}
 	_ = l.Close()
@@ -313,7 +312,7 @@ func TestListen(t *testing.T) {
 	}
 	stale.(*net.UnixListener).SetUnlinkOnClose(false)
 	_ = stale.Close()
-	l, err = Listen(path, 0o600, -1, -1)
+	l, err = nipLS.Listen(path, nipLS.ListenOptions{Mode: 0o600})
 	if err != nil {
 		t.Fatalf("stale socket: %v", err)
 	}
@@ -323,12 +322,12 @@ func TestListen(t *testing.T) {
 	if err := os.Symlink(filepath.Join(dir, "elsewhere"), link); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Listen(link, 0o660, -1, -1); err == nil || !strings.Contains(err.Error(), "symlink") {
+	if _, err := nipLS.Listen(link, nipLS.ListenOptions{Mode: 0o660}); err == nil || !strings.Contains(err.Error(), "symlink") {
 		t.Fatalf("symlink: %v", err)
 	}
 	file := filepath.Join(dir, "file")
 	_ = os.WriteFile(file, nil, 0o600)
-	if _, err := Listen(file, 0o660, -1, -1); err == nil || !strings.Contains(err.Error(), "not a socket") {
+	if _, err := nipLS.Listen(file, nipLS.ListenOptions{Mode: 0o660}); err == nil || !strings.Contains(err.Error(), "not a socket") {
 		t.Fatalf("regular file: %v", err)
 	}
 }
@@ -461,7 +460,7 @@ func TestWatchReloadsSymlinkSwap(t *testing.T) {
 }
 
 func TestAllowUID(t *testing.T) {
-	if !PeerCredSupported {
+	if !nipLS.PeerCredSupported {
 		t.Skip("SO_PEERCRED unsupported")
 	}
 	priv, _ := testKey(t, "signer")
@@ -470,7 +469,7 @@ func TestAllowUID(t *testing.T) {
 	r := startServer(t, Config{PrivKeyHex: priv, PolicyPath: policy, AllowUIDs: []int{os.Getuid() + 1}})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if c, err := Dial(ctx, r.uri); err == nil {
+	if c, err := nipLS.Dial(ctx, r.uri); err == nil {
 		_ = c.Close()
 		t.Fatal("a caller outside --allow-uid got an answer")
 	}
@@ -497,14 +496,14 @@ func BenchmarkSignOverSocket(b *testing.B) {
 		b.Fatal(err)
 	}
 	path := filepath.Join(dir, "s.sock")
-	l, err := Listen(path, 0o600, -1, -1)
+	l, err := nipLS.Listen(path, nipLS.ListenOptions{Mode: 0o600})
 	if err != nil {
 		b.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go func() { _ = srv.Serve(ctx, l) }()
-	c, err := Dial(ctx, URIScheme+"://"+path)
+	c, err := nipLS.Dial(ctx, nipLS.FormatURI(path))
 	if err != nil {
 		b.Fatal(err)
 	}

@@ -8,8 +8,8 @@ import (
 
 	"github.com/ohstr/ncli/cli/common"
 	"github.com/ohstr/ncli/client"
-	"github.com/ohstr/ncli/signer"
 	"github.com/ohstr/nmilat/nip19"
+	"github.com/ohstr/nmilat/nipLS"
 	"github.com/spf13/cobra"
 )
 
@@ -19,10 +19,10 @@ func TestSignerError(t *testing.T) {
 		err  error
 		code int
 	}{
-		"denied":       {&signer.RemoteError{Msg: signer.ErrPrefixDenied + "no rule matches"}, 7},
-		"invalid":      {&signer.RemoteError{Msg: signer.ErrPrefixInvalid + "malformed event JSON"}, 3},
-		"other remote": {&signer.RemoteError{Msg: "sign failed"}, 1},
-		"hung up":      {fmt.Errorf("sign: %w", signer.ErrConnClosed), 6},
+		"denied":       {nipLS.Deny("no rule matches"), 7},
+		"invalid":      {nipLS.Invalid("malformed event JSON"), 3},
+		"other remote": {&nipLS.Error{Reason: "sign failed"}, 1},
+		"hung up":      {fmt.Errorf("sign: %w", nipLS.ErrConnClosed), 6},
 		"deadline":     {fmt.Errorf("sign: %w", context.DeadlineExceeded), 6},
 		"plain":        {errors.New("boom"), 1},
 	}

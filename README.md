@@ -1010,6 +1010,9 @@ material. `--denials-file` collects denials alone.
   request.
 - To pass attestations, send them as `params[1]` of `sign_event`.
 - Treat `denied: ...` as a refusal, not a transport error.
+- In Go, [`nmilat/nipLS`](https://github.com/ohstr/nmilat/tree/main/nipLS)
+  does all of this (`nipLS.Dial`) and serves it (`nipLS.NewServer`). The
+  protocol is [NIP-LS](https://github.com/ohstr/zapf-nips/blob/main/NIP-LS.md).
 
 `examples/signer/` has a full agent policy and a Kubernetes pod manifest
 with the sidecar.

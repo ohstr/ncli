@@ -14,6 +14,7 @@ import (
 
 	"github.com/ohstr/ncli/signer"
 	"github.com/ohstr/nmilat/nip01"
+	"github.com/ohstr/nmilat/nipLS"
 	"github.com/ohstr/nmilat/utils"
 )
 
@@ -45,7 +46,7 @@ rules:
 		t.Fatal(err)
 	}
 	sock := filepath.Join(dir, "s.sock")
-	l, err := signer.Listen(sock, 0o600, -1, -1)
+	l, err := nipLS.Listen(sock, nipLS.ListenOptions{Mode: 0o600})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +54,7 @@ rules:
 	done := make(chan struct{})
 	go func() { _ = srv.Serve(ctx, l); close(done) }()
 	t.Cleanup(func() { cancel(); <-done; _ = srv.Close() })
-	return signer.URIScheme + "://" + sock
+	return nipLS.FormatURI(sock)
 }
 
 func hexKey(t *testing.T, name string) (priv, pub string) {
@@ -115,7 +116,7 @@ func TestIDSignThroughSocketSigner(t *testing.T) {
 	if code := exitCodeOf(exec.Command(bin, "id", "sign", "--signer", uri, "-e", statePath, "-o", out).Run()); code != 7 {
 		t.Errorf("state without approval: exit %d, want 7", code)
 	}
-	if err := signer.PrepareTarget(state, pub); err != nil {
+	if err := nipLS.PrepareTarget(state, pub); err != nil {
 		t.Fatal(err)
 	}
 	approval := &nip01.Event{CreatedAt: uint64(now), Kind: 9, Tags: [][]string{}, Content: "approve " + state.ID}

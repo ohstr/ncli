@@ -13,6 +13,7 @@ import (
 	"github.com/ohstr/ncli/signer"
 	"github.com/ohstr/nmilat/nip01"
 	"github.com/ohstr/nmilat/nip46"
+	"github.com/ohstr/nmilat/nipLS"
 	"github.com/spf13/cobra"
 )
 
@@ -163,7 +164,7 @@ func runCheck(cmd *cobra.Command, _ []string) error {
 			var d signer.Decision
 			if ev.PubKey != "" && !strings.EqualFold(ev.PubKey, pub) {
 				d = signer.Decision{Reason: "event pubkey does not match the signer"}
-			} else if err := signer.PrepareTarget(ev, pub); err != nil {
+			} else if err := nipLS.PrepareTarget(ev, pub); err != nil {
 				return common.InvalidInputError(cmd, eventsPath, err)
 			} else {
 				res.EventID = ev.ID

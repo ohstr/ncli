@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ohstr/nmilat/nip46"
+	"github.com/ohstr/nmilat/nipLS"
 )
 
 func TestServerMalformedRequests(t *testing.T) {
@@ -29,8 +30,7 @@ func TestServerMalformedRequests(t *testing.T) {
 	for name, params := range cases {
 		method := strings.Fields(name)[0]
 		_, err := c.Call(ctx, method, params...)
-		var re *RemoteError
-		if !errors.As(err, &re) || !re.Invalid() {
+		if !errors.Is(err, nipLS.ErrInvalid) {
 			t.Errorf("%s: err = %v, want an invalid: response", name, err)
 		}
 	}
@@ -40,7 +40,7 @@ func TestServerMalformedRequests(t *testing.T) {
 	}
 
 	// A non-JSON line gets an error response, and the connection survives.
-	path, _ := ParseURI(r.uri)
+	path, _ := nipLS.ParseURI(r.uri)
 	conn, err := net.Dial("unix", path)
 	if err != nil {
 		t.Fatal(err)
@@ -50,7 +50,7 @@ func TestServerMalformedRequests(t *testing.T) {
 	sc := bufio.NewScanner(conn)
 	_, _ = conn.Write([]byte("garbage\n\n{\"id\":\"2\",\"method\":\"ping\",\"params\":[]}\n"))
 	var resp nip46.Response
-	if !sc.Scan() || json.Unmarshal(sc.Bytes(), &resp) != nil || !strings.HasPrefix(resp.Error, ErrPrefixInvalid) {
+	if !sc.Scan() || json.Unmarshal(sc.Bytes(), &resp) != nil || !strings.HasPrefix(resp.Error, nipLS.ErrPrefixInvalid) {
 		t.Fatalf("garbage line: %q", sc.Text())
 	}
 	if !sc.Scan() || json.Unmarshal(sc.Bytes(), &resp) != nil || resp.RequestID != "2" || resp.Result != "pong" {
@@ -90,7 +90,7 @@ func TestClientRejectsTamperedResult(t *testing.T) {
 		}
 	}()
 
-	c := dial(t, URIScheme+"://"+path)
+	c := dial(t, nipLS.FormatURI(path))
 	ev := target(t, "", 1, t0, "what I asked for")
 	err = c.Sign(ctx5(t), ev)
 	if err == nil || !strings.Contains(err.Error(), "different event") {

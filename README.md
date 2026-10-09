@@ -128,7 +128,7 @@ Run a Nostr relay server.
 | [98](https://github.com/nostr-protocol/nips/blob/master/98.md) | HTTP Auth |
 | [A0](https://github.com/nostr-protocol/nips/blob/master/A0.md) | Voice Messages |
 | [AA](https://github.com/block/buzz/blob/main/docs/nips/NIP-AA.md) | Agent auth — requires relay membership; see `agent_auth` below |
-| [AZ](https://github.com/ohstr/zapf-nips/blob/main/NIP-AZ.md) | AltZap — zaps for energy-backed coins |
+| [AZ](https://github.com/ohstr/nips/blob/main/NIP-AZ.md) | AltZap — zaps for energy-backed coins |
 | [B0](https://github.com/nostr-protocol/nips/blob/master/B0.md) | Web Bookmarks |
 | [B7](https://github.com/nostr-protocol/nips/blob/master/B7.md) | Blossom |
 | [OA](https://github.com/block/buzz/blob/main/docs/nips/NIP-OA.md) | Owner attestation — verified as part of agent auth |
@@ -1012,7 +1012,7 @@ material. `--denials-file` collects denials alone.
 - Treat `denied: ...` as a refusal, not a transport error.
 - In Go, [`nmilat/nipLS`](https://github.com/ohstr/nmilat/tree/main/nipLS)
   does all of this (`nipLS.Dial`) and serves it (`nipLS.NewServer`). The
-  protocol is [NIP-LS](https://github.com/ohstr/zapf-nips/blob/main/NIP-LS.md).
+  protocol is [NIP-LS](https://github.com/ohstr/nips/blob/main/NIP-LS.md).
 
 `examples/signer/` has a full agent policy and a Kubernetes pod manifest
 with the sidecar.

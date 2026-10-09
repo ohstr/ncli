@@ -7,6 +7,7 @@
 - `ncli bunker` and `ncli signer` now run on nmilat's shared NIP-46 code
   (`nip46/bunker`, `nipLS`). Refusals sent to an app start with `denied: `
   or `invalid: `, so a client can tell a refusal from a malformed request.
+  ([#134](https://github.com/ohstr/ncli/pull/134), [#135](https://github.com/ohstr/ncli/pull/135))
 
 ## [0.8.0-rc.14]
 

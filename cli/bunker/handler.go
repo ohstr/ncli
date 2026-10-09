@@ -1,16 +1,14 @@
 package bunker
 
 import (
-	"crypto/subtle"
+	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"sync"
 	"time"
 
-	"github.com/ohstr/ncli/client/nipcrypto"
 	"github.com/ohstr/nmilat/nip01"
 	"github.com/ohstr/nmilat/nip46"
+	"github.com/ohstr/nmilat/nip46/bunker"
 )
 
 // PairingSecretTTL is how long a bunker:// pairing secret (SetPendingSecret)
@@ -21,14 +19,13 @@ import (
 // showBunkerURI shows a live countdown against this same constant.
 const PairingSecretTTL = DefaultPendingTTL
 
-// Handler dispatches one parsed NIP-46 request at a time against the
-// signer's identity, the remembered-permission Store, and the pending
-// approval Queue. It has no relay/transport knowledge of its own --
-// Handle returns the signed response event for the caller (daemon.go) to
-// publish, so this whole dispatch path is testable without any network.
-// Handle may block for as long as Queue's TTL while a human decides, so
-// callers must invoke it from its own per-request goroutine rather than a
-// shared read loop.
+// Handler is ncli's policy on top of nmilat's NIP-46 signer
+// (nip46/bunker): it decides each request against the remembered-permission
+// Store and the human approval Queue, and records pairings. The signer
+// itself (dispatch, crypto, pairing secrets, responses) is bunker.Server;
+// Handle answers one request through it without any relay, so the whole
+// path is testable without a network. Handle may block for as long as
+// Queue's TTL while a human decides.
 type Handler struct {
 	IdentityPriv string
 	IdentityPub  string
@@ -36,110 +33,91 @@ type Handler struct {
 	Queue        *Queue
 	Relays       []string
 
-	// OnSigned, if set, fires from execute() right after a sign_event
-	// request's event is actually signed -- daemon.go wires this to
-	// recordSignedEvent so the signed JSON reaches that request's own
-	// HistoryEntry, for board.go's HistoryTable to show/copy. Nil is a
-	// valid no-op (e.g. in tests that construct a Handler directly).
+	// OnSigned, if set, fires right after a sign_event request's event is
+	// signed -- daemon.go wires this to recordSignedEvent so the signed
+	// JSON reaches that request's own HistoryEntry. Nil is a no-op.
 	OnSigned func(requestID string, event *nip01.Event)
 
-	// OnAutoApproved, if set, fires from Handle right before execute(),
-	// for a request that was allowed instantly by an already-standing
-	// grant (or, for "connect", a pending GrantSpec) and so never touched
-	// Queue.Add -- Queue.OnResolved (what Request History is normally
-	// built from) never fires for these at all. daemon.go wires this to
-	// recordAutoApproved so these requests still get a HistoryEntry
-	// instead of being invisible to `ncli bunker history`. Fired before
-	// execute() runs, matching Queue.Resolve's own before-close(done)
-	// ordering, so a sign_event's HistoryEntry already exists by the time
-	// OnSigned tries to attach the signed event to it. Nil is a valid
-	// no-op (e.g. in tests that construct a Handler directly).
+	// OnAutoApproved, if set, fires for a request allowed instantly by a
+	// standing grant (or, for "connect", a pending GrantSpec), which never
+	// touches Queue.Add and so never reaches Queue.OnResolved. daemon.go
+	// wires this to recordAutoApproved so such requests still get a
+	// HistoryEntry. Fired before the request is carried out, so a
+	// sign_event's HistoryEntry exists by the time OnSigned attaches the
+	// signed event to it. Nil is a no-op.
 	OnAutoApproved func(Pending)
 
-	mu                     sync.Mutex
-	pendingSecret          string    // see SetPendingSecret
-	pendingSecretExpiresAt time.Time // zero while pendingSecret == ""
+	// OnDecision, if set, also receives every request's outcome --
+	// daemon.go logs it and confirms nostrconnect pairings with it.
+	OnDecision func(bunker.Decision)
+	// Logf receives the signer's operational messages.
+	Logf func(format string, args ...any)
 
-	// pendingGrantSpec is what to remember (via GrantSpec.Resolve, then
-	// Store.Remember/SetName) for whichever pubkey actually presents
-	// pendingSecret -- see SetPendingGrants. nil (the common case, an
-	// unscripted pairing) means nothing extra happens beyond the usual
-	// Store.Pair.
+	once   sync.Once
+	srv    *bunker.Server
+	srvErr error
+
+	mu sync.Mutex
+	// pendingGrantSpec is what to remember for whichever pubkey presents
+	// the armed secret -- see SetPendingGrants.
 	pendingGrantSpec *GrantSpec
 
-	// pairingSecretTTL overrides PairingSecretTTL when non-zero -- test-only
-	// seam so an integration test can prove a secret really does stop
-	// working once its TTL elapses (real elapsed time, through the actual
-	// wire protocol) without a test sleeping the real 5-minute default.
+	// pairingSecretTTL overrides PairingSecretTTL when non-zero -- a
+	// test-only seam.
 	pairingSecretTTL time.Duration
 }
 
-// SetPendingSecret records the secret this daemon currently expects on an
-// incoming bunker://-flow "connect" request (the signer displayed a
-// bunker:// URI carrying this secret and is waiting for a client to
-// present it back), armed for PairingSecretTTL (or pairingSecretTTL, if
-// that test-only override is set). Pass "" to stop expecting one -- Handle
-// already clears it itself on a successful single-use match, so callers
-// only need this to arm a freshly generated pairing or to cancel one.
-func (h *Handler) SetPendingSecret(secret string) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.pendingSecret = secret
-	// Arming a secret (or explicitly cancelling one with "") always starts
-	// a fresh pairing attempt -- a spec left over from a previous one
-	// (the operator generated a URI, set grants for it, then generated a
-	// new one without using the first) must not silently attach to
-	// whoever happens to complete this different attempt. Callers that
-	// want grants for THIS attempt call SetPendingGrants after this, not
-	// before.
-	h.pendingGrantSpec = nil
-	if secret == "" {
-		h.pendingSecretExpiresAt = time.Time{}
-		return
-	}
-	ttl := PairingSecretTTL
-	if h.pairingSecretTTL > 0 {
-		ttl = h.pairingSecretTTL
-	}
-	h.pendingSecretExpiresAt = time.Now().Add(ttl)
+// server builds the bunker.Server on first use, from the fields set by
+// then.
+func (h *Handler) server() (*bunker.Server, error) {
+	h.once.Do(func() {
+		key, err := nip46.NewLocalKey(h.IdentityPriv)
+		if err != nil {
+			h.srvErr = err
+			return
+		}
+		h.srv, h.srvErr = bunker.NewServer(bunker.ServerConfig{
+			Key:        key,
+			Relays:     h.Relays,
+			Policy:     h,
+			OnDecision: h.decided,
+			Logf: func(format string, args ...any) {
+				if h.Logf != nil {
+					h.Logf(format, args...)
+				}
+			},
+		})
+	})
+	return h.srv, h.srvErr
 }
 
-// SetPendingGrants records spec to resolve (via GrantSpec.Resolve, then
-// Store.Remember/SetName) for whichever pubkey ends up presenting the
-// secret currently armed by SetPendingSecret -- `ncli bunker connect
-// --grants <file>`'s own hook into the bunker:// flow, where (unlike
-// nostrconnect://) the app's pubkey isn't known until it actually
-// connects, so there's nothing to resolve spec against yet at Connect
-// time. Must be called after SetPendingSecret, which clears this as its
-// own side effect (see that method's doc comment) -- calling this first
-// would just have the next SetPendingSecret wipe it out again.
+// SetPendingSecret arms secret as the one the next bunker://-flow
+// "connect" must present, for PairingSecretTTL. "" cancels. It also drops
+// any GrantSpec staged for a previous attempt: callers that want grants
+// for this one call SetPendingGrants after this, not before.
+func (h *Handler) SetPendingSecret(secret string) {
+	h.mu.Lock()
+	h.pendingGrantSpec = nil
+	ttl := PairingSecretTTL
+	if h.pairingSecretTTL != 0 {
+		ttl = h.pairingSecretTTL
+	}
+	h.mu.Unlock()
+	if srv, err := h.server(); err == nil {
+		srv.ArmSecret(secret, ttl)
+	}
+}
+
+// SetPendingGrants records spec to apply to whichever pubkey presents the
+// secret SetPendingSecret armed -- `ncli bunker connect --grants <file>`'s
+// hook into the bunker:// flow, where the app's pubkey isn't known until
+// it connects.
 func (h *Handler) SetPendingGrants(spec *GrantSpec) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.pendingGrantSpec = spec
 }
 
-func (h *Handler) takePendingSecretIfMatches(given string) bool {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	if h.pendingSecret == "" {
-		return false
-	}
-	if time.Now().After(h.pendingSecretExpiresAt) {
-		h.pendingSecret = "" // stale -- a client presenting an expired secret shouldn't revive it
-		return false
-	}
-	if subtle.ConstantTimeCompare([]byte(given), []byte(h.pendingSecret)) != 1 {
-		return false
-	}
-	h.pendingSecret = "" // single-use
-	return true
-}
-
-// takePendingGrantSpec returns (and clears) whatever SetPendingGrants last
-// recorded -- called exactly once, from execute()'s own MethodConnect
-// case, right after a pairing attempt actually succeeds.
 func (h *Handler) takePendingGrantSpec() *GrantSpec {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -148,281 +126,124 @@ func (h *Handler) takePendingGrantSpec() *GrantSpec {
 	return spec
 }
 
-// hasPendingGrantSpec peeks (without consuming) whether a GrantSpec is
-// currently staged -- Handle's own MethodConnect case uses this to decide
-// whether to skip the usual Ask/Queue step for "connect" itself; the
-// actual consuming read happens later, in execute(), via
-// takePendingGrantSpec.
 func (h *Handler) hasPendingGrantSpec() bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return h.pendingGrantSpec != nil
 }
 
-// Handle dispatches req, blocking on a human decision if neither an
-// existing grant nor an explicit deny already resolves it. The returned
-// event is signed and ready to publish; a nil return means req couldn't
-// even be turned into an error response (a key/encoding failure, not a
-// normal rejection) and should just be logged, not published.
+// Handle answers one request. The returned event is signed and ready to
+// publish; nil means no response could be built at all.
 func (h *Handler) Handle(req *nip46.RequestEvent, encryption string) *nip01.Event {
-	peer := req.PubKey
+	srv, err := h.server()
+	if err != nil {
+		return nil
+	}
+	resp, err := srv.Handle(context.Background(), req, encryption)
+	if err != nil {
+		return nil
+	}
+	return resp
+}
 
-	if req.Method == nip46.MethodConnect {
-		given := ""
-		if len(req.Params) > 1 {
-			given = req.Params[1]
-		}
-		if !h.takePendingSecretIfMatches(given) {
-			return h.errorResponse(peer, req.RequestID, "no matching pairing in progress", encryption)
-		}
+// Authorize implements bunker.Policy. A connect only reaches it after the
+// server matched the armed secret.
+func (h *Handler) Authorize(_ context.Context, call *bunker.Call) error {
+	peer := call.Client
+
+	if call.Method == nip46.MethodConnect && h.hasPendingGrantSpec() {
 		// `ncli bunker connect --grants <file>` staging a GrantSpec for
-		// this exact secret already IS the human's (or agent's) approval
-		// decision for this pairing attempt -- without this, the
-		// unattended case that flag exists for would still block on
-		// Queue.Add below, exactly like an unscripted pairing's own
-		// "connect" request does (see
-		// TestHandle_Connect_GoesThroughApprovalQueueWhenNoGrant), with
-		// no human present to ever click it. An unscripted pairing (no
-		// spec staged) is untouched: it still asks, same as always.
-		if h.hasPendingGrantSpec() {
-			if h.OnAutoApproved != nil {
-				// Params deliberately omitted -- connect's own Params
-				// carry the pairing secret, and unlike the Ask-path below
-				// (where the same omission would be incidental, since
-				// HistoryEntry never has a Params field to begin with),
-				// leaving it out here is a deliberate belt-and-suspenders
-				// against ever persisting it if HistoryEntry's shape
-				// changes later.
-				h.OnAutoApproved(Pending{ID: req.RequestID, ClientKey: peer, Method: req.Method, CreatedAt: time.Now()})
-			}
-			return h.execute(req, peer, encryption, nil)
+		// this secret IS the approval decision for this pairing; without
+		// it the unattended case would block on the queue with nobody to
+		// click. Params are omitted: they carry the pairing secret.
+		if h.OnAutoApproved != nil {
+			h.OnAutoApproved(Pending{ID: call.ID, ClientKey: peer, Method: call.Method, CreatedAt: time.Now()})
 		}
+		h.pair(call)
+		return nil
 	}
 
-	// switch_relays and logout manage the client's own session: one asks
-	// which relays to talk on, the other ends the session entirely.
-	// Neither signs anything or exposes the identity key, and a compliant
-	// client fires switch_relays immediately after every connect -- so
-	// routing them through the approval queue would pop a dialog after
-	// every pairing asking a human to decide something they cannot
-	// meaningfully judge. Answered directly for a paired client, refused
-	// for anyone else: neither belongs to a caller with no session. Not
-	// recorded in History, which tracks permission decisions rather than
-	// protocol housekeeping; the daemon's own request log still shows them.
-	if req.Method == nip46.MethodSwitchRelays || req.Method == nip46.MethodLogout {
+	// switch_relays and logout manage the client's own session and expose
+	// nothing, and a compliant client fires switch_relays after every
+	// connect -- asking a human about them would be noise. Answered for a
+	// paired client, refused for anyone else; not recorded in History.
+	if call.Method == nip46.MethodSwitchRelays || call.Method == nip46.MethodLogout {
 		if !h.Store.IsPaired(peer) {
-			return h.errorResponse(peer, req.RequestID, "not paired", encryption)
+			return nip46.Deny("not paired")
 		}
-		return h.execute(req, peer, encryption, nil)
+		return nil
 	}
 
 	kind := 0
-	var signEvt *nip01.Event
-	if req.Method == nip46.MethodSignEvent {
-		var err error
-		signEvt, err = parseSignEventParams(req.Params)
-		if err != nil {
-			return h.errorResponse(peer, req.RequestID, "invalid params: "+err.Error(), encryption)
-		}
-		if signEvt.PubKey != "" && signEvt.PubKey != h.IdentityPub {
-			return h.errorResponse(peer, req.RequestID, "event pubkey does not match signer identity", encryption)
-		}
-		kind = signEvt.Kind
+	if call.Event != nil {
+		kind = call.Event.Kind
 	}
-
-	switch h.Store.Decide(peer, req.Method, kind) {
+	switch h.Store.Decide(peer, call.Method, kind) {
 	case Deny:
-		return h.errorResponse(peer, req.RequestID, "rejected", encryption)
+		return nip46.Deny("rejected")
 	case Ask:
-		pending := Pending{ID: req.RequestID, ClientKey: peer, Method: req.Method, Kind: kind, Params: req.Params, Event: signEvt}
+		pending := Pending{ID: call.ID, ClientKey: peer, Method: call.Method, Kind: kind, Params: call.Params, Event: call.Event}
 		verdict, err := h.Queue.Add(pending)
 		if err != nil {
-			return h.errorResponse(peer, req.RequestID, "signer busy: "+err.Error(), encryption)
+			return nip46.Deny("signer busy: " + err.Error())
 		}
 		if verdict != Allow {
-			return h.errorResponse(peer, req.RequestID, "rejected", encryption)
+			return nip46.Deny("rejected")
 		}
 	case Allow:
 		if h.OnAutoApproved != nil {
-			h.OnAutoApproved(Pending{ID: req.RequestID, ClientKey: peer, Method: req.Method, Kind: kind, Params: req.Params, Event: signEvt, CreatedAt: time.Now()})
+			h.OnAutoApproved(Pending{ID: call.ID, ClientKey: peer, Method: call.Method, Kind: kind, Params: call.Params, Event: call.Event, CreatedAt: time.Now()})
 		}
 	}
-
-	return h.execute(req, peer, encryption, signEvt)
+	if call.Method == nip46.MethodConnect {
+		h.pair(call)
+	}
+	return nil
 }
 
-func (h *Handler) execute(req *nip46.RequestEvent, peer, encryption string, signEvt *nip01.Event) *nip01.Event {
-	switch req.Method {
-	case nip46.MethodConnect:
-		// connect's params, per NIP-46:
-		//   [signer-pubkey, secret, perms, client-metadata]
-		// The last two are how a bunker:// pairing -- where the client
-		// speaks first and the signer has no URI to read -- reports who
-		// it is and what it wants. Both are client-supplied and
-		// unauthenticated: the metadata is a display hint only, and the
-		// perms are a request that Store.Decide still rules on.
-		//
-		// Best-effort: a disk hiccup registering this pairing shouldn't
-		// fail the handshake response itself -- see Store.Pair's own doc
-		// comment.
-		meta := parseConnectMetadata(req.Params)
-		_ = h.Store.Pair(peer, meta.Name, meta.Url)
-		if len(req.Params) > 2 {
-			for _, g := range parsePerms(req.Params[2], time.Now()) {
-				_ = h.Store.Remember(peer, g)
+// pair registers an approved connect: the app's self-reported name/url (a
+// display hint only), the perms it asked for (still ruled on by
+// Store.Decide), then any staged GrantSpec. Best-effort: a disk hiccup
+// shouldn't fail the handshake itself.
+func (h *Handler) pair(call *bunker.Call) {
+	peer := call.Client
+	var name, url string
+	if call.Metadata != nil {
+		name, url = call.Metadata.Name, call.Metadata.Url
+	}
+	_ = h.Store.Pair(peer, name, url)
+	now := time.Now()
+	for _, g := range parsePerms(call.Perms, now) {
+		_ = h.Store.Remember(peer, g)
+	}
+	if spec := h.takePendingGrantSpec(); spec != nil {
+		for _, g := range spec.Resolve(now) {
+			_ = h.Store.Remember(peer, g)
+		}
+		if spec.Nickname != "" {
+			_, _ = h.Store.SetName(peer, spec.Nickname)
+		}
+	}
+}
+
+// decided runs after each request: it hands a signed event to OnSigned
+// and ends a session on logout, once the response is settled.
+func (h *Handler) decided(d bunker.Decision) {
+	if d.Allowed() {
+		switch d.Call.Method {
+		case nip46.MethodSignEvent:
+			if h.OnSigned != nil {
+				var ev nip01.Event
+				if err := json.Unmarshal([]byte(d.Result), &ev); err == nil {
+					h.OnSigned(d.Call.ID, &ev)
+				}
 			}
+		case nip46.MethodLogout:
+			// A client that logs out and comes back has to pair again.
+			_, _ = h.Store.Revoke(d.Call.Client)
 		}
-		// Apply whatever `ncli bunker connect --grants <file>` armed
-		// alongside this pairing's own secret (see SetPendingGrants) --
-		// nil (the common, unscripted case) makes this a no-op. Resolved
-		// against time.Now() here, not whenever the spec was loaded or
-		// the bunker:// URI was generated -- see GrantSpec.Resolve's own
-		// doc comment. Also best-effort, for the same reason as Pair
-		// above: this is the handshake's own success response, not the
-		// place to surface a disk-write failure.
-		if spec := h.takePendingGrantSpec(); spec != nil {
-			for _, g := range spec.Resolve(time.Now()) {
-				_ = h.Store.Remember(peer, g)
-			}
-			if spec.Nickname != "" {
-				_, _ = h.Store.SetName(peer, spec.Nickname)
-			}
-		}
-		return h.okResponse(peer, req.RequestID, "ack", encryption)
-
-	case nip46.MethodPing:
-		return h.okResponse(peer, req.RequestID, "pong", encryption)
-
-	case nip46.MethodGetPublicKey:
-		return h.okResponse(peer, req.RequestID, h.IdentityPub, encryption)
-
-	case nip46.MethodGetRelays:
-		return h.okResponse(peer, req.RequestID, h.relaysJSON(), encryption)
-
-	case nip46.MethodSwitchRelays:
-		// A compliant client sends this straight after connecting, so the
-		// signer can move the conversation onto relays it actually
-		// controls -- in the nostrconnect:// direction the client picked
-		// them, and they may be foreign to this signer entirely. Answering
-		// "unsupported method" left ncli's own relay list inert.
-		//
-		// The result is a JSON *array*, unlike get_relays' read/write map
-		// -- two different shapes in one spec, so relaysJSON is
-		// deliberately not reused here.
-		return h.okResponse(peer, req.RequestID, h.switchRelaysJSON(), encryption)
-
-	case nip46.MethodLogout:
-		// Per spec: acknowledge first, then drop the session. A client
-		// that logs out and comes back has to pair again.
-		resp := h.okResponse(peer, req.RequestID, "ack", encryption)
-		_, _ = h.Store.Revoke(peer)
-		return resp
-
-	case nip46.MethodSignEvent:
-		if err := signEvt.Sign(h.IdentityPriv); err != nil {
-			return h.errorResponse(peer, req.RequestID, "sign failed: "+err.Error(), encryption)
-		}
-		if h.OnSigned != nil {
-			h.OnSigned(req.RequestID, signEvt)
-		}
-		out, err := json.Marshal(signEvt)
-		if err != nil {
-			return h.errorResponse(peer, req.RequestID, "encode failed", encryption)
-		}
-		return h.okResponse(peer, req.RequestID, string(out), encryption)
-
-	case nip46.MethodNIP04Encrypt, nip46.MethodNIP04Decrypt, nip46.MethodNIP44Encrypt, nip46.MethodNIP44Decrypt:
-		result, err := h.crypto(req.Method, req.Params)
-		if err != nil {
-			return h.errorResponse(peer, req.RequestID, err.Error(), encryption)
-		}
-		return h.okResponse(peer, req.RequestID, result, encryption)
-
-	default:
-		return h.errorResponse(peer, req.RequestID, "unsupported method: "+req.Method, encryption)
 	}
-}
-
-// parseConnectMetadata reads connect's optional_client_metadata (params[3],
-// a JSON-stringified {name,url,image}). Never nil, so a caller can read
-// .Name without a guard. Absent, empty or malformed all yield the zero
-// value: losing a display name is not worth failing a pairing over, and
-// per NIP-46 this is a display hint that MUST NOT feed an authorization
-// decision anyway.
-func parseConnectMetadata(params []string) *nip46.Metadata {
-	meta := &nip46.Metadata{}
-	if len(params) < 4 || params[3] == "" {
-		return meta
+	if h.OnDecision != nil {
+		h.OnDecision(d)
 	}
-	if err := json.Unmarshal([]byte(params[3]), meta); err != nil {
-		return &nip46.Metadata{}
-	}
-	return meta
-}
-
-// switchRelaysJSON renders this signer's own relays as switch_relays'
-// result: a JSON array, or "null" when the signer has none to offer, which
-// the spec defines as "nothing to change".
-func (h *Handler) switchRelaysJSON() string {
-	if len(h.Relays) == 0 {
-		return "null"
-	}
-	b, err := json.Marshal(h.Relays)
-	if err != nil {
-		return "null"
-	}
-	return string(b)
-}
-
-func (h *Handler) relaysJSON() string {
-	m := make(map[string]map[string]bool, len(h.Relays))
-	for _, r := range h.Relays {
-		m[r] = map[string]bool{"read": true, "write": true}
-	}
-	b, err := json.Marshal(m)
-	if err != nil {
-		return "{}"
-	}
-	return string(b)
-}
-
-func (h *Handler) crypto(method string, params []string) (string, error) {
-	return nipcrypto.Do(method, h.IdentityPriv, params)
-}
-
-func (h *Handler) nip44ConversationKey(peerPubkeyHex string) ([]byte, error) {
-	return nipcrypto.ConversationKey(h.IdentityPriv, peerPubkeyHex)
-}
-
-func parseSignEventParams(params []string) (*nip01.Event, error) {
-	if len(params) < 1 {
-		return nil, errors.New("sign_event requires an event param")
-	}
-	var ev nip01.Event
-	if err := json.Unmarshal([]byte(params[0]), &ev); err != nil {
-		return nil, fmt.Errorf("malformed event JSON: %w", err)
-	}
-	return &ev, nil
-}
-
-func (h *Handler) okResponse(peer, requestID, result, encryption string) *nip01.Event {
-	ev, err := nip46.NewResponseEvent(h.IdentityPriv, peer, requestID, result, encryption)
-	if err != nil {
-		return nil
-	}
-	if err := ev.Sign(h.IdentityPriv); err != nil {
-		return nil
-	}
-	return ev
-}
-
-func (h *Handler) errorResponse(peer, requestID, msg, encryption string) *nip01.Event {
-	ev, err := nip46.NewErrorResponseEvent(h.IdentityPriv, peer, requestID, msg, encryption)
-	if err != nil {
-		return nil
-	}
-	if err := ev.Sign(h.IdentityPriv); err != nil {
-		return nil
-	}
-	return ev
 }

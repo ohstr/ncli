@@ -20,8 +20,8 @@ func TestNewSecret_UniqueAndHex(t *testing.T) {
 	if a == b {
 		t.Error("NewSecret() produced the same value twice")
 	}
-	if len(a) != secretByteLen*2 {
-		t.Errorf("len(secret) = %d, want %d (hex-encoded)", len(a), secretByteLen*2)
+	if len(a) != 32 {
+		t.Errorf("len(secret) = %d, want 32 (16 bytes, hex-encoded)", len(a))
 	}
 }
 

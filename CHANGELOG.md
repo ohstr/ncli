@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.0-rc.15]
+
+### Changed
+
+- `ncli bunker` and `ncli signer` now run on nmilat's shared NIP-46 code
+  (`nip46/bunker`, `nipLS`). Refusals sent to an app start with `denied: `
+  or `invalid: `, so a client can tell a refusal from a malformed request.
+
 ## [0.8.0-rc.14]
 
 ### Fixed

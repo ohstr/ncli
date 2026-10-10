@@ -1,30 +1,25 @@
 // Package bunker implements `ncli bunker`: a NIP-46 remote signer ("bunker").
-// The daemon (this file) holds the unlocked identity key, listens on one or
-// more relays for kind:24133 requests addressed to it, and dispatches them
-// (handler.go) against a remembered-permission policy (policy.go) and a
-// human approval queue (queue.go). See board.go/command.go for the TUI and
+// The daemon (this file) holds the unlocked identity key and runs nmilat's
+// NIP-46 relay signer (nip46/bunker); handler.go decides each request
+// against a remembered-permission policy (policy.go) and a human approval
+// queue (queue.go). See board.go/command.go for the TUI and
 // CLI surface, and ipc_server.go/ipc_client.go/spawn_unix.go for how a
 // terminal attaches to (or backgrounds) a running daemon.
 package bunker
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
-	"strings"
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/ohstr/ncli/cli/common"
 	"github.com/ohstr/nmilat/nip01"
-	"github.com/ohstr/nmilat/nip04"
-	"github.com/ohstr/nmilat/nip44"
 	"github.com/ohstr/nmilat/nip46"
+	"github.com/ohstr/nmilat/nip46/bunker"
 	relayclient "github.com/ohstr/nmilat/relay/client"
-	"github.com/ohstr/nmilat/utils"
 )
 
 // DaemonConfig is everything Daemon needs to start listening. Store/Queue
@@ -67,19 +62,15 @@ type DaemonConfig struct {
 	NostrconnectConfirmTimeout time.Duration
 }
 
-// Daemon owns the live relay connections and dispatches incoming NIP-46
-// requests through a Handler. Safe for concurrent use; Run blocks until
-// ctx is cancelled, so callers drive its lifetime the same way every other
-// ncli command does its own graceful shutdown -- signal.NotifyContext at
-// the top, ctx cancellation flowing down (see cli/bunker/command.go).
+// Daemon runs the signer (nmilat's nip46/bunker server, through Handler)
+// and keeps ncli's history, log and profile around it. Safe for
+// concurrent use; Run blocks until ctx is cancelled, so callers drive its
+// lifetime the same way every other ncli command does its own graceful
+// shutdown -- signal.NotifyContext at the top, ctx cancellation flowing
+// down (see cli/bunker/command.go).
 type Daemon struct {
 	cfg     DaemonConfig
 	handler *Handler
-
-	mu        sync.Mutex
-	conns     map[string]*relayclient.Connection // by relay URL string
-	attempted map[string]bool                    // by relay URL string -- true once runRelay's first dial for it has resolved (succeeded or failed) at least once; see RelayStatuses
-	wg        sync.WaitGroup
 
 	pairMu   sync.Mutex
 	pairWait map[string]chan struct{} // by client pubkey -- closed on that client's first request, so InitiateNostrconnect can tell a pairing the app actually picked up from one it only sent
@@ -116,8 +107,6 @@ const maxHistoryTail = 200
 func NewDaemon(cfg DaemonConfig) *Daemon {
 	d := &Daemon{
 		cfg:         cfg,
-		conns:       map[string]*relayclient.Connection{},
-		attempted:   map[string]bool{},
 		pairWait:    map[string]chan struct{}{},
 		historyTail: cfg.InitialHistory,
 	}
@@ -137,6 +126,8 @@ func NewDaemon(cfg DaemonConfig) *Daemon {
 	cfg.Queue.OnAdded(d.recordAdded)
 	d.handler.OnSigned = d.recordSignedEvent
 	d.handler.OnAutoApproved = d.recordAutoApproved
+	d.handler.OnDecision = d.decided
+	d.handler.Logf = d.log
 	return d
 }
 
@@ -474,276 +465,51 @@ func (d *Daemon) Run(ctx context.Context) error {
 	if len(d.cfg.Relays) == 0 {
 		return errors.New("bunker: no relays configured")
 	}
+	srv, err := d.handler.server()
+	if err != nil {
+		return fmt.Errorf("bunker: %w", err)
+	}
 
 	go d.cfg.Queue.Run(ctx, 30*time.Second, d.cfg.Store)
 	go d.fetchProfile(ctx)
 
-	for _, raw := range d.cfg.Relays {
-		u, err := url.Parse(raw)
-		if err != nil {
-			d.log("skipping invalid relay %q: %v", raw, err)
-			continue
-		}
-		d.wg.Add(1)
-		go func(u *url.URL) {
-			defer d.wg.Done()
-			d.runRelay(ctx, u)
-		}(u)
-	}
-
-	d.wg.Wait()
-	return nil
-}
-
-// requestFilter is the kind:24133 / #p:<me> filter every relay connection
-// subscribes on -- every NIP-46 request or response addressed to this
-// identity, regardless of which client sent it.
-func (d *Daemon) requestFilter() *nip01.SubscriptionFilterGroup {
-	return nip01.NewSubscriptionFilterGroup(&nip01.SubscriptionFilter{
-		Kinds: []int{nip46.KindRequest},
-		Tags:  map[string][]string{"p": {d.cfg.IdentityPub}},
-	})
-}
-
-// runRelay dials u, serves it until the connection drops or ctx is
-// cancelled, then reconnects with exponential backoff (capped at 30s) --
-// unless ctx is already done, in which case it returns instead of
-// reconnecting.
-func (d *Daemon) runRelay(ctx context.Context, u *url.URL) {
-	backoff := time.Second
-	for {
-		if ctx.Err() != nil {
-			return
-		}
-
-		conn, err := relayclient.Connect(ctx, u)
-		d.markAttempted(u.String())
-		if err != nil {
-			d.log("relay %s: connect failed: %v", u, err)
-			select {
-			case <-time.After(backoff):
-			case <-ctx.Done():
-				return
-			}
-			backoff = min(backoff*2, 30*time.Second)
-			continue
-		}
-		backoff = time.Second
-		d.log("relay %s: connected", u)
-
-		d.registerConn(u.String(), conn)
-		d.serveConn(ctx, conn)
-		d.unregisterConn(u.String())
-	}
+	return srv.Run(ctx)
 }
 
 // RelayStatus is whether one configured relay currently has a live
 // connection -- the "is this thing actually working" signal board.go's
-// IdentityBar shows next to the identity itself. A relay flips between
-// connected/disconnected over the daemon's lifetime as runRelay's own
-// backoff-and-reconnect loop runs; this always reflects the current
-// instant, not a sticky history.
-type RelayStatus struct {
-	URL       string `json:"url"`
-	Connected bool   `json:"connected"`
-	// Connecting is true only for the brief window between the daemon
-	// starting and this relay's very first dial attempt resolving (either
-	// way) -- never true again afterward, even while a later reconnect
-	// attempt is itself in flight. Exists so a caller (board.go's
-	// AlertBar/IdentityBar) can tell "still trying for the first time,
-	// no verdict yet" apart from "tried and it's actually down" instead
-	// of both looking identical (Connected == false) the instant the
-	// daemon starts, before its relay goroutines have even had a chance
-	// to run -- see runRelay/markAttempted.
-	Connecting bool `json:"connecting,omitempty"`
-}
+// IdentityBar shows next to the identity itself. Connecting is true only
+// until that relay's first dial attempt resolves.
+type RelayStatus = bunker.RelayStatus
 
 // RelayStatuses reports live/dead for every configured relay, in
-// configured order. d.conns (registerConn/unregisterConn, driven by
-// runRelay) is the single source of truth for what's currently connected;
-// d.attempted (markAttempted) is the source for Connecting.
+// configured order. A relay the signer hasn't started dialing yet reads as
+// Connecting.
 func (d *Daemon) RelayStatuses() []RelayStatus {
-	d.mu.Lock()
-	defer d.mu.Unlock()
+	live := map[string]RelayStatus{}
+	if srv, err := d.handler.server(); err == nil {
+		for _, st := range srv.RelayStatuses() {
+			live[st.URL] = st
+		}
+	}
 	statuses := make([]RelayStatus, 0, len(d.cfg.Relays))
 	for _, raw := range d.cfg.Relays {
-		_, connected := d.conns[raw]
-		statuses = append(statuses, RelayStatus{
-			URL:        raw,
-			Connected:  connected,
-			Connecting: !connected && !d.attempted[raw],
-		})
+		st, ok := live[raw]
+		if !ok {
+			st = RelayStatus{URL: raw, Connecting: true}
+		}
+		st.URL = raw
+		statuses = append(statuses, st)
 	}
 	return statuses
 }
 
-func (d *Daemon) registerConn(key string, conn *relayclient.Connection) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	d.conns[key] = conn
-}
-
-// markAttempted records that key's first dial attempt (runRelay's own
-// relayclient.Connect call) has resolved, successfully or not -- see
-// RelayStatus.Connecting's own doc comment for why this matters.
-func (d *Daemon) markAttempted(key string) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	d.attempted[key] = true
-}
-
-func (d *Daemon) unregisterConn(key string) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	delete(d.conns, key)
-}
-
-// serveConn subscribes on conn (using SubscribeWithID + Events, not
-// Subscribe -- Subscribe's channel closes at EOSE, which would silently
-// stop delivery of new live requests the moment the relay finishes
-// replaying any stored backlog; SubscribeWithID's subscription is never
-// registered for that EOSE-triggered auto-close, so Events keeps streaming
-// indefinitely, which is what a signer that must listen forever needs) and
-// dispatches events until conn drops or ctx is cancelled. Responses are
-// sent fire-and-forget (Connection.Send, not Publish -- Publish reads from
-// the same shared incoming channel Events() already drains, and running
-// both concurrently on one Connection races for the same messages); a
-// client that gets no timely response is expected to resend with the same
-// request id, which Queue's de-dup (or an already-persisted grant)
-// resolves immediately without re-prompting a human twice.
-func (d *Daemon) serveConn(ctx context.Context, conn *relayclient.Connection) {
-	defer conn.Close()
-
-	subID := uuid.NewString()
-	conn.SubscribeWithID(subID, d.requestFilter())
-	events := conn.Events(subID)
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case err, ok := <-conn.Errors():
-			if !ok {
-				return
-			}
-			d.log("relay %s: %v", conn.Relay(), err)
-			if errors.Is(err, relayclient.ErrConnectionClosed) {
-				return
-			}
-		case ev, ok := <-events:
-			if !ok {
-				return
-			}
-			go d.handleIncoming(conn, ev.Event)
-		}
-	}
-}
-
-// handleIncoming verifies, decrypts, and dispatches one raw event received
-// on conn. Never logs decrypted content or key material -- only the
-// method/kind/pubkey/request-id shape already visible in Pending/log
-// lines: a headless daemon's log file is not a redaction layer.
-//
-// parseRequestEventFallback re-attempts decrypting ev as a NIP-46 request
-// using whichever encryption scheme ParseRequestEvent (nip46) did NOT
-// actually attempt (tried is exactly what handleIncoming computed nip46
-// would have used -- the request's "encryption" tag verbatim, or
-// nip46.EncryptionNIP04 if absent). Defaults to NIP-44V2 unless tried was
-// already an exact match for it: nip46's tag-reading is a raw string
-// comparison against its own "nip04"/"nip44_v2" constants with no
-// normalization, so a tag of "" (missing), "nip44" (the common real-world
-// convention -- no "_v2" suffix), or anything else unrecognized all still
-// mean "nip46 did NOT actually try NIP-44V2," not "so it must have been
-// NIP-04." The narrower case -- tried was already exactly nip44_v2 and
-// still failed (corrupt content, wrong key, ...) -- falls back to NIP-04
-// as the only other scheme, mostly so genuinely bad data still gets a
-// clean try-and-fail rather than an unreachable branch.
-//
-// Duplicates a handful of lines of decrypt/unmarshal logic nip46 keeps
-// unexported, the same reason nipcrypto.ConversationKey
-// exists. Returns the scheme that actually
-// decrypted successfully alongside the parsed request, so handleIncoming's
-// response goes back encrypted the way the client can actually read it --
-// not whatever nip46 originally guessed.
-func (d *Daemon) parseRequestEventFallback(ev *nip01.Event, tried string) (*nip46.RequestEvent, string, error) {
-	fallback := nip46.EncryptionNIP44V2
-	if tried == nip46.EncryptionNIP44V2 {
-		fallback = nip46.EncryptionNIP04
-	}
-
-	var plaintext string
-	var err error
-	if fallback == nip46.EncryptionNIP44V2 {
-		var key []byte
-		if key, err = d.handler.nip44ConversationKey(ev.PubKey); err == nil {
-			plaintext, err = nip44.Decrypt(ev.Content, key)
-		}
-	} else {
-		plaintext, err = nip04.Decrypt(ev.Content, ev.PubKey, d.cfg.IdentityPriv)
-	}
-	if err != nil {
-		return nil, "", fmt.Errorf("fallback decrypt (%s): %w", fallback, err)
-	}
-
-	var req nip46.Request
-	if err := json.Unmarshal([]byte(plaintext), &req); err != nil {
-		return nil, "", fmt.Errorf("fallback unmarshal (%s): %w", fallback, err)
-	}
-	return &nip46.RequestEvent{Event: ev, Request: req}, fallback, nil
-}
-
-func (d *Daemon) handleIncoming(conn *relayclient.Connection, ev *nip01.Event) {
-	if err := ev.Verify(); err != nil {
-		d.log("dropped unverifiable event %s: %v", shortHex(ev.ID), err)
-		return
-	}
-
-	encryption := nip46.EncryptionNIP04
-	if enc, err := utils.FindUniqueEventTagValue(ev.Tags, "encryption"); err == nil && enc != "" {
-		encryption = enc
-	}
-
-	req, err := nip46.ParseRequestEvent(ev, d.cfg.IdentityPriv)
-	if err != nil {
-		// Some real-world clients send NIP-44 ciphertext without tagging
-		// the event "encryption" (or, less commonly, the reverse) --
-		// ParseRequestEvent picks exactly one scheme from the tag's
-		// presence/absence and never retries (see its own doc comment),
-		// so a tag/ciphertext mismatch otherwise drops a perfectly valid
-		// request. Try the scheme it didn't, once, before giving up.
-		fallbackReq, fallbackEncryption, fallbackErr := d.parseRequestEventFallback(ev, encryption)
-		if fallbackErr != nil {
-			d.log("dropped unparseable request from %s: %v", d.cfg.Store.Label(ev.PubKey), err)
-			return
-		}
-		req, encryption = fallbackReq, fallbackEncryption
-	}
-
-	// A NIP-46 request and response share one event kind, distinguished
-	// only by which JSON fields the decrypted content has (see nip46.go's
-	// KindRequest doc comment) -- ParseRequestEvent still "succeeds" on a
-	// response's shape, just with an empty Method, since the JSON simply
-	// doesn't have a "method" key. This daemon never sends a request of
-	// its own, so nothing is ever waiting on a response: drop it rather
-	// than handing Handler an empty method.
-	if req.Method == "" {
-		return
-	}
-
-	// Any request at all is proof the client read our connect response and
-	// considers itself paired -- see awaitFirstRequest.
-	d.notifyFirstRequest(ev.PubKey)
-
-	d.log("request method=%s from=%s id=%s", req.Method, d.cfg.Store.Label(ev.PubKey), req.RequestID)
-
-	resp := d.handler.Handle(req, encryption)
-	if resp == nil {
-		d.log("failed to build a response for request %s", req.RequestID)
-		return
-	}
-	if !conn.Send(resp) {
-		d.log("relay %s: connection closed, dropped response to %s", conn.Relay(), req.RequestID)
-	}
+// decided logs every request (method, sender and id only -- never content
+// or key material: a headless daemon's log file is not a redaction layer)
+// and confirms a nostrconnect pairing on the app's first request.
+func (d *Daemon) decided(dec bunker.Decision) {
+	d.notifyFirstRequest(dec.Call.Client)
+	d.log("request method=%s from=%s id=%s", dec.Call.Method, d.cfg.Store.Label(dec.Call.Client), dec.Call.ID)
 }
 
 // awaitFirstRequest blocks until pubkey sends this daemon any NIP-46
@@ -778,9 +544,7 @@ func (d *Daemon) awaitFirstRequest(ctx context.Context, pubkey string, timeout t
 }
 
 // notifyFirstRequest releases whichever awaitFirstRequest is watching
-// pubkey, if any. Closing (rather than sending) makes it idempotent: a
-// client that fires several requests at once still only resolves the one
-// waiter, and a request arriving with nobody waiting is a no-op.
+// pubkey, if any. Closing (rather than sending) makes it idempotent.
 func (d *Daemon) notifyFirstRequest(pubkey string) {
 	d.pairMu.Lock()
 	ch, ok := d.pairWait[pubkey]
@@ -793,69 +557,6 @@ func (d *Daemon) notifyFirstRequest(pubkey string) {
 	}
 }
 
-// connectionFor returns the daemon's existing connection to relayURL, or
-// dials and registers a new one (serving it under the same lifetime as
-// every other relay connection) if it isn't already connected -- used by
-// InitiateNostrconnect when the nostrconnect:// URI's relay isn't one of
-// the daemon's own configured relays.
-func (d *Daemon) connectionFor(ctx context.Context, relayURL string) (*relayclient.Connection, error) {
-	d.mu.Lock()
-	conn, ok := d.conns[relayURL]
-	d.mu.Unlock()
-	if ok {
-		return conn, nil
-	}
-
-	u, err := url.Parse(relayURL)
-	if err != nil {
-		return nil, fmt.Errorf("invalid relay %q: %w", relayURL, err)
-	}
-
-	// The dial gets its own cancellable context. runRelay reconnects with
-	// backoff until its context ends, which is what a configured relay
-	// wants and an ad-hoc one does not: a relay named only by some pairing
-	// URI that never comes up would otherwise keep a goroutine retrying a
-	// dead host for the daemon's whole life. A URI listing four relays
-	// leaves one such loop per dead entry, every time one is pasted.
-	//
-	// Cancelled unless this returns a live connection -- past that point
-	// the relay is a real one the client may send requests on, so its
-	// reconnect loop belongs to the daemon's lifetime like any other.
-	dialCtx, stopDialing := context.WithCancel(ctx)
-	connected := false
-	defer func() {
-		if !connected {
-			stopDialing()
-		}
-	}()
-
-	d.wg.Add(1)
-	go func() {
-		defer d.wg.Done()
-		d.runRelay(dialCtx, u)
-	}()
-
-	// runRelay registers the connection asynchronously; poll briefly
-	// rather than adding a second signaling path just for this one-time
-	// ad-hoc case.
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		d.mu.Lock()
-		conn, ok := d.conns[relayURL]
-		d.mu.Unlock()
-		if ok {
-			connected = true
-			return conn, nil
-		}
-		select {
-		case <-time.After(50 * time.Millisecond):
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
-	}
-	return nil, fmt.Errorf("timed out connecting to relay %s", relayURL)
-}
-
 // NewBunkerPairing generates a fresh single-use secret and arms the
 // handler to expect it on the next "connect" request -- the bunker://
 // flow, where the client speaks first. Returns the bunker:// URI to
@@ -865,13 +566,10 @@ func (d *Daemon) NewBunkerPairing() (string, error) {
 }
 
 // NewBunkerPairingWithGrants is NewBunkerPairing plus `ncli bunker connect
-// --grants <file>`'s own hook: spec is resolved and applied to whichever
-// pubkey ends up presenting the freshly generated secret (handler.go's
-// execute, on that "connect" request's own success), not to any pubkey
-// known now -- the whole reason this is a separate arm-then-apply step
-// instead of an immediate GrantSpec.Resolve/Store.Remember call is that
-// the bunker:// direction never knows the app's pubkey until it actually
-// connects. nil spec is exactly NewBunkerPairing's own behavior.
+// --grants <file>`'s own hook: spec is applied to whichever pubkey ends up
+// presenting the freshly generated secret, since the bunker:// direction
+// never knows the app's pubkey until it actually connects. nil spec is
+// exactly NewBunkerPairing's own behavior.
 func (d *Daemon) NewBunkerPairingWithGrants(spec *GrantSpec) (string, error) {
 	secret, err := NewSecret()
 	if err != nil {
@@ -887,56 +585,36 @@ func (d *Daemon) NewBunkerPairingWithGrants(spec *GrantSpec) (string, error) {
 // nostrconnectConfirmTimeout bounds how long InitiateNostrconnect waits
 // for the paired app to make its first request. Only a reporting nicety --
 // the pairing is already registered and usable when this elapses (see
-// awaitFirstRequest), so it is deliberately shorter than the old
-// request/echo handshake's 60s, which callers had to block on for a
-// verdict.
+// awaitFirstRequest).
 const nostrconnectConfirmTimeout = 30 * time.Second
 
-// InitiateNostrconnect implements the nostrconnect:// flow. Per NIP-46 the
-// signer answers the URI by publishing a connect *response* whose result is
-// the URI's own secret, to the client pubkey, on the relays the URI names.
-// The client recognizes the pairing by that secret and learns the signer's
-// pubkey from the response's author; it sends nothing back, so there is no
-// handshake to await -- see awaitFirstRequest for how this reports whether
+// InitiateNostrconnect implements the nostrconnect:// flow: the signer
+// answers the URI with a connect response carrying its secret, on the
+// relays the URI names (bunker.Server.AcceptNostrconnectSchema). The client
+// sends nothing back -- see awaitFirstRequest for how this reports whether
 // the app actually picked the pairing up.
 func (d *Daemon) InitiateNostrconnect(ctx context.Context, schema *nip46.NostrconnectSchema) error {
 	return d.InitiateNostrconnectWithGrants(ctx, schema, nil)
 }
 
 // InitiateNostrconnectWithGrants is InitiateNostrconnect plus `ncli bunker
-// connect <uri> --grants <file>`'s own hook. Unlike the bunker:// direction
-// (NewBunkerPairingWithGrants), the app's pubkey is already known here --
-// schema.ClientPublickey, straight from the nostrconnect:// URI it
-// generated -- so spec is resolved and applied directly, right alongside
-// the existing Store.Pair call below, rather than staged on the handler
-// for a later request to consume.
+// connect <uri> --grants <file>`'s own hook. The app's pubkey is already
+// known here, so spec is applied directly alongside Store.Pair.
 func (d *Daemon) InitiateNostrconnectWithGrants(ctx context.Context, schema *nip46.NostrconnectSchema, spec *GrantSpec) error {
-	// The response id has no request to correlate with -- this is the one
-	// NIP-46 message that answers a URI rather than an event. The secret
-	// is the only token both sides already share, so it doubles as the id:
-	// clients key off the result field and ignore the id, and it travels
-	// inside the NIP-44 ciphertext either way.
-	ev, err := nip46.NewResponseEvent(d.cfg.IdentityPriv, schema.ClientPublickey,
-		schema.Secret, schema.Secret, nip46.EncryptionNIP44V2)
+	srv, err := d.handler.server()
 	if err != nil {
 		return fmt.Errorf("nostrconnect: %w", err)
 	}
-	if err := ev.Sign(d.cfg.IdentityPriv); err != nil {
+	if err := srv.AcceptNostrconnectSchema(ctx, schema); err != nil {
+		if errors.Is(err, bunker.ErrNoRelay) {
+			return fmt.Errorf("nostrconnect: none of the URI's relays could be reached (%v): %w", err, ErrNoRelayReachable)
+		}
 		return fmt.Errorf("nostrconnect: %w", err)
 	}
 
-	sent, tried := d.publishConnectResponse(ctx, schema, ev)
-	if sent == 0 {
-		return fmt.Errorf("nostrconnect: none of the URI's relays could be reached (tried %s): %w",
-			strings.Join(tried, ", "), ErrNoRelayReachable)
-	}
-
 	// Register the pairing in Trusted Apps. The name/URL are the app's own
-	// self-reported identity, straight from the nostrconnect:// URI it
-	// generated -- unauthenticated, and per NIP-46 a display hint only,
-	// never an input to an authorization decision. ParseNostrconnect
-	// always sets Metadata, but the struct is public and a caller may well
-	// build one by hand, so this doesn't assume it.
+	// self-reported identity -- unauthenticated, and per NIP-46 a display
+	// hint only, never an input to an authorization decision.
 	var appName, appURL string
 	if schema.Metadata != nil {
 		appName, appURL = schema.Metadata.Name, schema.Metadata.Url
@@ -950,16 +628,10 @@ func (d *Daemon) InitiateNostrconnectWithGrants(ctx context.Context, schema *nip
 	for _, g := range parsePerms(schema.Perms, now) {
 		_ = d.cfg.Store.Remember(schema.ClientPublickey, g)
 	}
-	// Resolved against time.Now() here, not whenever spec was loaded --
-	// see GrantSpec.Resolve's own doc comment.
 	if spec != nil {
 		for _, g := range spec.Resolve(now) {
 			_ = d.cfg.Store.Remember(schema.ClientPublickey, g)
 		}
-		// The spec's own nickname wins over the app's self-reported name
-		// -- same priority labelFor already gives Nickname over AppName
-		// for every other pairing, just applied proactively here instead
-		// of waiting for a human to set it later via 'n'/`sessions rename`.
 		if spec.Nickname != "" {
 			_, _ = d.cfg.Store.SetName(schema.ClientPublickey, spec.Nickname)
 		}
@@ -976,64 +648,6 @@ func (d *Daemon) InitiateNostrconnectWithGrants(ctx context.Context, schema *nip
 		d.log("sent the nostrconnect pairing to %s; waiting for its first request", label)
 	}
 	return nil
-}
-
-// publishConnectResponse sends ev to every relay the URI names, and
-// reports how many took it along with the full list it tried.
-//
-// Relays are dialed concurrently and each one is published to the moment
-// it comes up, rather than gathering every connection first. connectionFor
-// gives a relay up to five seconds, so waiting for the whole set would
-// make the pairing as slow as its worst relay: a URI listing four, with
-// the first three down, would take fifteen seconds to pair on the fourth,
-// and even one dead relay would delay a pairing the live ones could have
-// completed immediately. This way the client sees the response as soon as
-// the fastest relay is ready.
-//
-// A client subscribes to all the relays it listed and takes whichever copy
-// arrives first, so publishing to all of them is redundancy, not
-// duplication. An unreachable one is logged and skipped, the way every
-// other multi-target operation in ncli treats one; all of them failing is
-// the caller's error to raise.
-func (d *Daemon) publishConnectResponse(ctx context.Context, schema *nip46.NostrconnectSchema, ev *nip01.Event) (sent int, tried []string) {
-	relays := schema.Relays
-
-	seen := map[string]bool{}
-	results := make(chan bool, len(relays))
-	pending := 0
-	for _, relay := range relays {
-		raw := relay.String()
-		// A URI may name the same relay twice; one connection is enough,
-		// and connectionFor would otherwise race itself over d.conns.
-		if seen[raw] {
-			continue
-		}
-		seen[raw] = true
-		tried = append(tried, raw)
-		pending++
-
-		go func() {
-			conn, err := d.connectionFor(ctx, raw)
-			if err != nil {
-				d.log("nostrconnect: relay %s: %v", raw, err)
-				results <- false
-				return
-			}
-			if !conn.Send(ev) {
-				d.log("nostrconnect: relay %s: connection closed before the connect response went out", raw)
-				results <- false
-				return
-			}
-			results <- true
-		}()
-	}
-
-	for range pending {
-		if <-results {
-			sent++
-		}
-	}
-	return sent, tried
 }
 
 // shortHex renders a hex id/pubkey as its first 8 characters -- the same

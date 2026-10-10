@@ -130,28 +130,15 @@ func TestHandle_Connect_SecretMatch_Approved(t *testing.T) {
 
 func TestHandle_Connect_ExpiredSecretRejected(t *testing.T) {
 	h, signerPub, _ := newTestHandler(t)
+	// Arm the secret already expired rather than sleeping PairingSecretTTL
+	// (5 minutes) in a test -- simulates "nobody connected in time".
+	h.pairingSecretTTL = -time.Second
 	h.SetPendingSecret("correct-secret")
-	// Reach past SetPendingSecret's own TTL directly rather than sleeping
-	// PairingSecretTTL (5 minutes) in a test -- simulates "nobody connected
-	// in time" without actually waiting for it.
-	h.mu.Lock()
-	h.pendingSecretExpiresAt = time.Now().Add(-time.Second)
-	h.mu.Unlock()
 
 	req := buildRequest(t, signerPub, nip46.MethodConnect, []string{signerPub, "correct-secret"})
 	resp := parseResponse(t, h.Handle(req, nip46.EncryptionNIP04))
 	if resp.Error == "" {
 		t.Error("expected an error response for a secret past its expiry, even though it's otherwise correct")
-	}
-
-	// The expired secret must not linger to be matched by some other stray
-	// request either -- takePendingSecretIfMatches clears it once found
-	// expired.
-	h.mu.Lock()
-	stillSet := h.pendingSecret != ""
-	h.mu.Unlock()
-	if stillSet {
-		t.Error("expired secret was not cleared")
 	}
 }
 

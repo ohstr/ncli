@@ -14,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ohstr/ncli/client/nipcrypto"
 	"github.com/ohstr/nmilat/nip01"
 	"github.com/ohstr/nmilat/nip19"
 	"github.com/ohstr/nmilat/nip46"
@@ -166,18 +165,22 @@ func TestServerRoundTrip(t *testing.T) {
 		t.Fatalf("signed event: %v, pubkey %s", err, ev.PubKey)
 	}
 
-	for _, enc := range []struct{ encrypt, decrypt string }{
-		{nip46.MethodNIP44Encrypt, nip46.MethodNIP44Decrypt},
-		{nip46.MethodNIP04Encrypt, nip46.MethodNIP04Decrypt},
+	friendKey, err := nip46.NewLocalKey(friendPriv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, enc := range []struct{ scheme, encrypt, decrypt string }{
+		{nip46.EncryptionNIP44V2, nip46.MethodNIP44Encrypt, nip46.MethodNIP44Decrypt},
+		{nip46.EncryptionNIP04, nip46.MethodNIP04Encrypt, nip46.MethodNIP04Decrypt},
 	} {
 		ct, err := c.Call(ctx, enc.encrypt, npub(t, friend), "hi friend")
 		if err != nil {
 			t.Fatal(err)
 		}
-		if pt, err := nipcrypto.Do(enc.decrypt, friendPriv, []string{pub, ct}); err != nil || pt != "hi friend" {
+		if pt, err := friendKey.Decrypt(ctx, enc.scheme, pub, ct); err != nil || pt != "hi friend" {
 			t.Fatalf("%s: friend decrypts %q, %v", enc.encrypt, pt, err)
 		}
-		reply, _ := nipcrypto.Do(enc.encrypt, friendPriv, []string{pub, "hi back"})
+		reply, _ := friendKey.Encrypt(ctx, enc.scheme, pub, "hi back")
 		if pt, err := c.Call(ctx, enc.decrypt, friend, reply); err != nil || pt != "hi back" {
 			t.Fatalf("%s = %q, %v", enc.decrypt, pt, err)
 		}

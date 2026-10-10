@@ -19,7 +19,6 @@ import (
 	"github.com/ohstr/ncli/cli/common"
 	"github.com/ohstr/nmilat/nip01"
 	"github.com/ohstr/nmilat/nip04"
-	"github.com/ohstr/nmilat/nip44"
 	"github.com/ohstr/nmilat/nip46"
 	relayclient "github.com/ohstr/nmilat/relay/client"
 	"github.com/ohstr/nmilat/utils"
@@ -281,11 +280,11 @@ func (c *testNIP46Client) send(signerPub, method string, params []string, opts s
 
 		var ciphertext string
 		if encryption == nip46.EncryptionNIP44V2 {
-			key, err := (&Handler{IdentityPriv: c.priv}).nip44ConversationKey(signerPub)
+			key, err := nip46.NewLocalKey(c.priv)
 			if err != nil {
 				c.t.Fatal(err)
 			}
-			ciphertext, err = nip44.Encrypt(string(plaintext), key)
+			ciphertext, err = key.Encrypt(context.Background(), nip46.EncryptionNIP44V2, signerPub, string(plaintext))
 			if err != nil {
 				c.t.Fatal(err)
 			}
@@ -1467,12 +1466,9 @@ func TestDaemon_RelayStatuses(t *testing.T) {
 // startup-race fix directly (board.go's AlertBar/formatRelayStatuses):
 // RelayStatuses must report Connecting=true for a relay that hasn't had
 // its first dial attempt resolve yet -- e.g. the very first Update a
-// freshly Init'd AlertBar runs, synchronously, at the same instant
-// Daemon.Run has only just spawned its runRelay goroutines and none of
-// them have dialed anything yet -- and Connecting=false again the moment
-// markAttempted fires for it, regardless of whether that attempt
-// succeeded. Exercises markAttempted directly rather than through a real
-// dial so this is deterministic, not timing-dependent.
+// freshly Init'd AlertBar runs, before Daemon.Run has dialed anything.
+// The flip back to false is nmilat's (nip46/bunker), covered by
+// TestDaemon_RelayStatuses against a real and a dead relay.
 func TestDaemon_RelayStatuses_ConnectingUntilFirstAttemptResolves(t *testing.T) {
 	signerPub, err := utils.GetPublicKey(testSignerPriv)
 	if err != nil {
@@ -1498,19 +1494,6 @@ func TestDaemon_RelayStatuses_ConnectingUntilFirstAttemptResolves(t *testing.T) 
 		}
 		if !s.Connecting {
 			t.Errorf("status %+v: want Connecting=true before any dial attempt has resolved", s)
-		}
-	}
-
-	// relayA's first attempt resolves (as a failure, same as
-	// runRelay would report on a real dial error) -- only it should
-	// leave the "still trying for the first time" state; relayB is
-	// untouched and must still read as Connecting.
-	daemon.markAttempted(relayA)
-
-	for _, s := range daemon.RelayStatuses() {
-		wantConnecting := s.URL != relayA
-		if s.Connecting != wantConnecting {
-			t.Errorf("status %+v: Connecting = %v, want %v", s, s.Connecting, wantConnecting)
 		}
 	}
 }

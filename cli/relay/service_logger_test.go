@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/ohstr/nmilat/nip11"
 	"github.com/ohstr/nmilat/relay"
@@ -75,6 +76,12 @@ func TestNewServer_WiresLoggerIntoSDK(t *testing.T) {
 
 	s := NewServer(store, nil)
 	t.Cleanup(s.Stop)
+
+	// serve reads log.Logger on its own goroutine; wait for that read
+	// (via buf's lock) so the cleanup restoring log.Logger can't race it.
+	for i := 0; i < 200 && !strings.Contains(buf.String(), "listening..."); i++ {
+		time.Sleep(10 * time.Millisecond)
+	}
 
 	if !strings.Contains(buf.String(), "nip11.url is not set") {
 		t.Errorf("log output = %q, want the SDK's nip11.url warning to reach the configured logger", buf.String())

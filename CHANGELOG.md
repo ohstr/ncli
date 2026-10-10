@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.8.0-rc.15]
+
+A Go 1.26.9 build with nine standard-library security fixes, and clearer
+bunker refusals.
+
+### Security
+
+- Builds with Go 1.26.9, which fixes nine standard-library vulnerabilities in
+  `net/http`, `crypto/tls` and `net/textproto`.
+  ([#134](https://github.com/ohstr/ncli/pull/134))
+
+### Changed
+
+- Starts refusals from `ncli bunker` with `denied: ` or `invalid: `, so an
+  app can tell a refusal from a malformed request.
+  ([#135](https://github.com/ohstr/ncli/pull/135))
+
+### Fixed
+
+- Fixes `ncli bunker` history showing a quickly approved request as expired
+  after a restart. ([#135](https://github.com/ohstr/ncli/pull/135))
+
 ## [0.8.0-rc.14]
 
 A relay performance fix.

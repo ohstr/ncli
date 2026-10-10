@@ -117,7 +117,9 @@ func LoadEventLog(path string) (*EventLog, []HistoryEntry, error) {
 	for _, e := range entries {
 		switch e.Type {
 		case walAdded:
-			if e.Pending != nil {
+			// Queue.Add fires OnAdded after releasing its lock, so a fast
+			// Resolve can land first; an Added after its own Resolved is stale.
+			if e.Pending != nil && history[e.Pending.ID] == nil {
 				pending[e.Pending.ID] = *e.Pending
 			}
 		case walResolved:

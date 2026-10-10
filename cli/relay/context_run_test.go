@@ -1,7 +1,6 @@
 package relay
 
 import (
-	"bytes"
 	"encoding/json"
 	"net"
 	"os"
@@ -50,7 +49,7 @@ func waitForPort(t *testing.T, addr string, timeout time.Duration) {
 // discarded either way).
 type runningRelay struct {
 	cmd    *exec.Cmd
-	Stderr *bytes.Buffer
+	Stderr *syncBuffer
 }
 
 func (r *runningRelay) stop() {
@@ -71,7 +70,7 @@ func startRelay(t *testing.T, bin string, env []string, cwd string, extraArgs ..
 	cmd := exec.Command(bin, args...)
 	cmd.Env = env
 	cmd.Dir = cwd
-	var stderr bytes.Buffer
+	var stderr syncBuffer
 	cmd.Stderr = &stderr
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("failed to start relay: %v", err)

@@ -17,6 +17,11 @@ bunker refusals.
   app can tell a refusal from a malformed request.
   ([#135](https://github.com/ohstr/ncli/pull/135))
 
+### Fixed
+
+- Fixes `ncli bunker` history showing a quickly approved request as expired
+  after a restart. ([#135](https://github.com/ohstr/ncli/pull/135))
+
 ## [0.8.0-rc.14]
 
 A relay performance fix.

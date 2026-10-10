@@ -198,6 +198,38 @@ func TestLoadEventLog_SelfHealsInterruptedPending(t *testing.T) {
 	}
 }
 
+// TestLoadEventLog_AddedAfterResolvedKeepsVerdict covers a request
+// resolved before Queue.Add's OnAdded hook ran, which writes Resolved
+// before Added: the reload must keep the real verdict, not synthesize an
+// expired deny.
+func TestLoadEventLog_AddedAfterResolvedKeepsVerdict(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "events.wal")
+
+	log, _, err := LoadEventLog(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().Truncate(time.Second)
+	if err := log.AppendResolved(HistoryEntry{ID: "req-1", ClientKey: "app1", Method: "sign_event", Kind: 1, CreatedAt: now, ResolvedAt: now, Verdict: Allow}); err != nil {
+		t.Fatal(err)
+	}
+	if err := log.AppendAdded(Pending{ID: "req-1", ClientKey: "app1", Method: "sign_event", Kind: 1, CreatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	if err := log.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reloaded, history, err := LoadEventLog(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = reloaded.Close() }()
+	if len(history) != 1 || history[0].Verdict != Allow || history[0].Expired {
+		t.Fatalf("history = %+v, want the single req-1/Allow entry", history)
+	}
+}
+
 // TestLoadEventLog_CompactsToMaxHistoryTail guards the bound: a log with
 // more resolved entries than maxHistoryTail is trimmed to the most recent
 // maxHistoryTail on load, and the file itself is rewritten to match (not

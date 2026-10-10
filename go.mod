@@ -1,6 +1,6 @@
 module github.com/ohstr/ncli
 
-go 1.26.8
+go 1.26.9
 
 require (
 	github.com/btcsuite/btcd/btcec/v2 v2.3.4
@@ -84,7 +84,7 @@ require (
 	github.com/atotto/clipboard v0.1.4
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/ebitengine/oto/v3 v3.3.3
-	github.com/ohstr/nmilat v0.5.0-rc.13.0.20261009214042-d9edb0603648
+	github.com/ohstr/nmilat v0.5.0-rc.14
 	github.com/pion/opus v0.1.0
 	github.com/pion/rtcp v1.2.18
 	github.com/pion/rtp v1.10.5

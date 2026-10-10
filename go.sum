@@ -97,8 +97,8 @@ github.com/muesli/cancelreader v0.2.2 h1:3I4Kt4BQjOR54NavqnDogx/MIoWBFa0StPA8ELU
 github.com/muesli/cancelreader v0.2.2/go.mod h1:3XuTXfFS2VjM+HTLZY9Ak0l6eUKfijIfMUZ4EgX0QYo=
 github.com/muesli/termenv v0.16.0 h1:S5AlUN9dENB57rsbnkPyfdGuWIlkmzJjbFf0Tf5FWUc=
 github.com/muesli/termenv v0.16.0/go.mod h1:ZRfOIKPFDYQoDFF4Olj7/QJbW60Ol/kL1pU3VfY/Cnk=
-github.com/ohstr/nmilat v0.5.0-rc.14 h1:HwtkG3IkzkYVGwRn489q3/X56QtHZV2YtR8Gg0vXQug=
-github.com/ohstr/nmilat v0.5.0-rc.14/go.mod h1:xZZnShpMN99a2oJM2prGDnM+79NQ1z1hDf//aGPjYrk=
+github.com/ohstr/nmilat v0.5.0-rc.16 h1:+JrzmM2GxmH8u1nzBJNpf4XtghM1HqM6a/X8XSEvwf0=
+github.com/ohstr/nmilat v0.5.0-rc.16/go.mod h1:xZZnShpMN99a2oJM2prGDnM+79NQ1z1hDf//aGPjYrk=
 github.com/pelletier/go-toml/v2 v2.2.3 h1:YmeHyLY8mFWbdkNWwpr+qIL2bEqT0o95WSdkNHvL12M=
 github.com/pelletier/go-toml/v2 v2.2.3/go.mod h1:MfCQTFTvCcUyyvvwm1+G6H/jORL20Xlb6rzQu9GuUkc=
 github.com/pion/datachannel v1.6.3 h1:HZAYLpunVI0xi057ZiANl558d0uSpomcWw4UEPz3qXs=

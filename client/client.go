@@ -21,6 +21,7 @@ import (
 	"github.com/ohstr/ncli/cli/common"
 	"github.com/ohstr/ncli/client/tui"
 	"github.com/ohstr/nmilat/nip01"
+	relaystore "github.com/ohstr/nmilat/relay"
 	relayclient "github.com/ohstr/nmilat/relay/client"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/term"
@@ -165,7 +166,7 @@ func mergeEventsFromTargets(ctx context.Context, targets *TargetsSpec, filters *
 				return nil, fmt.Errorf("failed to create directory for local store: %w", err)
 			}
 			log.Info().Msgf("querying %s", target.Path)
-			events, err = relayclient.ReadEventsFromStore(ctx, target.Path, filters)
+			events, err = relaystore.ReadEventsFromStore(ctx, target.Path, filters)
 			if err != nil {
 				return nil, err
 			}
@@ -261,7 +262,7 @@ loop:
 				return fmt.Errorf("failed to create directory for local store: %w", err)
 			}
 			log.Info().Msgf("querying %s", relay.Path)
-			events, err = relayclient.ReadEventsFromStore(parent, relay.Path, filters)
+			events, err = relaystore.ReadEventsFromStore(parent, relay.Path, filters)
 			if err != nil {
 				return err
 			}

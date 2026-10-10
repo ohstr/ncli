@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.8.0-rc.16]
+
+`ncli bunker` works on relays that require NIP-42 AUTH.
+
+### Fixed
+
+- Fixes `ncli bunker` hearing nothing on relays that require NIP-42 AUTH; it now
+  subscribes once AUTH settles and re-subscribes when a relay closes its
+  subscription.
+
 ## [0.8.0-rc.15]
 
 A Go 1.26.9 build with nine standard-library security fixes, and clearer

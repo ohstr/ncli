@@ -10,6 +10,7 @@ import (
 	"github.com/ohstr/ncli/signer"
 	"github.com/ohstr/nmilat/nip19"
 	"github.com/ohstr/nmilat/nip46"
+	"github.com/ohstr/nmilat/nipLS"
 	"github.com/spf13/cobra"
 )
 
@@ -43,14 +44,14 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 	socketFlag, _ := cmd.Flags().GetString("socket")
 	timeout, _ := cmd.Flags().GetDuration("timeout")
 
-	path, err := signer.ParseURI(socketFlag)
+	path, err := nipLS.ParseURI(socketFlag)
 	if err != nil {
 		return common.InvalidInputError(cmd, socketFlag, err)
 	}
 	ctx, cancel := context.WithTimeout(cmd.Context(), timeout)
 	defer cancel()
 
-	c, err := signer.Dial(ctx, path)
+	c, err := nipLS.Dial(ctx, path)
 	if err != nil {
 		return common.NetworkError(cmd, path, fmt.Errorf("signer not answering: %w", err))
 	}
@@ -58,9 +59,9 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 	if _, err := c.Call(ctx, nip46.MethodPing); err != nil {
 		return common.NetworkError(cmd, path, fmt.Errorf("ping: %w", err))
 	}
-	st, err := c.Status(ctx)
+	st, err := signer.FetchStatus(ctx, c)
 	if err != nil {
-		var re *signer.RemoteError
+		var re *nipLS.Error
 		if errors.As(err, &re) {
 			return common.UnsupportedError(cmd, path, fmt.Errorf("signer has no status method: %w", err))
 		}

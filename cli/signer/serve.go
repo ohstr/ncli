@@ -15,6 +15,7 @@ import (
 	"github.com/ohstr/ncli/client"
 	"github.com/ohstr/ncli/signer"
 	"github.com/ohstr/nmilat/nip49"
+	"github.com/ohstr/nmilat/nipLS"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -91,7 +92,7 @@ func runServe(cmd *cobra.Command, _ []string) error {
 	socketUID, _ := f.GetInt("socket-uid")
 	socketGID, _ := f.GetInt("socket-gid")
 
-	socketPath, err := signer.ParseURI(socketFlag)
+	socketPath, err := nipLS.ParseURI(socketFlag)
 	if err != nil {
 		return common.InvalidInputError(cmd, socketFlag, err)
 	}
@@ -102,7 +103,7 @@ func runServe(cmd *cobra.Command, _ []string) error {
 	if watch && watchInterval <= 0 {
 		return common.InvalidInputError(cmd, watchInterval.String(), errors.New("--watch-interval must be positive"))
 	}
-	if (len(allowUIDs) > 0 || len(allowGIDs) > 0) && !signer.PeerCredSupported {
+	if (len(allowUIDs) > 0 || len(allowGIDs) > 0) && !nipLS.PeerCredSupported {
 		return common.UnsupportedError(cmd, "", signer.ErrPeerCredUnsupported)
 	}
 	if _, err := signer.LoadPolicy(policyPath, signer.LoadOptions{AllowCatchAll: allowCatchAll}); err != nil {
@@ -147,9 +148,9 @@ func runServe(cmd *cobra.Command, _ []string) error {
 	}
 	defer func() { _ = srv.Close() }()
 
-	l, err := signer.Listen(socketPath, os.FileMode(mode), socketUID, socketGID)
+	l, err := nipLS.Listen(socketPath, nipLS.ListenOptions{Mode: os.FileMode(mode), UID: optID(socketUID), GID: optID(socketGID)})
 	if err != nil {
-		if errors.Is(err, signer.ErrAlreadyListening) {
+		if errors.Is(err, nipLS.ErrAlreadyListening) {
 			return common.ConflictError(cmd, socketPath, err)
 		}
 		return common.RuntimeError(cmd, err)
@@ -288,4 +289,12 @@ func looksLikePrivateKey(s string) bool {
 		}
 	}
 	return true
+}
+
+// optID maps a --socket-uid/--socket-gid value to nipLS's "leave unset" nil.
+func optID(id int) *int {
+	if id < 0 {
+		return nil
+	}
+	return &id
 }

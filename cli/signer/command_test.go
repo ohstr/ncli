@@ -15,10 +15,10 @@ import (
 	"time"
 
 	"github.com/ohstr/ncli/cli/common"
-	"github.com/ohstr/ncli/signer"
 	"github.com/ohstr/nmilat/nip01"
 	"github.com/ohstr/nmilat/nip19"
 	"github.com/ohstr/nmilat/nip49"
+	"github.com/ohstr/nmilat/nipLS"
 	"github.com/ohstr/nmilat/utils"
 )
 
@@ -93,7 +93,7 @@ rules:
 
 	at := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
 	tgt := &nip01.Event{CreatedAt: uint64(at.Unix()), Kind: 30618, Tags: [][]string{{"d", "repo"}}}
-	if err := signer.PrepareTarget(tgt, signerPub); err != nil {
+	if err := nipLS.PrepareTarget(tgt, signerPub); err != nil {
 		t.Fatal(err)
 	}
 	events := writeJSON(t, dir, "event.json", &nip01.Event{CreatedAt: tgt.CreatedAt, Kind: tgt.Kind, Tags: tgt.Tags})

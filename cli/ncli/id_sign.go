@@ -8,8 +8,8 @@ import (
 	"github.com/ohstr/ncli/cli/common"
 	"github.com/ohstr/ncli/cli/keyresolve"
 	"github.com/ohstr/ncli/client"
-	"github.com/ohstr/ncli/signer"
 	"github.com/ohstr/nmilat/nip01"
+	"github.com/ohstr/nmilat/nipLS"
 	"github.com/spf13/cobra"
 )
 
@@ -46,7 +46,7 @@ Fails if an event already declares a different pubkey.`,
 			return common.InvocationOrHelp(cmd, args, errors.New(`required flag(s) "identity" or "signer" not set`))
 		case identity != "" && signerFlag != "":
 			return common.InvocationError(cmd, errors.New("use --identity or --signer, not both"))
-		case attestations != "" && !signer.IsURI(signerFlag):
+		case attestations != "" && !nipLS.IsURI(signerFlag):
 			return common.InvocationError(cmd, errors.New("--attestations needs a bunker+unix:// --signer"))
 		}
 		return nil
@@ -93,7 +93,7 @@ Fails if an event already declares a different pubkey.`,
 		}
 
 		for _, event := range events {
-			if sc, ok := sgn.(*signer.Client); ok {
+			if sc, ok := sgn.(*nipLS.Client); ok {
 				err = sc.SignWithAttestations(cmd.Context(), event, attestations)
 			} else {
 				err = sgn.Sign(cmd.Context(), event)

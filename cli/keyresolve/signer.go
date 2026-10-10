@@ -8,7 +8,7 @@ import (
 
 	"github.com/ohstr/ncli/cli/common"
 	"github.com/ohstr/ncli/client"
-	"github.com/ohstr/ncli/signer"
+	"github.com/ohstr/nmilat/nipLS"
 	"github.com/spf13/cobra"
 )
 
@@ -19,13 +19,13 @@ const signerDialTimeout = 10 * time.Second
 // URI dials that socket signer; anything else resolves like --identity to
 // a private key held in this process. Call the returned close when done.
 func ResolveSigner(cmd *cobra.Command, jsonMode bool, value string) (client.Signer, func(), error) {
-	if signer.IsURI(value) {
-		if _, err := signer.ParseURI(value); err != nil {
+	if nipLS.IsURI(value) {
+		if _, err := nipLS.ParseURI(value); err != nil {
 			return nil, nil, common.InvalidInputError(cmd, value, err)
 		}
 		ctx, cancel := context.WithTimeout(cmd.Context(), signerDialTimeout)
 		defer cancel()
-		c, err := signer.Dial(ctx, value)
+		c, err := nipLS.Dial(ctx, value)
 		if err != nil {
 			return nil, nil, common.NetworkError(cmd, value, fmt.Errorf("signer not answering: %w", err))
 		}
@@ -54,18 +54,18 @@ func ResolveSigner(cmd *cobra.Command, jsonMode bool, value string) (client.Sign
 // a request the signer called malformed is invalid_input, a dropped
 // connection is network.
 func SignerError(cmd *cobra.Command, input string, err error) error {
-	var re *signer.RemoteError
+	var re *nipLS.Error
 	if errors.As(err, &re) {
 		switch {
-		case re.Denied():
+		case errors.Is(re, nipLS.ErrDenied):
 			return common.AuthError(cmd, err)
-		case re.Invalid():
+		case errors.Is(re, nipLS.ErrInvalid):
 			return common.InvalidInputError(cmd, input, err)
 		}
 		return common.RuntimeError(cmd, err)
 	}
 	var ne interface{ Timeout() bool }
-	if errors.As(err, &ne) || errors.Is(err, signer.ErrConnClosed) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+	if errors.As(err, &ne) || errors.Is(err, nipLS.ErrConnClosed) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 		return common.NetworkError(cmd, "", err)
 	}
 	return common.RuntimeError(cmd, err)

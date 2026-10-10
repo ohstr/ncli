@@ -8,7 +8,7 @@
 
 - Fixes `ncli bunker` hearing nothing on relays that require NIP-42 AUTH; it now
   subscribes once AUTH settles and re-subscribes when a relay closes its
-  subscription.
+  subscription. ([#137](https://github.com/ohstr/ncli/pull/137))
 
 ## [0.8.0-rc.15]
 

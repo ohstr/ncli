@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.8.0-rc.18]
+
+`ncli skills install` needs `--dir`, so skills go wherever your agent reads them.
+
+### Changed
+
+- Makes `--dir` required for `ncli skills install`, which no longer defaults to
+  `~/.claude/skills`; without it the command exits 2 and writes nothing.
+
 ## [0.8.0-rc.17]
 
 `publish`, `find`, `dump` and `apply` log in to relays that require NIP-42

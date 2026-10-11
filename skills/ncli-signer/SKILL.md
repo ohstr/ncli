@@ -69,6 +69,32 @@ ncli id sign --signer bunker+unix:///run/signer/agent.sock -e state.json -o sign
 ncli publish -e draft.json --signer bunker+unix:///run/signer/agent.sock -s wss://relay.example
 ```
 
+### Relays that require login
+
+`publish`, `find`, `dump` and `apply` log in (NIP-42) through the signer
+when a relay asks. Each connection gets one kind 22242, for the relay URL
+it dialed. Pin the login rule to those relays, or the agent can log in
+anywhere as this key:
+
+```yaml
+  - name: relay-login
+    allow: {kinds: [22242], tags: {relay: ["wss://members.example"]}}
+```
+
+```sh
+# publish logs in with --signer; reads sign only the login
+ncli publish -e draft.json --signer bunker+unix:///run/signer/agent.sock -s wss://members.example
+ncli find -k 1 -s wss://members.example --auth-identity bunker+unix:///run/signer/agent.sock
+# events already signed by someone else: log in as the agent only
+ncli publish -e signed.json --auth-signer bunker+unix:///run/signer/agent.sock -s wss://members.example
+# a stream/sync spec
+ncli apply -f stream.yaml --auth-signer bunker+unix:///run/signer/agent.sock
+```
+
+A login the policy denies exits `7` with `reason: signer_refused`, and
+`detail` names the rule. Each login shows up as one `sign_event` kind
+22242 line in the decision log.
+
 - **URI forms.** `bunker+unix:///abs/path` is canonical, and
   `unix:///abs/path` also works. The path must be absolute.
 - **Choosing a signer.** `--signer` also accepts a plain identity, so

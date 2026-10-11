@@ -141,7 +141,7 @@ func runChatList(cmd *cobra.Command, args []string) error {
 	var events []*nip01.Event
 	err = common.WithSpinner(cmd, fmt.Sprintf("Reading chat on %s", chatRelay.Host), func() error {
 		var qErr error
-		events, qErr = client.QueryTargetsWithAuth(ctx, targets, filters, timeout, privKeyHex)
+		events, qErr = client.QueryTargetsWithAuth(ctx, targets, filters, timeout, client.KeySigner(privKeyHex))
 		return qErr
 	})
 	if err != nil {

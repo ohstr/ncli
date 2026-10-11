@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.8.0-rc.17]
+
+`publish`, `find`, `dump` and `apply` log in to relays that require NIP-42
+through a signer, so a process with no private key can use them.
+
+### Added
+
+- Adds NIP-42 login through a signer (`bunker+unix://`, `bunker://` or a key)
+  to `publish` (`--signer`, `--auth-signer`), `find`/`dump` (`--auth-identity`,
+  alias `--signer`) and `apply` (`--auth-signer`). Each connection signs one
+  kind 22242 for the relay it dialed, and a failed login exits 7 with
+  `reason` `login_required`, `signer_refused` or `relay_refused`.
+  ([#139](https://github.com/ohstr/ncli/pull/139))
+
+### Changed
+
+- Names the matched rule in `ncli signer serve` denials, e.g.
+  `rule "rest": denied by rule`. ([#139](https://github.com/ohstr/ncli/pull/139))
+
 ## [0.8.0-rc.16]
 
 `ncli bunker` works on relays that require NIP-42 AUTH.

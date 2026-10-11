@@ -1,7 +1,6 @@
 package ncli
 
 import (
-	"errors"
 	"fmt"
 	"os/signal"
 	"syscall"
@@ -23,10 +22,16 @@ nip-05 identifier returns that author's profile unless --kinds widens
 it.
 
 --targets cannot be combined with --relays or the inline filter flags.
-Omit both to use the relays from "ncli prefs relays".`,
+Omit both to use the relays from "ncli prefs relays".
+
+Relays that require login (NIP-42): --auth-identity (or --signer) signs
+only a kind 22242 for the relay URL dialed, one per connection, through
+bunker+unix:///path.sock, bunker://..., or a key. A failed login exits 7
+with reason login_required, signer_refused or relay_refused.`,
 		Example: `  ncli find note1...
   ncli find npub1...
-  ncli find --authors npub1... --kinds 1 -s wss://relay.example.com`,
+  ncli find --authors npub1... --kinds 1 -s wss://relay.example.com
+  ncli find --kinds 1 -s wss://members.example --auth-identity bunker+unix:///run/signer/agent.sock`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if err := cmd.ValidateRequiredFlags(); err != nil {
 				return common.InvocationOrHelp(cmd, args, err)
@@ -72,10 +77,11 @@ Omit both to use the relays from "ncli prefs relays".`,
 				return common.RuntimeError(cmd, err)
 			}
 
-			identityHex, err := resolveQueryIdentity(cmd)
+			authSigner, closeSigner, err := resolveQueryAuthSigner(cmd)
 			if err != nil {
 				return err
 			}
+			defer closeSigner()
 
 			if err := client.ResolveFilterAuthors(filtersSpec); err != nil {
 				return common.NetworkError(cmd, "", err)
@@ -92,16 +98,10 @@ Omit both to use the relays from "ncli prefs relays".`,
 			}
 
 			err = common.WithSpinner(cmd, targetsMessage("querying", targetsSpec), func() error {
-				return client.Find(ctx, idFilter, filtersSpec, targetsSpec, outPath, timeout, identityHex)
+				return client.Find(ctx, idFilter, filtersSpec, targetsSpec, outPath, timeout, authSigner)
 			})
 			if err != nil {
-				if errors.Is(err, client.ErrNoReachableTargets) {
-					return common.NetworkError(cmd, "", err)
-				}
-				if errors.Is(err, client.ErrRestricted) {
-					return common.AuthError(cmd, err)
-				}
-				return common.RuntimeError(cmd, err)
+				return queryError(cmd, err)
 			}
 			return nil
 		},

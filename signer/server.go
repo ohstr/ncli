@@ -185,6 +185,9 @@ func (s *Server) authorize(_ context.Context, req *nipLS.Request) error {
 	}, s.policy.Load(), s.used.Has)
 	req.Rule = d.Rule
 	if !d.Allow {
+		if d.Rule != "" {
+			return nipLS.Denyf("rule %q: %s", d.Rule, d.Reason)
+		}
 		return nipLS.Deny(d.Reason)
 	}
 	if d.Rate != nil && !s.limiter.Allow(d.Rule, *d.Rate, now) {

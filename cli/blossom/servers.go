@@ -70,7 +70,7 @@ func publishServerList(ctx context.Context, cmd *cobra.Command, jsonMode bool, i
 	var report *client.PublishReport
 	err = common.WithSpinner(cmd, "publishing server list", func() error {
 		var pErr error
-		report, pErr = client.PublishToTargets(ctx, targets, []*nip01.Event{event})
+		report, pErr = client.PublishToTargets(ctx, targets, []*nip01.Event{event}, client.KeySigner(privKeyHex))
 		return pErr
 	})
 	if err != nil {

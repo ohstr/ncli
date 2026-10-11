@@ -26,7 +26,7 @@ that priority order.
 | `ncli bunker attach/status/stop/connect/history` / `ncli bunker sessions list/grants/rename/revoke/revoke-grant/set-grant` | Reattach to, query, stop, or pair a running bunker daemon without opening the TUI; review resolved requests; manage each app's remembered permissions |
 | `ncli bunker pending list/approve/reject` / `ncli bunker sessions set-grant` | Everything the TUI decides, from a script: list requests awaiting a decision, approve or reject one by id (`--always` remembers it, with `--any-kind`, `--for <dur>` or `--uses <n>` like the TUI's buttons), or apply a `--grants` spec to an already-paired app |
 | `ncli signer serve` / `status` / `check` | Local policy signer on a unix socket: holds one key in memory and answers the NIP-46 method set as newline-delimited JSON (no relay, no encryption; socket permissions plus optional `--allow-uid`/`--allow-gid` authenticate). A `kind: signer-policy` file decides (default deny; selectors, `deny_matching`, rate limits, `require: attestations` such as a signed "approve <id>"). Built in: never signs its own key, never counts a self-signed or pre-start attestation, single-use attestations persisted in `--state-dir`. `status` probes it (exit 6 when down); `check` dry-runs a policy offline (exit 7 on any denial) |
-| `ncli id sign --signer` / `ncli publish --signer` | Sign through a socket signer: `bunker+unix:///abs/path.sock` (or `unix://`); `--signer` also takes an identity. `id sign --attestations <file>` passes events a policy requires. A policy denial is `auth` (exit 7) |
+| `ncli id sign --signer` / `ncli publish --signer` | Sign through a socket signer: `bunker+unix:///abs/path.sock` (or `unix://`); `--signer` also takes an identity. `id sign --attestations <file>` passes events a policy requires. A policy denial is `auth` (exit 7). `publish` also logs in (NIP-42) with it, or with `--auth-signer`; `find`/`dump --auth-identity` and `apply --auth-signer` take the same forms plus `bunker://`, signing only the login |
 | `ncli blossom upload/download/list/rm/mirror/report` | Client for the Blossom protocol (BUD-01..12): content-addressed blob storage authenticated with a Nostr identity |
 | `ncli blossom servers add/remove/list/discover` | Manage the default Blossom server list, optionally publishing/discovering it as a signed kind:10063 (BUD-03) event |
 | `ncli huddle list` | List the ephemeral transport rooms that currently have someone in them, with peer count and the protocol version each is pinned to — a room id is otherwise out-of-band knowledge, and `space join` on an unused one opens it rather than failing |
@@ -98,7 +98,8 @@ when it fails, so a script can see which targets were down.
 
 **Failures**: exactly one top-level error report, always on stderr, never
 stdout. In text mode it takes one of three shapes, and `--json` replaces
-all three with a single `{"error", "code", "retryable", "input"}` line:
+all three with a single `{"error", "code", "retryable", "input"}` line
+(plus `reason`/`detail` on a failed NIP-42 login, see below):
 
 | shape | when | looks like |
 |---|---|---|
@@ -121,6 +122,14 @@ and never when `NO_COLOR` is set or stderr is piped.
 | `auth` | 7 | no | wrong credentials or a rejected signature |
 | `unsupported` | 8 | no | the target server doesn't support the requested capability at all (`blossom list` against a server with BUD-02 disabled, `huddle list`/`space join` against a relay with huddles disabled), distinct from `not_found`'s "this one specific resource is missing" |
 | `internal` | 1 | no | anything else (fallback bucket) |
+
+A failed NIP-42 login (`publish`, `find`, `dump`, `apply` against a relay
+that requires one) is `auth` with `input` = the relay URL and `reason` =
+`login_required` (no signer given), `signer_refused` (`detail` = the
+signer's reason, with its rule) or `relay_refused` (`detail` = the relay's
+message). Each connection signs at most one kind 22242, for the URL it
+dialed, through `--signer`/`--auth-signer`/`--auth-identity`
+(`bunker+unix://`, `bunker://`, or a key).
 
 `input`, when present, is the single specific value that caused the
 failure (an identifier, file path, relay URL, `--kinds` token, ...) —

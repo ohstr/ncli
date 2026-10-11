@@ -39,7 +39,7 @@ func signAndPublish(ctx context.Context, cmd *cobra.Command, relayURL *url.URL, 
 	var report *client.PublishReport
 	err = common.WithSpinner(cmd, fmt.Sprintf("Publishing to %s", relayURL.Host), func() error {
 		var pErr error
-		report, pErr = client.PublishToTargets(ctx, targets, []*nip01.Event{ev})
+		report, pErr = client.PublishToTargets(ctx, targets, []*nip01.Event{ev}, client.KeySigner(privKeyHex))
 		return pErr
 	})
 	if err != nil {

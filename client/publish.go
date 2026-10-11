@@ -68,6 +68,9 @@ type PublishReport struct {
 	Succeeded int             `json:"succeeded"`
 	Failed    int             `json:"failed"`
 	Results   []PublishResult `json:"results"`
+
+	// LoginError is the first NIP-42 login failure, if any pair failed on one.
+	LoginError error `json:"-"`
 }
 
 // AllSucceeded reports whether every (event, relay) pair was accepted.
@@ -85,9 +88,10 @@ func (r *PublishReport) AllSucceeded() bool {
 // targets aren't supported yet -- rejected up front with a clear error
 // rather than silently skipped, since a store target quietly not receiving
 // events would be easy to miss.
-func PublishToTargets(ctx context.Context, targets *TargetsSpec, events []*nip01.Event) (*PublishReport, error) {
+func PublishToTargets(ctx context.Context, targets *TargetsSpec, events []*nip01.Event, authSigner Signer) (*PublishReport, error) {
 	report := &PublishReport{}
 	reached := false
+	var loginErr error
 
 	for _, target := range targets.Relays {
 		if target.killed {
@@ -97,7 +101,7 @@ func PublishToTargets(ctx context.Context, targets *TargetsSpec, events []*nip01
 			return nil, fmt.Errorf("ncli publish only supports remote relay targets for now, not %q (%s)", target.Type, target.Path)
 		}
 
-		conn, err := connectRelayWithFallback(ctx, target.relayURI, target.relayFallbackURI, nil)
+		sess, err := dialRelay(ctx, target.relayURI, target.relayFallbackURI, nil, authSigner)
 		if err != nil {
 			var connErr *relayclient.ConnectionError
 			if errors.As(err, &connErr) {
@@ -109,8 +113,8 @@ func PublishToTargets(ctx context.Context, targets *TargetsSpec, events []*nip01
 		reached = true
 
 		for _, event := range events {
-			pubCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-			pubErr := PublishEvent(pubCtx, conn, event)
+			pubCtx, cancel := context.WithTimeout(ctx, loginWait+10*time.Second)
+			pubErr := sess.publish(pubCtx, event)
 			cancel()
 
 			result := PublishResult{ID: event.ID, Relay: target.relayURI.Host}
@@ -118,6 +122,10 @@ func PublishToTargets(ctx context.Context, targets *TargetsSpec, events []*nip01
 			if pubErr != nil {
 				result.Error = pubErr.Error()
 				report.Failed++
+				var le *LoginError
+				if loginErr == nil && errors.As(pubErr, &le) {
+					loginErr = le
+				}
 			} else {
 				result.Accepted = true
 				report.Succeeded++
@@ -125,12 +133,13 @@ func PublishToTargets(ctx context.Context, targets *TargetsSpec, events []*nip01
 			report.Results = append(report.Results, result)
 		}
 
-		conn.Close()
+		sess.Close()
 	}
 
 	if !reached && len(targets.Relays) > 0 {
 		return nil, ErrNoReachableTargets
 	}
 
+	report.LoginError = loginErr
 	return report, nil
 }

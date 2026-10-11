@@ -34,28 +34,33 @@ same idea: plain positional arguments instead of `-s/--relays` (`ncli
 ping relay.primal.net` needs no flag at all), and no filter flags at all
 — see `## ping` below for why.
 
-Both also take **`--auth-identity <id>`** (vault label, nsec, npub, hex,
-nprofile, or nip-05 — same shapes as everywhere else, but must resolve to
-a *private* key, since authenticating means signing): answers a target's
-NIP-42 AUTH challenge so a restricted relay — e.g. `nip11.limitation.
-auth_required`, or NIP-43 `membership_required` — actually returns its
-members-only content instead of a REQ this relay closes as `restricted:
-...`. Omit it to query anonymously, exactly as before this flag existed;
-a target that doesn't challenge ignores it either way, and it's a
-different flag from `miner check`'s own `--identity` (a public-key
-author filter, unrelated).
+### Relays that require login
+
+`find` and `dump` take **`--auth-identity`** (alias `--signer`): what to
+log in (NIP-42) with when a relay asks. It can be a socket signer
+(`bunker+unix:///path.sock`, see the `ncli-signer` skill), a NIP-46
+`bunker://...` URI, or a vault label/nsec. On a read, ncli signs **only**
+the login: one kind 22242 per connection, naming the exact relay URL it
+dialed. It then retries the refused REQ once. Without it, the query runs
+anonymously. `miner check --identity` is a different flag, an author
+filter.
 
 ```sh
-ncli find -k 1 -s wss://relay.example --auth-identity mykey
-ncli dump -k 1 -s wss://relay.example --auth-identity mykey -o out.json
+# no private key in this process: the socket signer signs the login
+ncli find -k 1 -s wss://members.example --auth-identity bunker+unix:///run/signer/agent.sock
+ncli dump -k 1 -s wss://members.example --signer mykey -o out.json
 ```
 
-If authenticating still isn't enough -- the identity isn't a member, or
-no identity was given against a restricted target at all -- both exit
-`7` (`auth`) with `"relay restricted this query (private/membership
-required)"` instead of the usual empty-result success, so a script can
-tell "refused" apart from "genuinely nothing matched" from `$?`/the
-`--json` error shape alone.
+A failed login exits `7` (`auth`), and `--json` says why in `reason`:
+
+| `reason` | `detail` |
+|---|---|
+| `login_required` | relay asked for a login, none given; the relay's `auth-required:` message |
+| `signer_refused` | the signer's refusal, e.g. `denied: rule "rest": denied by rule` |
+| `relay_refused` | the relay's message, e.g. `restricted: valid NIP-43 membership required` |
+
+`input` is the relay URL. A member-only relay that accepts the login
+but still closes the REQ (`restricted:`) exits `7` with no `reason`.
 
 ## `dump`
 

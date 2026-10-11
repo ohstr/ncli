@@ -7,6 +7,7 @@ import (
 	"syscall"
 
 	"github.com/ohstr/ncli/cli/common"
+	"github.com/ohstr/ncli/cli/keyresolve"
 	"github.com/ohstr/ncli/client"
 	"github.com/spf13/cobra"
 )
@@ -18,7 +19,8 @@ var (
 		Use:   "apply",
 		Short: "Run a stream, sync, or inspect workflow",
 		Example: `  ncli apply -f sync.yaml
-  ncli apply -f sync.yaml --strict-pow`,
+  ncli apply -f sync.yaml --strict-pow
+  ncli apply -f stream.yaml --auth-signer bunker+unix:///run/signer/agent.sock`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if err := cmd.ValidateRequiredFlags(); err != nil {
 				return common.InvocationOrHelp(cmd, args, err)
@@ -54,9 +56,22 @@ var (
 				return &common.CLIError{Err: err, Code: common.CodeUsage, Input: fileName}
 			}
 
+			if authFlag, _ := cmd.Flags().GetString("auth-signer"); authFlag != "" {
+				jsonMode, _ := cmd.Flags().GetBool("json")
+				sgn, closeSigner, err := keyresolve.ResolveSigner(cmd, jsonMode, authFlag)
+				if err != nil {
+					return err
+				}
+				defer closeSigner()
+				options.AuthSigner = sgn
+			}
+
 			if err := client.Process(ctx, fileName, options); err != nil {
 				if errors.Is(err, client.ErrNeedsTerminal) {
 					return common.UsageError(cmd, err)
+				}
+				if le := keyresolve.LoginError(cmd, err); le != nil {
+					return le
 				}
 				return common.RuntimeError(cmd, err)
 			}
@@ -73,4 +88,5 @@ func init() {
 	_ = applyCmd.MarkFlagFilename("file", "yaml", "yml")
 
 	applyCmd.Flags().Bool("strict-pow", false, "Reject stream/sync events whose nonce tag doesn't meet its declared NIP-13 proof-of-work difficulty (default: accept them regardless, since PoW compliance is opt-in per NIP-13, not mandatory). Overrides the spec file's own strictPow field when passed explicitly")
+	applyCmd.Flags().String("auth-signer", "", "Log in (NIP-42) to relays that require it: bunker+unix:///path.sock, bunker://..., or an identity (only login events are signed)")
 }

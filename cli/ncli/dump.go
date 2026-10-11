@@ -1,7 +1,6 @@
 package ncli
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -19,7 +18,12 @@ var dumpCmd = &cobra.Command{
 	Use:   "dump",
 	Short: "Export events to JSON",
 	Long: `--targets cannot be combined with --relays or the inline filter flags.
-Omit both to use the relays from "ncli prefs relays".`,
+Omit both to use the relays from "ncli prefs relays".
+
+Relays that require login (NIP-42): --auth-identity (or --signer) signs
+only a kind 22242 for the relay URL dialed, one per connection, through
+bunker+unix:///path.sock, bunker://..., or a key. A failed login exits 7
+with reason login_required, signer_refused or relay_refused.`,
 	Example: `  ncli dump -o events.json
   ncli dump -t targets.yaml -o events.json
   ncli dump -s wss://relay.example.com -k 1 --since 24h -o recent.json`,
@@ -56,26 +60,21 @@ Omit both to use the relays from "ncli prefs relays".`,
 			return common.RuntimeError(cmd, err)
 		}
 
-		identityHex, err := resolveQueryIdentity(cmd)
+		authSigner, closeSigner, err := resolveQueryAuthSigner(cmd)
 		if err != nil {
 			return err
 		}
+		defer closeSigner()
 
 		if err := client.ResolveFilterAuthors(filtersSpec); err != nil {
 			return common.NetworkError(cmd, "", err)
 		}
 
 		err = common.WithSpinner(cmd, targetsMessage("exporting from", targetsSpec), func() error {
-			return client.DumpFromTargets(ctx, targetsSpec, outFile, filtersSpec, timeout, identityHex)
+			return client.DumpFromTargets(ctx, targetsSpec, outFile, filtersSpec, timeout, authSigner)
 		})
 		if err != nil {
-			if errors.Is(err, client.ErrNoReachableTargets) {
-				return common.NetworkError(cmd, "", err)
-			}
-			if errors.Is(err, client.ErrRestricted) {
-				return common.AuthError(cmd, err)
-			}
-			return common.RuntimeError(cmd, err)
+			return queryError(cmd, err)
 		}
 		return nil
 	},

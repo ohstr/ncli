@@ -4,10 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/ohstr/ncli/cli/common"
 	"github.com/ohstr/ncli/client"
+	"github.com/ohstr/nmilat/nip46"
+	"github.com/ohstr/nmilat/nip46/bunker"
 	"github.com/ohstr/nmilat/nipLS"
 	"github.com/spf13/cobra"
 )
@@ -15,10 +18,37 @@ import (
 // signerDialTimeout bounds connecting to a socket signer.
 const signerDialTimeout = 10 * time.Second
 
+// bunkerDialTimeout bounds pairing with a NIP-46 signer, which may wait on
+// a person to approve.
+const bunkerDialTimeout = 60 * time.Second
+
+// IsSignerURI reports whether value names a signer to dial rather than an
+// identity: bunker+unix:// (or unix://) or a NIP-46 bunker://.
+func IsSignerURI(value string) bool {
+	return nipLS.IsURI(value) || strings.HasPrefix(strings.TrimSpace(value), "bunker://")
+}
+
 // ResolveSigner turns value into a Signer: a bunker+unix:// (or unix://)
-// URI dials that socket signer; anything else resolves like --identity to
-// a private key held in this process. Call the returned close when done.
+// URI dials that socket signer, a bunker:// URI pairs with that NIP-46
+// signer; anything else resolves like --identity to a private key held in
+// this process. Call the returned close when done.
 func ResolveSigner(cmd *cobra.Command, jsonMode bool, value string) (client.Signer, func(), error) {
+	if strings.HasPrefix(strings.TrimSpace(value), "bunker://") {
+		if _, err := bunker.ParseURI(value); err != nil {
+			return nil, nil, common.InvalidInputError(cmd, "", err)
+		}
+		ctx, cancel := context.WithTimeout(cmd.Context(), bunkerDialTimeout)
+		defer cancel()
+		c, err := bunker.Dial(ctx, value, bunker.ClientOptions{Metadata: &nip46.Metadata{Name: "ncli"}})
+		if err != nil {
+			var refusal *nip46.Error
+			if errors.As(err, &refusal) {
+				return nil, nil, common.AuthError(cmd, fmt.Errorf("bunker refused to pair: %w", err))
+			}
+			return nil, nil, common.NetworkError(cmd, "", fmt.Errorf("bunker not answering: %w", err))
+		}
+		return c, func() { _ = c.Close() }, nil
+	}
 	if nipLS.IsURI(value) {
 		if _, err := nipLS.ParseURI(value); err != nil {
 			return nil, nil, common.InvalidInputError(cmd, value, err)
@@ -69,4 +99,14 @@ func SignerError(cmd *cobra.Command, input string, err error) error {
 		return common.NetworkError(cmd, "", err)
 	}
 	return common.RuntimeError(cmd, err)
+}
+
+// LoginError turns a failed NIP-42 login into its structured CLI error,
+// or returns nil if err isn't one.
+func LoginError(cmd *cobra.Command, err error) error {
+	var le *client.LoginError
+	if !errors.As(err, &le) {
+		return nil
+	}
+	return common.LoginFailureError(cmd, le.Relay, string(le.Reason), le.Detail, err)
 }

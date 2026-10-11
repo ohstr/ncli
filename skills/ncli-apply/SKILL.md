@@ -30,6 +30,16 @@ CLI flag, when passed explicitly, overrides whatever the spec file says for
 that run, so a spec's own `strictPow` is the "usual" setting and
 `--strict-pow`/`--strict-pow=false` is a one-off override.
 
+`apply` also takes `--auth-signer` for relays that require login (NIP-42):
+`bunker+unix:///path.sock`, `bunker://...`, or a vault label/nsec. Each
+relay connection signs one kind 22242 for the URL it dialed, and nothing
+else. A refused REQ or EVENT is retried once after login. With a signer,
+each connection waits up to 2s for a challenge before its first REQ.
+
+```sh
+ncli apply -f stream.yaml --auth-signer bunker+unix:///run/signer/agent.sock
+```
+
 Only an event that actually **declares** a `nonce` tag is judged at all —
 NIP-13 PoW is optional per-event, so most events carry no `nonce` tag, and
 that's still perfectly valid regardless of this setting. By **default,

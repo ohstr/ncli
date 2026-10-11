@@ -1,6 +1,7 @@
 package ncli
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/ohstr/ncli/cli/common"
@@ -45,29 +46,51 @@ func registerQueryFlags(cmd *cobra.Command, prefix string) {
 	registerInlineFilterFlags(cmd)
 }
 
-// registerQueryAuthFlag adds --auth-identity to find/dump: an identity to
-// authenticate with (NIP-42) against a target that requires it, resolved
-// by resolveQueryIdentity. Deliberately not part of registerQueryFlags,
-// let alone named plain "identity" -- miner check already has its own
-// --identity flag (an author to restrict the live check to, a public key
-// only) registered on the same command registerQueryFlags also touches,
-// and it means something unrelated: a signing/auth key, not a filter.
+// registerQueryAuthFlag adds --auth-identity (alias --signer) to find/dump:
+// what to log in with (NIP-42) on a target that asks. Not part of
+// registerQueryFlags: miner check's own --identity is a filter, not a key.
 func registerQueryAuthFlag(cmd *cobra.Command) {
-	cmd.Flags().String("auth-identity", "", "Identity to authenticate with (NIP-42) against a target that requires it -- vault label, nsec, npub, hex, nprofile, or nip-05 (optional; omitted targets are queried anonymously, same as before this flag existed)")
+	cmd.Flags().String("auth-identity", "", "Log in (NIP-42) to relays that require it: bunker+unix:///path.sock, bunker://..., or a vault label/nsec/npub/hex/nprofile/nip-05 (optional; only the login event is signed)")
+	cmd.Flags().String("signer", "", "Alias for --auth-identity")
 }
 
-// resolveQueryIdentity resolves registerQueryAuthFlag's --auth-identity
-// flag into a private key hex string, via
+// resolveQueryAuthSigner resolves --auth-identity/--signer into the signer
+// a read logs in with. A signer URI is dialed; anything else goes through
 // keyresolve.ResolveIdentityOptional under "query.identity"
-// (NCLI_QUERY_IDENTITY) -- authenticating is a bonus for a query command,
-// never a requirement, so this returns "" rather than erroring when
-// nothing was given/configured and the vault has no sole entry to fall
-// back to. It errors only when an identity was explicitly given (flag or
-// config) and failed to resolve.
-func resolveQueryIdentity(cmd *cobra.Command) (string, error) {
-	identityFlag, _ := cmd.Flags().GetString("auth-identity")
+// (NCLI_QUERY_IDENTITY), so nothing given means an anonymous read. Call
+// the returned close when done.
+func resolveQueryAuthSigner(cmd *cobra.Command) (client.Signer, func(), error) {
+	value, _ := cmd.Flags().GetString("auth-identity")
+	alias, _ := cmd.Flags().GetString("signer")
+	if value != "" && alias != "" && value != alias {
+		return nil, nil, common.InvocationError(cmd, fmt.Errorf("--signer is an alias for --auth-identity; pass one"))
+	}
+	if value == "" {
+		value = alias
+	}
 	jsonMode, _ := cmd.Flags().GetBool("json")
-	return keyresolve.ResolveIdentityOptional(cmd, identityFlag, "query.identity", jsonMode)
+	if keyresolve.IsSignerURI(value) {
+		return keyresolve.ResolveSigner(cmd, jsonMode, value)
+	}
+	priv, err := keyresolve.ResolveIdentityOptional(cmd, value, "query.identity", jsonMode)
+	if err != nil {
+		return nil, nil, err
+	}
+	return client.KeySigner(priv), func() {}, nil
+}
+
+// queryError classifies a find/dump failure.
+func queryError(cmd *cobra.Command, err error) error {
+	if errors.Is(err, client.ErrNoReachableTargets) {
+		return common.NetworkError(cmd, "", err)
+	}
+	if le := keyresolve.LoginError(cmd, err); le != nil {
+		return le
+	}
+	if errors.Is(err, client.ErrRestricted) {
+		return common.AuthError(cmd, err)
+	}
+	return common.RuntimeError(cmd, err)
 }
 
 // queryMutualExclusionCheck enforces registerQueryFlags' two options, not a

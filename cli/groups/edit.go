@@ -191,7 +191,7 @@ func currentGroupMetadata(ctx context.Context, relayURL *url.URL, groupID, privK
 		nip01.NewFilter().WithKinds(nip29.KindGroupMetadata).WithTag("d", groupID).WithLimit(1),
 	)
 
-	events, err := client.QueryTargetsWithAuth(ctx, targets, filters, metadataQueryTimeout, privKeyHex)
+	events, err := client.QueryTargetsWithAuth(ctx, targets, filters, metadataQueryTimeout, client.KeySigner(privKeyHex))
 	if err != nil {
 		return nil, err
 	}

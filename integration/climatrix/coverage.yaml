@@ -1,7 +1,7 @@
 # One row per ncli command. TestCoverage_EveryCommandListed fails on a
 # missing or stale row. modes: json (agent), text, tty (human), errors.
 # tests: test-name prefixes in this package. pending: what's not covered yet.
-"apply": {modes: [json, errors], tests: [TestApply], pending: "stream workflow and TTY runs of sync/inspect (phase 5)"}
+"apply": {modes: [json, errors], tests: [TestApply, TestRelayLogin_ApplyStream], pending: "TTY runs of sync/inspect (phase 5)"}
 "blossom": {modes: [errors], tests: [TestBareGroupCommands]}
 "blossom download": {modes: [json, text, errors], tests: [TestBlossom]}
 "blossom list": {modes: [errors], tests: [TestBlossom], pending: "success path needs a server with BUD-02 on"}
@@ -32,8 +32,8 @@
 "bunker status": {modes: [json], tests: [TestTTY_BunkerDaemon, TestBunkerWithoutDaemon]}
 "bunker stop": {modes: [json, errors], tests: [TestTTY_BunkerDaemon, TestBunkerWithoutDaemon]}
 "decode": {modes: [json, text, tty, errors], tests: [TestDecode, TestTTY_FailureShapes, TestTTY_Color]}
-"dump": {modes: [json, errors], tests: [TestQuery]}
-"find": {modes: [json, tty, errors], tests: [TestQuery, TestAddressableLookups, TestTTY_Spinner, TestTimeoutCoversHandshake]}
+"dump": {modes: [json, errors], tests: [TestQuery, TestRelayLogin_AuthRequired]}
+"find": {modes: [json, tty, errors], tests: [TestQuery, TestAddressableLookups, TestTTY_Spinner, TestTimeoutCoversHandshake, TestRelayLogin_AuthRequired, TestRelayLogin_MembershipRequired, TestRelayLogin_NIP46Bunker]}
 "groups": {modes: [errors], tests: [TestBareGroupCommands]}
 "groups create": {modes: [json, errors], tests: [TestGroupsCLI]}
 "groups delete": {modes: [json, errors], tests: [TestGroupsModeration]}
@@ -71,7 +71,7 @@
 "prefs relays list": {modes: [json], tests: [TestPrefs]}
 "prefs relays remove": {modes: [json], tests: [TestPrefs]}
 "profile": {modes: [json, errors], tests: [TestQuery]}
-"publish": {modes: [json, errors], tests: [TestPublish, TestSignerPublish]}
+"publish": {modes: [json, errors], tests: [TestPublish, TestSignerPublish, TestRelayLogin_AuthRequired, TestRelayLogin_MembershipRequired]}
 "relay": {modes: [json, errors], tests: [TestRelayAdmin, TestRelayJSONLogs, TestHarness_RelaySeedsCorpus], pending: "-c context creation (phase 5)"}
 "relay clear": {modes: [errors], tests: [TestBareGroupCommands]}
 "relay clear search": {modes: [errors], tests: [TestRelayAdmin]}

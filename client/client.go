@@ -68,10 +68,10 @@ func LoadTargetsSpec(yamlPath string) (*TargetsSpec, error) {
 // targets -- merged and deduplicated by event ID across ALL of them (see
 // mergeEventsFromTargets) -- and writes the result to outPath as JSON.
 // This is `dump`'s implementation: targets comes from --targets, --relays,
-// or (both omitted) the configured prefs relays. identityHex, from
-// --identity, authenticates to a remote target that requires it (NIP-42);
+// or (both omitted) the configured prefs relays. authSigner, from
+// --auth-identity, logs in to to a remote target that requires it (NIP-42);
 // empty behaves exactly as before this parameter existed.
-func DumpFromTargets(ctx context.Context, targets *TargetsSpec, outPath string, filtersSpec []*FilterSpec, timeout time.Duration, identityHex string) error {
+func DumpFromTargets(ctx context.Context, targets *TargetsSpec, outPath string, filtersSpec []*FilterSpec, timeout time.Duration, authSigner Signer) error {
 	if len(filtersSpec) == 0 {
 		filtersSpec = []*FilterSpec{{}}
 	}
@@ -81,7 +81,7 @@ func DumpFromTargets(ctx context.Context, targets *TargetsSpec, outPath string, 
 		filters.Add(&f.SubscriptionFilter)
 	}
 
-	merged, err := mergeEventsFromTargets(ctx, targets, filters, timeout, identityHex)
+	merged, err := mergeEventsFromTargets(ctx, targets, filters, timeout, authSigner)
 	if err != nil {
 		return err
 	}
@@ -145,11 +145,12 @@ var ErrRestricted = errors.New("relay restricted this query (private/membership 
 // long any single remote target gets before it's treated the same way --
 // logged and skipped -- so one slow or unresponsive relay can't eat the
 // whole call; 0 waits indefinitely.
-func mergeEventsFromTargets(ctx context.Context, targets *TargetsSpec, filters *nip01.SubscriptionFilterGroup, timeout time.Duration, identityHex string) ([]*nip01.Event, error) {
+func mergeEventsFromTargets(ctx context.Context, targets *TargetsSpec, filters *nip01.SubscriptionFilterGroup, timeout time.Duration, authSigner Signer) ([]*nip01.Event, error) {
 	seen := make(map[string]struct{})
 	var merged []*nip01.Event
 	reached := false
 	anyRestricted := false
+	var loginErr error
 
 	for _, target := range targets.Relays {
 		if target.killed {
@@ -173,7 +174,7 @@ func mergeEventsFromTargets(ctx context.Context, targets *TargetsSpec, filters *
 
 		case FlOW_REMOTE:
 			log.Info().Msgf("querying %s", target.relayURI.Host)
-			events, restricted, err = readEventsWithFallback(ctx, timeout, target.relayURI, target.relayFallbackURI, filters, identityHex)
+			events, restricted, err = readEventsWithFallback(ctx, timeout, target.relayURI, target.relayFallbackURI, filters, authSigner)
 			if err != nil {
 				var connErr *relayclient.ConnectionError
 				if errors.As(err, &connErr) {
@@ -182,6 +183,14 @@ func mergeEventsFromTargets(ctx context.Context, targets *TargetsSpec, filters *
 				}
 				if errors.Is(err, context.DeadlineExceeded) {
 					log.Error().Msgf("%s: no response after %s, skipping", target.relayURI.Host, timeout)
+					continue
+				}
+				var le *LoginError
+				if errors.As(err, &le) {
+					log.Warn().Err(le).Msg("login failed, skipping")
+					if loginErr == nil {
+						loginErr = le
+					}
 					continue
 				}
 				return nil, err
@@ -199,6 +208,10 @@ func mergeEventsFromTargets(ctx context.Context, targets *TargetsSpec, filters *
 			seen[ev.ID] = struct{}{}
 			merged = append(merged, ev)
 		}
+	}
+
+	if len(merged) == 0 && loginErr != nil {
+		return nil, loginErr
 	}
 
 	if !reached && len(targets.Relays) > 0 {
@@ -222,18 +235,18 @@ func mergeEventsFromTargets(ctx context.Context, targets *TargetsSpec, filters *
 // current callers need an identity; DumpFromTargets/Find take one
 // instead, for find/dump's --identity.
 func QueryTargets(ctx context.Context, targets *TargetsSpec, filters *nip01.SubscriptionFilterGroup, timeout time.Duration) ([]*nip01.Event, error) {
-	return mergeEventsFromTargets(ctx, targets, filters, timeout, "")
+	return mergeEventsFromTargets(ctx, targets, filters, timeout, nil)
 }
 
 // QueryTargetsWithAuth is QueryTargets' --identity-aware counterpart, for
 // a caller (groups show/list) that wants the merged set back rather than
-// Find/DumpFromTargets' own reporting. identityHex empty behaves exactly
+// Find/DumpFromTargets' own reporting. authSigner nil behaves exactly
 // like QueryTargets. Can return ErrRestricted -- see its own doc comment.
-func QueryTargetsWithAuth(ctx context.Context, targets *TargetsSpec, filters *nip01.SubscriptionFilterGroup, timeout time.Duration, identityHex string) ([]*nip01.Event, error) {
-	return mergeEventsFromTargets(ctx, targets, filters, timeout, identityHex)
+func QueryTargetsWithAuth(ctx context.Context, targets *TargetsSpec, filters *nip01.SubscriptionFilterGroup, timeout time.Duration, authSigner Signer) ([]*nip01.Event, error) {
+	return mergeEventsFromTargets(ctx, targets, filters, timeout, authSigner)
 }
 
-func Find(parent context.Context, idFilter *nip01.SubscriptionFilter, filtersSpec []*FilterSpec, targets *TargetsSpec, savePath string, timeout time.Duration, identityHex string) error {
+func Find(parent context.Context, idFilter *nip01.SubscriptionFilter, filtersSpec []*FilterSpec, targets *TargetsSpec, savePath string, timeout time.Duration, authSigner Signer) error {
 
 	filters := nip01.NewSubscriptionFilterGroup()
 	if idFilter != nil {
@@ -247,6 +260,7 @@ func Find(parent context.Context, idFilter *nip01.SubscriptionFilter, filtersSpe
 	var err error
 	reached := false
 	anyRestricted := false
+	var loginErr error
 
 loop:
 	for _, relay := range targets.Relays {
@@ -269,7 +283,7 @@ loop:
 
 		case FlOW_REMOTE:
 			log.Info().Msgf("querying %s", relay.relayURI.Host)
-			events, restricted, err = readEventsWithFallback(parent, timeout, relay.relayURI, relay.relayFallbackURI, filters, identityHex)
+			events, restricted, err = readEventsWithFallback(parent, timeout, relay.relayURI, relay.relayFallbackURI, filters, authSigner)
 			if err != nil {
 				var connErr *relayclient.ConnectionError
 				if errors.As(err, &connErr) {
@@ -278,6 +292,14 @@ loop:
 				}
 				if errors.Is(err, context.DeadlineExceeded) {
 					log.Error().Msgf("%s: no response after %s, skipping", relay.relayURI.Host, timeout)
+					continue
+				}
+				var le *LoginError
+				if errors.As(err, &le) {
+					log.Warn().Err(le).Msg("login failed, skipping")
+					if loginErr == nil {
+						loginErr = le
+					}
 					continue
 				}
 				return err
@@ -292,6 +314,10 @@ loop:
 		if len(events) > 0 {
 			break loop
 		}
+	}
+
+	if len(events) == 0 && loginErr != nil {
+		return loginErr
 	}
 
 	if !reached && len(targets.Relays) > 0 {
@@ -403,6 +429,10 @@ type ClientOptions struct {
 	// a missing/insufficient PoW nonce; true rejects it -- see
 	// Client.strictPow, Stream.strictPow, and SyncModule.strictPow.
 	StrictPow *bool
+
+	// AuthSigner logs in (NIP-42) to stream/sync relays that ask; nil stays
+	// anonymous.
+	AuthSigner Signer
 
 	LogLevel tui.LogLevel
 }
@@ -600,6 +630,9 @@ func (c *Client) render(parent context.Context) {
 	case *StreamSpec:
 
 		s, err := NewStream(spec, c.strictPow(spec.StrictPow))
+		if err == nil {
+			s.sc.authSigner = c.options.AuthSigner
+		}
 		if err != nil {
 			c.errors <- err
 			return
@@ -647,6 +680,9 @@ func (c *Client) render(parent context.Context) {
 	case *SyncSpec:
 
 		sm, err := NewSyncModule(spec, c.app.Logger(), c.strictPow(spec.StrictPow))
+		if err == nil {
+			sm.authSigner = c.options.AuthSigner
+		}
 		if err != nil {
 			c.errors <- err
 			return
@@ -715,39 +751,22 @@ func connectRelayWithFallback(ctx context.Context, primary, fallback *url.URL, c
 	return relayclient.NewConnection(ctx, fallback, cfg)
 }
 
-// readEventsWithFallback is connectRelayWithFallback's counterpart for the
-// one-shot ReadEventsFromRelayWithAuth helper used by find/dump's target
-// loop. If
-// timeout > 0, primary and (if tried) fallback each get their own budget --
-// a slow primary times out on its own deadline rather than one shared with
-// fallback, and doesn't fall back on a timeout at all (only on a dial/
-// connection failure -- see connectRelayWithFallback), matching
-// readEventsWithTimeout's ctx.DeadlineExceeded, which isn't a
-// *relayclient.ConnectionError.
-func readEventsWithFallback(ctx context.Context, timeout time.Duration, primary, fallback *url.URL, filters *nip01.SubscriptionFilterGroup, identityHex string) (events []*nip01.Event, restricted bool, err error) {
-	events, restricted, err = readEventsWithTimeout(ctx, timeout, primary, filters, identityHex)
-	if err == nil || fallback == nil {
-		return events, restricted, err
+// readEventsWithFallback runs one read against a remote target, logging
+// in with authSigner (nil reads anonymously) if the relay asks. fallback
+// is dialed only if primary fails to connect -- see dialRelay. If
+// timeout > 0 it bounds the whole read, dial included.
+func readEventsWithFallback(ctx context.Context, timeout time.Duration, primary, fallback *url.URL, filters *nip01.SubscriptionFilterGroup, authSigner Signer) ([]*nip01.Event, bool, error) {
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
 	}
-	var connErr *relayclient.ConnectionError
-	if !errors.As(err, &connErr) {
-		return events, restricted, err
+	sess, err := dialRelay(ctx, primary, fallback, nil, authSigner)
+	if err != nil {
+		return nil, false, err
 	}
-	return readEventsWithTimeout(ctx, timeout, fallback, filters, identityHex)
-}
-
-// readEventsWithTimeout bounds a single ReadEventsFromRelayWithAuth call to
-// timeout (0 disables the bound, waiting on ctx alone) -- so a relay that
-// accepts a subscription and then never sends EOSE or an error can't hang
-// the caller past this deadline. identityHex empty reads anonymously and
-// still reports a restricted CLOSED.
-func readEventsWithTimeout(ctx context.Context, timeout time.Duration, relayURL *url.URL, filters *nip01.SubscriptionFilterGroup, identityHex string) ([]*nip01.Event, bool, error) {
-	if timeout <= 0 {
-		return relayclient.ReadEventsFromRelayWithAuth(ctx, relayURL, filters, identityHex)
-	}
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	return relayclient.ReadEventsFromRelayWithAuth(ctx, relayURL, filters, identityHex)
+	defer sess.Close()
+	return sess.read(ctx, filters)
 }
 
 func GetPublicKey(privKey string) (string, error) {

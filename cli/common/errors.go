@@ -81,6 +81,11 @@ type CLIError struct {
 	Code  ErrorCode
 	Input string
 	Help  HelpMode
+	// Reason and Detail refine an auth failure, e.g. a NIP-42 login:
+	// "login_required"/"signer_refused"/"relay_refused" plus the relay's
+	// message or the signer's reason.
+	Reason string
+	Detail string
 }
 
 func (e *CLIError) Error() string { return e.Err.Error() }
@@ -143,6 +148,8 @@ func EmitError(cmd *cobra.Command, err error) {
 			Code      ErrorCode `json:"code"`
 			Retryable bool      `json:"retryable"`
 			Input     string    `json:"input,omitempty"`
+			Reason    string    `json:"reason,omitempty"`
+			Detail    string    `json:"detail,omitempty"`
 		}{
 			Error:     err.Error(),
 			Code:      codeOf(err),
@@ -150,6 +157,8 @@ func EmitError(cmd *cobra.Command, err error) {
 		}
 		if ce != nil {
 			payload.Input = ce.Input
+			payload.Reason = ce.Reason
+			payload.Detail = ce.Detail
 		}
 		data, mErr := json.Marshal(payload)
 		if mErr != nil {

@@ -12,11 +12,12 @@ through a signer, so a process with no private key can use them.
   alias `--signer`) and `apply` (`--auth-signer`). Each connection signs one
   kind 22242 for the relay it dialed, and a failed login exits 7 with
   `reason` `login_required`, `signer_refused` or `relay_refused`.
+  ([#139](https://github.com/ohstr/ncli/pull/139))
 
 ### Changed
 
 - Names the matched rule in `ncli signer serve` denials, e.g.
-  `rule "rest": denied by rule`.
+  `rule "rest": denied by rule`. ([#139](https://github.com/ohstr/ncli/pull/139))
 
 ## [0.8.0-rc.16]
 

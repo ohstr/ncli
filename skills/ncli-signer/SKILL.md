@@ -104,7 +104,7 @@ A login the policy denies exits `7` with `reason: signer_refused`, and
 
   | Exit | Code | Meaning |
   |---|---|---|
-  | 7 | `auth` | The policy denied the request; the message carries the reason. |
+  | 7 | `auth` | The policy denied the request, or a relay login failed (`--json` `reason`: `login_required`, `signer_refused`, `relay_refused`). The message carries the reason. |
   | 6 | `network` | The socket is missing or the signer is down. |
   | 3 | `invalid_input` | The signer rejected the request as malformed. |
 

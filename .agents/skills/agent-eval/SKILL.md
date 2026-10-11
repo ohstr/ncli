@@ -19,7 +19,7 @@ its self-report. Full architecture: `integration/agent-eval/README.md`.
 
 ```sh
 cd integration/agent-eval
-bin/run.sh                              # all 15 rounds (r0-bootstrap .. r14-signer)
+bin/run.sh                              # all 16 rounds (r0-bootstrap .. r15-relay-login)
 bin/run.sh r0-bootstrap r2-query        # just these, in the order given
 ```
 

@@ -14,7 +14,7 @@
 set -euo pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-ALL_ROUNDS=(r0-bootstrap r1-identity r2-query r3-relay-ops r4-publish-apply r5-miner r6-bunker r7-blossom r8-error-contract r9-groups r10-space r11-relay-scenarios-write r12-relay-scenarios-serve r13-relay-scenarios-write-2 r14-signer)
+ALL_ROUNDS=(r0-bootstrap r1-identity r2-query r3-relay-ops r4-publish-apply r5-miner r6-bunker r7-blossom r8-error-contract r9-groups r10-space r11-relay-scenarios-write r12-relay-scenarios-serve r13-relay-scenarios-write-2 r14-signer r15-relay-login)
 ROUNDS=("${@:-${ALL_ROUNDS[@]}}")
 
 RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -209,6 +209,46 @@ prepare_r14() {
   fi
 }
 
+# R15 logs in to two relays the harness starts inside the agent container:
+# :5520 requires login and NIP-43 membership (eval-agent is a member),
+# :5521 requires login only. eval-outsider is a member of neither.
+prepare_r15() {
+  echo "==> [r15-relay-login] starting the login relays and identities"
+  if ! docker compose exec -T agent bash -lc '
+    set -e
+    export PATH="$HOME/.local/bin:$PATH"
+    ncli id eval-agent --json >/dev/null 2>&1 || ncli id --save --label eval-agent --json >/dev/null
+    ncli id eval-outsider --json >/dev/null 2>&1 || ncli id --save --label eval-outsider --json >/dev/null
+    op=$(ncli id --json | jq -r .priv_hex)
+    for port in 5520 5521; do
+      dir=/home/evaluser/work/.r15-relay-$port
+      rm -rf "$dir" && mkdir -p "$dir"
+      members=false
+      [ "$port" = 5520 ] && members=true
+      cat > "$dir/relay.yaml" <<EOF
+port: $port
+store: $dir/db/notes.db
+logdir: $dir/logs
+logs: {filename: $dir/logs/nrelay.log}
+membership: {enabled: $members}
+nip11:
+  name: r15-$port
+  url: ws://localhost:$port
+  privkey: $op
+  limitation: {auth_required: true, membership_required: $members}
+EOF
+      (cd "$dir" && nohup ncli relay --config relay.yaml >relay.out 2>&1 & disown)
+    done
+    for _ in $(seq 1 30); do
+      ncli ping ws://localhost:5520 ws://localhost:5521 >/dev/null 2>&1 && break
+      sleep 1
+    done
+    ncli relay members add "$(ncli id eval-agent --json | jq -r .pub_hex)"       --config /home/evaluser/work/.r15-relay-5520/relay.yaml --json >/dev/null
+  '; then
+    echo "ERROR: [r15-relay-login] could not start the login relays (ncli is installed by r0-bootstrap; running this round on its own skips that)" >&2
+  fi
+}
+
 # R12 needs a real Meilisearch reachable at localhost:7700 before the
 # round starts, matching public-search-relay.yaml's own doc literally (a
 # co-located instance, not a network trick). The binary is baked into the
@@ -294,6 +334,10 @@ for round in "${ROUNDS[@]}"; do
       ;;
     r14-signer)
       prepare_r14
+      run_round "${round}" || echo "WARNING: [${round}] claude invocation exited non-zero" >&2
+      ;;
+    r15-relay-login)
+      prepare_r15
       run_round "${round}" || echo "WARNING: [${round}] claude invocation exited non-zero" >&2
       ;;
     r12-relay-scenarios-serve)

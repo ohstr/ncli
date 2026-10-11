@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.8.0-rc.17]
+
+`ncli signer serve` names the rule behind a denial.
+
+### Changed
+
+- Names the matched rule in `ncli signer serve` denials, e.g.
+  `rule "rest": denied by rule`.
+
 ## [0.8.0-rc.16]
 
 `ncli bunker` works on relays that require NIP-42 AUTH.

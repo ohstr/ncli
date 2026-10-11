@@ -141,6 +141,13 @@ func AuthError(cmd *cobra.Command, err error) error {
 	return wrapCLIError(CodeAuth, "", err)
 }
 
+// LoginFailureError is AuthError for a refused NIP-42 login on relay, with
+// reason and detail reported separately in --json output.
+func LoginFailureError(cmd *cobra.Command, relay, reason, detail string, err error) error {
+	silence(cmd)
+	return &CLIError{Err: err, Code: CodeAuth, Input: relay, Reason: reason, Detail: detail}
+}
+
 // UnsupportedError marks err as failing because the target server doesn't
 // support the requested capability at all (e.g. a Blossom server with
 // BUD-02 `list` disabled entirely), as opposed to NotFoundError's "this one

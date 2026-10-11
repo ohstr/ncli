@@ -33,3 +33,15 @@ func (s *LocalSigner) PubKey() string { return s.pub }
 func (s *LocalSigner) Sign(_ context.Context, ev *nip01.Event) error {
 	return ev.Sign(s.priv)
 }
+
+// KeySigner wraps privKeyHex as a Signer, or returns nil for "" (anonymous).
+func KeySigner(privKeyHex string) Signer {
+	if privKeyHex == "" {
+		return nil
+	}
+	s, err := NewLocalSigner(privKeyHex)
+	if err != nil {
+		return nil
+	}
+	return s
+}

@@ -435,6 +435,9 @@ type StreamChannel struct {
 	subscribersSnapshot atomic.Pointer[[]*FlowContext]
 
 	timeouts *TimeoutSpec
+
+	// authSigner logs in (NIP-42) to remote relays that ask; nil stays anonymous.
+	authSigner Signer
 }
 
 func NewStreamChannel(numReaders int, timeouts *TimeoutSpec) *StreamChannel {
@@ -1354,7 +1357,7 @@ func (rs *RemoteSubscription) Read(parent context.Context) {
 		rs.sc.handleFlow(ctx, rs.fc)
 	}()
 
-	conn, err := connectRelayWithFallback(ctx, rs.relay, rs.relayFallback, rs.sc.getConnectionConfig())
+	sess, err := dialRelay(ctx, rs.relay, rs.relayFallback, rs.sc.getConnectionConfig(), rs.sc.authSigner)
 	if err != nil {
 		rs.fc.sendError(ctx, err)
 		log.Error().
@@ -1363,14 +1366,23 @@ func (rs *RemoteSubscription) Read(parent context.Context) {
 			Msg("failed to open read connection")
 		return
 	}
-	defer conn.Close()
+	defer sess.Close()
+	conn := sess.conn
+
+	if err := sess.loginFirst(ctx, nil); err != nil {
+		rs.fc.sendError(ctx, err)
+		log.Error().Err(err).Str("relay", rs.relay.String()).Msg("login failed")
+		return
+	}
 
 	// SubscribeWithID, not Subscribe: this loop reads every message type off
 	// the raw conn.Read() channel itself (via fc.receive), so it must not
 	// use Subscribe's own typed per-subscription channel — that channel
 	// would go undrained and eventually block the connection's read loop
 	// once its buffer fills.
-	conn.SubscribeWithID(uuid.NewString(), rs.fc.filters)
+	subID := uuid.NewString()
+	conn.SubscribeWithID(subID, rs.fc.filters)
+	retried := false
 
 	// Create a channel to signal connection death to the main loop
 	connDead := make(chan struct{})
@@ -1394,6 +1406,21 @@ func (rs *RemoteSubscription) Read(parent context.Context) {
 	for {
 		select {
 		case ev := <-conn.Read():
+			if sess.observe(ev) {
+				continue
+			}
+			// A relay that asks for a login after the REQ: log in, REQ once more.
+			if closed, ok := ev.(*wire.ClosedSubscriptionResponse); ok && closed.SubscriptionID == subID && refusedForLogin(closed.Message) && !retried {
+				retried = true
+				if err := sess.awaitLogin(ctx, closed.Message, rs.fc.receive); err != nil {
+					rs.fc.sendError(ctx, err)
+					log.Error().Err(err).Str("relay", rs.relay.String()).Msg("login failed")
+					return
+				}
+				subID = uuid.NewString()
+				conn.SubscribeWithID(subID, rs.fc.filters)
+				continue
+			}
 			rs.fc.receive(ev)
 
 		case <-connDead:
@@ -1418,7 +1445,7 @@ func (rs *RemoteSubscription) Write(parent context.Context) {
 		rs.sc.handleFlow(ctx, rs.fc)
 	}()
 
-	conn, err := connectRelayWithFallback(ctx, rs.relay, rs.relayFallback, rs.sc.getConnectionConfig())
+	sess, err := dialRelay(ctx, rs.relay, rs.relayFallback, rs.sc.getConnectionConfig(), rs.sc.authSigner)
 	if err != nil {
 		rs.fc.sendError(ctx, err)
 		log.Error().
@@ -1427,7 +1454,19 @@ func (rs *RemoteSubscription) Write(parent context.Context) {
 			Msg("failed to open write connection")
 		return
 	}
-	defer conn.Close()
+	defer sess.Close()
+	conn := sess.conn
+
+	if err := sess.loginFirst(ctx, nil); err != nil {
+		rs.fc.sendError(ctx, err)
+		log.Error().Err(err).Str("relay", rs.relay.String()).Msg("login failed")
+		return
+	}
+
+	// With a signer, events sent but not yet acked, so one refused with
+	// "auth-required:" can be sent once more after logging in.
+	var unacked sync.Map
+	trackUnacked := sess.signer != nil
 
 	connDead := make(chan struct{})
 
@@ -1436,6 +1475,19 @@ func (rs *RemoteSubscription) Write(parent context.Context) {
 		for {
 			select {
 			case res := <-conn.Read(): // Write connection also reads ACKs
+				if sess.observe(res) {
+					continue
+				}
+				if ok, isOK := res.(*wire.OkSubscriptionResponse); isOK && trackUnacked {
+					v, pending := unacked.LoadAndDelete(ok.EventID)
+					if pending && !ok.Accepted && refusedForLogin(ok.Message) {
+						if err := sess.awaitLogin(ctx, ok.Message, rs.fc.receive); err != nil {
+							log.Error().Err(err).Str("relay", rs.relay.String()).Msg("login failed")
+						} else if conn.Send(v.(*nip01.Event)) {
+							continue
+						}
+					}
+				}
 				rs.fc.receive(res)
 
 			case err := <-conn.Errors():
@@ -1489,6 +1541,9 @@ func (rs *RemoteSubscription) Write(parent context.Context) {
 			// here, once for real on its ack), which is exactly what LocalSubscription's
 			// Write avoids by only ever counting through the synthetic ack it
 			// sends itself.
+			if trackUnacked {
+				unacked.Store(ev.ID, ev)
+			}
 			if ok := conn.Send(ev); !ok {
 				// No explicit slot release: Write returns right below, and
 				// this connection's whole semaphore is discarded next cycle

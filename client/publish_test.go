@@ -77,7 +77,7 @@ func TestPublishToTargetsCrossProduct(t *testing.T) {
 		newRecoveryTestEvent(fmt.Sprintf("%064x", 4)),
 	}
 
-	report, err := PublishToTargets(context.Background(), targets, events)
+	report, err := PublishToTargets(context.Background(), targets, events, nil)
 	if err != nil {
 		t.Fatalf("PublishToTargets failed: %v", err)
 	}
@@ -105,7 +105,7 @@ func TestPublishToTargetsToleratesUnreachableTarget(t *testing.T) {
 	targets := targetsSpecFromURLs(t, deadURL, mockRelayWSURL(good))
 	events := []*nip01.Event{newRecoveryTestEvent(fmt.Sprintf("%064x", 5))}
 
-	report, err := PublishToTargets(context.Background(), targets, events)
+	report, err := PublishToTargets(context.Background(), targets, events, nil)
 	if err != nil {
 		t.Fatalf("expected the reachable target to make this succeed, got error: %v", err)
 	}
@@ -128,7 +128,7 @@ func TestPublishToTargetsAllUnreachable(t *testing.T) {
 	targets := targetsSpecFromURLs(t, deadURL)
 	events := []*nip01.Event{newRecoveryTestEvent(fmt.Sprintf("%064x", 6))}
 
-	if _, err := PublishToTargets(context.Background(), targets, events); err != ErrNoReachableTargets {
+	if _, err := PublishToTargets(context.Background(), targets, events, nil); err != ErrNoReachableTargets {
 		t.Fatalf("expected ErrNoReachableTargets, got %v", err)
 	}
 }
@@ -140,7 +140,7 @@ func TestPublishToTargetsRejectsLocalTarget(t *testing.T) {
 	targets := &TargetsSpec{Relays: []*FlowSpec{{Type: FlOW_LOCAL, Path: t.TempDir() + "/notes.db"}}}
 	events := []*nip01.Event{newRecoveryTestEvent(fmt.Sprintf("%064x", 7))}
 
-	if _, err := PublishToTargets(context.Background(), targets, events); err == nil {
+	if _, err := PublishToTargets(context.Background(), targets, events, nil); err == nil {
 		t.Fatal("expected an error for a local-store target, got nil")
 	}
 }

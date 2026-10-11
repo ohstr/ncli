@@ -16,28 +16,28 @@ func newTestQueryAuthCmd(t *testing.T) *cobra.Command {
 	return cmd
 }
 
-// TestResolveQueryIdentity_NoneGivenIsOptional covers find/dump's "no
+// TestResolveQueryAuthSigner_NoneGivenIsOptional covers find/dump's "no
 // behavior change without --auth-identity" contract at the flag-wiring
 // layer: no flag, no config, no vault entry to fall back to must resolve
 // to "" with no error, not the required-identity error
 // keyresolve.ResolveIdentity itself would return.
-func TestResolveQueryIdentity_NoneGivenIsOptional(t *testing.T) {
+func TestResolveQueryAuthSigner_NoneGivenIsOptional(t *testing.T) {
 	cmd := newTestQueryAuthCmd(t)
 
-	got, err := resolveQueryIdentity(cmd)
+	got, _, err := resolveQueryAuthSigner(cmd)
 	if err != nil {
-		t.Fatalf("resolveQueryIdentity() error = %v, want nil", err)
+		t.Fatalf("resolveQueryAuthSigner() error = %v, want nil", err)
 	}
-	if got != "" {
-		t.Fatalf("resolveQueryIdentity() = %q, want \"\"", got)
+	if got != nil {
+		t.Fatalf("resolveQueryAuthSigner() = %v, want nil", got)
 	}
 }
 
-// TestResolveQueryIdentity_ExplicitFlagResolves covers the flag actually
+// TestResolveQueryAuthSigner_ExplicitFlagResolves covers the flag actually
 // reaching keyresolve.ResolveIdentityOptional under the name this package
 // uses for it (auth-identity, not identity -- miner check already owns
 // --identity for an unrelated purpose).
-func TestResolveQueryIdentity_ExplicitFlagResolves(t *testing.T) {
+func TestResolveQueryAuthSigner_ExplicitFlagResolves(t *testing.T) {
 	cmd := newTestQueryAuthCmd(t)
 
 	id, err := client.GenerateIdentity()
@@ -46,25 +46,25 @@ func TestResolveQueryIdentity_ExplicitFlagResolves(t *testing.T) {
 	}
 	mustSet(t, cmd, "auth-identity", id.Nsec)
 
-	got, err := resolveQueryIdentity(cmd)
+	got, _, err := resolveQueryAuthSigner(cmd)
 	if err != nil {
-		t.Fatalf("resolveQueryIdentity() error = %v, want nil", err)
+		t.Fatalf("resolveQueryAuthSigner() error = %v, want nil", err)
 	}
-	if got != id.PrivKeyHex {
-		t.Fatalf("resolveQueryIdentity() = %q, want %q", got, id.PrivKeyHex)
+	if got == nil || got.PubKey() != id.PubKeyHex {
+		t.Fatalf("resolveQueryAuthSigner() = %v, want a signer for %s", got, id.PubKeyHex)
 	}
 }
 
-// TestResolveQueryIdentity_ExplicitBadFlagErrors covers the other half:
+// TestResolveQueryAuthSigner_ExplicitBadFlagErrors covers the other half:
 // unlike "nothing given," an explicitly-given identity that fails to
 // resolve must still surface as an error, not be silently swallowed into
 // "".
-func TestResolveQueryIdentity_ExplicitBadFlagErrors(t *testing.T) {
+func TestResolveQueryAuthSigner_ExplicitBadFlagErrors(t *testing.T) {
 	cmd := newTestQueryAuthCmd(t)
 	mustSet(t, cmd, "auth-identity", "not-a-real-identity")
 
-	if _, err := resolveQueryIdentity(cmd); err == nil {
-		t.Fatal("resolveQueryIdentity() with a malformed --auth-identity error = nil, want an error")
+	if _, _, err := resolveQueryAuthSigner(cmd); err == nil {
+		t.Fatal("resolveQueryAuthSigner() with a malformed --auth-identity error = nil, want an error")
 	}
 }
 

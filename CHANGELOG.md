@@ -2,7 +2,16 @@
 
 ## [0.8.0-rc.17]
 
-`ncli signer serve` names the rule behind a denial.
+`publish`, `find`, `dump` and `apply` log in to relays that require NIP-42
+through a signer, so a process with no private key can use them.
+
+### Added
+
+- Adds NIP-42 login through a signer (`bunker+unix://`, `bunker://` or a key)
+  to `publish` (`--signer`, `--auth-signer`), `find`/`dump` (`--auth-identity`,
+  alias `--signer`) and `apply` (`--auth-signer`). Each connection signs one
+  kind 22242 for the relay it dialed, and a failed login exits 7 with
+  `reason` `login_required`, `signer_refused` or `relay_refused`.
 
 ### Changed
 

@@ -42,7 +42,7 @@ func attachPreviousTags(ctx context.Context, relayURL *url.URL, groupID string, 
 		nip01.NewFilter().WithTag(nip29.TagGroupID, groupID).WithLimit(nip29.RecommendedTimelineReferences),
 	)
 
-	events, err := client.QueryTargetsWithAuth(ctx, targets, filters, previousQueryTimeout, privKeyHex)
+	events, err := client.QueryTargetsWithAuth(ctx, targets, filters, previousQueryTimeout, client.KeySigner(privKeyHex))
 	if errors.Is(err, client.ErrRestricted) {
 		return nil
 	}

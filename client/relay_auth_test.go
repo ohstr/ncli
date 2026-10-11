@@ -175,7 +175,7 @@ func TestMergeEventsFromTargets_AuthenticatesWithIdentity(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	events, err := mergeEventsFromTargets(ctx, targets, filters, 0, testAuthPrivKey)
+	events, err := mergeEventsFromTargets(ctx, targets, filters, 0, KeySigner(testAuthPrivKey))
 	if err != nil {
 		t.Fatalf("mergeEventsFromTargets() with identity error = %v", err)
 	}
@@ -202,7 +202,7 @@ func TestMergeEventsFromTargets_AnonymousGetsNothingFromGatedRelay(t *testing.T)
 	defer cancel()
 
 	// Refused, and says so: an empty result would read as "nothing matched".
-	events, err := mergeEventsFromTargets(ctx, targets, filters, 0, "")
+	events, err := mergeEventsFromTargets(ctx, targets, filters, 0, nil)
 	if !errors.Is(err, ErrRestricted) {
 		t.Fatalf("mergeEventsFromTargets() with no identity error = %v, want ErrRestricted", err)
 	}
@@ -227,7 +227,7 @@ func TestDumpFromTargets_ThreadsIdentityThrough(t *testing.T) {
 	defer cancel()
 
 	outPath := filepath.Join(t.TempDir(), "out.json")
-	if err := DumpFromTargets(ctx, targets, outPath, nil, 0, testAuthPrivKey); err != nil {
+	if err := DumpFromTargets(ctx, targets, outPath, nil, 0, KeySigner(testAuthPrivKey)); err != nil {
 		t.Fatalf("DumpFromTargets() with identity error = %v", err)
 	}
 
@@ -261,7 +261,7 @@ func TestFind_ThreadsIdentityThrough(t *testing.T) {
 	defer cancel()
 
 	savePath := filepath.Join(t.TempDir(), "found.json")
-	if err := Find(ctx, nil, filtersSpec, targets, savePath, 0, testAuthPrivKey); err != nil {
+	if err := Find(ctx, nil, filtersSpec, targets, savePath, 0, KeySigner(testAuthPrivKey)); err != nil {
 		t.Fatalf("Find() with identity error = %v", err)
 	}
 
@@ -290,7 +290,7 @@ func TestMergeEventsFromTargets_ReturnsErrRestrictedWhenAuthenticatedButDenied(t
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	events, err := mergeEventsFromTargets(ctx, targets, filters, 0, testAuthPrivKey)
+	events, err := mergeEventsFromTargets(ctx, targets, filters, 0, KeySigner(testAuthPrivKey))
 	if !errors.Is(err, ErrRestricted) {
 		t.Fatalf("mergeEventsFromTargets() error = %v, want ErrRestricted", err)
 	}
@@ -311,7 +311,7 @@ func TestQueryTargetsWithAuth_ReturnsErrRestrictedWhenAuthenticatedButDenied(t *
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if _, err := QueryTargetsWithAuth(ctx, targets, filters, 0, testAuthPrivKey); !errors.Is(err, ErrRestricted) {
+	if _, err := QueryTargetsWithAuth(ctx, targets, filters, 0, KeySigner(testAuthPrivKey)); !errors.Is(err, ErrRestricted) {
 		t.Fatalf("QueryTargetsWithAuth() error = %v, want ErrRestricted", err)
 	}
 
@@ -332,7 +332,7 @@ func TestFind_ReturnsErrRestrictedWhenAuthenticatedButDenied(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err = Find(ctx, nil, filtersSpec, targets, "", 0, testAuthPrivKey)
+	err = Find(ctx, nil, filtersSpec, targets, "", 0, KeySigner(testAuthPrivKey))
 	if !errors.Is(err, ErrRestricted) {
 		t.Fatalf("Find() error = %v, want ErrRestricted", err)
 	}
@@ -349,7 +349,7 @@ func TestDumpFromTargets_ReturnsErrRestrictedWhenAuthenticatedButDenied(t *testi
 	defer cancel()
 
 	outPath := filepath.Join(t.TempDir(), "out.json")
-	err = DumpFromTargets(ctx, targets, outPath, nil, 0, testAuthPrivKey)
+	err = DumpFromTargets(ctx, targets, outPath, nil, 0, KeySigner(testAuthPrivKey))
 	if !errors.Is(err, ErrRestricted) {
 		t.Fatalf("DumpFromTargets() error = %v, want ErrRestricted", err)
 	}

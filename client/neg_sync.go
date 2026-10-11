@@ -45,6 +45,9 @@ type SyncModule struct {
 	// of a missing/insufficient PoW nonce; true drops it instead of
 	// inserting it into the local store, unless the remote flow is Trusted.
 	strictPow bool
+
+	// authSigner logs in (NIP-42) to the remote if it asks; nil stays anonymous.
+	authSigner Signer
 }
 
 func NewSyncModule(spec *SyncSpec, logger *tui.FlowLogger, strictPow bool) (*SyncModule, error) {
@@ -133,13 +136,19 @@ func (s *SyncModule) execute(ctx context.Context) {
 	remote := s.spec.GetRemote()
 	s.logger.Info(fmt.Sprintf("Connecting to %s", remote.Relay), syncAttr)
 
-	conn, err := connectRelayWithFallback(ctx, remote.relayURI, remote.relayFallbackURI, s.spec.Timeouts.ConnectionConfig())
+	sess, err := dialRelay(ctx, remote.relayURI, remote.relayFallbackURI, s.spec.Timeouts.ConnectionConfig(), s.authSigner)
 	if err != nil {
 		s.logger.Error(fmt.Errorf("failed to connect: %w", err), syncAttr)
 		return
 	}
+	conn := sess.conn
 	s.conn = conn
 	defer conn.Close()
+
+	if err := sess.loginFirst(ctx, nil); err != nil {
+		s.logger.Error(err, syncAttr)
+		return
+	}
 
 	s.logger.Success("Connected", syncAttr)
 

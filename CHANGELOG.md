@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.8.0-rc.21]
+
+Relays hosting NIP-29 groups no longer keep a deleted subgroup in its parent.
+
+### Fixed
+
+- Fixes deleting a NIP-29 subgroup on `ncli relay`: it now leaves its parent's
+  `child` list, so the parent's other subgroups stay readable, and an edit to
+  the parent clears an id left behind by an earlier delete.
+  ([#149](https://github.com/ohstr/ncli/pull/149))
+
 ## [0.8.0-rc.20]
 
 `ncli skills install` needs `--dir`, so skills go wherever your agent reads them.

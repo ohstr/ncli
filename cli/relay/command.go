@@ -223,8 +223,9 @@ type Nip86Config struct {
 	// Content-Type: application/nostr+json+rpc. The WebSocket upgrade and the
 	// NIP-11 document on that same URL are unaffected.
 	//
-	// Requires membership.enabled: every method it exposes administers NIP-43
-	// membership, so without it there would be nothing to administer.
+	// The moderation methods (bans, kind rules, blocked IPs, the relay's
+	// NIP-11 name/description/icon) work on any relay; the NIP-43 membership
+	// methods are added when membership.enabled is on.
 	Enabled bool `mapstructure:"enabled"`
 
 	// Admins are the hex pubkeys allowed to call it, in addition to

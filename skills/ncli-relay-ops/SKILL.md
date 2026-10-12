@@ -133,7 +133,7 @@ relay at all; not `network`, since retrying won't fix a config problem).
 
 Full endpoint list and subcommand reference: `references/membership-admin-reference.md`.
 
-## `nip86:` — let an app administer membership, no terminal
+## `nip86:` — let an app moderate and administer the relay, no terminal
 
 `ncli relay members/invites/roles` is a bespoke API that only this CLI
 speaks, and it authenticates as `nip11.privkey` — so administering means
@@ -143,7 +143,8 @@ NIP-98 against a list of admin pubkeys:
 
 ```yaml
 membership:
-  # required: every NIP-86 method here administers NIP-43
+  # only for the membership methods (allowpubkey, claims, roles); the
+  # moderation methods work without it
   enabled: true
 nip86:
   enabled: true
@@ -179,7 +180,21 @@ Gotchas worth knowing before you debug a 401:
   relay answers. A permissive origin is fine here: authorization is a signed
   header, not a cookie.
 
-Methods: `supportedmethods`, `allowpubkey`, `unallowpubkey`,
+Methods, always: `supportedmethods`, and moderation --
+`banpubkey`/`unbanpubkey`/`listbannedpubkeys` (a banned pubkey's new events
+are refused `blocked: ...`), `banevent` (also deletes the stored copy)/
+`allowevent`/`listbannedevents`, `listeventsneedingmoderation` (always `[]`:
+there is no review queue), `allowkind`/`disallowkind`/`listallowedkinds`/
+`listdisallowedkinds` (once any kind is allowed, every other kind is
+refused), `blockip`/`unblockip`/`listblockedips` (by the connection's own
+address; a forwarded-for header is ignored; NIP-86 calls themselves are
+never blocked, so an admin can't lock themselves out), and
+`changerelayname`/`changerelaydescription`/`changerelayicon` (the NIP-11
+document changes at once). The relay's own key is never refused. This state
+is saved beside the store as `<store>.moderation.json` and survives a
+restart; it overrides `nip11.name`/`description`/`icon` from the config.
+
+With `membership.enabled`, also: `allowpubkey`, `unallowpubkey`,
 `listallowedpubkeys`, `createclaim` (optional code; generated when omitted),
 `listclaims`, `deleteclaim`, and the role methods `createrole`, `editrole`,
 `deleterole`, `assignrole`, `unassignrole`.

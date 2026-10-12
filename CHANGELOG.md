@@ -27,6 +27,10 @@ from an nevent, note, naddr, file or stdin.
   group role may send, so a role like `moderator` has real power. Without it,
   only `admin` moderates, as before.
   ([#145](https://github.com/ohstr/ncli/pull/145))
+- Adds NIP-86 moderation to `ncli relay`: ban pubkeys and events, allow or
+  disallow kinds, block IPs, and change the relay's name, description and
+  icon, saved across restarts. `nip86` no longer requires `membership`; the
+  membership methods are added when it is on.
 - Adds `-e -` to `ncli id sign` and `ncli publish`, and `-o -` to `id sign`,
   so an event can be built, signed and published in one pipe.
   ([#144](https://github.com/ohstr/ncli/pull/144))

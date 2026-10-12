@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	"github.com/ohstr/ncli/cli/reindex"
@@ -93,6 +94,15 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 		sessionConfig.AgentKindEnforcement = config.AgentAuth.KindEnforcement
 	}
 
+	// NIP-86 moderation (bans, kind rules, blocked IPs, NIP-11 overrides):
+	// loaded before the session handler so the event policy applies from
+	// the first connection.
+	moderation, err := loadModeration(moderationPath(config.RelayNotesDb), config.Nip11.PubKey)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to load NIP-86 moderation state")
+	}
+	sessionConfig.EventPolicy = moderation.eventPolicy
+
 	wsHandler := relay.NewSessionHandler(
 		store,
 		&config.Nip11,
@@ -149,7 +159,17 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 			break
 		}
 	}
-	nip11Handler := nip11.NewHandler(&nip11Metadata, supportedNips)
+	// Rebuilt when NIP-86 changes the relay's name, description or icon:
+	// nip11.NewHandler serves the bytes it marshaled when built.
+	var nip11Handler atomic.Pointer[http.Handler]
+	buildNip11 := func() {
+		md := nip11Metadata
+		moderation.applyNip11(&md)
+		h := nip11.NewHandler(&md, supportedNips)
+		nip11Handler.Store(&h)
+	}
+	buildNip11()
+	moderation.onNip11Change = buildNip11
 
 	mux := http.NewServeMux()
 	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -164,7 +184,7 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 		case nip86Handler != nil && (nip86.IsManagementRequest(r) || r.Method == http.MethodOptions):
 			serveOnce(nip86Replay, nip86Handler, w, r)
 		case r.Header.Get("Accept") == nip11.ContentTypeHeader:
-			nip11Handler.ServeHTTP(w, r)
+			(*nip11Handler.Load()).ServeHTTP(w, r)
 		default:
 			wsHandler.ServeHTTP(w, r)
 		}
@@ -189,7 +209,7 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 		// admin-pubkey allowlist. wsHandler.Membership() for the same
 		// reason /query shares it -- one live membership view, not a
 		// second cache.
-		mux.Handle("/events", relay.NewEventsHandler(store, &config.Nip11.Limitation, wsHandler.Membership(), config.Nip11.Self))
+		mux.Handle("/events", relay.NewEventsHandler(store, &config.Nip11.Limitation, wsHandler.Membership(), config.Nip11.Self, relay.WithEventsPolicy(moderation.eventPolicy)))
 	}
 
 	// ADMIN ENDPOINTS
@@ -340,7 +360,7 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 
 	registerMembershipAdminRoutes(mux, wsHandler, store, huddleRooms, adminAuth)
 
-	handler, err := newNip86Handler(wsHandler, store, huddleRooms)
+	handler, err := newNip86Handler(wsHandler, store, huddleRooms, moderation)
 	if err != nil {
 		log.Fatal().Err(err).Msg("invalid nip86 configuration")
 	}
@@ -365,7 +385,7 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 		verificationWorker: wsHandler.VerificationWorker,
 		huddleRooms:        huddleRooms,
 		server: &http.Server{
-			Handler: mux,
+			Handler: moderation.ipGate(mux),
 			Addr:    fmt.Sprintf(":%d", config.Port),
 		},
 	}

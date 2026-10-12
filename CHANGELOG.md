@@ -2,8 +2,8 @@
 
 ## [0.8.0-rc.18]
 
-`ncli event` verifies, fetches and inspects any event, whoever signed it,
-from an nevent, note, naddr, file or stdin.
+`ncli event` verifies, fetches and inspects any event, whoever signed it, and
+relays gain NIP-86 moderation and configurable NIP-29 group roles.
 
 ### Added
 
@@ -35,6 +35,13 @@ from an nevent, note, naddr, file or stdin.
 - Adds `-e -` to `ncli id sign` and `ncli publish`, and `-o -` to `id sign`,
   so an event can be built, signed and published in one pipe.
   ([#144](https://github.com/ohstr/ncli/pull/144))
+
+### Changed
+
+- Updates nmilat to v0.5.0-rc.17: hosted NIP-29 groups enforce `restricted`
+  and `hidden`, the relay's own key can moderate every group, and each group
+  advertises its roles (kind 39003).
+  ([#147](https://github.com/ohstr/ncli/pull/147))
 
 ## [0.8.0-rc.17]
 

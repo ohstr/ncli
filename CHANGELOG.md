@@ -26,6 +26,7 @@ from an nevent, note, naddr, file or stdin.
 - Adds `groups.roles` to relay.yaml, which sets the moderation kinds each NIP-29
   group role may send, so a role like `moderator` has real power. Without it,
   only `admin` moderates, as before.
+  ([#145](https://github.com/ohstr/ncli/pull/145))
 - Adds `-e -` to `ncli id sign` and `ncli publish`, and `-o -` to `id sign`,
   so an event can be built, signed and published in one pipe.
   ([#144](https://github.com/ohstr/ncli/pull/144))

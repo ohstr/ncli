@@ -15,6 +15,8 @@ that priority order.
 | `ncli dump -o <out.json>` | Export events to JSON from a relay, `.db` file, or prefs relays |
 | `ncli find <id>` / `-t <targets.yaml>` | Look up events by ID (hex/note/nevent) or author (npub/nprofile/nip-05), and/or filter, across targets |
 | `ncli profile <identifier>` | Readable profile card for one identity — metadata, following count, relay list, Blossom servers, lightning address — aggregated across every relay (not stopping at the first hit like `find`) |
+| `ncli event verify/get/show <ref...>` | Verify any event's id and signature (plus author, kind, PoW, expiration, delegation, zap, `--deleted`, `--cross-relays`), print it raw, or show it as a card -- from an nevent/note/naddr/hex id/`kind:pubkey:d`, event JSON, `-f` files or stdin, looked up on the reference's relay hints, `-s` (or prefs) and the author's NIP-65 outbox; no identity needed. `verify` exits 1 if any event is invalid |
+| `ncli event new/id/encode/seen/rebroadcast/thread/diff/unwrap/validate` | Build an unsigned event from flags or compute ids; spell an event as nevent/naddr with hints; list which relays hold it; copy it unchanged to `--to` relays; walk its NIP-10/NIP-22 thread; diff two events; decrypt a NIP-59 gift wrap with `--identity`; run nmilat's per-kind rules on it |
 | `ncli ping <relay...>` / `-t <targets.yaml>` | Probe whether targets are reachable (connect + subscribe), no events fetched |
 | `ncli prefs relays add/list/remove/clear` | Manage the default relay list `find`/`dump`/`ping`/`miner check` fall back to |
 | `ncli relay --config <relay.yaml>` | Run the relay server; `agent_auth` block enables NIP-AA (an agent key gains virtual membership from its owner's NIP-43 membership via a NIP-OA credential, no separate enrollment); `nip86` block serves the NIP-86 management API on the relay URL so an app can administer membership without a terminal; `query` block serves buzz's NIP-CW `POST /query` bridge, a one-shot HTTP alternative to a WS REQ/EOSE round trip -- NIP-98 there binds identity; results are further gated to the signer's own NIP-43 membership when `nip11.limitation.membership_required` is set, same as REQ/COUNT |
@@ -44,7 +46,7 @@ that priority order.
 | `ncli id relabel <identifier> <new-label>` | Rename a saved vault identity (by label, npub, hex, nprofile or nip-05) without supplying its key |
 | `ncli id rm <identifier>` | Remove a saved vault identity (by label, npub, hex, nprofile or nip-05), deleting the vault's copy of its key; confirms first, `--yes` required with `--json` or no terminal |
 | `ncli id delegate` | Mint a NIP-26 delegation token |
-| `ncli id sign -e <events.json> -o <signed.json>` | Sign one or more unsigned events with a vault/nsec identity; `-e -`/`-o -` read stdin and print the signed events, so signing and publishing fit in a pipe |
+| `ncli id sign -e <events.json> -o <signed.json>` | Sign one or more unsigned events with a vault/nsec identity; `-e -`/`-o -` read stdin and print the signed events, so `ncli event new \| ncli id sign -e - -o - \| ncli publish -e -` works as a pipe |
 | `ncli decode <entity>` | Decode any NIP-19 bech32 entity (npub/nsec/note/nprofile/nevent/naddr), a NIP-CASH cash-token-family string, or a NIP-CW circlehub1... connection |
 | `ncli miner -e <event.yaml>` | Mine or check NIP-13 proof-of-work on an event |
 | `ncli version` | Build info + on-disk paths |
@@ -65,7 +67,8 @@ than per-command. `id`, `id list`, `id import`, `id relabel`, `id rm`, `id sign`
 stats`/`reindex`/`clear`, `relay members`/`invites`/`roles`, `ping`,
 `miner mine`/`check`, `publish`, `huddle list`, `space create`/
 `list`/`show`/`chat send`/`chat list`, `bunker`/`status`/`stop`/
-`connect`/`history`/`sessions`/`pending`, `signer status`/`check`, `groups create`/`edit`/`delete`/`invite`/`join`/`leave`/
+`connect`/`history`/`sessions`/`pending`, `signer status`/`check`, `event verify`/`show`/`encode`/`seen`/
+`rebroadcast`/`thread`/`diff`/`unwrap`/`validate`, `groups create`/`edit`/`delete`/`invite`/`join`/`leave`/
 `members`/`pins`/`delete-event`/`list`/`show`, and `prefs relays add`/
 `remove`/`list`/`clear`/`prefs path` are human-readable text by default
 and switch their *success* output to structured JSON on stdout with
@@ -175,6 +178,10 @@ or invoking a command in that area:
 - Generating/importing/managing keys or delegation tokens (`id`, `id import`, `id delegate`), or
   decoding a NIP-19 entity, cash token, or circlehub1... connection
   (`decode`) → `skills/ncli-identity/SKILL.md`
+- Checking whether an event is authentic, fetching or showing one by
+  nevent/note/naddr, seeing which relays hold it, rebroadcasting it,
+  walking its thread, unwrapping a gift wrap, or building/signing/
+  publishing an event in a pipe (`event ...`) → `skills/ncli-event/SKILL.md`
 - Mining or verifying proof-of-work (`miner`) → `skills/ncli-miner/SKILL.md`
 - Running `ncli` as a remote NIP-46 signer (`bunker`, `bunker attach/
   status/stop/sessions/history/connect`), including pairing an agent as

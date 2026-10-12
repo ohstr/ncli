@@ -33,6 +33,19 @@
 "bunker stop": {modes: [json, errors], tests: [TestTTY_BunkerDaemon, TestBunkerWithoutDaemon]}
 "decode": {modes: [json, text, tty, errors], tests: [TestDecode, TestTTY_FailureShapes, TestTTY_Color]}
 "dump": {modes: [json, errors], tests: [TestQuery, TestRelayLogin_AuthRequired]}
+"event": {modes: [errors], tests: [TestBareGroupCommands]}
+"event diff": {modes: [json], tests: [TestEventAuthoring]}
+"event encode": {modes: [json], tests: [TestEventVerifyAndGet]}
+"event get": {modes: [json, errors], tests: [TestEventVerifyAndGet]}
+"event id": {modes: [text, errors], tests: [TestEventAuthoring]}
+"event new": {modes: [json, errors], tests: [TestEventAuthoring, TestEventVerifyAndGet]}
+"event rebroadcast": {modes: [json, errors], tests: [TestEventSeenAndRebroadcast]}
+"event seen": {modes: [json, errors], tests: [TestEventSeenAndRebroadcast]}
+"event show": {modes: [json, text], tests: [TestEventVerifyAndGet]}
+"event thread": {modes: [json], tests: [TestEventAuthoring]}
+"event unwrap": {modes: [json, errors], tests: [TestEventUnwrap]}
+"event validate": {modes: [json, errors], tests: [TestEventAuthoring]}
+"event verify": {modes: [json, text, errors], tests: [TestEventVerifyAndGet]}
 "find": {modes: [json, tty, errors], tests: [TestQuery, TestAddressableLookups, TestTTY_Spinner, TestTimeoutCoversHandshake, TestRelayLogin_AuthRequired, TestRelayLogin_MembershipRequired, TestRelayLogin_NIP46Bunker]}
 "groups": {modes: [errors], tests: [TestBareGroupCommands]}
 "groups create": {modes: [json, errors], tests: [TestGroupsCLI]}

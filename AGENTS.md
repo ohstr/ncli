@@ -50,7 +50,7 @@ that priority order.
 | `ncli decode <entity>` | Decode any NIP-19 bech32 entity (npub/nsec/note/nprofile/nevent/naddr), a NIP-CASH cash-token-family string, or a NIP-CW circlehub1... connection |
 | `ncli miner -e <event.yaml>` | Mine or check NIP-13 proof-of-work on an event |
 | `ncli version` | Build info + on-disk paths |
-| `ncli skills list/show/install` | List, print or install the agent skills built into the binary (the `skills/` guides below, matching the installed version); `install` copies them to `~/.claude/skills` or `--dir`, refusing to overwrite a differing file without `--force` |
+| `ncli skills list/show/install` | List, print or install the agent skills built into the binary (the `skills/` guides below, matching the installed version); `install` copies them to the required `--dir`, refusing to overwrite a differing file without `--force` |
 
 Every relay input (`-s/--relays`, `prefs relays add`, `targets.yaml`, `apply`
 flow entries) accepts a bare host with no `ws(s)://` scheme —

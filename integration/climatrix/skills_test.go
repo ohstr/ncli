@@ -81,14 +81,19 @@ func TestSkillsCmd(t *testing.T) {
 	e.Run(t, "skills", "show", "ncli-query", "../ncli-miner/SKILL.md", "--json").ExpectErr(t, "not_found")
 	e.Run(t, "skills", "show", "--json").ExpectErr(t, "usage")
 
-	// Default dir is ~/.claude/skills; HOME is the Env dir.
-	dir := filepath.Join(e.Dir, ".claude", "skills")
+	// No default dir: without --dir nothing is written, even under HOME.
+	e.Run(t, "skills", "install", "--json").ExpectErr(t, "usage")
+	if _, err := os.Stat(filepath.Join(e.Dir, ".claude")); err == nil {
+		t.Error("install without --dir wrote under HOME")
+	}
+
+	dir := filepath.Join(e.Dir, "agent-skills")
 	type installOut struct {
 		Dir    string
 		Skills []struct{ Name, Status string }
 	}
 	var first installOut
-	e.MustOK(t, "skills", "install", "--json").JSON(t, &first)
+	e.MustOK(t, "skills", "install", "--dir", dir, "--json").JSON(t, &first)
 	if first.Dir != dir || len(first.Skills) != len(onDisk) || first.Skills[0].Status != "installed" {
 		t.Fatalf("install: %+v", first)
 	}
@@ -96,7 +101,7 @@ func TestSkillsCmd(t *testing.T) {
 		t.Errorf("references not installed: %v", err)
 	}
 	var again installOut
-	e.MustOK(t, "skills", "install", "--json").JSON(t, &again)
+	e.MustOK(t, "skills", "install", "--dir", dir, "--json").JSON(t, &again)
 	for _, s := range again.Skills {
 		if s.Status != "unchanged" {
 			t.Errorf("reinstall: %s %s", s.Name, s.Status)
@@ -107,12 +112,12 @@ func TestSkillsCmd(t *testing.T) {
 	if err := os.WriteFile(edited, []byte("mine"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if r := e.Run(t, "skills", "install", "--json").ExpectErr(t, "conflict"); r.Input != edited {
+	if r := e.Run(t, "skills", "install", "--dir", dir, "--json").ExpectErr(t, "conflict"); r.Input != edited {
 		t.Errorf("conflict input %q, want %q", r.Input, edited)
 	}
-	e.MustOK(t, "skills", "install", "ncli-miner", "--force", "--json")
+	e.MustOK(t, "skills", "install", "ncli-miner", "--dir", dir, "--force", "--json")
 	if b, _ := os.ReadFile(edited); string(b) == "mine" {
 		t.Error("--force didn't overwrite")
 	}
-	e.Run(t, "skills", "install", "bogus", "--json").ExpectErr(t, "not_found")
+	e.Run(t, "skills", "install", "bogus", "--dir", dir, "--json").ExpectErr(t, "not_found")
 }

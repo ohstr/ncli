@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.8.0-rc.20]
+
+`ncli skills install` needs `--dir`, so skills go wherever your agent reads them.
+
+### Changed
+
+- Makes `--dir` required for `ncli skills install`, which no longer defaults to
+  `~/.claude/skills`; without it the command exits 2 and writes nothing.
+  ([#141](https://github.com/ohstr/ncli/pull/141))
+
 ## [0.8.0-rc.19]
 
 Relays configure the rest of NIP-29 group hosting from relay.yaml.

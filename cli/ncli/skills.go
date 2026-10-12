@@ -26,7 +26,7 @@ binary, so an agent with only ncli on PATH can read guidance that matches
 the installed version.`,
 	Example: `  ncli skills list
   ncli skills show ncli-query
-  ncli skills install`,
+  ncli skills install --dir ~/.agents/skills`,
 	// Embedded data only: no config or log setup.
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {},
 	RunE:             common.RequireSubcommand,
@@ -107,11 +107,11 @@ var skillsInstallCmd = &cobra.Command{
 	Use:   "install [name...]",
 	Short: "Copy built-in skills into an agent's skills directory",
 	Long: `Copy built-in skills (all, or the ones named) into an agent's skills
-directory, default ~/.claude/skills. A file that already exists with
+directory, given by --dir. A file that already exists with
 different content (edited locally, or from another ncli version) aborts the
 install with nothing written, unless --force.`,
-	Example: `  ncli skills install
-  ncli skills install ncli-query ncli-relay-ops
+	Example: `  ncli skills install --dir ~/.agents/skills
+  ncli skills install ncli-query ncli-relay-ops --dir ~/.agents/skills
   ncli skills install --dir .agents/skills --force`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		all, err := loadSkills()
@@ -131,13 +131,6 @@ install with nothing written, unless --force.`,
 		}
 
 		dir := skillsInstallDir
-		if dir == "" {
-			home, err := os.UserHomeDir()
-			if err != nil {
-				return common.RuntimeError(cmd, err)
-			}
-			dir = filepath.Join(home, ".claude", "skills")
-		}
 		if abs, err := filepath.Abs(dir); err == nil {
 			dir = abs
 		}
@@ -308,7 +301,8 @@ func firstSentence(s string) string {
 }
 
 func init() {
-	skillsInstallCmd.Flags().StringVar(&skillsInstallDir, "dir", "", "Skills directory to install into (default ~/.claude/skills)")
+	skillsInstallCmd.Flags().StringVar(&skillsInstallDir, "dir", "", "Skills directory to install into (required)")
+	_ = skillsInstallCmd.MarkFlagRequired("dir")
 	skillsInstallCmd.Flags().BoolVar(&skillsInstallForce, "force", false, "Overwrite files that differ from the built-in copy")
 
 	skillsCmd.AddCommand(skillsListCmd, skillsShowCmd, skillsInstallCmd)

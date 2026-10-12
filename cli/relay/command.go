@@ -97,6 +97,7 @@ type RelayConfig struct {
 	Membership *MembershipConfig `mapstructure:"membership"`
 	Nip86      *Nip86Config      `mapstructure:"nip86"`
 	AgentAuth  *AgentAuthConfig  `mapstructure:"agent_auth"`
+	Groups     *GroupsConfig     `mapstructure:"groups"`
 	Huddle     *HuddleConfig     `mapstructure:"huddle"`
 	HTTPBridge *HTTPBridgeConfig `mapstructure:"httpBridge"`
 
@@ -479,6 +480,10 @@ func initConfig() error {
 
 	if config.AgentAuth != nil && config.AgentAuth.Enabled && !config.Nip11.Limitation.MembershipRequired {
 		return &common.CLIError{Err: errors.New("agent_auth.enabled requires nip11.limitation.membership_required"), Code: common.CodeUsage}
+	}
+
+	if _, err := groupModerationPolicy(&config); err != nil {
+		return &common.CLIError{Err: err, Code: common.CodeInvalidInput}
 	}
 
 	if config.Port == 0 {

@@ -16,6 +16,7 @@ of writing. Update by hand if the Go types change. -->
 | `pow` | object | no requirement | NIP-13 proof-of-work gate (`pow.strict`, `pow.min`) — see below |
 | `membership` | object | disabled | NIP-43 relay membership (`membership.enabled`, invite/join/leave flow) |
 | `agent_auth` | object | disabled | NIP-AA agent authentication (`agent_auth.enabled`); requires `membership` above |
+| `groups` | object | only `admin` moderates | NIP-29 group roles: `groups.roles` maps a role name to the moderation kinds (9000-9020) it may send, e.g. `moderator: [9005, 9010]`. Must define `admin` (a group's creator holds it); names are lowercase. A bad entry fails startup with `invalid_input` |
 | `handshakeTimeout` | Go duration string | relay-client default | |
 | `pingInterval` | Go duration string | relay-client default | |
 | `pongTimeout` | Go duration string | relay-client default | |

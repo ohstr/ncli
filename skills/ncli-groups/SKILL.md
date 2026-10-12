@@ -29,7 +29,7 @@ entirely.
 | `groups invite <group-id>` | 9009 | random code if `--code` omitted |
 | `groups join <group-id>` | 9021 | relay auto-grants on acceptance |
 | `groups leave <group-id>` | 9022 | relay auto-removes |
-| `groups members add <group-id> <pubkey> [role...]` | 9000 | |
+| `groups members add <group-id> <pubkey> [role...]` | 9000 | a role has power only if the relay's policy names it; on an ncli relay that's `groups.roles` in relay.yaml (default: only `admin`) |
 | `groups members remove <group-id> <pubkey>` | 9001 | |
 | `groups pins set <group-id> [--event...] [--address...]` | 9010 | whole-list replace |
 | `groups delete-event <group-id> <event-id>` | 9005 | |

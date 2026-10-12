@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -81,14 +82,19 @@ func LoadDraftEvents(eventPath string) (events []*nip01.Event, wasArray bool, er
 	if err != nil {
 		return nil, false, err
 	}
+	return ParseDraftEvents(bytes, eventPath)
+}
 
-	if err := yaml.UnmarshalStrict(bytes, &events); err == nil {
+// ParseDraftEvents is LoadDraftEvents for bytes already read, e.g. stdin;
+// name labels them in errors.
+func ParseDraftEvents(data []byte, name string) (events []*nip01.Event, wasArray bool, err error) {
+	if err := yaml.UnmarshalStrict(data, &events); err == nil {
 		return events, true, nil
 	}
 
 	var event *nip01.Event
-	if err := yaml.UnmarshalStrict(bytes, &event); err != nil {
-		return nil, false, fmt.Errorf("%s is neither an array of events nor a single event object: %w", eventPath, err)
+	if err := yaml.UnmarshalStrict(data, &event); err != nil {
+		return nil, false, fmt.Errorf("%s is neither an array of events nor a single event object: %w", name, err)
 	}
 	return []*nip01.Event{event}, false, nil
 }
@@ -100,15 +106,30 @@ func LoadDraftEvents(eventPath string) (events []*nip01.Event, wasArray bool, er
 // check --events" (see LoadEvents) with no reshaping. outPath's extension
 // governs the format, same as Mine's -o.
 func WriteDraftEvents(outPath string, events []*nip01.Event, wasArray bool) error {
-	var v any = events
-	if !wasArray && len(events) == 1 {
-		v = events[0]
-	}
-	data, err := marshalEventFile(outPath, v)
+	data, err := marshalEventFile(outPath, draftShape(events, wasArray))
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(outPath, data, 0644)
+}
+
+// WriteDraftEventsJSON is WriteDraftEvents to a writer, always as JSON --
+// for "-o -".
+func WriteDraftEventsJSON(w io.Writer, events []*nip01.Event, wasArray bool) error {
+	data, err := json.MarshalIndent(draftShape(events, wasArray), "", "    ")
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintln(w, string(data))
+	return err
+}
+
+func draftShape(events []*nip01.Event, wasArray bool) any {
+	var v any = events
+	if !wasArray && len(events) == 1 {
+		v = events[0]
+	}
+	return v
 }
 
 // marshalEventFile encodes v (an *nip01.Event or []*nip01.Event) per
@@ -233,15 +254,20 @@ func LoadEvents(eventsPath string) ([]*nip01.Event, error) {
 	if err != nil {
 		return nil, err
 	}
+	return ParseEvents(bytes, eventsPath)
+}
 
+// ParseEvents is LoadEvents for bytes already read, e.g. stdin; name labels
+// them in errors.
+func ParseEvents(data []byte, name string) ([]*nip01.Event, error) {
 	var events []*nip01.Event
-	if err := yaml.UnmarshalStrict(bytes, &events); err == nil {
+	if err := yaml.UnmarshalStrict(data, &events); err == nil {
 		return events, nil
 	}
 
 	var event *nip01.Event
-	if err := yaml.UnmarshalStrict(bytes, &event); err != nil {
-		return nil, fmt.Errorf("%s is neither a JSON array of events nor a single event object: %w", eventsPath, err)
+	if err := yaml.UnmarshalStrict(data, &event); err != nil {
+		return nil, fmt.Errorf("%s is neither a JSON array of events nor a single event object: %w", name, err)
 	}
 	return []*nip01.Event{event}, nil
 }

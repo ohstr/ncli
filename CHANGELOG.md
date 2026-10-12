@@ -10,8 +10,10 @@ Relays configure the rest of NIP-29 group hosting from relay.yaml.
   `groups.pendingJoins` to relay.yaml: describe roles in kind 39003, let more
   keys moderate every group, keep a moderation log, and hold codeless joins to
   closed groups for an admin.
+  ([#148](https://github.com/ohstr/ncli/pull/148))
 - Adds the relay's OK message to `publish --json` results (`message`), and
   `groups join` now says when a request is pending an admin.
+  ([#148](https://github.com/ohstr/ncli/pull/148))
 
 ## [0.8.0-rc.18]
 

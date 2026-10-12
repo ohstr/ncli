@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.8.0-rc.19]
+
+Relays configure the rest of NIP-29 group hosting from relay.yaml.
+
+### Added
+
+- Adds `groups.roleDescriptions`, `groups.admins`, `groups.moderationLog` and
+  `groups.pendingJoins` to relay.yaml: describe roles in kind 39003, let more
+  keys moderate every group, keep a moderation log, and hold codeless joins to
+  closed groups for an admin.
+- Adds the relay's OK message to `publish --json` results (`message`), and
+  `groups join` now says when a request is pending an admin.
+
 ## [0.8.0-rc.18]
 
 `ncli event` verifies, fetches and inspects any event, whoever signed it, and

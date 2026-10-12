@@ -112,11 +112,9 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 
 	wsHandler.VerificationWorker.Start(config.VerificationWorkers)
 
-	// groups.roles: which group roles may send which moderation kinds.
-	// initConfig already validated it.
-	if policy, _ := groupModerationPolicy(&config); policy != nil {
-		wsHandler.Groups().SetModerationPolicy(policy)
-	}
+	// groups: roles, role descriptions, extra group admins, moderation log
+	// and pending joins. initConfig already validated it.
+	applyGroupsConfig(wsHandler.Groups(), &config)
 
 	// NIP-98: the admin endpoints below require HTTP auth, a capability
 	// this service adds on top of what the SDK's SessionHandler knows about.

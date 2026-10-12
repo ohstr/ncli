@@ -2,7 +2,9 @@ package groups
 
 import (
 	"fmt"
+	"github.com/ohstr/ncli/client"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/ohstr/ncli/cli/common"
@@ -50,8 +52,23 @@ func runJoin(cmd *cobra.Command, args []string) error {
 
 	jsonMode, _ := cmd.Flags().GetBool("json")
 	if !jsonMode && report.AllSucceeded() {
-		fmt.Println("join request sent -- the relay grants membership automatically on acceptance, no further step needed")
+		if joinPending(report) {
+			fmt.Println("join request is pending -- a group admin has to accept it")
+		} else {
+			fmt.Println("join request sent -- the relay grants membership automatically on acceptance, no further step needed")
+		}
 	}
 	printPublishReport(cmd, report)
 	return failedPublishErr(cmd, report)
+}
+
+// joinPending reports whether the relay kept the request for an admin (a
+// closed group with pending joins on) rather than admitting the member.
+func joinPending(report *client.PublishReport) bool {
+	for _, r := range report.Results {
+		if r.Accepted && strings.Contains(r.Message, "pending") {
+			return true
+		}
+	}
+	return false
 }

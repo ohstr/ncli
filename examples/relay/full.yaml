@@ -152,6 +152,24 @@ groups:
     admin: [9000, 9001, 9002, 9005, 9008, 9009, 9010]
     moderator: [9005, 9010]
 
+  # Text each role gets in the group's kind 39003; a role without one is
+  # described by what it may do. Keys must be roles above (or "admin").
+  roleDescriptions:
+    moderator: keeps the peace
+
+  # Keys (npub or hex) that moderate every group, like the relay's own key
+  # always does -- e.g. to recover a group whose admins are gone.
+  admins: []
+
+  # Keep accepted moderation events so members can read who did what
+  # (invites only for admins). Off by default.
+  moderationLog: false
+
+  # A closed group keeps a join request without an invite code for its
+  # admins to accept (members add) or decline (members remove), instead of
+  # refusing it. Off by default.
+  pendingJoins: false
+
 agent_auth:
   enabled: false
 

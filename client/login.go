@@ -315,28 +315,29 @@ func (s *relaySession) loginFirst(ctx context.Context, other func(wire.Subscript
 	}
 }
 
-// publish sends ev and waits for its OK. If the relay asks for a login
-// first, it logs in and sends ev once more.
-func (s *relaySession) publish(ctx context.Context, ev *nip01.Event) error {
+// publish sends ev and waits for its OK, returning the relay's message on
+// acceptance. If the relay asks for a login first, it logs in and sends ev
+// once more.
+func (s *relaySession) publish(ctx context.Context, ev *nip01.Event) (string, error) {
 	retried := false
 	for {
 		ok, err := s.awaitOK(ctx, ev)
 		if err != nil {
-			return err
+			return "", err
 		}
 		switch {
 		case ok.Accepted:
-			return nil
+			return ok.Message, nil
 		case refusedForLogin(ok.Message) && !retried:
 			if err := s.awaitLogin(ctx, ok.Message, nil); err != nil {
-				return err
+				return "", err
 			}
 			retried = true
 			continue
 		case s.loggedIn() && (refusedForLogin(ok.Message) || strings.HasPrefix(ok.Message, restrictedPrefix)):
-			return &LoginError{Relay: s.relay, Reason: LoginRelayRefused, Detail: ok.Message}
+			return "", &LoginError{Relay: s.relay, Reason: LoginRelayRefused, Detail: ok.Message}
 		}
-		return fmt.Errorf("relay rejected event: %s", ok.Message)
+		return "", fmt.Errorf("relay rejected event: %s", ok.Message)
 	}
 }
 

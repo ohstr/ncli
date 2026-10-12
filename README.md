@@ -18,6 +18,7 @@ events.**
 - [`ncli apply`](#apply) — Stream, sync, or inspect events, with a live TUI and hot-reloading config
 - [`ncli find`](#find) — Query events
 - [`ncli profile`](#profile) — Look up one identity as a readable card
+- [`ncli event`](#event) — Verify, fetch, show, rebroadcast or unwrap any event, no identity needed
 - [`ncli ping`](#ping) — Check if relays/targets are reachable
 - [`ncli dump`](#dump) — Export events to JSON
 - [`ncli publish`](#publish) — Publish signed events to one or more relays
@@ -290,6 +291,29 @@ The relay forwards audio without decoding it, so it links no codec. See
 [`examples/relay/community-voice-relay.yaml`](examples/relay/community-voice-relay.yaml)
 for the documented preset, and [`ncli huddle`](#huddle) for joining a call
 from a terminal.
+
+Host NIP-29 groups with your own roles, and moderate the relay from any
+NIP-86 client:
+
+```yaml
+groups:
+  roles:
+    admin: [9000, 9001, 9002, 9005, 9008, 9009, 9010]
+    moderator: [9005, 9010]
+  roleDescriptions:
+    moderator: keeps the peace
+  admins: [npub1...]   # moderate every group, like the relay's own key
+  moderationLog: true  # members can read who did what
+  pendingJoins: true   # closed groups keep codeless joins for an admin
+nip86:
+  enabled: true
+  admins: [<hex pubkey>]
+```
+
+NIP-86 bans pubkeys and events, allows or disallows kinds, blocks IPs and
+renames the relay (name, description, icon); that state is kept in
+`<store>.moderation.json`. See
+[`skills/ncli-relay-ops`](skills/ncli-relay-ops/SKILL.md).
 
 ### Example configs
 
@@ -572,6 +596,39 @@ The claimed nip-05 is checked against its domain (`✔` verified, `✘`
 mismatch, `⚠` unreachable); `--no-verify` skips that round trip. An
 identity that published nothing still renders, with each section reading
 `not published`, and exits 0.
+
+## `event`
+
+Work with any event, whoever signed it, with no vault identity: name it
+by an nevent/note/naddr, a hex id or a `kind:pubkey:d` coordinate, or
+give it in full as JSON, `-f` files or stdin. It is looked up on the
+reference's own relay hints, then `-s` (or `ncli prefs relays`), then the
+author's NIP-65 write relays.
+
+```sh
+# is this event authentic? (exit 1 if not)
+ncli event verify nevent1...
+ncli event verify -f signed.json --author npub1... --min-pow 20 --offline
+ncli event verify naddr1... --cross-relays --deleted --json
+
+# the event as served, or as a readable card
+ncli event get note1... | jq .content
+ncli event show naddr1...
+
+# where does it live, and copy it somewhere else unchanged
+ncli event seen nevent1...
+ncli event rebroadcast nevent1... --to wss://my.relay.example
+
+# build, sign and publish in one pipe
+ncli event new --content "hello" --pubkey me \
+  | ncli id sign -e - -o - --identity me \
+  | ncli publish -e -
+```
+
+Also: `encode` (note/nevent/naddr with relay hints), `id` (compute ids of
+unsigned events), `thread` (parents and direct replies), `diff` (two
+versions), `unwrap` (decrypt a NIP-59 gift wrap with `--identity`) and
+`validate` (the rule an nmilat relay applies to the event's kind).
 
 ## `ping`
 
@@ -1128,7 +1185,9 @@ ncli groups leave standup --relay wss://relay.example --identity friend
 ```
 
 A private group is invisible without `--identity`: `list` silently leaves it
-out, and `show` is refused (`auth`). See
+out, and `show` is refused (`auth`). On a relay with `groups.pendingJoins`, a
+join to a closed group without a code waits for an admin to `members add`
+you. See
 [`skills/ncli-groups/SKILL.md`](skills/ncli-groups/SKILL.md).
 
 ## `blossom`

@@ -97,6 +97,7 @@ type RelayConfig struct {
 	Membership *MembershipConfig `mapstructure:"membership"`
 	Nip86      *Nip86Config      `mapstructure:"nip86"`
 	AgentAuth  *AgentAuthConfig  `mapstructure:"agent_auth"`
+	Groups     *GroupsConfig     `mapstructure:"groups"`
 	Huddle     *HuddleConfig     `mapstructure:"huddle"`
 	HTTPBridge *HTTPBridgeConfig `mapstructure:"httpBridge"`
 
@@ -222,8 +223,9 @@ type Nip86Config struct {
 	// Content-Type: application/nostr+json+rpc. The WebSocket upgrade and the
 	// NIP-11 document on that same URL are unaffected.
 	//
-	// Requires membership.enabled: every method it exposes administers NIP-43
-	// membership, so without it there would be nothing to administer.
+	// The moderation methods (bans, kind rules, blocked IPs, the relay's
+	// NIP-11 name/description/icon) work on any relay; the NIP-43 membership
+	// methods are added when membership.enabled is on.
 	Enabled bool `mapstructure:"enabled"`
 
 	// Admins are the hex pubkeys allowed to call it, in addition to
@@ -479,6 +481,10 @@ func initConfig() error {
 
 	if config.AgentAuth != nil && config.AgentAuth.Enabled && !config.Nip11.Limitation.MembershipRequired {
 		return &common.CLIError{Err: errors.New("agent_auth.enabled requires nip11.limitation.membership_required"), Code: common.CodeUsage}
+	}
+
+	if err := checkGroupsConfig(&config); err != nil {
+		return &common.CLIError{Err: err, Code: common.CodeInvalidInput}
 	}
 
 	if config.Port == 0 {

@@ -32,11 +32,15 @@ func nip86Admins() []string {
 	return admins
 }
 
-// nip86Enabled reports whether to serve the management API. It requires
-// membership, since every method it exposes administers NIP-43 membership.
+// nip86Enabled reports whether to serve the management API. The moderation
+// methods work on any relay; the membership ones only when membership is on
+// (membershipOn).
 func nip86Enabled() bool {
-	return config.Nip86 != nil && config.Nip86.Enabled &&
-		config.Membership != nil && config.Membership.Enabled
+	return config.Nip86 != nil && config.Nip86.Enabled
+}
+
+func membershipOn() bool {
+	return config.Membership != nil && config.Membership.Enabled
 }
 
 // membershipInviteTTL is the configured invite lifetime, or the SDK's default.
@@ -173,7 +177,7 @@ func newNip86Router(admin membershipAdmin) *nip86.Router {
 }
 
 // newNip86Handler builds the HTTP handler, or nil when the API is off.
-func newNip86Handler(wsHandler *relay.SessionHandler, store *relay.EventStore, rooms *room.Manager) (*nip86.Handler, error) {
+func newNip86Handler(wsHandler *relay.SessionHandler, store *relay.EventStore, rooms *room.Manager, moderation *relayModeration) (*nip86.Handler, error) {
 	if !nip86Enabled() {
 		return nil, nil
 	}
@@ -189,9 +193,13 @@ func newNip86Handler(wsHandler *relay.SessionHandler, store *relay.EventStore, r
 		origins = config.Nip86.AllowedOrigins
 	}
 
-	admin := membershipAdmin{ws: wsHandler, store: store, rooms: rooms}
+	router := nip86.NewRouter()
+	if membershipOn() {
+		router = newNip86Router(membershipAdmin{ws: wsHandler, store: store, rooms: rooms})
+	}
+	registerModerationMethods(router, moderation, store)
 	return nip86.NewHandler(nip86.Config{
-		Router:         newNip86Router(admin),
+		Router:         router,
 		AllowedPubkeys: admins,
 		AllowedOrigins: origins,
 	}), nil

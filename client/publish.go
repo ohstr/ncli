@@ -57,7 +57,10 @@ type PublishResult struct {
 	ID       string `json:"id"`
 	Relay    string `json:"relay"`
 	Accepted bool   `json:"accepted"`
-	Error    string `json:"error,omitempty"`
+	// Message is the relay's OK message for an accepted event, e.g.
+	// "info: your join request is pending admin approval."
+	Message string `json:"message,omitempty"`
+	Error   string `json:"error,omitempty"`
 }
 
 // PublishReport summarizes PublishToTargets' attempt to publish every event
@@ -114,7 +117,7 @@ func PublishToTargets(ctx context.Context, targets *TargetsSpec, events []*nip01
 
 		for _, event := range events {
 			pubCtx, cancel := context.WithTimeout(ctx, loginWait+10*time.Second)
-			pubErr := sess.publish(pubCtx, event)
+			msg, pubErr := sess.publish(pubCtx, event)
 			cancel()
 
 			result := PublishResult{ID: event.ID, Relay: target.relayURI.Host}
@@ -128,6 +131,7 @@ func PublishToTargets(ctx context.Context, targets *TargetsSpec, events []*nip01
 				}
 			} else {
 				result.Accepted = true
+				result.Message = msg
 				report.Succeeded++
 			}
 			report.Results = append(report.Results, result)

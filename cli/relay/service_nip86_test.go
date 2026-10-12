@@ -42,17 +42,18 @@ func TestNip86Admins_IncludesRelayKeyAndConfiguredAdmins(t *testing.T) {
 	require.Contains(t, admins, testMember, "a configured admin must be allowed")
 }
 
-// Enabling the API without membership would expose methods with nothing to
-// administer, so both have to be on.
-func TestNip86Enabled_RequiresMembership(t *testing.T) {
+// nip86 alone enables the API: its moderation methods work on any relay.
+// The membership methods additionally need membership.
+func TestNip86Enabled_WithoutMembership(t *testing.T) {
 	prev := config
 	t.Cleanup(func() { config = prev })
 
 	config = RelayConfig{Nip86: &Nip86Config{Enabled: true}}
-	require.False(t, nip86Enabled(), "nip86 alone must not enable the API")
+	require.True(t, nip86Enabled())
+	require.False(t, membershipOn())
 
 	config.Membership = &MembershipConfig{Enabled: true}
-	require.True(t, nip86Enabled())
+	require.True(t, membershipOn())
 }
 
 func TestNip86_AllowAndListPubkeys(t *testing.T) {

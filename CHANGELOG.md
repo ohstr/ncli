@@ -31,6 +31,7 @@ from an nevent, note, naddr, file or stdin.
   disallow kinds, block IPs, and change the relay's name, description and
   icon, saved across restarts. `nip86` no longer requires `membership`; the
   membership methods are added when it is on.
+  ([#146](https://github.com/ohstr/ncli/pull/146))
 - Adds `-e -` to `ncli id sign` and `ncli publish`, and `-o -` to `id sign`,
   so an event can be built, signed and published in one pipe.
   ([#144](https://github.com/ohstr/ncli/pull/144))

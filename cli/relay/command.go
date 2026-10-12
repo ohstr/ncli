@@ -483,7 +483,7 @@ func initConfig() error {
 		return &common.CLIError{Err: errors.New("agent_auth.enabled requires nip11.limitation.membership_required"), Code: common.CodeUsage}
 	}
 
-	if _, err := groupModerationPolicy(&config); err != nil {
+	if err := checkGroupsConfig(&config); err != nil {
 		return &common.CLIError{Err: err, Code: common.CodeInvalidInput}
 	}
 

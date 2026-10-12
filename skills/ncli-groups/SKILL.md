@@ -27,7 +27,7 @@ entirely.
 | `groups edit <group-id> [--parent <id>]` | 9002 | reads current metadata first, see below |
 | `groups delete <group-id>` | 9008 | relay enforces admin-only; cascades any children to root, see "Subgroups" |
 | `groups invite <group-id>` | 9009 | random code if `--code` omitted |
-| `groups join <group-id>` | 9021 | relay auto-grants on acceptance |
+| `groups join <group-id>` | 9021 | an open group, or a closed one with `--invite-code`, admits at once; a closed one without a code is refused, or, on a relay with `groups.pendingJoins`, waits for an admin (`members add` accepts, `members remove` declines) and the command says it's pending |
 | `groups leave <group-id>` | 9022 | relay auto-removes |
 | `groups members add <group-id> <pubkey> [role...]` | 9000 | a role has power only if the relay's policy names it; on an ncli relay that's `groups.roles` in relay.yaml (default: only `admin`) |
 | `groups members remove <group-id> <pubkey>` | 9001 | |
@@ -122,11 +122,24 @@ group already had; a flag you did pass overrides it. This means:
   whole edit with the same exit `7`/`"relay restricted this query"` shape
   `show` uses, rather than quietly falling back to a blank slate.
 
+## What the relay enforces
+
+On an ncli relay (nmilat v0.5.0-rc.17+): `private` hides a group's content
+and metadata from non-members; `closed` needs an invite code to join;
+`restricted` takes posts only from members; `hidden` hides the metadata
+(kinds 39000-39005) from non-members. The relay's own key, and any
+`groups.admins` key in its relay.yaml, can moderate every group. Each group
+publishes its roles as kind 39003 (`ncli find --kinds 39003`). With
+`groups.moderationLog`, members can read the group's moderation events
+(`ncli find --kinds 9000,9001,9002,9005 --tag h=<id> --auth-identity ...`).
+A 9002 that flips `private` on a group with a parent or subgroups is refused;
+detach it first.
+
 ## Posting a message into a group
 
 There's no `groups post`: a group message is an ordinary event carrying
 the group's `h` tag (kind 9 for chat), signed and published like any
-other. The relay accepts it only from a member (closed or private group);
+other. The relay accepts it only from a member (closed, private or restricted group);
 it checks the signed author, so `publish` needs no `--identity`.
 
 ```sh

@@ -292,6 +292,29 @@ The relay forwards audio without decoding it, so it links no codec. See
 for the documented preset, and [`ncli huddle`](#huddle) for joining a call
 from a terminal.
 
+Host NIP-29 groups with your own roles, and moderate the relay from any
+NIP-86 client:
+
+```yaml
+groups:
+  roles:
+    admin: [9000, 9001, 9002, 9005, 9008, 9009, 9010]
+    moderator: [9005, 9010]
+  roleDescriptions:
+    moderator: keeps the peace
+  admins: [npub1...]   # moderate every group, like the relay's own key
+  moderationLog: true  # members can read who did what
+  pendingJoins: true   # closed groups keep codeless joins for an admin
+nip86:
+  enabled: true
+  admins: [<hex pubkey>]
+```
+
+NIP-86 bans pubkeys and events, allows or disallows kinds, blocks IPs and
+renames the relay (name, description, icon); that state is kept in
+`<store>.moderation.json`. See
+[`skills/ncli-relay-ops`](skills/ncli-relay-ops/SKILL.md).
+
 ### Example configs
 
 Every file under [`examples/relay/`](examples/relay/) is a working config,
@@ -1162,7 +1185,9 @@ ncli groups leave standup --relay wss://relay.example --identity friend
 ```
 
 A private group is invisible without `--identity`: `list` silently leaves it
-out, and `show` is refused (`auth`). See
+out, and `show` is refused (`auth`). On a relay with `groups.pendingJoins`, a
+join to a closed group without a code waits for an admin to `members add`
+you. See
 [`skills/ncli-groups/SKILL.md`](skills/ncli-groups/SKILL.md).
 
 ## `blossom`

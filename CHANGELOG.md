@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.8.0-rc.18]
+
+`ncli event` verifies, fetches and inspects any event, whoever signed it,
+from an nevent, note, naddr, file or stdin.
+
+### Added
+
+- Adds `ncli event verify`, which checks any event's id and signature plus
+  what it claims (author, kind, PoW, expiration, delegation, zap) and, with
+  `--deleted`/`--cross-relays`, its deletion and every relay's copy. Events
+  are looked up on the reference's relay hints, `--relays` or prefs, then the
+  author's NIP-65 outbox, and no identity is needed.
+  ([#144](https://github.com/ohstr/ncli/pull/144))
+- Adds `ncli event get`, `show`, `encode`, `seen` and `rebroadcast` to print
+  an event as served or as a readable card, spell it as nevent/naddr with
+  relay hints, list which relays hold it, and copy it unchanged to other
+  relays.
+  ([#144](https://github.com/ohstr/ncli/pull/144))
+- Adds `ncli event new`, `id`, `thread`, `diff`, `unwrap` and `validate` to
+  build unsigned events and compute ids, walk a NIP-10/NIP-22 thread, compare
+  two events, decrypt NIP-59 gift wraps, and run nmilat's per-kind rules
+  before publishing.
+  ([#144](https://github.com/ohstr/ncli/pull/144))
+- Adds `-e -` to `ncli id sign` and `ncli publish`, and `-o -` to `id sign`,
+  so an event can be built, signed and published in one pipe.
+  ([#144](https://github.com/ohstr/ncli/pull/144))
+
 ## [0.8.0-rc.17]
 
 `publish`, `find`, `dump` and `apply` log in to relays that require NIP-42

@@ -3,6 +3,7 @@ package ncli
 import (
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/ohstr/ncli/cli/common"
@@ -19,6 +20,9 @@ var idSignCmd = &cobra.Command{
 	Long: `Sign an unsigned event, or an array of them, with --identity's private
 key, or through --signer. --out is written in the shape it was read.
 
+"-e -" reads the events from stdin; "-o -" prints the signed events to
+stdout (as JSON) instead of the summary, so signing fits in a pipe.
+
 --signer takes a bunker+unix:///path/to.sock URI (an "ncli signer serve"
 socket; the key never enters this process) or an identity like
 --identity. --attestations passes signed events a socket signer's policy
@@ -27,16 +31,21 @@ may require (e.g. an approval); a denial exits 7.
 Fails if an event already declares a different pubkey.`,
 	Example: `  ncli id sign -e events.json -o signed.json --identity satoshi
   ncli id sign -e event.json -o signed.json --signer bunker+unix:///run/signer/agent.sock
-  ncli id sign -e state.json -o signed.json --signer bunker+unix:///run/signer/agent.sock --attestations approval.json`,
+  ncli id sign -e state.json -o signed.json --signer bunker+unix:///run/signer/agent.sock --attestations approval.json
+  ncli id sign -e - -o - --identity me < draft.json | ncli publish -e -`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		if err := cmd.ValidateRequiredFlags(); err != nil {
 			return common.InvocationOrHelp(cmd, args, err)
 		}
-		if _, err := validateArgFile(cmd, "events", true, ".json", ".jsonp", ".yaml", ".yml"); err != nil {
-			return common.InvocationOrHelp(cmd, args, err)
+		if !isStdio(cmd, "events") {
+			if _, err := validateArgFile(cmd, "events", true, ".json", ".jsonp", ".yaml", ".yml"); err != nil {
+				return common.InvocationOrHelp(cmd, args, err)
+			}
 		}
-		if _, err := validateArgFile(cmd, "out", false, ".json", ".jsonp", ".yaml", ".yml"); err != nil {
-			return common.InvocationOrHelp(cmd, args, err)
+		if !isStdio(cmd, "out") {
+			if _, err := validateArgFile(cmd, "out", false, ".json", ".jsonp", ".yaml", ".yml"); err != nil {
+				return common.InvocationOrHelp(cmd, args, err)
+			}
 		}
 		identity, _ := cmd.Flags().GetString("identity")
 		signerFlag, _ := cmd.Flags().GetString("signer")
@@ -74,13 +83,27 @@ Fails if an event already declares a different pubkey.`,
 			}
 		}
 
-		eventsPath, err := validateArgFile(cmd, "events", true, ".json", ".jsonp", ".yaml", ".yml")
-		if err != nil {
-			return common.RuntimeError(cmd, err)
-		}
-		events, wasArray, err := client.LoadDraftEvents(eventsPath)
-		if err != nil {
-			return common.InvalidInputError(cmd, eventsPath, err)
+		var events []*nip01.Event
+		var wasArray bool
+		eventsPath := "stdin"
+		if isStdio(cmd, "events") {
+			data, err := io.ReadAll(cmd.InOrStdin())
+			if err != nil {
+				return common.RuntimeError(cmd, fmt.Errorf("read stdin: %w", err))
+			}
+			events, wasArray, err = client.ParseDraftEvents(data, eventsPath)
+			if err != nil {
+				return common.InvalidInputError(cmd, eventsPath, err)
+			}
+		} else {
+			eventsPath, err = validateArgFile(cmd, "events", true, ".json", ".jsonp", ".yaml", ".yml")
+			if err != nil {
+				return common.RuntimeError(cmd, err)
+			}
+			events, wasArray, err = client.LoadDraftEvents(eventsPath)
+			if err != nil {
+				return common.InvalidInputError(cmd, eventsPath, err)
+			}
 		}
 		if len(events) == 0 {
 			return common.InvalidInputError(cmd, eventsPath, fmt.Errorf("no events to sign"))
@@ -103,6 +126,12 @@ Fails if an event already declares a different pubkey.`,
 			}
 		}
 
+		if isStdio(cmd, "out") {
+			if err := client.WriteDraftEventsJSON(cmd.OutOrStdout(), events, wasArray); err != nil {
+				return common.RuntimeError(cmd, err)
+			}
+			return nil
+		}
 		outPath, err := validateArgFile(cmd, "out", false, ".json", ".jsonp", ".yaml", ".yml")
 		if err != nil {
 			return common.RuntimeError(cmd, err)
@@ -145,11 +174,18 @@ func init() {
 	idSignCmd.Flags().String("signer", "", "Sign through a socket signer (bunker+unix:///path/to.sock) instead of --identity")
 	idSignCmd.Flags().String("attestations", "", "Signed event(s) to pass to a socket signer's policy (with --signer)")
 
-	idSignCmd.Flags().StringP("events", "e", "", "Path to a single unsigned event object or an array of them (required)")
+	idSignCmd.Flags().StringP("events", "e", "", `Path to a single unsigned event object or an array of them, or "-" for stdin (required)`)
 	_ = idSignCmd.MarkFlagRequired("events")
 	_ = idSignCmd.MarkFlagFilename("events", "json", "jsonp", "yaml", "yml")
 
-	idSignCmd.Flags().StringP("out", "o", "", "Output path for the signed event(s) (required)")
+	idSignCmd.Flags().StringP("out", "o", "", `Output path for the signed event(s), or "-" for stdout (required)`)
 	_ = idSignCmd.MarkFlagRequired("out")
 	_ = idSignCmd.MarkFlagFilename("out", "json", "jsonp", "yaml", "yml")
+}
+
+// isStdio reports whether a file flag is "-": stdin for input, stdout for
+// output.
+func isStdio(cmd *cobra.Command, name string) bool {
+	v, _ := cmd.Flags().GetString(name)
+	return v == "-"
 }

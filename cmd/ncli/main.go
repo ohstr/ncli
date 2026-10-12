@@ -7,6 +7,7 @@ import (
 	"github.com/ohstr/ncli/cli/blossom"
 	"github.com/ohstr/ncli/cli/bunker"
 	"github.com/ohstr/ncli/cli/common"
+	"github.com/ohstr/ncli/cli/event"
 	"github.com/ohstr/ncli/cli/groups"
 	"github.com/ohstr/ncli/cli/huddle"
 	"github.com/ohstr/ncli/cli/ncli"
@@ -54,6 +55,11 @@ func init() {
 	// create/edit/delete/invite/join/leave/members/pins/delete-event/list/
 	// show as its own children; see NewGroupsCommand.
 	ncli.RootCmd.AddCommand(groups.NewGroupsCommand())
+
+	// Register the generic event toolbox ("event") -- verify/get/show/id/
+	// new/encode/seen/rebroadcast/thread/diff/unwrap/validate on any event,
+	// whoever signed it; see NewEventCommand.
+	ncli.RootCmd.AddCommand(event.NewEventCommand())
 
 	// Register the generic NIP-53 meeting-space command ("space") --
 	// mounts create/list/show plus huddle's own "join" (implemented in

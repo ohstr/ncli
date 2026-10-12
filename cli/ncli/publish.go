@@ -3,6 +3,7 @@ package ncli
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os/signal"
 	"strings"
 	"syscall"
@@ -30,6 +31,8 @@ when the login identity differs, e.g. publishing events someone else
 signed), then retries the refused event once. A failed login exits 7
 with reason login_required, signer_refused or relay_refused.
 
+"-e -" reads the events from stdin.
+
 Omit --relays to use the relays from "ncli prefs relays".`,
 	Example: `  ncli publish -e signed.json
   ncli publish -e signed.json -s wss://relay.example.com
@@ -38,6 +41,9 @@ Omit --relays to use the relays from "ncli prefs relays".`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		if err := cmd.ValidateRequiredFlags(); err != nil {
 			return common.InvocationOrHelp(cmd, args, err)
+		}
+		if isStdio(cmd, "events") {
+			return nil
 		}
 		if _, err := validateArgFile(cmd, "events", true, ".json", ".jsonp"); err != nil {
 			return common.InvocationOrHelp(cmd, args, err)
@@ -50,14 +56,24 @@ Omit --relays to use the relays from "ncli prefs relays".`,
 
 		jsonMode, _ := cmd.Flags().GetBool("json")
 
-		eventsPath, err := validateArgFile(cmd, "events", true, ".json", ".jsonp")
-		if err != nil {
-			return common.RuntimeError(cmd, err)
-		}
-
-		events, err := client.LoadEvents(eventsPath)
-		if err != nil {
-			return common.InvalidInputError(cmd, eventsPath, err)
+		var events []*nip01.Event
+		var err error
+		eventsPath := "stdin"
+		if isStdio(cmd, "events") {
+			data, err := io.ReadAll(cmd.InOrStdin())
+			if err != nil {
+				return common.RuntimeError(cmd, fmt.Errorf("read stdin: %w", err))
+			}
+			if events, err = client.ParseEvents(data, eventsPath); err != nil {
+				return common.InvalidInputError(cmd, eventsPath, err)
+			}
+		} else {
+			if eventsPath, err = validateArgFile(cmd, "events", true, ".json", ".jsonp"); err != nil {
+				return common.RuntimeError(cmd, err)
+			}
+			if events, err = client.LoadEvents(eventsPath); err != nil {
+				return common.InvalidInputError(cmd, eventsPath, err)
+			}
 		}
 		signerFlag, _ := cmd.Flags().GetString("signer")
 		var sgn client.Signer
@@ -136,7 +152,7 @@ Omit --relays to use the relays from "ncli prefs relays".`,
 func init() {
 	RootCmd.AddCommand(publishCmd)
 
-	publishCmd.Flags().StringP("events", "e", "", "Path to a single event object or a JSON array of events (required)")
+	publishCmd.Flags().StringP("events", "e", "", `Path to a single event object or a JSON array of events, or "-" for stdin (required)`)
 	_ = publishCmd.MarkFlagRequired("events")
 	_ = publishCmd.MarkFlagFilename("events", "json", "jsonp")
 

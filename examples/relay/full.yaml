@@ -118,10 +118,10 @@ membership:
   # updating its own internal membership store (authoritative either way).
   publishAddRemoveEvents: false
 
-# NIP-86, the Relay Management API (optional). Requires membership.enabled
-# above -- every method it exposes administers NIP-43 membership, so with
-# membership off this simply does not serve (it is not a startup error).
-# Omitting this block leaves it off.
+# NIP-86, the Relay Management API (optional): bans, kind rules, blocked IPs
+# and the relay's name/description/icon on any relay, plus the NIP-43
+# membership methods when membership.enabled is on. Moderation state is kept
+# in <store>.moderation.json. Omitting this block leaves it off.
 nip86:
   # Serves the API for requests to the relay URL carrying
   # Content-Type: application/nostr+json+rpc. The WebSocket upgrade and the
@@ -144,6 +144,14 @@ nip86:
 # (which itself requires membership.enabled and limitation.auth_required)
 # -- enabling this genuinely changes AUTH-time behavior, so it only makes
 # sense once membership is actually enforced.
+groups:
+  # NIP-29 group roles: which moderation kinds each role may send. Omit to
+  # keep the default, where only "admin" moderates. "admin" must be listed:
+  # a group's creator holds it.
+  roles:
+    admin: [9000, 9001, 9002, 9005, 9008, 9009, 9010]
+    moderator: [9005, 9010]
+
 agent_auth:
   enabled: false
 

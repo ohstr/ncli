@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0-rc.18]
+
+### Added
+
+- Adds `-e -` to `ncli id sign` and `ncli publish`, and `-o -` to `id sign`,
+  so an event can be built, signed and published in one pipe.
+
 ## [0.8.0-rc.17]
 
 `publish`, `find`, `dump` and `apply` log in to relays that require NIP-42

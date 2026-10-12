@@ -44,7 +44,7 @@ that priority order.
 | `ncli id relabel <identifier> <new-label>` | Rename a saved vault identity (by label, npub, hex, nprofile or nip-05) without supplying its key |
 | `ncli id rm <identifier>` | Remove a saved vault identity (by label, npub, hex, nprofile or nip-05), deleting the vault's copy of its key; confirms first, `--yes` required with `--json` or no terminal |
 | `ncli id delegate` | Mint a NIP-26 delegation token |
-| `ncli id sign -e <events.json> -o <signed.json>` | Sign one or more unsigned events with a vault/nsec identity |
+| `ncli id sign -e <events.json> -o <signed.json>` | Sign one or more unsigned events with a vault/nsec identity; `-e -`/`-o -` read stdin and print the signed events, so signing and publishing fit in a pipe |
 | `ncli decode <entity>` | Decode any NIP-19 bech32 entity (npub/nsec/note/nprofile/nevent/naddr), a NIP-CASH cash-token-family string, or a NIP-CW circlehub1... connection |
 | `ncli miner -e <event.yaml>` | Mine or check NIP-13 proof-of-work on an event |
 | `ncli version` | Build info + on-disk paths |

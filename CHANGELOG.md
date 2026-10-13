@@ -8,7 +8,7 @@ AltZap events move to kinds 9520/9521/9523.
 
 - Updates nmilat to v0.5.0-rc.20: AltZap events use kinds 9520/9521/9523, so
   `ncli event validate` and `ncli relay` check and index AltZap receipts under
-  kind 9521.
+  kind 9521. ([#150](https://github.com/ohstr/ncli/pull/150))
 
 ## [0.8.0-rc.21]
 

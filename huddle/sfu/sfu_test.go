@@ -1009,3 +1009,187 @@ func TestCandidatesBeforeTheOfferAreNotDropped(t *testing.T) {
 	}
 	assertNoDroppedCandidates(t, h)
 }
+
+// TestSubscriberKeyframeRequestReachesThePublisher covers the repair path a
+// running call depends on. A subscriber that loses packets cannot decode until
+// the next keyframe, and a browser encoder only produces one when asked, so the
+// subscriber's own PLI has to travel through the SFU to the publisher. When it
+// did not, one lost packet froze the picture for good while audio carried on.
+func TestSubscriberKeyframeRequestReachesThePublisher(t *testing.T) {
+	h := newHarness(t, nil)
+
+	publisher, _, videos := connectBrowserWith(t, h, "room-1", alicePriv, false, []string{"camera"})
+	camera := videos["camera"]
+
+	pli := make(chan struct{}, 64)
+	for _, sender := range publisher.pc.GetSenders() {
+		if track := sender.Track(); track == nil || track.ID() != "camera" {
+			continue
+		}
+		go func(s *webrtc.RTPSender) {
+			for {
+				packets, _, err := s.ReadRTCP()
+				if err != nil {
+					return
+				}
+				for _, p := range packets {
+					if _, ok := p.(*rtcp.PictureLossIndication); ok {
+						select {
+						case pli <- struct{}{}:
+						default:
+						}
+					}
+				}
+			}
+		}(sender)
+	}
+
+	stop := make(chan struct{})
+	defer close(stop)
+	go func() {
+		seq, ts := uint16(1), uint32(3000)
+		ticker := time.NewTicker(20 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-ticker.C:
+			}
+			_ = camera.WriteRTP(&rtp.Packet{
+				Header:  rtp.Header{Version: 2, SequenceNumber: seq, Timestamp: ts, SSRC: 0xCAFE, PayloadType: 96},
+				Payload: []byte{0x10, 0xAB, 0xCD, 0xEF},
+			})
+			seq++
+			ts += 3000
+		}
+	}()
+
+	remoteSSRC := make(chan webrtc.SSRC, 1)
+	subscriber, _, _ := connectBrowserWith(t, h, "room-1", bobPriv, false, nil,
+		func(track *webrtc.TrackRemote, _ *webrtc.RTPReceiver) {
+			if track.Kind() != webrtc.RTPCodecTypeVideo {
+				return
+			}
+			first := true
+			for {
+				if _, _, err := track.ReadRTP(); err != nil {
+					return
+				}
+				if first {
+					first = false
+					remoteSSRC <- track.SSRC()
+				}
+			}
+		})
+
+	var ssrc webrtc.SSRC
+	select {
+	case ssrc = <-remoteSSRC:
+	case <-time.After(window):
+		t.Fatal("the subscriber never received a forwarded video packet")
+	}
+
+	// Let the setup-time requests (track creation, first receiver report) land
+	// and fall outside the SFU's throttle, so only the subscriber's own request
+	// below can satisfy the assertion.
+	time.Sleep(2 * time.Second)
+	for drained := false; !drained; {
+		select {
+		case <-pli:
+		default:
+			drained = true
+		}
+	}
+
+	if err := subscriber.pc.WriteRTCP([]rtcp.Packet{&rtcp.PictureLossIndication{MediaSSRC: uint32(ssrc)}}); err != nil {
+		t.Fatalf("subscriber PLI: %v", err)
+	}
+	select {
+	case <-pli:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the subscriber's keyframe request never reached the publisher, so a lost packet freezes its picture for good")
+	}
+}
+
+// TestKeyframeIsRequestedOnceTheSubscriberIsReceiving covers the first picture.
+// The request made when the SFU creates a subscriber's track reaches the
+// publisher before the subscriber has answered the renegotiation that adds it,
+// so the keyframe it produces is written into a track with nowhere to send it.
+// The SFU has to ask again once the subscriber is demonstrably receiving.
+func TestKeyframeIsRequestedOnceTheSubscriberIsReceiving(t *testing.T) {
+	h := newHarness(t, nil)
+
+	publisher, _, videos := connectBrowserWith(t, h, "room-1", alicePriv, false, []string{"camera"})
+	camera := videos["camera"]
+
+	var mu sync.Mutex
+	requests := 0
+	for _, sender := range publisher.pc.GetSenders() {
+		if track := sender.Track(); track == nil || track.ID() != "camera" {
+			continue
+		}
+		go func(s *webrtc.RTPSender) {
+			for {
+				packets, _, err := s.ReadRTCP()
+				if err != nil {
+					return
+				}
+				for _, p := range packets {
+					if _, ok := p.(*rtcp.PictureLossIndication); ok {
+						mu.Lock()
+						requests++
+						mu.Unlock()
+					}
+				}
+			}
+		}(sender)
+	}
+
+	stop := make(chan struct{})
+	defer close(stop)
+	go func() {
+		seq, ts := uint16(1), uint32(3000)
+		ticker := time.NewTicker(20 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-ticker.C:
+			}
+			_ = camera.WriteRTP(&rtp.Packet{
+				Header:  rtp.Header{Version: 2, SequenceNumber: seq, Timestamp: ts, SSRC: 0xCAFE, PayloadType: 96},
+				Payload: []byte{0x10, 0xAB, 0xCD, 0xEF},
+			})
+			seq++
+			ts += 3000
+		}
+	}()
+
+	// The subscriber only reads; it never asks for a keyframe itself, so any
+	// request after the first comes from the SFU noticing it is receiving.
+	connectBrowserWith(t, h, "room-1", bobPriv, false, nil,
+		func(track *webrtc.TrackRemote, _ *webrtc.RTPReceiver) {
+			for {
+				if _, _, err := track.ReadRTP(); err != nil {
+					return
+				}
+			}
+		})
+
+	deadline := time.After(window)
+	for {
+		mu.Lock()
+		got := requests
+		mu.Unlock()
+		if got >= 2 {
+			return
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("keyframe requests = %d, want a second once the subscriber is receiving", got)
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
+}

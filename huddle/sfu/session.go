@@ -43,7 +43,7 @@ type session struct {
 	hub *videoHub
 	// videoTracks are this subscriber's outbound tracks, keyed by publication.
 	videoMu     sync.Mutex
-	videoTracks map[string]*webrtc.TrackLocalStaticRTP
+	videoTracks map[string]*subscription
 
 	// writeMu serialises websocket writes. Signalling originates from three
 	// places -- the read loop, ICE gathering, and renegotiation when a speaker
@@ -86,7 +86,7 @@ type session struct {
 func (s *session) run(ctx context.Context) {
 	defer func() { _ = s.conn.Close() }()
 	s.done = make(chan struct{})
-	s.videoTracks = make(map[string]*webrtc.TrackLocalStaticRTP)
+	s.videoTracks = make(map[string]*subscription)
 	s.conn.SetReadLimit(wire.MaxControlBytes * 16) // SDP is far larger than a huddle control frame
 
 	if !s.cfg.Enabled {

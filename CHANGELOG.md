@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.8.0-rc.23]
+
+### Fixed
+
+- Fixes huddle video freezing for good after a lost packet on `ncli relay`: a
+  subscriber's keyframe requests (PLI/FIR) now reach the publisher, throttled,
+  and its NACKs are answered. The SFU also asks for a keyframe once a new
+  subscriber is actually receiving, and when a publisher reconnects, so the
+  first picture no longer waits for the encoder's next natural keyframe. Before
+  this, a 1:1 video call could lose one side's picture while audio carried on.
+
 ## [0.8.0-rc.22]
 
 AltZap events move to kinds 9520/9521/9523.

@@ -26,6 +26,24 @@
 //
 // The client offers first because it owns the microphone. The server offers only
 // to add a newly-heard speaker's track, and the client is expected to answer.
+//
+// # Control
+//
+// Once a peer is in, the room's control messages reach it over the same socket,
+// behind its own "joined" -- see control.go:
+//
+//	server -> {"type":"joined",...,"features":["control","media","leave"],
+//	           "peers":[{"pubkey":"...","peer_index":N,"epoch":N,
+//	                     "media":[{"kind":"camera","state":"off","track_id":"...","stream_id":"...","seq":N}]}]}
+//	server -> {"type":"joined",...}       // someone else joined
+//	server -> {"type":"left","pubkey":"...","peer_index":N,"epoch":N,"revision":N,"reason":"leave|evicted|dropped"}
+//	client -> {"type":"media","kind":"mic|camera|screen","state":"live|off","track_id":"...","stream_id":"..."}
+//	server -> {"type":"media","pubkey":"...","peer_index":N,"epoch":N,"kind":"...","state":"...","track_id":"...","stream_id":"...","seq":N}
+//	client -> {"type":"leave"}
+//
+// All of it is additive: a client ignores types and fields it does not know,
+// and one that never sends media or leave behaves exactly as before. "features"
+// is how a client tells a relay that does this from one that does not.
 package sfu
 
 import (
@@ -213,12 +231,21 @@ type signal struct {
 	Event           *nip01.Event `json:"event,omitempty"`
 	ProtocolVersion *uint8       `json:"protocol_version,omitempty"`
 
-	// joined
+	// joined / left
 	Revision  uint64        `json:"revision,omitempty"`
 	Pubkey    string        `json:"pubkey,omitempty"`
 	PeerIndex uint8         `json:"peer_index,omitempty"`
 	Epoch     uint8         `json:"epoch,omitempty"`
 	Peers     []peerMessage `json:"peers,omitempty"`
+	Features  []string      `json:"features,omitempty"`
+	Reason    string        `json:"reason,omitempty"`
+
+	// media
+	Kind     string `json:"kind,omitempty"`
+	State    string `json:"state,omitempty"`
+	TrackID  string `json:"track_id,omitempty"`
+	StreamID string `json:"stream_id,omitempty"`
+	Seq      uint64 `json:"seq,omitempty"`
 
 	// offer / answer
 	SDP string `json:"sdp,omitempty"`
@@ -236,12 +263,18 @@ type peerMessage struct {
 	Pubkey    string `json:"pubkey"`
 	PeerIndex uint8  `json:"peer_index"`
 	Epoch     uint8  `json:"epoch"`
+	// Media is what this peer has said it is publishing, so a peer joining
+	// mid-call knows whose camera is off without waiting for the next change.
+	// Empty for a WebSocket peer, which publishes only audio and never says.
+	Media []mediaState `json:"media,omitempty"`
 }
 
-func rosterMessages(peers []room.PeerInfo) []peerMessage {
+// rosterMessages describes the roster, merging in each peer's media state
+// (keyed by mediaKey) where there is any.
+func rosterMessages(peers []room.PeerInfo, media map[string][]mediaState) []peerMessage {
 	out := make([]peerMessage, 0, len(peers))
 	for _, p := range peers {
-		out = append(out, peerMessage{Pubkey: p.Pubkey, PeerIndex: p.Index, Epoch: p.Epoch})
+		out = append(out, peerMessage{Pubkey: p.Pubkey, PeerIndex: p.Index, Epoch: p.Epoch, Media: media[mediaKey(p.Pubkey, p.Index)]})
 	}
 	return out
 }

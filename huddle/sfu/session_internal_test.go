@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/ohstr/nmilat/huddle/room"
 	"github.com/pion/webrtc/v4"
 	"github.com/rs/zerolog"
 )
@@ -151,5 +152,36 @@ func TestRemoteCandidatesWaitForTheOffer(t *testing.T) {
 	s.flushRemoteCandidates()
 	if len(s.pendingRemote) != 0 {
 		t.Fatalf("%d candidates left queued after the flush", len(s.pendingRemote))
+	}
+}
+
+// TestControlNeverBlocksTheRoom: the room delivers control while holding its
+// lock, so a peer that has stopped reading must cost a dropped message, never a
+// stalled room. An eviction that finds the queue full shuts the session down
+// directly instead of waiting its turn.
+func TestControlNeverBlocksTheRoom(t *testing.T) {
+	s := &session{log: zerolog.Nop(), control: make(chan room.Control, 1), done: make(chan struct{})}
+	server, _ := websocketPair(t)
+	s.conn = server
+
+	finished := make(chan struct{})
+	go func() {
+		s.enqueueControl(room.Control{JSON: `{"type":"joined"}`})
+		s.enqueueControl(room.Control{JSON: `{"type":"left"}`}) // queue full: dropped
+		s.enqueueControl(room.Control{Close: true})             // queue full: shut down now
+		close(finished)
+	}()
+	select {
+	case <-finished:
+	case <-time.After(time.Second):
+		t.Fatal("enqueueControl blocked on a full queue")
+	}
+	select {
+	case <-s.done:
+	default:
+		t.Fatal("an eviction on a full queue did not shut the session down")
+	}
+	if got := s.leftReason(); got != ReasonEvicted {
+		t.Fatalf("reason = %q, want %q", got, ReasonEvicted)
 	}
 }

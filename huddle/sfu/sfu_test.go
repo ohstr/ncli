@@ -40,6 +40,30 @@ type message struct {
 	Epoch     uint8                    `json:"epoch"`
 	SDP       string                   `json:"sdp"`
 	Candidate *webrtc.ICECandidateInit `json:"candidate"`
+
+	// Control plane: roster updates, media state, leave reasons.
+	Features []string      `json:"features"`
+	Peers    []peerMessage `json:"peers"`
+	Reason   string        `json:"reason"`
+	Kind     string        `json:"kind"`
+	State    string        `json:"state"`
+	TrackID  string        `json:"track_id"`
+	StreamID string        `json:"stream_id"`
+	Seq      uint64        `json:"seq"`
+}
+
+type peerMessage struct {
+	Pubkey    string         `json:"pubkey"`
+	PeerIndex uint8          `json:"peer_index"`
+	Media     []mediaMessage `json:"media"`
+}
+
+type mediaMessage struct {
+	Kind     string `json:"kind"`
+	State    string `json:"state"`
+	TrackID  string `json:"track_id"`
+	StreamID string `json:"stream_id"`
+	Seq      uint64 `json:"seq"`
 }
 
 // logSink captures the handler's log output so a test can assert on what the

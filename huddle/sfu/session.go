@@ -79,6 +79,20 @@ type session struct {
 	localSent    bool
 	pendingLocal []webrtc.ICECandidateInit
 
+	// control carries the room's control messages to this peer's socket; see
+	// enqueueControl and controlLoop.
+	control chan room.Control
+
+	// media is what this peer has said it is publishing, by kind; mediaSeq
+	// numbers its changes. See handleMedia.
+	mediaMu  sync.Mutex
+	media    map[string]mediaState
+	mediaSeq uint64
+
+	// reason is why the session ended, carried on "left". See setReason.
+	reasonMu sync.Mutex
+	reason   string
+
 	done      chan struct{}
 	closeOnce sync.Once
 }
@@ -87,6 +101,8 @@ func (s *session) run(ctx context.Context) {
 	defer func() { _ = s.conn.Close() }()
 	s.done = make(chan struct{})
 	s.videoTracks = make(map[string]*subscription)
+	s.control = make(chan room.Control, controlQueueDepth)
+	s.media = make(map[string]mediaState)
 	s.conn.SetReadLimit(wire.MaxControlBytes * 16) // SDP is far larger than a huddle control frame
 
 	if !s.cfg.Enabled {
@@ -152,7 +168,7 @@ func (s *session) handshake(ctx context.Context) bool {
 	s.pc = pc
 	s.wirePeerConnection()
 
-	sink, err := rtp.New(rtp.Config{NewTrack: s.newSpeakerTrack})
+	sink, err := rtp.New(rtp.Config{NewTrack: s.newSpeakerTrack, OnControl: s.enqueueControl})
 	if err != nil {
 		s.writeError(CodeNegotiationFailed, "could not build the audio sink", nil)
 		return false
@@ -170,10 +186,13 @@ func (s *session) handshake(ctx context.Context) bool {
 
 	if err := s.write(signal{
 		Type: "joined", Revision: roster.Revision, Pubkey: s.pubkey,
-		PeerIndex: peer.Index, Epoch: peer.Epoch, Peers: rosterMessages(roster.Peers),
+		PeerIndex: peer.Index, Epoch: peer.Epoch, Peers: rosterMessages(roster.Peers, s.hub.media(s.roomID)),
+		Features: Features,
 	}); err != nil {
 		return false
 	}
+	// Room control queued since Join goes out now, behind our own "joined".
+	go s.controlLoop()
 	s.announceJoin(roster)
 	return true
 }
@@ -312,6 +331,14 @@ func (s *session) signallingLoop() {
 			if msg.Candidate != nil {
 				s.addRemoteCandidate(*msg.Candidate)
 			}
+		case "media":
+			s.handleMedia(msg)
+		case "leave":
+			// Said before closing, so the others hear "left" rather than
+			// "dropped". Nothing else is read after it.
+			s.setReason(ReasonLeave)
+			s.shutdown()
+			return
 		default:
 			s.log.Debug().Str("type", msg.Type).Msg("ignoring an unexpected signalling message")
 		}
@@ -504,7 +531,8 @@ func (s *session) writeJoinError(err error) {
 func (s *session) announceJoin(roster room.Roster) {
 	message, err := json.Marshal(signal{
 		Type: "joined", Revision: roster.Revision, Pubkey: s.pubkey,
-		PeerIndex: s.peer.Index, Epoch: s.peer.Epoch, Peers: rosterMessages(roster.Peers),
+		PeerIndex: s.peer.Index, Epoch: s.peer.Epoch, Peers: rosterMessages(roster.Peers, s.hub.media(s.roomID)),
+		Features: Features,
 	})
 	if err != nil {
 		return
@@ -528,7 +556,7 @@ func (s *session) teardown() {
 	roster := s.room.Roster()
 	message, err := json.Marshal(signal{
 		Type: "left", Revision: roster.Revision, Pubkey: s.pubkey,
-		PeerIndex: s.peer.Index, Epoch: s.peer.Epoch,
+		PeerIndex: s.peer.Index, Epoch: s.peer.Epoch, Reason: s.leftReason(),
 	})
 	if err != nil {
 		return

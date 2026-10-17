@@ -2,7 +2,21 @@
 
 ## [Unreleased]
 
+### Added
+
+- Adds a control plane to the huddle `/rtc` door on `ncli relay`: a client
+  announces `media` (mic, camera or screen share `live`/`off`) and says `leave`
+  before hanging up, the relay fans both out at once with each peer's media
+  also listed on `joined`, and `left` now carries `reason` (`leave`, `evicted`
+  or `dropped`). A stopped camera or a hang-up no longer looks like a lost
+  connection to the other side; `joined` lists `features` so clients can tell.
+
 ### Fixed
+
+- Fixes WebRTC huddle peers on `ncli relay` never hearing about anyone else
+  joining or leaving: the room's control messages were discarded for them. It
+  also means revoking a peer's relay membership now closes its WebRTC session
+  instead of leaving it connected outside the room.
 
 - Fixes huddle video freezing for good after a lost packet on `ncli relay`: a
   subscriber's keyframe requests (PLI/FIR) now reach the publisher, throttled,

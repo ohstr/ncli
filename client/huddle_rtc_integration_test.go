@@ -34,6 +34,30 @@ type rtcSignal struct {
 	Pubkey    string                   `json:"pubkey"`
 	SDP       string                   `json:"sdp"`
 	Candidate *webrtc.ICECandidateInit `json:"candidate"`
+
+	// The control plane -- see huddle_control_integration_test.go.
+	Features []string     `json:"features"`
+	Peers    []rtcRosterP `json:"peers"`
+	Reason   string       `json:"reason"`
+	Kind     string       `json:"kind"`
+	State    string       `json:"state"`
+	TrackID  string       `json:"track_id"`
+	StreamID string       `json:"stream_id"`
+	Seq      uint64       `json:"seq"`
+}
+
+// rtcRosterP is one roster entry on "joined", with the media that peer has
+// announced.
+type rtcRosterP struct {
+	Pubkey string     `json:"pubkey"`
+	Media  []rtcMedia `json:"media"`
+}
+
+type rtcMedia struct {
+	Kind    string `json:"kind"`
+	State   string `json:"state"`
+	TrackID string `json:"track_id"`
+	Seq     uint64 `json:"seq"`
 }
 
 // mediaKind labels what a track carries, so a receiver can tell a microphone
@@ -65,6 +89,11 @@ type rtcPeer struct {
 
 	tracks map[mediaKind]*webrtc.TrackLocalStaticRTP
 
+	// joined is this peer's own joined; controls receives every roster and
+	// media message after it.
+	joined   rtcSignal
+	controls chan rtcSignal
+
 	writeMu sync.Mutex
 
 	mu        sync.Mutex
@@ -92,6 +121,7 @@ func dialRTCPeer(t *testing.T, roomID string, i int, kinds ...mediaKind) *rtcPee
 		index:     i,
 		conn:      conn,
 		tracks:    make(map[mediaKind]*webrtc.TrackLocalStaticRTP),
+		controls:  make(chan rtcSignal, 64),
 		connected: make(chan struct{}),
 	}
 	p.authenticate(i)
@@ -158,6 +188,7 @@ func (p *rtcPeer) authenticate(i int) {
 	require.NoError(p.t, p.conn.ReadJSON(&joined), "peer %d joined", i)
 	require.Equal(p.t, "joined", joined.Type, "peer %d was refused: %s %s", i, joined.Code, joined.Message)
 	require.NoError(p.t, p.conn.SetReadDeadline(time.Time{}))
+	p.joined = joined
 }
 
 // publish adds one outbound track. Opus for audio, VP8 for the two video kinds
@@ -212,6 +243,11 @@ func (p *rtcPeer) pump() {
 		case "candidate":
 			if m.Candidate != nil {
 				_ = p.pc.AddICECandidate(*m.Candidate)
+			}
+		case "joined", "left", "media":
+			select {
+			case p.controls <- m:
+			default: // a scenario that does not read controls must not stall signalling
 			}
 		}
 	}

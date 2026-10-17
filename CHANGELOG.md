@@ -6,6 +6,7 @@
 
 - Updates nmilat to v0.5.0-rc.24, whose NIP-CASH private transport listens for a
   reply on the relay it sent the request to; ncli's behaviour is unchanged.
+  ([#152](https://github.com/ohstr/ncli/pull/152))
 
 ## [0.8.0-rc.23]
 

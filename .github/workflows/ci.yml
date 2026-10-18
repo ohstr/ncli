@@ -79,8 +79,41 @@ jobs:
       - name: Install
         run: npm ci --no-audit --no-fund
 
+      - name: Unit tests
+        run: npm test
+
       - name: Build (typecheck, bundle, size budget)
         run: npm run build
+
+  dashboard-e2e:
+    # The dashboard in headless Chromium against a real relay: sign-in, every
+    # chart, an index job, local mode, themes; fails on any CSP violation.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/dashboard/package-lock.json
+
+      - name: Build ncli with the dashboard
+        run: |
+          cd web/dashboard && npm ci --no-audit --no-fund && npm run build && cd ../..
+          go build -o bin/ncli ./cmd/ncli
+
+      - name: Browser
+        working-directory: web/dashboard
+        run: npx playwright install --with-deps chromium
+
+      - name: Smoke test
+        working-directory: web/dashboard
+        run: NCLI_BIN="$GITHUB_WORKSPACE/bin/ncli" npm run e2e
 
   lint:
     runs-on: ubuntu-latest

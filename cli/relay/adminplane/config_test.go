@@ -196,3 +196,34 @@ func TestTokenLifecycle(t *testing.T) {
 		t.Fatal("token still rejected after the file was fixed")
 	}
 }
+
+func TestResolveHosts(t *testing.T) {
+	s, err := Resolve(nil, 5500, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, h := range []string{"127.0.0.1:5501", "localhost:5501", "[::1]:5501"} {
+		if !s.Hosts[h] {
+			t.Errorf("loopback default does not answer %s", h)
+		}
+	}
+	if s.Hosts["127.0.0.1:5500"] || s.Hosts["evil.example"] {
+		t.Errorf("hosts too broad: %v", s.Hosts)
+	}
+
+	s, err = Resolve(&Config{Listen: "10.0.0.5:5501", TLS: &TLSConfig{Cert: writeTokens(t, "", 0o600), Key: writeTokens(t, "", 0o600)}, Hosts: []string{"Admin.Example.com"}}, 5500, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !s.Hosts["10.0.0.5:5501"] || !s.Hosts["admin.example.com"] || s.Hosts["127.0.0.1:5501"] {
+		t.Errorf("specific address hosts = %v", s.Hosts)
+	}
+
+	tls := &TLSConfig{Cert: writeTokens(t, "", 0o600), Key: writeTokens(t, "", 0o600)}
+	if _, err := Resolve(&Config{Listen: "0.0.0.0:5501", TLS: tls}, 5500, nil); err == nil || !strings.Contains(err.Error(), "admin.hosts") {
+		t.Errorf("wildcard listen without hosts: err = %v", err)
+	}
+	if _, err := Resolve(&Config{Hosts: []string{"https://x"}}, 5500, nil); err == nil {
+		t.Error("a URL in admin.hosts was accepted")
+	}
+}

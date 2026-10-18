@@ -51,7 +51,7 @@ func newHarness(t *testing.T, mutate func(*Settings)) *harness {
 		t.Fatal(err)
 	}
 	s := &Settings{
-		Addr: "127.0.0.1:0", Loopback: true, Dashboard: true, SessionTTL: time.Minute,
+		Addr: "127.0.0.1:0", Loopback: true, Hosts: map[string]bool{testHost: true}, Dashboard: true, SessionTTL: time.Minute,
 		Metrics: true, TokensFile: path, ScrapeTTL: time.Hour,
 	}
 	if mutate != nil {
@@ -363,6 +363,7 @@ func TestStreamDeliversPoints(t *testing.T) {
 	h := newHarness(t, nil)
 	ts := httptest.NewServer(h.h)
 	defer ts.Close()
+	h.srv.opts.Settings.Hosts[ts.Listener.Addr().String()] = true
 
 	path := "/admin/api/stream"
 	header, err := common.GenerateNIP98Header(adminPriv, ts.URL+path, "GET", nil)
@@ -394,4 +395,34 @@ func TestStreamDeliversPoints(t *testing.T) {
 		}
 	}
 	t.Fatalf("stream ended without a point: %v", sc.Err())
+}
+
+// A NIP-98 header is bound to the URL the client claims to call, so the
+// listener must refuse any Host but its own: otherwise a signature the admin
+// gave another site ("log in" at evil.example) works here, as does a
+// DNS-rebound page.
+func TestForeignHostIsRefused(t *testing.T) {
+	h := newHarness(t, nil)
+	const evil = "evil.example"
+	body := []byte{}
+	header, err := common.GenerateNIP98Header(adminPriv, "http://"+evil+"/admin/api/login", "POST", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"/admin/api/login", "/admin/api/metrics", "/metrics", "/admin/ui/"} {
+		r := httptest.NewRequest("POST", "http://"+evil+path, bytes.NewReader(body))
+		r.RemoteAddr = "127.0.0.1:1"
+		r.Header.Set("Authorization", header)
+		w := httptest.NewRecorder()
+		h.h.ServeHTTP(w, r)
+		if w.Code != http.StatusMisdirectedRequest {
+			t.Errorf("%s for Host %s = %d, want 421", path, evil, w.Code)
+		}
+		if len(w.Result().Cookies()) != 0 {
+			t.Errorf("%s for a foreign Host set a cookie", path)
+		}
+	}
+	if w := h.do("GET", "/admin/api/metrics", nil, withHeader("Authorization", "Bearer x")); w.Code == http.StatusMisdirectedRequest {
+		t.Error("the listener's own host was refused")
+	}
 }

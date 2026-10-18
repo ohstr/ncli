@@ -245,6 +245,9 @@ verificationWorkers: 50       # number of signature-verification worker goroutin
 #     clientCA: /etc/ncli/clients-ca.crt
 #   # Drop other source addresses before any auth.
 #   allowCIDRs: [10.0.0.0/8]
+#   # Host names besides the listen address, e.g. a reverse proxy's;
+#   # required when listen is 0.0.0.0.
+#   hosts: [admin.relay.example.com]
 #   # /admin/ui/: sign in with a NIP-07 extension as an admin pubkey.
 #   dashboard:
 #     enabled: true

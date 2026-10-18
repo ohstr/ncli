@@ -67,6 +67,10 @@ func newServer(store *relay.EventStore, searchService search.Service, m *metrics
 		// silent one.
 		Logger:   log.Logger,
 		Observer: m,
+		// Web clients on any site connect to a public relay; access is
+		// decided by NIP-42/NIP-43, not by Origin. WithSessionConfig drops
+		// the SDK's own "*" default, which left only localhost allowed.
+		AllowedOrigins: []string{"*"},
 	}
 
 	if d, err := time.ParseDuration(config.PingInterval); err == nil {

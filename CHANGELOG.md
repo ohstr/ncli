@@ -17,6 +17,7 @@
   rejections, queues, access and process charts plus index jobs. The relay
   serves it with `admin.dashboard.enabled` (sign in with a NIP-07 extension),
   or `ncli relay dashboard` serves it locally and signs for you.
+  ([#156](https://github.com/ohstr/ncli/pull/156))
 
 ### Removed
 

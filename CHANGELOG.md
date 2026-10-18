@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.8.0-rc.26]
+
+### Added
+
+- Adds dashboard sign-in with a secret key, signed in the browser and never
+  sent or stored, or with a NIP-46 remote signer: a `bunker://` URL or a
+  `nostrconnect://` QR code for apps such as Amber and nsec.app.
+
+### Fixed
+
+- Fixes browsers on any site but localhost being refused (HTTP 403) when they
+  opened a WebSocket to `ncli relay`, which locked out every web client.
+
 ## [0.8.0-rc.25]
 
 Relay monitoring: Prometheus metrics, a one-page dashboard, and index jobs

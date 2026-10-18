@@ -99,8 +99,10 @@ try {
     watch(page, "no-signer");
     await page.addInitScript(cspProbe);
     await page.goto(`${admin}/admin/ui/`);
-    await page.getByText("Sign in with Nostr extension").waitFor();
-    check(await page.getByRole("button", { name: /Sign in/ }).isDisabled(), "sign-in disabled without a NIP-07 signer");
+    await page.getByRole("tab", { name: "Secret key" }).waitFor();
+    check((await page.getByRole("tab", { name: "Secret key" }).getAttribute("aria-selected")) === "true", "without an extension, the secret-key tab opens first");
+    await page.getByRole("tab", { name: "Extension" }).click();
+    check(await page.getByRole("button", { name: /Sign in with Nostr extension/ }).isDisabled(), "extension sign-in disabled without a NIP-07 signer");
     check(await page.getByText("ncli relay dashboard").isVisible(), "login screen points to `ncli relay dashboard`");
     await ctx.close();
   }
@@ -172,6 +174,91 @@ try {
     check(reuse === 401, `the one-time link works once (${reuse})`);
     await ctx.close();
   }
+
+  const signedIn = async (page, what) => {
+    await page.locator(".kpis").waitFor({ timeout: 30000 });
+    check(await page.getByText(key.pub_hex.slice(0, 8)).isVisible(), `${what}: signed in as the admin`);
+    const stored = await page.evaluate(() => JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage }));
+    check(!stored.includes(key.nsec) && !stored.includes(key.priv_hex), `${what}: no key in browser storage`);
+  };
+
+  // 4. Secret key: signed in the tab, then dropped.
+  {
+    const ctx = await browser.newContext();
+    const page = await ctx.newPage();
+    watch(page, "nsec");
+    await page.addInitScript(cspProbe);
+    let leaked = false;
+    page.on("request", (r) => {
+      const body = r.postData() ?? "";
+      if (r.url().includes(key.nsec) || body.includes(key.nsec) || body.includes(key.priv_hex)) leaked = true;
+    });
+    await page.goto(`${admin}/admin/ui/`);
+    await page.getByRole("tab", { name: "Secret key" }).click();
+    await page.getByLabel("nsec or hex secret key").fill("nsec1notakey");
+    await page.getByRole("button", { name: "Sign in", exact: true }).click();
+    check(await page.getByRole("alert").getByText(/Not a secret key/).isVisible(), "a malformed key is refused in the page");
+    await page.getByLabel("nsec or hex secret key").fill(key.nsec);
+    await page.getByRole("button", { name: "Sign in", exact: true }).click();
+    await signedIn(page, "nsec");
+    check(!leaked, "the secret key never went over the network");
+    await ctx.close();
+  }
+
+  // NIP-46 against ncli's own bunker, on the test relay.
+  const relayWS = `ws://127.0.0.1:${port}`;
+  ncli(["bunker", "--identity", key.nsec, "--relay", relayWS, "--json", "-q"]);
+  let approving = true;
+  const approver = (async () => {
+    while (approving) {
+      try {
+        const pending = JSON.parse(ncli(["bunker", "pending", "list", "--json", "-q"]) || "[]");
+        for (const p of pending) ncli(["bunker", "pending", "approve", p.id, "--json", "-q"]);
+      } catch {
+        /* the daemon may still be starting */
+      }
+      await new Promise((r) => setTimeout(r, 300));
+    }
+  })();
+
+  // 5. bunker:// URL pasted into the page.
+  {
+    const bunkerURL = JSON.parse(ncli(["bunker", "connect", "--json", "-q"])).result;
+    check(Boolean(bunkerURL), "ncli bunker prints a bunker:// URL");
+    const ctx = await browser.newContext();
+    const page = await ctx.newPage();
+    watch(page, "bunker");
+    await page.addInitScript(cspProbe);
+    await page.goto(`${admin}/admin/ui/`);
+    await page.getByRole("tab", { name: "Remote signer" }).click();
+    await page.getByLabel("bunker:// URL or NIP-05 name").fill(bunkerURL ?? "");
+    await page.getByRole("button", { name: "Connect and sign in" }).click();
+    await signedIn(page, "bunker://");
+    await ctx.close();
+  }
+
+  // 6. nostrconnect:// code the page shows, "scanned" by ncli bunker.
+  {
+    const ctx = await browser.newContext();
+    const page = await ctx.newPage();
+    watch(page, "nostrconnect");
+    await page.addInitScript(cspProbe);
+    await page.goto(`${admin}/admin/ui/`);
+    await page.getByRole("tab", { name: "Remote signer" }).click();
+    await page.getByLabel("Scan with signer app").check();
+    await page.getByLabel("Relay your signer listens on").fill(relayWS);
+    await page.getByRole("button", { name: "Show code" }).click();
+    check(await page.getByRole("img", { name: "nostrconnect QR code" }).isVisible(), "a QR code is shown");
+    const uri = await page.getByLabel("nostrconnect URI").inputValue();
+    check(uri.startsWith("nostrconnect://") && uri.includes(encodeURIComponent(relayWS)), "the code names the chosen relay");
+    ncli(["bunker", "connect", uri, "--json", "-q"]);
+    await signedIn(page, "nostrconnect://");
+    await ctx.close();
+  }
+
+  approving = false;
+  await approver;
+  ncli(["bunker", "stop", "--json", "-q"]);
 
   await browser.close();
   check(problems.length === 0, "no console errors or CSP violations");

@@ -330,3 +330,134 @@ button.danger {
     display: none;
   }
 }
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin: 14px 0 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab {
+  background: transparent;
+  color: var(--muted);
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 6px 10px;
+}
+
+.tab.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.method {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.method form,
+.method > div {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.method label {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.method input[type="password"],
+.method input:not([type]),
+.copy input {
+  font: inherit;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  padding: 7px 9px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  width: 100%;
+}
+
+.segmented {
+  display: flex;
+  gap: 14px;
+  font-size: 13px;
+}
+
+.segmented label {
+  color: var(--text);
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.connect {
+  align-items: center;
+}
+
+.qr {
+  width: 220px;
+  height: 220px;
+  border-radius: 6px;
+  image-rendering: pixelated;
+}
+
+.copy {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+}
+
+.notice {
+  padding: 8px 10px;
+  border-radius: 5px;
+  border: 1px solid var(--warn);
+  font-size: 13px;
+}
+
+.notice a {
+  color: var(--accent);
+}
+
+.small {
+  font-size: 12px;
+}
+
+.login .muted.small {
+  margin-top: 14px;
+}
+
+.tab {
+  flex: 1;
+  white-space: nowrap;
+}
+
+.method > .segmented {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+.connect {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.copy input {
+  flex: 1;
+  min-width: 0;
+}
+
+.login .copy button {
+  flex: none;
+  width: auto;
+  margin-top: 0;
+}

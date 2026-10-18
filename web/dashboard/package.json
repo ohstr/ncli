@@ -11,9 +11,11 @@
     "e2e": "node e2e/smoke.mjs"
   },
   "dependencies": {
+    "nostr-tools": "^2.25.2",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "uplot": "^1.6.32"
+    "uplot": "^1.6.32",
+    "uqr": "^0.1.3"
   },
   "devDependencies": {
     "@types/react": "^19.1.0",

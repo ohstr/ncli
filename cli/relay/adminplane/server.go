@@ -433,9 +433,10 @@ func (s *Server) serveStream(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// uiCSP allows only the dashboard's own files: no inline script, no other
-// origin, no framing.
-const uiCSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+// uiCSP allows only the dashboard's own files: no inline script, no framing.
+// WebSockets may also reach any wss:// relay (and ws:// on localhost): a
+// NIP-46 remote signer answers the sign-in over a relay of its choosing.
+const uiCSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' wss: ws://localhost:* ws://127.0.0.1:*; manifest-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 
 const placeholderPage = `<!doctype html><meta charset="utf-8"><title>ncli relay dashboard</title>
 <p>The dashboard was not built into this binary. Build it with <code>just ui</code>, then rebuild ncli.

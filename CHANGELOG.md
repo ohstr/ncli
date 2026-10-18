@@ -21,7 +21,7 @@
 
 - Adds `admin.hosts`: the admin listener answers only to its own address and
   these names, so a NIP-98 signature an admin made for another site can't be
-  used against it.
+  used against it. ([#158](https://github.com/ohstr/ncli/pull/158))
 
 ### Removed
 

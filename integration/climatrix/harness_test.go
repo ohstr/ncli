@@ -346,9 +346,11 @@ type Relay struct {
 	ConfigPath string
 	LogPath    string
 	Dir        string
-	args       []string
-	cmd        *exec.Cmd
-	env        *Env
+	// AdminAddr is the admin listener's host:port.
+	AdminAddr string
+	args      []string
+	cmd       *exec.Cmd
+	env       *Env
 }
 
 func allocPort(t *testing.T) int {
@@ -413,6 +415,7 @@ func StartRelayArgs(t *testing.T, base string, overrides map[string]any, args ..
 		admin["listen"] = fmt.Sprintf("127.0.0.1:%d", allocPort(t))
 	}
 	cfg["admin"] = admin
+	adminAddr, _ := admin["listen"].(string)
 	cfg["store"] = filepath.Join(dir, "db", "notes.db")
 	cfg["logdir"] = filepath.Join(dir, "logs")
 	logs, _ := cfg["logs"].(map[string]any)
@@ -426,7 +429,7 @@ func StartRelayArgs(t *testing.T, base string, overrides map[string]any, args ..
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := &Relay{Port: port, URL: url, Dir: dir,
+	r := &Relay{Port: port, URL: url, Dir: dir, AdminAddr: adminAddr,
 		ConfigPath: filepath.Join(dir, "relay.yaml"),
 		LogPath:    filepath.Join(dir, "relay.out"),
 		args:       args,

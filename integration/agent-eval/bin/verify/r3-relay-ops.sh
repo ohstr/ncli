@@ -13,11 +13,11 @@ self_report_exists "${RUN_DIR}" "${ROUND}" \
   && add_check "self_report_written" true "present" \
   || add_check "self_report_written" false "missing"
 
-STATS="$(agent_exec 'ncli relay stats --config /relay/relay.yaml --json' 2>/dev/null)"
-if jq -e '.status == "active"' >/dev/null 2>&1 <<<"${STATS}"; then
-  add_check "shared_relay_admin_reachable" true "ncli relay stats reports status=active"
+STATUS="$(agent_exec 'ncli relay status --config /relay/relay.yaml --json' 2>/dev/null)"
+if jq -e '.metrics.v.uptime_seconds >= 0 and (.indexes | length) == 2' >/dev/null 2>&1 <<<"${STATUS}"; then
+  add_check "shared_relay_admin_reachable" true "ncli relay status reports metrics and both indexes"
 else
-  add_check "shared_relay_admin_reachable" false "ncli relay stats: ${STATS}"
+  add_check "shared_relay_admin_reachable" false "ncli relay status: ${STATUS}"
 fi
 
 MEMBERS="$(agent_exec 'ncli relay members list --config /relay/relay.yaml --json' 2>/dev/null)"
@@ -62,9 +62,9 @@ else
   add_check "context_removed" false "context list: ${CONTEXTS}"
 fi
 
-SEARCH="$(agent_exec 'ncli relay reindex search --config /relay/relay.yaml --json 2>&1 >/dev/null; echo "exit=$?"' 2>/dev/null)"
+SEARCH="$(agent_exec 'ncli relay index rebuild search --config /relay/relay.yaml --json 2>&1 >/dev/null; echo "exit=$?"' 2>/dev/null)"
 if grep -q '"code":"usage"' <<<"${SEARCH}" && grep -q 'exit=2' <<<"${SEARCH}"; then
-  add_check "search_off_is_usage" true "reindex search without search: usage, exit 2"
+  add_check "search_off_is_usage" true "index rebuild search without search: usage, exit 2"
 else
   add_check "search_off_is_usage" false "${SEARCH}"
 fi

@@ -91,6 +91,7 @@
 "relay context list": {modes: [json], tests: [TestRelayContext]}
 "relay context remove": {modes: [json], tests: [TestRelayContext]}
 "relay context use": {modes: [json, errors], tests: [TestRelayContext]}
+"relay dashboard": {modes: [errors], tests: [TestAttack_AdminHTTP], pending: "serving runs until interrupted; its proxy is unit-tested"}
 "relay index": {modes: [errors], tests: [TestBareGroupCommands]}
 "relay index drop": {modes: [json, errors], tests: [TestRelayAdmin]}
 "relay index list": {modes: [json], tests: [TestRelayAdmin], pending: "text table"}

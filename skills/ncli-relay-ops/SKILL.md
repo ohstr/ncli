@@ -1,20 +1,21 @@
 ---
 name: ncli-relay-ops
-description: Configure, run, and operate a live ncli Nostr relay — author relay.yaml (NIP-11, auth, search, cache, NIP-43 membership), start the server, and monitor/administer it remotely over NIP-98 (`ncli relay stats`/`reindex`/`clear`, and `ncli relay members`/`invites`/`roles` for NIP-43 membership admin, plus a `nip86:` block serving the standard NIP-86 management API an app can call without a terminal), including rebuilding search/zap indexes on a running relay (`ncli relay reindex`) and switching between named relay configs without repeating `--config` (`ncli relay context`). Use when writing a relay config file, deploying/operating an ncli relay, managing NIP-43 relay membership/invite-codes/roles, troubleshooting search/zap index state, or juggling multiple relay targets.
+description: Configure, run, and operate a live ncli Nostr relay — author relay.yaml (NIP-11, auth, search, cache, NIP-43 membership), start the server, and monitor/administer it over its admin listener (`ncli relay status`, `relay index rebuild/drop`, `relay jobs`, Prometheus `/metrics` with `relay metrics token`, the embedded dashboard via `relay dashboard` or `admin.dashboard`), and `ncli relay members`/`invites`/`roles` for NIP-43 membership admin, plus a `nip86:` block serving the standard NIP-86 management API an app can call without a terminal), including rebuilding search/zap indexes on a running relay as cancellable jobs and switching between named relay configs without repeating `--config` (`ncli relay context`). Use when writing a relay config file, deploying/operating an ncli relay, monitoring a relay with Prometheus/Grafana or the dashboard, managing NIP-43 relay membership/invite-codes/roles, troubleshooting search/zap index state, or juggling multiple relay targets.
 license: Unlicense
 ---
 
 <!-- Mirrors ohstr/ncli's examples/relay/*.yaml, cli/relay/command.go,
-cli/relay/admin.go, cli/relay/service_membership.go, and
-cli/reindex/command.go as of writing. This skill is self-contained by
+cli/relay/admin.go, cli/relay/admin_api.go, cli/relay/adminplane/,
+cli/relay/jobs/ and cli/relay/service_membership.go as of writing. This skill is self-contained by
 design and won't see repo changes automatically — update by hand if
 flags/schemas change. -->
 
-# ncli relay / relay stats, reindex, clear
+# ncli relay / relay status, index, jobs
 
-One config file (`--config relay.yaml`), read by both `ncli relay` and
-`ncli relay stats`/`reindex`/`clear` — the latter need `port` +
-`nip11.privkey` from it to authenticate over HTTP.
+One config file (`--config relay.yaml`), read by both `ncli relay` and the
+commands that administer it (`status`, `index`, `jobs`, `members`, ...) —
+those need `nip11.privkey` from it to sign NIP-98 requests, and
+`admin.listen`/`port` to find the relay.
 
 ## Minimal config to start
 
@@ -31,7 +32,8 @@ logdir: ./data/logs
 ```
 
 `pubkey` alone is enough to start; `privkey` is only required if you also
-want `cache.topZapped.enabled` or `ncli relay stats`/`reindex`/`clear`.
+want `cache.topZapped.enabled` or the admin commands (`status`, `index`,
+`jobs`, `members`, ...).
 
 ## Scenario examples
 
@@ -43,7 +45,7 @@ closest to what you're building and adapt its name/port/store.
 |---|---|---|
 | `personal-relay.yaml` | One person's own outbox/backup -- wide open, low stakes | Nothing beyond minimal, by design |
 | `community-membership-relay.yaml` | Invite-gated community (paid newsletter, friend group, contributor channel) | `membership.enabled` + `nip11.privkey` + `auth_required`+`url` (+ optional `membership_required`) -- NIP-43 relay membership: enrolled pubkeys can REQ/EVENT, everyone else must invite-then-join first |
-| `public-search-relay.yaml` | Public, high-traffic relay where search and "what's trending" actually work | `cache.search.*` + `cache.topZapped.enabled` + `nip11.privkey` -- also the shape `ncli relay stats`/`reindex`/`clear` need, since their auth requires `nip11.privkey` too |
+| `public-search-relay.yaml` | Public, high-traffic relay where search and "what's trending" actually work | `cache.search.*` + `cache.topZapped.enabled` + `nip11.privkey` -- also the shape the admin commands need, since their auth requires `nip11.privkey` too |
 | `anti-spam-relay.yaml` | Public relay fighting spam with mining cost instead of a ban list | `pow.strict: true` + `pow.min` (nonzero) -- actually rejects under-difficulty events instead of just advertising the requirement |
 | `dev-test-relay.yaml` | Throwaway relay for local development or CI | Nothing beyond minimal -- its own port/store so it can run alongside `just dev relay` or another instance of itself |
 | `agent-swarm-relay.yaml` | A team's AI agents post under their own key via a human's membership, no separate bot enrollment | `agent_auth.enabled` on top of membership + `auth_required` + `membership_required` -- NIP-AA |
@@ -97,7 +99,7 @@ resolving to the right relay.
 
 ## `ncli relay members`/`invites`/`roles` — NIP-43 membership admin, relay must be running
 
-Same NIP-98-over-HTTP mechanism as `stats`/`reindex`/`clear` below, gated on
+NIP-98-signed HTTP to the relay's public port, gated on
 `membership.enabled: true` in the relay's own config (see the `membership`
 preset). Manage enrolled members, issue/revoke invite codes out-of-band, and
 define roles — all against the relay's live `MembershipService`, so changes
@@ -125,7 +127,7 @@ ncli relay roles list
 ncli relay roles create <id> --label "VIP" --color 280
 ```
 
-Same `--json`/error-classification convention as stats/reindex/clear, plus
+Same `--json`/error-classification convention as `status`/`index` below, plus
 `invalid_input` (`400` — a malformed pubkey, an unparseable `--ttl`, a
 missing role `id`, `--color` outside 0-360), `not_found` (`404` — `members
 show` on a non-member), and `usage` (`501` — membership isn't enabled on the
@@ -203,54 +205,89 @@ With `membership.enabled`, also: `allowpubkey`, `unallowpubkey`,
 join — the other participants stay connected. `ncli relay members remove`
 does the same.
 
-## `ncli relay stats`/`reindex`/`clear` — relay must be running
+## Monitoring and index jobs — relay must be running
 
-NIP-98-signed HTTP requests to `http://localhost:<port>` on the *same*
-relay this config describes. Requires `nip11.privkey` in config to sign
-requests as admin.
+Every running relay has an **admin listener** separate from its public
+port: `admin.listen`, default `127.0.0.1:<port+1>` (`off` disables it).
+`status`/`index`/`jobs` sign each request (NIP-98) with `nip11.privkey`,
+which must be the relay's key or in `nip86.admins`. `--admin-url` overrides
+where they connect.
 
 ```sh
-# live reindexer + verification-worker metrics
-ncli relay stats
-# trigger a live search reindex (202 Accepted, runs async)
-ncli relay reindex search
-# trigger a live zap-stats reindex
-ncli relay reindex zaps
-# delete the search index on the live relay
-ncli relay clear search
-# delete zap counters on the live relay
-ncli relay clear zaps
+# health and live metrics (--watch: every 2s; NDJSON with --json)
+ncli relay status
+# indexes with their running/last job and an item estimate
+ncli relay index list
+# rebuild zaps beside the live index and swap it in; wait with progress
+ncli relay index rebuild zaps --follow
+# search: upsert in place, or --fresh to build a new index and swap it in
+ncli relay index rebuild search --fresh --follow
+# estimate only
+ncli relay index rebuild all --dry-run
+# empty an index (prompts; --yes required with --json or no terminal)
+ncli relay index drop search --yes
+# jobs: running first, then the last 20 (kept in <store>.jobs.json)
+ncli relay jobs list
+ncli relay jobs show <id> --follow
+ncli relay jobs cancel <id>
 ```
 
-All subcommands take `--json` (a global flag) for scripted use: the
-relay's raw JSON response on stdout on success, or `{"error", "code",
-"retryable", "input"}` on stderr on failure -- never both, and never on
-stdout. `code` is classified from *how* the request failed: `network` if
-the request couldn't even reach the relay (connection refused/timeout, or
-the relay itself returned `5xx` -- both `retryable: true`), `auth` for a
-`401`/`403` (bad or mismatched NIP-98 signature -- check `nip11.privkey`),
-`conflict` for a `409` (the exact case below: a reindex of that kind is
-already running -- `retryable: true`, safe to retry once it finishes), or
-`usage` if `nip11.privkey` is missing from `--config` entirely (nothing to
-sign the request with). `reindex` calls return immediately (`202`) with
-the job started in a background goroutine inside the relay process — poll
-`ncli relay stats` for progress. If a reindex of that kind is already
-running, the endpoint returns `409 Conflict` instead of starting a second
-one.
+- A rebuild is a job with an id. Starting the same rebuild while it runs
+  returns that job (no duplicate); any other job on that index is
+  `conflict` (exit 5, retryable). `--follow` exits non-zero unless the job
+  succeeds; Ctrl-C stops following, not the job.
+- Neither rebuild leaves an empty window: zaps builds a new generation and
+  swaps it atomically; `search --fresh` builds `<index_name>__next`, swaps,
+  then catches up on profiles stored meanwhile. `--reverify` (search only)
+  re-queues every profile's NIP-05/LUD-16 check, throttled to the relay's
+  own verification queue — leave it off unless verification logic changed.
+- A search rebuild covers every stored profile, past `max_limit`.
+- `search` is `usage` (exit 2) when `cache.search.enabled` is off or
+  `readonly` is set; an unknown index or job id is `not_found` (exit 4); a
+  key that isn't admin is `auth` (exit 7); a stopped relay is `network`.
+- `ncli relay stats`/`reindex`/`clear` no longer exist; they fail with
+  `usage` naming the replacement.
 
-This is the only way to trigger a search/zap reindex — there is no offline
-CLI equivalent. `ncli relay reindex {search,zaps}` runs a background
-goroutine inside the relay process (`reindex.ExecuteSearchReindex`/
-`ExecuteZapReindex`) that walks every event already in `store` and rebuilds
-the index from scratch. That means `nip11.privkey` must be configured
-whenever you might need to rebuild an index, not just for
-`cache.topZapped.enabled`.
+### Prometheus and the dashboard
 
-Full endpoint list and subcommand reference: `references/admin-reindex-reference.md`.
+```yaml
+admin:
+  listen: 127.0.0.1:5501
+  dashboard:
+    enabled: true       # /admin/ui/, NIP-07 sign-in, 15m sessions
+  metrics:
+    enabled: true       # /metrics, bearer tokens only
+    tokensFile: /etc/ncli/metrics.tokens
+```
+
+```sh
+# prints the token once; the file keeps only its sha256 (mode 0600)
+ncli relay metrics token add prometheus --config relay.yaml
+# open the dashboard locally, signed by this CLI (no admin.dashboard needed)
+ncli relay dashboard --config relay.yaml
+```
+
+- The relay **refuses to start** if `admin.listen` isn't loopback without
+  `admin.tls`, equals the relay port, or `metrics` lacks a valid tokens file
+  (missing, readable by others, or holding a plaintext token). A taken
+  *default* admin port only warns.
+- The listener answers only to its own address (plus `localhost` on
+  loopback); behind a reverse proxy list its name in `admin.hosts`, or every
+  request gets `421`. This is what stops a NIP-98 signature the admin gave
+  another site from working here.
+- Credentials don't cross: a metrics token opens only `/metrics`; a NIP-98
+  signature or dashboard session opens only `/admin/api/*`.
+- Tokens rotate without a restart: add the new one, switch the scraper,
+  `token remove` the old one; the relay rereads the file within a second.
+- Metric names are `ncli_relay_*` (plus Go/process collectors); labels are
+  bounded (message type, NIP-01 reason, kind class), never pubkeys or IPs.
+  Scrapes are cached 5s (`admin.metrics.scrapeCacheTTL`).
+
+Full route, metric and config reference: `references/admin-plane-reference.md`.
 
 ## Gotchas learned
 
-- `ncli relay reindex`/`clear`/`members`/`invites`/`roles` invoked with no
+- `ncli relay index`/`jobs`/`metrics`/`members`/`invites`/`roles` invoked with no
   further subcommand (or a misspelled one) is a `code: "usage"` error
   (exit 2), same as any other invocation mistake. It prints the group's
   help on stderr to show you the subcommands, but it still **exits 2** --
@@ -338,7 +375,7 @@ Full endpoint list and subcommand reference: `references/admin-reindex-reference
   store.go).
 - `nip11.pubkey` is optional if `nip11.privkey` is set — it's derived
   automatically and must match if both are present (config-validation error
-  otherwise). `ncli relay stats`/`reindex`/`clear` use the same derivation
+  otherwise). The admin commands use the same derivation
   if `nip11.pubkey` is absent from config but `nip11.privkey` is present.
 - `pow.min` is a difficulty *requirement*, not a discount: it never lets an
   event with insufficient PoW skip other checks, and it does nothing at all

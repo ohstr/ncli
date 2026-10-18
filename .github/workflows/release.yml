@@ -107,6 +107,14 @@ jobs:
           git tag -a "v$VERSION" -F /tmp/release-notes.md
           git push origin "v$VERSION"
 
+      # goreleaser's before hook builds the embedded relay dashboard.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ncli/web/dashboard/package-lock.json
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 

@@ -1,0 +1,30 @@
+# A relay with its dashboard and Prometheus metrics on.
+#
+# Create the scrape token first (printed once; the file keeps only its hash):
+#   ncli relay metrics token add prometheus --config examples/relay/dashboard-relay.yaml
+# Then run it:
+#   ncli relay --config examples/relay/dashboard-relay.yaml
+# Open http://127.0.0.1:5501/admin/ui/ and sign in with a NIP-07 extension
+# holding nip11.pubkey's key, or skip that and run:
+#   ncli relay dashboard --config examples/relay/dashboard-relay.yaml
+
+port: 5500
+
+nip11:
+  name: ncli-dashboard-relay
+  # The admin key: signs `ncli relay status`/`index`/`jobs`/`dashboard`.
+  # Generated for this example only -- never reuse a published key.
+  privkey: 4e1b2f9d6c3a8e7f0b5d2c1a9e8f7d6c5b4a3928170615f4e3d2c1b0a9f8e7d6
+  contact: admin@example.com
+
+store: ./data/db/notes.db
+logdir: ./data/logs
+
+admin:
+  # Loopback: reach it from elsewhere with an SSH tunnel, or add tls.
+  listen: 127.0.0.1:5501
+  dashboard:
+    enabled: true
+  metrics:
+    enabled: true
+    tokensFile: ./data/metrics.tokens

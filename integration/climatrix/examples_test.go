@@ -35,7 +35,35 @@ func TestRelayExamples(t *testing.T) {
 			if err := yaml.Unmarshal(raw, &cfg); err != nil {
 				t.Fatalf("example doesn't parse: %v", err)
 			}
-			r := StartRelay(t, string(raw), nil)
+			// An example serving metrics names a tokens file to create
+			// first, as its header says; the admin port moves like the
+			// relay port does.
+			overrides := map[string]any{}
+			var adminAddr, token string
+			if admin, ok := cfg["admin"].(map[string]any); ok {
+				adminAddr = fmt.Sprintf("127.0.0.1:%d", allocPort(t))
+				ov := map[string]any{"listen": adminAddr}
+				if m, _ := admin["metrics"].(map[string]any); m != nil && m["enabled"] == true {
+					tokens := filepath.Join(t.TempDir(), "metrics.tokens")
+					var added struct{ Token string }
+					NewEnv(t).MustOK(t, "relay", "metrics", "token", "add", "ci", "--file", tokens, "--json").JSON(t, &added)
+					token = added.Token
+					ov["metrics"] = map[string]any{"tokensFile": tokens}
+				}
+				overrides["admin"] = ov
+			}
+			r := StartRelay(t, string(raw), overrides)
+			if token != "" {
+				req, _ := http.NewRequest("GET", "http://"+adminAddr+"/metrics", nil)
+				req.Header.Set("Authorization", "Bearer "+token)
+				resp, err := http.DefaultClient.Do(req)
+				if err != nil || resp.StatusCode != http.StatusOK {
+					t.Errorf("example's /metrics with its token: %v %v", resp, err)
+				}
+				if resp != nil {
+					_ = resp.Body.Close()
+				}
+			}
 
 			var doc struct {
 				Limitation struct {

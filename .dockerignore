@@ -10,4 +10,5 @@ logs
 test
 build/relay/.dev
 .env
-.env.*
+.env.*web/dashboard/node_modules
+web/dashboard/dist

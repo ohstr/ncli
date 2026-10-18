@@ -12,6 +12,14 @@ build: ui
 ui:
     cd web/dashboard && npm ci --no-audit --no-fund && npm run build
 
+# Dashboard unit tests (vitest)
+ui-test:
+    cd web/dashboard && npm test
+
+# Dashboard in headless Chromium against a real relay (builds ncli first)
+ui-e2e: build
+    cd web/dashboard && npx playwright install chromium && NCLI_BIN="$PWD/../../bin/ncli" npm run e2e
+
 # Serve the dashboard with hot reload against a relay's admin listener on :5501
 ui-dev:
     cd web/dashboard && npm run dev

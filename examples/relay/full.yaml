@@ -231,6 +231,33 @@ verificationWorkers: 50       # number of signature-verification worker goroutin
 # keep it on loopback.
 # pprofAddr: 127.0.0.1:6060
 
+# Admin listener (optional block): `ncli relay status`/`index`/`jobs`, the
+# dashboard and Prometheus metrics, on an address apart from `port`.
+# Without the block it listens on 127.0.0.1:<port + 1> with only the
+# NIP-98 admin API. The relay refuses to start off loopback without tls.
+# admin:
+#   # "off" disables it.
+#   listen: 127.0.0.1:5501
+#   # Required when listen isn't loopback; clientCA also requires mTLS.
+#   tls:
+#     cert: /etc/ncli/admin.crt
+#     key: /etc/ncli/admin.key
+#     clientCA: /etc/ncli/clients-ca.crt
+#   # Drop other source addresses before any auth.
+#   allowCIDRs: [10.0.0.0/8]
+#   # Host names besides the listen address, e.g. a reverse proxy's;
+#   # required when listen is 0.0.0.0.
+#   hosts: [admin.relay.example.com]
+#   # /admin/ui/: sign in with a NIP-07 extension as an admin pubkey.
+#   dashboard:
+#     enabled: true
+#     sessionTTL: 15m
+#   # /metrics for Prometheus: `ncli relay metrics token add <name>`.
+#   metrics:
+#     enabled: true
+#     tokensFile: /etc/ncli/metrics.tokens
+#     scrapeCacheTTL: 5s
+
 # Custom log rotation (optional). If omitted, logs go to
 # <logdir>/nrelay.log with the same defaults shown here.
 logs:

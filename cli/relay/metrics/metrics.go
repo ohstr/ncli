@@ -124,7 +124,7 @@ func New(version string) *Metrics {
 	}, []string{"route"})
 	reg.MustRegister(m.httpSeconds)
 	m.adminDenied = f.counterVec("admin_denied_total", "Admin listener requests refused, by reason.", "reason")
-	for _, r := range []string{"cidr", "token", "nip98", "session", "csrf", "replay"} {
+	for _, r := range []string{"host", "cidr", "token", "nip98", "session", "csrf", "replay"} {
 		m.adminDenied.WithLabelValues(r)
 	}
 	m.jobRuns = f.counterVec("job_runs_total", "Index jobs finished, by index and outcome.", "index", "result")
@@ -217,7 +217,7 @@ func (m *Metrics) BatchCommitted(n int, d time.Duration, failed bool) {
 func (m *Metrics) ScanBusy() { m.scanBusy.Inc() }
 
 // AdminDenied counts one admin listener refusal. reason is one of a fixed
-// set: cidr, token, nip98, session, csrf, replay.
+// set: host, cidr, token, nip98, session, csrf, replay.
 func (m *Metrics) AdminDenied(reason string) { m.adminDenied.WithLabelValues(reason).Inc() }
 
 // JobFinished counts one finished index job.

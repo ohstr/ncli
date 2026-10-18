@@ -25,59 +25,53 @@ func resolve(t *testing.T, args ...string) *cobra.Command {
 	return cmd
 }
 
-// TestCommandTree_RelayFlattensAdmin guards the "admin" layer's removal
-// (ncli relay admin stats -> ncli relay stats) against silently regressing
-// back to a nested "admin" tree, or silently losing a subcommand during a
-// future refactor. stats/reindex/clear still work by making NIP-98
-// authenticated HTTP requests to a running relay -- flattening only
-// dropped the "admin" path segment, not their online-only nature (there is
-// still no offline reindex; see TestCommandTree_OfflineReindexRemoved).
-func TestCommandTree_RelayFlattensAdmin(t *testing.T) {
+// TestCommandTree_RelayAdminAPI guards the commands that drive a running
+// relay's admin listener against a refactor silently dropping one.
+func TestCommandTree_RelayAdminAPI(t *testing.T) {
 	paths := [][]string{
-		{"relay", "stats"},
-		{"relay", "reindex", "search"},
-		{"relay", "reindex", "zaps"},
-		{"relay", "clear", "search"},
-		{"relay", "clear", "zaps"},
+		{"relay", "status"},
+		{"relay", "index", "list"},
+		{"relay", "index", "rebuild"},
+		{"relay", "index", "drop"},
+		{"relay", "jobs", "list"},
+		{"relay", "jobs", "show"},
+		{"relay", "jobs", "cancel"},
+		{"relay", "metrics", "token", "add"},
+		{"relay", "metrics", "token", "list"},
+		{"relay", "metrics", "token", "remove"},
 	}
 	for _, p := range paths {
-		resolve(t, p...)
+		if cmd := resolve(t, p...); cmd.RunE == nil {
+			t.Errorf("%v: no RunE", p)
+		}
 	}
 }
 
-// TestCommandTree_AdminRemoved guards against "admin" reappearing anywhere
-// in the tree, nested or not, now that its stats/reindex/clear children
-// live directly under "relay". Find() falls back to the deepest command it
-// can still resolve, so on an absent "admin" it should stop at "relay"
-// rather than reach an "admin" or "stats" command.
-func TestCommandTree_AdminRemoved(t *testing.T) {
-	cmd, _, err := ncli.RootCmd.Find([]string{"relay", "admin", "stats"})
-	if err != nil {
-		t.Fatalf("Find returned error: %v", err)
-	}
-	if cmd.Name() == "admin" || cmd.Name() == "stats" {
-		t.Fatalf("resolved to %q; \"relay admin\" should no longer exist", cmd.Name())
-	}
-}
-
-// TestCommandTree_OfflineReindexRemoved guards against a *second*,
-// offline "reindex" implementation reappearing under "relay": reindexing
-// only happens through a live relay via "ncli relay reindex", which
-// exercises the same underlying engine
-// (cli/reindex.ExecuteSearchReindex/ExecuteZapReindex) that used to live
-// one level deeper at "ncli relay admin reindex" before the admin flatten.
-func TestCommandTree_OfflineReindexRemoved(t *testing.T) {
-	cmd := resolve(t, "relay", "reindex", "search")
-	if cmd.RunE == nil {
-		t.Fatalf("relay reindex search has no RunE; expected the NIP-98 admin-request implementation")
+// TestCommandTree_RemovedRelayCommands guards against "relay admin" and the
+// stats/reindex/clear commands index/status replaced coming back. Find()
+// stops at the deepest command it can resolve, so each should stop at
+// "relay", whose argument check then names the replacement.
+func TestCommandTree_RemovedRelayCommands(t *testing.T) {
+	for _, p := range [][]string{
+		{"relay", "admin", "stats"},
+		{"relay", "stats"},
+		{"relay", "reindex", "search"},
+		{"relay", "clear", "zaps"},
+	} {
+		cmd, _, err := ncli.RootCmd.Find(p)
+		if err != nil {
+			t.Fatalf("Find(%v) returned error: %v", p, err)
+		}
+		if cmd.Name() != "relay" {
+			t.Errorf("Find(%v) resolved to %q; it should no longer exist", p, cmd.Name())
+		}
 	}
 }
 
 // TestCommandTree_RelayMembershipAdmin guards the NIP-43 membership admin
-// commands' wiring directly onto "relay" (same flattened shape as
-// stats/reindex/clear -- three parent groups, "members"/"invites"/"roles",
-// each with its own children) against a future refactor silently dropping
-// one.
+// commands' wiring directly onto "relay" (three parent groups,
+// "members"/"invites"/"roles", each with its own children) against a future
+// refactor silently dropping one.
 func TestCommandTree_RelayMembershipAdmin(t *testing.T) {
 	paths := [][]string{
 		{"relay", "members", "list"},
@@ -110,8 +104,10 @@ func TestCommandTree_RelayMembershipAdmin(t *testing.T) {
 // itself.
 func TestCommandTree_GroupCommandsRequireSubcommand(t *testing.T) {
 	paths := [][]string{
-		{"relay", "reindex"},
-		{"relay", "clear"},
+		{"relay", "index"},
+		{"relay", "jobs"},
+		{"relay", "metrics"},
+		{"relay", "metrics", "token"},
 		{"relay", "members"},
 		{"relay", "invites"},
 		{"relay", "roles"},

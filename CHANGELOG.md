@@ -9,11 +9,23 @@
   `ncli relay metrics token add`. The relay refuses to start when it would be
   reachable off loopback without TLS, and collecting metrics adds no measurable
   latency. ([#154](https://github.com/ohstr/ncli/pull/154))
+- Adds `ncli relay status`, `relay index list|rebuild|drop` and `relay jobs
+  list|show|cancel`, which run index maintenance as jobs with progress,
+  `--follow` and cancel. Rebuilds swap the new index in atomically, so search
+  and top-zapped answers never go empty mid-rebuild.
+
+### Removed
+
+- Removes `ncli relay stats`, `relay reindex` and `relay clear`, and their
+  routes on the public relay port; each now names its replacement (`relay
+  status`, `relay index rebuild`, `relay index drop`).
 
 ### Fixed
 
 - Fixes zap reindexing dropping every NIP-57 (kind 9735) receipt from the
   top-zapped index. ([#154](https://github.com/ohstr/ncli/pull/154))
+- Fixes search reindexing covering only the newest `max_limit` profiles; a
+  rebuild now indexes every stored profile.
 
 ### Changed
 

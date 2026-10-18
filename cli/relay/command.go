@@ -333,13 +333,35 @@ type EventsConfig struct {
 	Enabled bool `mapstructure:"enabled"`
 }
 
+// removedRelayCommands maps relay subcommands that no longer exist to what
+// replaced them, so `ncli relay stats` says where it went instead of trying
+// to start a relay.
+var removedRelayCommands = map[string]string{
+	"stats":   "ncli relay status",
+	"reindex": "ncli relay index rebuild <search|zaps>",
+	"clear":   "ncli relay index drop <search|zaps>",
+}
+
+// relayArgs rejects positional arguments: `relay` itself takes none, so one
+// is a mistyped or removed subcommand.
+func relayArgs(cmd *cobra.Command, args []string) error {
+	if len(args) == 0 {
+		return nil
+	}
+	if repl, ok := removedRelayCommands[args[0]]; ok {
+		return common.UsageError(cmd, fmt.Errorf("`ncli relay %s` was removed; use `%s`", args[0], repl))
+	}
+	return common.UsageError(cmd, fmt.Errorf("unknown command %q for \"ncli relay\"", args[0]))
+}
+
 func NewRelayCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "relay",
 		Short: "Run and operate a Nostr relay",
 		Example: `  ncli relay --config relay.yaml
   ncli relay --context myrelay
-  ncli relay stats --config relay.yaml`,
+  ncli relay status --config relay.yaml`,
+		Args: relayArgs,
 		PreRunE: func(cmd *cobra.Command, args []string) error {
 			ctxName, _ := cmd.Flags().GetString("context")
 			if ctxName != "" {

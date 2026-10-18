@@ -403,6 +403,16 @@ func StartRelayArgs(t *testing.T, base string, overrides map[string]any, args ..
 	nip11["url"] = url
 	cfg["nip11"] = nip11
 	cfg["port"] = port
+	// An explicit admin port: the default (port+1) could be another
+	// test relay's port from the same pool.
+	admin, _ := cfg["admin"].(map[string]any)
+	if admin == nil {
+		admin = map[string]any{}
+	}
+	if _, ok := admin["listen"]; !ok {
+		admin["listen"] = fmt.Sprintf("127.0.0.1:%d", allocPort(t))
+	}
+	cfg["admin"] = admin
 	cfg["store"] = filepath.Join(dir, "db", "notes.db")
 	cfg["logdir"] = filepath.Join(dir, "logs")
 	logs, _ := cfg["logs"].(map[string]any)
@@ -482,8 +492,8 @@ func (r *Relay) Log() string {
 	return string(b)
 }
 
-// AdminConfig writes a relay config pointing at this relay's port but
-// signing with privHex -- for driving `relay stats`/`members`/... as a
+// AdminConfig writes a relay config pointing at this relay's ports but
+// signing with privHex -- for driving `relay status`/`members`/... as a
 // key that may or may not be the relay's own.
 func (r *Relay) AdminConfig(t *testing.T, privHex string) string {
 	t.Helper()

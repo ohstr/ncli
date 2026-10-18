@@ -99,6 +99,11 @@
 "relay invites list": {modes: [json], tests: [TestRelayAdmin]}
 "relay invites revoke": {modes: [json, errors], tests: [TestRelayAdmin, TestAttack_NIP43Membership]}
 "relay members": {modes: [errors], tests: [TestBareGroupCommands]}
+"relay metrics": {modes: [errors], tests: [TestBareGroupCommands]}
+"relay metrics token": {modes: [errors], tests: [TestBareGroupCommands]}
+"relay metrics token add": {modes: [json, errors], tests: [TestRelayMetricsToken]}
+"relay metrics token list": {modes: [json, errors], tests: [TestRelayMetricsToken]}
+"relay metrics token remove": {modes: [json, errors], tests: [TestRelayMetricsToken]}
 "relay members add": {modes: [json, errors], tests: [TestRelayAdmin, TestAttack_AdminHTTP]}
 "relay members list": {modes: [json, errors], tests: [TestRelayAdmin, TestAttack_AdminHTTP]}
 "relay members remove": {modes: [json], tests: [TestRelayAdmin, TestAttack_NIP43Membership]}

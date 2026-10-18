@@ -5,6 +5,8 @@
 package metrics
 
 import (
+	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/ohstr/nmilat/relay"
@@ -27,31 +29,31 @@ type Metrics struct {
 	Registry *prometheus.Registry
 	started  time.Time
 
-	sessionsTotal   prometheus.Counter
-	messages        [relayMessageTypes]prometheus.Counter
-	events          [relayEventResults]prometheus.Counter
-	rejected        [relayRejectReasons]prometheus.Counter
-	byClass         [relayKindClasses]prometheus.Counter
-	eventOK         prometheus.Observer
-	reqEOSE         prometheus.Observer
-	reqEvents       prometheus.Observer
-	readRefused     [relayRejectReasons]prometheus.Counter
-	countSeconds    prometheus.Observer
-	subscriptions   prometheus.Gauge
-	subLimitHits    prometheus.Counter
-	authAccepted    prometheus.Counter
-	authRejected    [relayRejectReasons]prometheus.Counter
-	sendSeconds     prometheus.Observer
-	sendErrors      prometheus.Counter
-	slowSends       prometheus.Counter
-	batchSeconds    prometheus.Observer
-	batchSize       prometheus.Observer
-	batchErrors     prometheus.Counter
-	scanBusy        prometheus.Counter
-	httpRequests    *prometheus.CounterVec
-	httpSeconds     *prometheus.HistogramVec
-	adminDenied     *prometheus.CounterVec
-	jobRuns         *prometheus.CounterVec
+	sessionsTotal prometheus.Counter
+	messages      [relayMessageTypes]prometheus.Counter
+	events        [relayEventResults]prometheus.Counter
+	rejected      [relayRejectReasons]prometheus.Counter
+	byClass       [relayKindClasses]prometheus.Counter
+	eventOK       prometheus.Observer
+	reqEOSE       prometheus.Observer
+	reqEvents     prometheus.Observer
+	readRefused   [relayRejectReasons]prometheus.Counter
+	countSeconds  prometheus.Observer
+	subscriptions prometheus.Gauge
+	subLimitHits  prometheus.Counter
+	authAccepted  prometheus.Counter
+	authRejected  [relayRejectReasons]prometheus.Counter
+	sendSeconds   prometheus.Observer
+	sendErrors    prometheus.Counter
+	slowSends     prometheus.Counter
+	batchSeconds  prometheus.Observer
+	batchSize     prometheus.Observer
+	batchErrors   prometheus.Counter
+	scanBusy      prometheus.Counter
+	httpRequests  *prometheus.CounterVec
+	httpSeconds   *prometheus.HistogramVec
+	adminDenied   *prometheus.CounterVec
+	jobRuns       *prometheus.CounterVec
 }
 
 const (
@@ -220,6 +222,38 @@ func (m *Metrics) AdminDenied(reason string) { m.adminDenied.WithLabelValues(rea
 
 // JobFinished counts one finished index job.
 func (m *Metrics) JobFinished(index, result string) { m.jobRuns.WithLabelValues(index, result).Inc() }
+
+// HTTP wraps h to count requests to route by status class and time them.
+// The series are resolved here, once per route.
+func (m *Metrics) HTTP(route string, h http.Handler) http.Handler {
+	var byClass [6]prometheus.Counter
+	for i := 1; i <= 5; i++ {
+		byClass[i] = m.httpRequests.WithLabelValues(route, fmt.Sprintf("%dxx", i))
+	}
+	seconds := m.httpSeconds.WithLabelValues(route)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		rec := &statusWriter{ResponseWriter: w, status: http.StatusOK}
+		h.ServeHTTP(rec, r)
+		if c := rec.status / 100; c >= 1 && c <= 5 {
+			byClass[c].Inc()
+		}
+		seconds.Observe(time.Since(start).Seconds())
+	})
+}
+
+type statusWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (s *statusWriter) WriteHeader(code int) {
+	s.status = code
+	s.ResponseWriter.WriteHeader(code)
+}
+
+// Unwrap lets http.ResponseController reach the underlying writer.
+func (s *statusWriter) Unwrap() http.ResponseWriter { return s.ResponseWriter }
 
 var (
 	_ relay.Observer      = (*Metrics)(nil)

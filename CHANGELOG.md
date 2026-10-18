@@ -2,6 +2,19 @@
 
 ## [0.8.0-rc.24]
 
+### Added
+
+- Adds an admin listener to `ncli relay` (`admin:` block, `127.0.0.1:<port+1>`
+  by default) serving Prometheus metrics at `/metrics` to bearer tokens from
+  `ncli relay metrics token add`. The relay refuses to start when it would be
+  reachable off loopback without TLS, and collecting metrics adds no measurable
+  latency.
+
+### Fixed
+
+- Fixes zap reindexing dropping every NIP-57 (kind 9735) receipt from the
+  top-zapped index.
+
 ### Changed
 
 - Updates nmilat to v0.5.0-rc.24, whose NIP-CASH private transport listens for a

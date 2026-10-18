@@ -13,6 +13,10 @@
   list|show|cancel`, which run index maintenance as jobs with progress,
   `--follow` and cancel. Rebuilds swap the new index in atomically, so search
   and top-zapped answers never go empty mid-rebuild. ([#155](https://github.com/ohstr/ncli/pull/155))
+- Adds a one-page relay dashboard embedded in `ncli`: live traffic, latency,
+  rejections, queues, access and process charts plus index jobs. The relay
+  serves it with `admin.dashboard.enabled` (sign in with a NIP-07 extension),
+  or `ncli relay dashboard` serves it locally and signs for you.
 
 ### Removed
 

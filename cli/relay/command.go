@@ -388,6 +388,7 @@ func NewRelayCommand() *cobra.Command {
 
 	addRemoteAdminCommands(cmd)
 	addMetricsCommands(cmd)
+	addDashboardCommand(cmd)
 	addContextCommands(cmd)
 	return cmd
 }

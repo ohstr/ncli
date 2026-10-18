@@ -15,6 +15,7 @@ import (
 	"github.com/ohstr/ncli/cli/relay/jobs"
 	"github.com/ohstr/ncli/cli/relay/metrics"
 	"github.com/ohstr/ncli/client"
+	"github.com/ohstr/ncli/web/dashboard"
 	"github.com/ohstr/nmilat/huddle/room"
 	"github.com/ohstr/nmilat/nip11"
 	"github.com/ohstr/nmilat/nip86"
@@ -330,6 +331,7 @@ func (s *Service) startAdmin() error {
 	admin, err := adminplane.New(adminplane.Options{
 		Settings: adminSettings,
 		Admins:   nip86Admins,
+		UI:       dashboard.FS(),
 		Metrics:  s.metrics,
 		History:  s.history,
 		Logger:   log.Logger,

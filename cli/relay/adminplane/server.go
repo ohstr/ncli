@@ -92,10 +92,12 @@ func New(opts Options) (*Server, error) {
 		writeJSON(w, http.StatusOK, s.opts.History.Columns())
 	})
 	s.Handle("GET /admin/api/stream", s.serveStream)
+	// Who is calling: `ncli relay dashboard` checks it even when the relay
+	// serves no dashboard of its own.
+	s.Handle("GET /admin/api/session", s.sessionInfo)
 
 	if opts.Settings.Dashboard {
 		s.mux.HandleFunc("POST /admin/api/login", s.login)
-		s.Handle("GET /admin/api/session", s.sessionInfo)
 		s.Handle("POST /admin/api/logout", s.logout)
 		s.mux.Handle("GET /admin/ui/", http.StripPrefix("/admin/ui", s.uiHandler()))
 		s.mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
@@ -432,8 +434,12 @@ const placeholderPage = `<!doctype html><meta charset="utf-8"><title>ncli relay 
 <p>The dashboard was not built into this binary. Build it with <code>just ui</code>, then rebuild ncli.
 The admin API and /metrics work without it.</p>`
 
-func (s *Server) uiHandler() http.Handler {
-	ui := s.opts.UI
+func (s *Server) uiHandler() http.Handler { return UIHandler(s.opts.UI) }
+
+// UIHandler serves a built dashboard (rooted at its index.html, mounted
+// with its /admin/ui prefix stripped) under the dashboard's CSP, or a
+// placeholder page when ui holds no build.
+func UIHandler(ui fs.FS) http.Handler {
 	hasIndex := false
 	if ui != nil {
 		if _, err := fs.Stat(ui, "index.html"); err == nil {

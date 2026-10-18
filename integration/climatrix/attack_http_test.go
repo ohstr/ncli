@@ -193,6 +193,7 @@ func TestAttack_AdminHTTP(t *testing.T) {
 		r2 := StartRelay(t, "", nil)
 		r2.Stop()
 		NewEnv(t).Run(t, "relay", "status", "--config", r2.ConfigPath, "--json").ExpectErr(t, "network")
+		NewEnv(t).Run(t, "relay", "dashboard", "--no-open", "--config", r2.ConfigPath, "--json").ExpectErr(t, "network")
 	})
 	t.Run("membership routes with membership off are usage", func(t *testing.T) {
 		r2 := StartRelay(t, "", nil)

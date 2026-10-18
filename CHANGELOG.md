@@ -7,6 +7,10 @@
 - Adds dashboard sign-in with a secret key, signed in the browser and never
   sent or stored, or with a NIP-46 remote signer: a `bunker://` URL or a
   `nostrconnect://` QR code for apps such as Amber and nsec.app.
+- Adds `admin.pubkeys`: personal keys that may sign in to the dashboard and
+  use the admin API, so admins no longer need the relay's own key.
+- Adds a homepage at the relay's URL for browsers, built from its NIP-11, the
+  operator's profile and its public groups; `homepage: false` turns it off.
 
 ### Fixed
 

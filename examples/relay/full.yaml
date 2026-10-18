@@ -231,6 +231,9 @@ verificationWorkers: 50       # number of signature-verification worker goroutin
 # keep it on loopback.
 # pprofAddr: 127.0.0.1:6060
 
+# Homepage for browsers opening the relay's URL, built from NIP-11.
+# homepage: false
+
 # Admin listener (optional block): `ncli relay status`/`index`/`jobs`, the
 # dashboard and Prometheus metrics, on an address apart from `port`.
 # Without the block it listens on 127.0.0.1:<port + 1> with only the
@@ -245,6 +248,8 @@ verificationWorkers: 50       # number of signature-verification worker goroutin
 #     clientCA: /etc/ncli/clients-ca.crt
 #   # Drop other source addresses before any auth.
 #   allowCIDRs: [10.0.0.0/8]
+#   # Keys (npub or hex) allowed to sign in, besides nip11's and nip86.admins.
+#   pubkeys: [npub1...]
 #   # Host names besides the listen address, e.g. a reverse proxy's;
 #   # required when listen is 0.0.0.0.
 #   hosts: [admin.relay.example.com]

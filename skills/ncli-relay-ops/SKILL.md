@@ -271,6 +271,10 @@ ncli relay dashboard --config relay.yaml
   `admin.tls`, equals the relay port, or `metrics` lacks a valid tokens file
   (missing, readable by others, or holding a plaintext token). A taken
   *default* admin port only warns.
+- The listener answers only to its own address (plus `localhost` on
+  loopback); behind a reverse proxy list its name in `admin.hosts`, or every
+  request gets `421`. This is what stops a NIP-98 signature the admin gave
+  another site from working here.
 - Credentials don't cross: a metrics token opens only `/metrics`; a NIP-98
   signature or dashboard session opens only `/admin/api/*`.
 - Tokens rotate without a restart: add the new one, switch the scraper,

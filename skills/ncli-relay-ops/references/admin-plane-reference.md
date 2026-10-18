@@ -12,6 +12,7 @@ if these change. -->
 | `tls.cert`, `tls.key` | — | Both or neither. The CLI trusts `tls.cert` when it connects. |
 | `tls.clientCA` | — | Requires every client to present a certificate it signed (mTLS). |
 | `allowCIDRs` | — | Refuse other source addresses (`403`) before any auth. A bare IP is a /32 or /128. |
+| `hosts` | — | Extra `Host` values to answer, e.g. a reverse proxy's name. The listen address (and on loopback `localhost`/`127.0.0.1`/`[::1]` at that port) always count; any other Host gets `421`. Required when `listen` is `0.0.0.0`/`::`. |
 | `dashboard.enabled` | `false` | Serves `/admin/ui/` and `POST /admin/api/login`. Needs an admin pubkey. |
 | `dashboard.sessionTTL` | `15m` | 1m–24h. |
 | `metrics.enabled` | `false` | Serves `/metrics`. Needs `tokensFile`. |
@@ -45,8 +46,8 @@ cookie (plus `X-CSRF-Token` on anything but `GET`).
 
 Ten failed credentials from one address within a minute are refused with
 `429` for the rest of that minute. Refusals are counted in
-`ncli_relay_admin_denied_total{reason}` (`token`, `nip98`, `replay`,
-`session`, `csrf`, `cidr`).
+`ncli_relay_admin_denied_total{reason}` (`host`, `token`, `nip98`,
+`replay`, `session`, `csrf`, `cidr`).
 
 ## Job object
 

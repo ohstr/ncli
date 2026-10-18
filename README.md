@@ -484,6 +484,9 @@ ncli relay metrics token add prometheus --config relay.yaml
 - Off loopback the listener needs `admin.tls` (add `clientCA` for mTLS) and
   can be narrowed with `admin.allowCIDRs`; the relay refuses to start
   otherwise.
+- It answers only to its own address (and `localhost` on loopback); a
+  reverse proxy's public name goes in `admin.hosts`. A NIP-98 signature made
+  for any other host is refused.
 - Metrics cost the relay no measurable latency: the hot path only bumps
   counters, and heavier figures are sampled in the background.
 

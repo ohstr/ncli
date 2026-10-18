@@ -19,6 +19,10 @@
   or `ncli relay dashboard` serves it locally and signs for you.
   ([#156](https://github.com/ohstr/ncli/pull/156))
 
+- Adds `admin.hosts`: the admin listener answers only to its own address and
+  these names, so a NIP-98 signature an admin made for another site can't be
+  used against it.
+
 ### Removed
 
 - Removes `ncli relay stats`, `relay reindex` and `relay clear`, and their

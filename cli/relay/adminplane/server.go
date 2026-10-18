@@ -201,6 +201,13 @@ func (s *Server) gate(next http.Handler) http.Handler {
 			h.Set("Strict-Transport-Security", "max-age=31536000")
 		}
 
+		// Only this listener's own names: a request for another host (DNS
+		// rebinding, or a NIP-98 header signed for another site) would
+		// otherwise verify against the URL it claims.
+		if !s.opts.Settings.Hosts[strings.ToLower(r.Host)] {
+			s.deny(w, "host", http.StatusMisdirectedRequest)
+			return
+		}
 		ip := clientIP(r)
 		if len(s.opts.Settings.AllowCIDRs) > 0 && !s.allowed(ip) {
 			s.deny(w, "cidr", http.StatusForbidden)

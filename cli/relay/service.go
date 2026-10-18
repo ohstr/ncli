@@ -3,7 +3,6 @@ package relay
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -12,10 +11,11 @@ import (
 	"time"
 
 	"github.com/ohstr/ncli/cli/common"
-	"github.com/ohstr/ncli/cli/reindex"
 	"github.com/ohstr/ncli/cli/relay/adminplane"
+	"github.com/ohstr/ncli/cli/relay/jobs"
 	"github.com/ohstr/ncli/cli/relay/metrics"
 	"github.com/ohstr/ncli/client"
+	"github.com/ohstr/ncli/web/dashboard"
 	"github.com/ohstr/nmilat/huddle/room"
 	"github.com/ohstr/nmilat/nip11"
 	"github.com/ohstr/nmilat/nip86"
@@ -23,7 +23,6 @@ import (
 	"github.com/ohstr/nmilat/relay"
 	"github.com/ohstr/nmilat/search"
 	"github.com/rs/zerolog/log"
-	"github.com/spf13/viper"
 )
 
 type Service struct {
@@ -37,6 +36,7 @@ type Service struct {
 	metrics *metrics.Metrics
 	history *metrics.History
 	admin   *adminplane.Server
+	jobs    *jobs.Manager
 	// stopSampling ends the metrics samplers.
 	stopSampling context.CancelFunc
 }
@@ -269,112 +269,6 @@ func newServer(store *relay.EventStore, searchService search.Service, m *metrics
 		}
 	}
 
-	mux.HandleFunc("/admin/reindex/search", adminAuth(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
-			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		if searchService == nil {
-			http.Error(w, "search is not enabled on this relay (cache.search.enabled)", http.StatusNotImplemented)
-			return
-		}
-		status := reindex.SearchState.GetStatus()
-		if status["is_running"].(bool) {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusConflict) // already reindexing
-			_ = json.NewEncoder(w).Encode(status)
-			return
-		}
-
-		go func() {
-			if err := reindex.ExecuteSearchReindex(&reindex.Config{
-				RelayNotesDb: viper.GetString("store"),
-				Search: struct {
-					Host      string `mapstructure:"host"`
-					Key       string `mapstructure:"key"`
-					IndexName string `mapstructure:"index_name"`
-				}{
-					Host:      viper.GetString("cache.search.host"),
-					Key:       viper.GetString("cache.search.key"),
-					IndexName: viper.GetString("cache.search.index_name"),
-				},
-			}, store); err != nil {
-				log.Error().Err(err).Msg("search reindex triggered via /admin/reindex/search failed")
-			}
-		}()
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusAccepted)
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "started"})
-	}))
-
-	mux.HandleFunc("/admin/reindex/zaps", adminAuth(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
-			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		status := reindex.ZapsState.GetStatus()
-		if status["is_running"].(bool) {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusConflict)
-			_ = json.NewEncoder(w).Encode(status)
-			return
-		}
-
-		go func() {
-			if err := reindex.ExecuteZapReindex(store); err != nil {
-				log.Error().Err(err).Msg("zap reindex triggered via /admin/reindex/zaps failed")
-			}
-		}()
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusAccepted)
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "started"})
-	}))
-
-	mux.HandleFunc("/admin/worker/stats", adminAuth(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "GET" {
-			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-			return
-		}
-
-		stats := map[string]interface{}{
-			"status":              "active",
-			"verification_worker": wsHandler.VerificationWorker.GetStats(),
-			"search_reindex":      reindex.SearchState.GetStatus(),
-			"zaps_reindex":        reindex.ZapsState.GetStatus(),
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(stats)
-	}))
-
-	mux.HandleFunc("/admin/search", adminAuth(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "DELETE" {
-			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		if searchService == nil {
-			http.Error(w, "search is not enabled on this relay (cache.search.enabled)", http.StatusNotImplemented)
-			return
-		}
-		if searchService != nil {
-			// search.Service doesn't expose a Delete method, so this only works
-			// against the concrete Meilisearch-backed implementation; other
-			// search.Service implementations silently no-op here.
-			if impl, ok := searchService.(*search.ServiceImpl); ok {
-				err := impl.DeleteIndex(context.Background())
-				if err != nil {
-					http.Error(w, err.Error(), 500)
-					return
-				}
-			}
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "deleted"})
-	}))
-
 	// Huddle first: both the membership admin routes and NIP-86 need the rooms
 	// manager so removing a member ends that member's live calls.
 	huddleRooms := registerHuddleRoutes(mux, wsHandler, config.Huddle, config.Nip11.URL)
@@ -387,19 +281,11 @@ func newServer(store *relay.EventStore, searchService search.Service, m *metrics
 	}
 	nip86Handler = handler
 
-	mux.HandleFunc("/admin/zaps", adminAuth(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "DELETE" {
-			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		if err := store.ClearZapIndex(r.Context()); err != nil {
-			http.Error(w, err.Error(), 500)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "deleted"})
-	}))
+	jobManager := jobs.New(config.RelayNotesDb+".jobs.json", log.Logger,
+		searchIndex(store, searchService, wsHandler.VerificationWorker),
+		&jobs.ZapIndex{Store: store},
+	)
+	jobManager.OnFinish = func(j jobs.Job) { m.JobFinished(j.Index, string(j.State)) }
 
 	sampleCtx, stopSampling := context.WithCancel(context.Background())
 	m.Attach(sampleCtx, metrics.Sources{
@@ -408,6 +294,7 @@ func newServer(store *relay.EventStore, searchService search.Service, m *metrics
 		StorePath: config.RelayNotesDb,
 		Search:    searchService,
 		Rooms:     huddleRooms,
+		Jobs:      jobManager.Running,
 	})
 	history := metrics.NewHistory(m, historyInterval, historyWindow)
 	go history.Run(sampleCtx)
@@ -418,6 +305,7 @@ func newServer(store *relay.EventStore, searchService search.Service, m *metrics
 		huddleRooms:        huddleRooms,
 		metrics:            m,
 		history:            history,
+		jobs:               jobManager,
 		stopSampling:       stopSampling,
 		server: &http.Server{
 			Handler: moderation.ipGate(mux),
@@ -443,6 +331,7 @@ func (s *Service) startAdmin() error {
 	admin, err := adminplane.New(adminplane.Options{
 		Settings: adminSettings,
 		Admins:   nip86Admins,
+		UI:       dashboard.FS(),
 		Metrics:  s.metrics,
 		History:  s.history,
 		Logger:   log.Logger,
@@ -450,6 +339,7 @@ func (s *Service) startAdmin() error {
 	if err != nil {
 		return err
 	}
+	s.jobs.Routes(admin)
 	if err := admin.Start(); err != nil {
 		if adminSettings.Defaulted && !adminSettings.Dashboard && !adminSettings.Metrics {
 			log.Warn().Err(err).Msg("admin listener not started; set admin.listen to choose a free address")
@@ -459,6 +349,25 @@ func (s *Service) startAdmin() error {
 	}
 	s.admin = admin
 	return nil
+}
+
+// searchIndex describes the search index for maintenance jobs, or why it
+// can't be maintained on this relay.
+func searchIndex(store *relay.EventStore, svc search.Service, worker *relay.ProfileVerificationWorker) *jobs.SearchIndex {
+	ix := &jobs.SearchIndex{Store: store, Worker: worker}
+	var cfg *SearchConfig
+	if config.Cache != nil {
+		cfg = config.Cache.Search
+	}
+	switch {
+	case cfg == nil || !cfg.Enabled || svc == nil:
+		ix.Disabled = "search is not enabled on this relay (cache.search.enabled)"
+	case cfg.Readonly:
+		ix.Disabled = "search is read-only on this relay (cache.search.readonly)"
+	default:
+		ix.Host, ix.Key, ix.IndexName = cfg.Host, cfg.Key, cfg.IndexName
+	}
+	return ix
 }
 
 func (s *Service) serve() {
@@ -497,6 +406,9 @@ func (s *Service) Stop() {
 	}
 	if s.stopSampling != nil {
 		s.stopSampling()
+	}
+	if s.jobs != nil {
+		s.jobs.Shutdown(ctx)
 	}
 	if err := s.server.Shutdown(ctx); err != nil {
 		// Shutdown itself never force-closes anything on timeout -- per its

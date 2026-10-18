@@ -14,7 +14,7 @@ events.**
 - [`ncli relay`](#relay) — Run a fast, low-level Nostr relay server
 - [`ncli relay context`](#relay-context) — Save, switch, and run relays by name, auto-creating new ones
 - [`ncli relay members/invites/roles`](#relay-membersinvitesroles) — Manage a running relay's NIP-43 membership over NIP-98 HTTP
-- [`ncli relay stats/reindex/clear`](#relay-statsreindexclear) — Manage a running relay over NIP-98 HTTP
+- [`ncli relay status/index/jobs/dashboard`](#relay-monitoring) — Monitor a running relay (Prometheus, dashboard) and rebuild its indexes
 - [`ncli apply`](#apply) — Stream, sync, or inspect events, with a live TUI and hot-reloading config
 - [`ncli find`](#find) — Query events
 - [`ncli profile`](#profile) — Look up one identity as a readable card
@@ -239,13 +239,12 @@ logdir: ./data/logs
 ncli relay --config examples/relay/minimal.yaml
 ```
 
-Once it's running, operate it with NIP-98-signed admin commands — see
-[`relay stats`/`reindex`/`clear`](#relay-statsreindexclear)
-below for the full set:
+Once it's running, watch and operate it from its admin listener — see
+[relay monitoring](#relay-monitoring) below:
 
 ```sh
-# live reindexer + verification-worker metrics
-ncli relay stats --config examples/relay/full.yaml
+# health and live metrics
+ncli relay status --config examples/relay/minimal.yaml
 ```
 
 With search enabled, `--search` on `find`/`dump` is a **people** search
@@ -341,7 +340,7 @@ it:
 ## `relay context`
 
 Save, switch, and run relays by name, instead of retyping `--config
-path/to/relay.yaml` on every `stats`/`members`/`invites`/... call:
+path/to/relay.yaml` on every `status`/`members`/`invites`/... call:
 
 ```sh
 ncli relay context add bee_community ~/relays/bee-community.yaml
@@ -352,7 +351,7 @@ ncli relay context use bee_community
 ncli relay
 
 # targets bee_community too, no --config needed
-ncli relay stats
+ncli relay status
 ncli relay members list
 
 # list saved contexts, "*" marks the current one (same as `relay context list`)
@@ -377,8 +376,8 @@ uses an existing identity instead of generating one. `--context` and
 
 ## `relay members`/`invites`/`roles`
 
-NIP-43 membership admin. Same NIP-98-signed mechanism as `relay stats`/
-`reindex`/`clear` below, gated on `membership.enabled: true`. Enroll
+NIP-43 membership admin, NIP-98-signed with `nip11.privkey` and gated on
+`membership.enabled: true`. Enroll
 members, hand out invite codes, and define roles on a running relay:
 
 ```sh
@@ -425,30 +424,43 @@ for a relay built around this, or the commented-out block in
 and the fully-documented one in
 [`examples/relay/full.yaml`](examples/relay/full.yaml).
 
-## `relay stats`/`reindex`/`clear`
+<a id="relay-monitoring"></a>
 
-Operate a running relay: NIP-98-signed HTTP requests to an already-running
-relay, using the same `--config` as the server:
+## `relay status`/`index`/`jobs`/`dashboard`
+
+Monitor and maintain a running relay through its admin listener
+(`127.0.0.1:<port+1>` by default), signed with `nip11.privkey`:
 
 ```sh
-# live reindexer + verification-worker metrics
-ncli relay stats --config examples/relay/full.yaml
+# health and live metrics
+ncli relay status --watch
 
-# trigger a live profile-search reindex (async, kind 0 only)
-ncli relay reindex search --config examples/relay/full.yaml
+# rebuild an index and wait for it
+ncli relay index rebuild zaps --follow
 
-# trigger a live zap-stats reindex
-ncli relay reindex zaps --config examples/relay/full.yaml
+# list or cancel jobs
+ncli relay jobs list
 
-# delete the profile search index on the live relay
-ncli relay clear search --config examples/relay/full.yaml
-
-# delete zap counters on the live relay
-ncli relay clear zaps --config examples/relay/full.yaml
+# open the dashboard in your browser
+ncli relay dashboard
 ```
 
-Every subcommand takes `--json`; requires `nip11.privkey` in `--config`.
-Poll `ncli relay stats` for `reindex` progress.
+To serve Prometheus metrics, or the dashboard from the relay itself:
+
+```yaml
+admin:
+  dashboard: {enabled: true}
+  metrics: {enabled: true, tokensFile: ./data/metrics.tokens}
+```
+
+```sh
+# create a scrape token (printed once)
+ncli relay metrics token add prometheus
+```
+
+Examples: [`dashboard-relay.yaml`](examples/relay/dashboard-relay.yaml),
+[`examples/monitoring/`](examples/monitoring/). Security and the full
+reference: `ncli skills show ncli-relay-ops`.
 
 ## `prefs`
 

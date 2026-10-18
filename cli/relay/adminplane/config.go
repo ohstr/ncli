@@ -11,6 +11,7 @@ import (
 	"net/netip"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -18,11 +19,15 @@ import (
 type Config struct {
 	// Listen is host:port for the admin listener; "off" disables it.
 	// Default 127.0.0.1:<relay port + 1>.
-	Listen     string           `mapstructure:"listen"`
-	TLS        *TLSConfig       `mapstructure:"tls"`
-	AllowCIDRs []string         `mapstructure:"allowCIDRs"`
-	Dashboard  *DashboardConfig `mapstructure:"dashboard"`
-	Metrics    *MetricsConfig   `mapstructure:"metrics"`
+	Listen     string     `mapstructure:"listen"`
+	TLS        *TLSConfig `mapstructure:"tls"`
+	AllowCIDRs []string   `mapstructure:"allowCIDRs"`
+	// Hosts are the extra Host header values the listener answers to, e.g.
+	// a reverse proxy's public name. Its own listen address (and, on
+	// loopback, localhost/127.0.0.1/[::1] at that port) always count.
+	Hosts     []string         `mapstructure:"hosts"`
+	Dashboard *DashboardConfig `mapstructure:"dashboard"`
+	Metrics   *MetricsConfig   `mapstructure:"metrics"`
 }
 
 // TLSConfig serves the admin listener over TLS; ClientCA additionally
@@ -59,6 +64,10 @@ type Settings struct {
 	Loopback   bool
 	TLS        *TLSConfig
 	AllowCIDRs []netip.Prefix
+	// Hosts are the Host header values requests must carry (lowercase).
+	// NIP-98 binds a signature to the URL the client says it called, so
+	// without this a signature made for another site would be accepted.
+	Hosts      map[string]bool
 	Dashboard  bool
 	SessionTTL time.Duration
 	Metrics    bool
@@ -123,6 +132,24 @@ func Resolve(c *Config, relayPort int, admins []string) (*Settings, error) {
 	}
 	s.Loopback = isLoopback(host)
 
+	s.Hosts = map[string]bool{}
+	wildcard := host == "" || host == "0.0.0.0" || host == "::"
+	if !wildcard {
+		s.Hosts[strings.ToLower(net.JoinHostPort(host, portStr))] = true
+	}
+	if s.Loopback || wildcard {
+		for _, h := range []string{"127.0.0.1", "localhost", "::1"} {
+			s.Hosts[net.JoinHostPort(h, portStr)] = true
+		}
+	}
+	for _, h := range c.Hosts {
+		h = strings.ToLower(strings.TrimSpace(h))
+		if h == "" || strings.ContainsAny(h, "/ ") {
+			return nil, invalidErr(h, "admin.hosts: %q must be a host or host:port, as clients send it", h)
+		}
+		s.Hosts[h] = true
+	}
+
 	if c.TLS != nil {
 		if c.TLS.Cert == "" || c.TLS.Key == "" {
 			return nil, usageErr("admin.tls needs both cert and key")
@@ -139,6 +166,9 @@ func Resolve(c *Config, relayPort int, admins []string) (*Settings, error) {
 	}
 	if !s.Loopback && s.TLS == nil {
 		return nil, usageErr("admin.listen %s is not loopback: set admin.tls, or listen on 127.0.0.1 and tunnel to it", s.Addr)
+	}
+	if wildcard && !s.Loopback && len(c.Hosts) == 0 {
+		return nil, usageErr("admin.listen %s accepts any address: list the names clients use in admin.hosts", s.Addr)
 	}
 
 	for _, raw := range c.AllowCIDRs {

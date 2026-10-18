@@ -6,12 +6,11 @@
 #             the R7 upload/download/mirror round.
 #   agent   - the agent-under-test's machine (see agent/Dockerfile). Shares
 #             the relay's network namespace (network_mode: service:relay)
-#             because ncli's admin commands (relay stats/reindex/clear/
-#             members/invites/roles) hard-target http://localhost:<port> --
-#             they assume they're running on the same host as the relay
-#             they administer (confirmed against the real image; there is
-#             no --url/--host override). Sharing the netns also gives the
-#             agent the compose DNS for `blossom` for free.
+#             because ncli's admin commands reach the relay on loopback:
+#             members/invites/roles at http://localhost:<port>, and
+#             status/index/jobs at its admin listener (127.0.0.1:<port+1>
+#             by default). Sharing the netns also gives the agent the
+#             compose DNS for `blossom` for free.
 #
 # The agent container has no source checkout of this repo and no ncli
 # binary baked in -- see agent/Dockerfile's own header comment.

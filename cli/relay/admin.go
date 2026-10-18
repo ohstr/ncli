@@ -27,51 +27,15 @@ var (
 			Padding(0, 1).
 			MarginBottom(1)
 
-	headerStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#7D56F4")).
-			Bold(true).
-			Underline(true)
-
 	statusOkStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#04B575"))
 	statusWaitStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFD100"))
 	statusErrStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444"))
 )
 
-// addRemoteAdminCommands adds "stats", "reindex", and "clear" directly onto
-// cmd (the relay root command) -- NIP-98 authenticated HTTP requests to a
-// relay that's already running. These used to nest under a "relay admin"
-// group, but that was the only grouping under "relay" and didn't cover
-// anything not already implied by the subcommand names themselves, so it
-// was flattened away: "ncli relay admin stats" -> "ncli relay stats".
+// addRemoteAdminCommands adds the commands that administer a running relay:
+// status, index and jobs over its admin listener, and NIP-43 membership.
 func addRemoteAdminCommands(cmd *cobra.Command) {
-	statsCmd := &cobra.Command{
-		Use:     "stats",
-		Short:   "Show live relay metrics",
-		Example: `  ncli relay stats --config relay.yaml`,
-		RunE:    runStats,
-	}
-	cmd.AddCommand(statsCmd)
-
-	reindexCmd := &cobra.Command{
-		Use:     "reindex",
-		Short:   "Rebuild a relay's indexes while it runs",
-		Example: `  ncli relay reindex search --config relay.yaml`,
-		RunE:    common.RequireSubcommand,
-	}
-	reindexCmd.AddCommand(&cobra.Command{Use: "search", Short: "Reindex profiles to the search index", Example: `  ncli relay reindex search --config relay.yaml`, RunE: runReindexSearch})
-	reindexCmd.AddCommand(&cobra.Command{Use: "zaps", Short: "Reindex zap stats", Example: `  ncli relay reindex zaps --config relay.yaml`, RunE: runReindexZaps})
-	cmd.AddCommand(reindexCmd)
-
-	clearCmd := &cobra.Command{
-		Use:     "clear",
-		Short:   "Delete a relay's indexes while it runs",
-		Example: `  ncli relay clear search --config relay.yaml`,
-		RunE:    common.RequireSubcommand,
-	}
-	clearCmd.AddCommand(&cobra.Command{Use: "search", Short: "Delete all profiles from the search index", Example: `  ncli relay clear search --config relay.yaml`, RunE: runClearSearch})
-	clearCmd.AddCommand(&cobra.Command{Use: "zaps", Short: "Delete all zap counters", Example: `  ncli relay clear zaps --config relay.yaml`, RunE: runClearZaps})
-	cmd.AddCommand(clearCmd)
-
+	addAdminAPICommands(cmd)
 	addMembershipAdminCommands(cmd)
 }
 
@@ -211,8 +175,8 @@ func getAdminConfig() (string, int, string, error) {
 	return privKey, port, pubKey, nil
 }
 
-// adminRequest issues a NIP-98-authenticated admin HTTP request with no
-// body -- the shape every pre-existing stats/reindex/clear caller needs.
+// adminRequest issues a NIP-98-authenticated membership admin request with
+// no body.
 func adminRequest(cmd *cobra.Command, method, path string) (map[string]interface{}, error) {
 	return adminRequestBody(cmd, method, path, nil)
 }
@@ -227,10 +191,10 @@ func adminRequestBody(cmd *cobra.Command, method, path string, body interface{})
 	privKey, port, _, err := getAdminConfig()
 	if err != nil {
 		// nip11.privkey missing from config -- a missing-required-config
-		// mistake, classified here (rather than at each of stats/reindex/
-		// clear's own RunE) since wrapCLIError keeps this code even when
-		// the caller re-wraps it via common.RuntimeError. Help follows the
-		// error because the fix is a flag the caller can see there.
+		// mistake, classified here rather than at each command's RunE,
+		// since wrapCLIError keeps this code when the caller re-wraps it.
+		// Help follows the error because the fix is a flag the caller can
+		// see there.
 		return nil, &common.CLIError{Err: err, Code: common.CodeUsage, Help: common.HelpAfterError}
 	}
 
@@ -319,136 +283,6 @@ func adminRequestBody(cmd *cobra.Command, method, path string, body interface{})
 	}
 
 	return result, nil
-}
-
-func runStats(cmd *cobra.Command, args []string) error {
-	jsonMode, _ := cmd.Flags().GetBool("json")
-
-	stats, err := adminRequest(cmd, "GET", "/admin/worker/stats")
-	if err != nil {
-		return common.RuntimeError(cmd, err)
-	}
-	if jsonMode {
-		common.PrintJSON(stats)
-		return nil
-	}
-
-	fmt.Println(titleStyle.Render(" ncli relay: stats "))
-	fmt.Printf("\n%s\n", headerStyle.Render("Reindexers"))
-	renderReindexStats("Search", stats["search_reindex"])
-	renderReindexStats("Zaps", stats["zaps_reindex"])
-
-	fmt.Printf("\n%s\n", headerStyle.Render("Verification Worker"))
-	if wStats, ok := stats["verification_worker"].(map[string]interface{}); ok {
-		status := statusOkStyle.Render("🟢 ACTIVE")
-		fmt.Printf(" Status:          %s\n", status)
-		fmt.Printf(" Uptime:          %v\n", wStats["uptime"])
-		fmt.Printf(" Queue Depth:     %v\n", wStats["queue_depth"])
-		fmt.Printf(" Pending Jobs:    %v\n", wStats["pending_jobs"])
-		fmt.Printf(" Total Enqueued:  %v\n", wStats["total_enqueued"])
-		fmt.Printf(" Total Processed: %v\n", wStats["total_processed"])
-
-		errVal := wStats["total_errors"]
-		errStr := fmt.Sprintf("%v", errVal)
-		if errVal != nil && errStr != "0" && errStr != "0.0" {
-			errStr = statusErrStyle.Render(errStr)
-		} else {
-			errStr = statusOkStyle.Render("0")
-		}
-		fmt.Printf(" Total Errors:    %s\n", errStr)
-		fmt.Printf(" Speed:           %v items/sec\n", wStats["items_per_sec"])
-	} else {
-		fmt.Printf(" %s Worker stats unavailable\n", statusWaitStyle.Render("🟡"))
-	}
-	fmt.Println()
-	return nil
-}
-
-func renderReindexStats(label string, data interface{}) {
-	m, ok := data.(map[string]interface{})
-	if !ok || m == nil {
-		fmt.Printf(" %-6s : %s stats unavailable\n", label, statusWaitStyle.Render("🟡"))
-		return
-	}
-
-	status := statusWaitStyle.Render("🟡 IDLE")
-	if isRunning, _ := m["is_running"].(bool); isRunning {
-		status = statusOkStyle.Render("🟢 BUSY")
-	}
-
-	speed := ""
-	if v, exists := m["items_per_sec"]; exists {
-		speed = fmt.Sprintf(" | Speed: %v items/sec", v)
-	}
-
-	dur := ""
-	if v, exists := m["duration"]; exists {
-		dur = fmt.Sprintf(" | Time: %v", v)
-	}
-
-	fmt.Printf(" %-6s : %s | Total Processed: %v%s%s\n", label, status, m["total_processed"], dur, speed)
-}
-
-func runReindexSearch(cmd *cobra.Command, args []string) error {
-	jsonMode, _ := cmd.Flags().GetBool("json")
-	resp, err := adminRequest(cmd, "POST", "/admin/reindex/search")
-	if err != nil {
-		return common.RuntimeError(cmd, err)
-	}
-	if jsonMode {
-		common.PrintJSON(resp)
-		return nil
-	}
-	fmt.Println(titleStyle.Render(" ncli relay: triggering search reindex "))
-	fmt.Printf("%s %v\n", statusOkStyle.Render("✔"), resp["status"])
-	fmt.Println("Tip: Run `ncli relay stats` to track progress.")
-	return nil
-}
-
-func runReindexZaps(cmd *cobra.Command, args []string) error {
-	jsonMode, _ := cmd.Flags().GetBool("json")
-	resp, err := adminRequest(cmd, "POST", "/admin/reindex/zaps")
-	if err != nil {
-		return common.RuntimeError(cmd, err)
-	}
-	if jsonMode {
-		common.PrintJSON(resp)
-		return nil
-	}
-	fmt.Println(titleStyle.Render(" ncli relay: triggering zaps reindex "))
-	fmt.Printf("%s %v\n", statusOkStyle.Render("✔"), resp["status"])
-	fmt.Println("Tip: Run `ncli relay stats` to track progress.")
-	return nil
-}
-
-func runClearSearch(cmd *cobra.Command, args []string) error {
-	jsonMode, _ := cmd.Flags().GetBool("json")
-	resp, err := adminRequest(cmd, "DELETE", "/admin/search")
-	if err != nil {
-		return common.RuntimeError(cmd, err)
-	}
-	if jsonMode {
-		common.PrintJSON(resp)
-		return nil
-	}
-	fmt.Println(titleStyle.Render(" ncli relay: clearing search index "))
-	fmt.Printf("%s %v\n", statusOkStyle.Render("✔"), resp["status"])
-	return nil
-}
-
-func runClearZaps(cmd *cobra.Command, args []string) error {
-	jsonMode, _ := cmd.Flags().GetBool("json")
-	resp, err := adminRequest(cmd, "DELETE", "/admin/zaps")
-	if err != nil {
-		return common.RuntimeError(cmd, err)
-	}
-	if jsonMode {
-		common.PrintJSON(resp)
-		return nil
-	}
-	fmt.Println(titleStyle.Render(" ncli relay: clearing zaps index "))
-	fmt.Printf("%s %v\n", statusOkStyle.Render("✔"), resp["status"])
-	return nil
 }
 
 /////////////////////////////////////////////////////////////////////

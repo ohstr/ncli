@@ -84,7 +84,7 @@ func TestAttack_AdminHTTP(t *testing.T) {
 	op, eve := A(t, "operator"), A(t, "eve")
 	invites := r.httpURL("/admin/membership/invites")
 	members := r.httpURL("/admin/membership/members")
-	stats := r.httpURL("/admin/worker/stats")
+	stats := r.httpURL("/admin/membership/roles")
 	body := []byte(`{"max_uses":1}`)
 
 	ok := func(t *testing.T, code int, resp string) {
@@ -186,13 +186,14 @@ func TestAttack_AdminHTTP(t *testing.T) {
 	})
 	t.Run("CLI as non-admin is auth", func(t *testing.T) {
 		cfg := r.AdminConfig(t, eve.PrivHex)
-		NewEnv(t).Run(t, "relay", "stats", "--config", cfg, "--json").ExpectErr(t, "auth")
+		NewEnv(t).Run(t, "relay", "status", "--config", cfg, "--json").ExpectErr(t, "auth")
 		NewEnv(t).Run(t, "relay", "members", "add", eve.PubHex, "--config", cfg, "--json").ExpectErr(t, "auth")
 	})
 	t.Run("CLI against a stopped relay is network", func(t *testing.T) {
 		r2 := StartRelay(t, "", nil)
 		r2.Stop()
-		NewEnv(t).Run(t, "relay", "stats", "--config", r2.ConfigPath, "--json").ExpectErr(t, "network")
+		NewEnv(t).Run(t, "relay", "status", "--config", r2.ConfigPath, "--json").ExpectErr(t, "network")
+		NewEnv(t).Run(t, "relay", "dashboard", "--no-open", "--config", r2.ConfigPath, "--json").ExpectErr(t, "network")
 	})
 	t.Run("membership routes with membership off are usage", func(t *testing.T) {
 		r2 := StartRelay(t, "", nil)

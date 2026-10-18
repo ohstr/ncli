@@ -39,7 +39,7 @@ func contextTestEnv(t *testing.T) []string {
 
 // TestRelayContextUseAppliesWithoutConfigFlag is the end-to-end regression
 // test for the actual feature: once a context is added and selected via
-// "use", a later "relay stats" invocation with no --config flag, run from
+// "use", a later "relay members list" invocation with no --config flag, run from
 // a directory with no ncli.yaml/relay.yaml of its own, must still resolve
 // to that context's config file -- proven here by a distinctive port
 // number in the context's config surfacing in the connection-refused
@@ -78,10 +78,10 @@ port: 59999
 		t.Fatalf("relay context use failed: %v", err)
 	}
 
-	out, err := run("relay", "stats", "--json")
+	out, err := run("relay", "members", "list", "--json")
 	exitErr, ok := err.(*exec.ExitError)
 	if !ok {
-		t.Fatalf("expected relay stats to fail (nothing listening on 59999), got err=%v out=%s", err, out)
+		t.Fatalf("expected relay members list to fail (nothing listening on 59999), got err=%v out=%s", err, out)
 	}
 
 	// stderr also carries the --json-mode "using config file" info log
@@ -155,10 +155,10 @@ port: 59998
 		t.Fatalf("relay context use failed: %v", err)
 	}
 
-	out, err := run("relay", "stats", "--json")
+	out, err := run("relay", "members", "list", "--json")
 	exitErr, ok := err.(*exec.ExitError)
 	if !ok {
-		t.Fatalf("expected relay stats to fail (nothing listening), got err=%v out=%s", err, out)
+		t.Fatalf("expected relay members list to fail (nothing listening), got err=%v out=%s", err, out)
 	}
 	lines := strings.Split(strings.TrimSpace(string(exitErr.Stderr)), "\n")
 	lastLine := lines[len(lines)-1]

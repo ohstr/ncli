@@ -11,7 +11,7 @@ nip11:
   # privkey that's ever appeared in a public repo for anything real.
   # Needed here because cache.topZapped.enabled requires it (the relay signs
   # its own cached "top zapped" response), and it's also what unlocks
-  # `ncli relay stats`/`reindex`/`clear` against this same relay later.
+  # `ncli relay status`/`index`/`jobs` against this same relay later.
   privkey: "cf7b085cd0e28c3c2237e5899b76ec8cecbadb1f78e4ef13d122e25b538cca21"
   # pubkey is optional once privkey is set -- ncli derives and fills it in
   # automatically at startup. Left here anyway so it's visible without

@@ -1,0 +1,67 @@
+groups:
+  - name: ncli-relay
+    rules:
+      - alert: NcliRelayDown
+        expr: up{job="ncli-relay"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: "ncli relay {{ $labels.instance }} is not answering scrapes"
+
+      - alert: NcliRelayAdminDenied
+        # Someone is trying credentials against the admin listener.
+        expr: increase(ncli_relay_admin_denied_total[10m]) > 20
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $value | humanize }} refused admin requests ({{ $labels.reason }}) in 10m"
+
+      - alert: NcliRelayRejectSpike
+        expr: |
+          sum(rate(ncli_relay_events_total{result="rejected"}[5m]))
+            / clamp_min(sum(rate(ncli_relay_events_total{result=~"accepted|duplicate|rejected"}[5m])), 0.01)
+            > 0.25
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "More than 25% of EVENTs rejected for 10m"
+
+      - alert: NcliRelaySlowEOSE
+        expr: histogram_quantile(0.99, sum by (le) (rate(ncli_relay_req_eose_seconds_bucket[5m]))) > 2
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "REQ to EOSE p99 is {{ $value | humanizeDuration }}"
+
+      - alert: NcliRelaySlowEventOK
+        expr: histogram_quantile(0.99, sum by (le) (rate(ncli_relay_event_ok_seconds_bucket[5m]))) > 1
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "EVENT to OK p99 is {{ $value | humanizeDuration }}"
+
+      - alert: NcliRelayWriteQueueSaturated
+        expr: ncli_relay_store_task_queue_depth / ncli_relay_store_task_queue_capacity > 0.8
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: "Store write queue over 80% full"
+
+      - alert: NcliRelayScanBusy
+        # Reads answered "relay busy" for want of a scan slot.
+        expr: rate(ncli_relay_scan_busy_total[5m]) > 0
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "Reads refused for lack of a scan slot"
+
+      - alert: NcliRelayDroppedWork
+        expr: increase(ncli_relay_verify_dropped_total[15m]) + increase(ncli_relay_search_index_dropped_total[15m]) > 0
+        labels: {severity: warning}
+        annotations:
+          summary: "Profile verification or search indexing dropped work on a full queue"
+
+      - alert: NcliRelayIndexJobFailed
+        expr: increase(ncli_relay_job_runs_total{result="failed"}[1h]) > 0
+        labels: {severity: warning}
+        annotations:
+          summary: "An index job failed on {{ $labels.index }}: see `ncli relay jobs list`"

@@ -21,11 +21,11 @@
 A second relay is already running elsewhere on this machine, on port
 `5500`, and you have its config file at `/relay/relay.yaml` (you didn't
 start it, but having its config is what lets you authenticate as its
-admin -- see AGENTS.md's `relay stats`/`reindex`/`clear` and
+admin -- see AGENTS.md's `relay status`/`index`/`jobs` and
 `relay members`/`invites`/`roles` sections for why the config file itself
 is the credential here).
 
-1. `ncli relay stats --config /relay/relay.yaml`.
+1. `ncli relay status --config /relay/relay.yaml`.
 2. Create an invite code (`ncli relay invites create`), list invites,
    then revoke the one you just created.
 3. Enroll a freshly generated pubkey as a member (`ncli relay members

@@ -5,6 +5,7 @@
 package adminplane
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net"
@@ -13,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ohstr/nmilat/nip19"
 )
 
 // Config is the relay config's `admin:` block.
@@ -25,7 +28,11 @@ type Config struct {
 	// Hosts are the extra Host header values the listener answers to, e.g.
 	// a reverse proxy's public name. Its own listen address (and, on
 	// loopback, localhost/127.0.0.1/[::1] at that port) always count.
-	Hosts     []string         `mapstructure:"hosts"`
+	Hosts []string `mapstructure:"hosts"`
+	// Pubkeys (npub or hex) may sign in to the dashboard and use the admin
+	// API, besides the relay's own key and nip86.admins: admins sign in as
+	// themselves instead of with the relay's key.
+	Pubkeys   []string         `mapstructure:"pubkeys"`
 	Dashboard *DashboardConfig `mapstructure:"dashboard"`
 	Metrics   *MetricsConfig   `mapstructure:"metrics"`
 }
@@ -67,7 +74,9 @@ type Settings struct {
 	// Hosts are the Host header values requests must carry (lowercase).
 	// NIP-98 binds a signature to the URL the client says it called, so
 	// without this a signature made for another site would be accepted.
-	Hosts      map[string]bool
+	Hosts map[string]bool
+	// Pubkeys are admin.pubkeys as hex.
+	Pubkeys    []string
 	Dashboard  bool
 	SessionTTL time.Duration
 	Metrics    bool
@@ -183,8 +192,16 @@ func Resolve(c *Config, relayPort int, admins []string) (*Settings, error) {
 		s.AllowCIDRs = append(s.AllowCIDRs, p.Masked())
 	}
 
+	for _, raw := range c.Pubkeys {
+		pk, err := parsePubkey(raw)
+		if err != nil {
+			return nil, invalidErr(raw, "admin.pubkeys: %v", err)
+		}
+		s.Pubkeys = append(s.Pubkeys, pk)
+	}
+
 	if d := c.Dashboard; d != nil && d.Enabled {
-		if len(admins) == 0 {
+		if len(admins) == 0 && len(s.Pubkeys) == 0 {
 			return nil, usageErr("admin.dashboard needs an admin pubkey (nip11.pubkey or nip86.admins)")
 		}
 		s.Dashboard = true
@@ -223,6 +240,24 @@ func isLoopback(host string) bool {
 	}
 	addr, err := netip.ParseAddr(host)
 	return err == nil && addr.IsLoopback()
+}
+
+// parsePubkey accepts an npub or 64 hex characters and returns hex.
+func parsePubkey(raw string) (string, error) {
+	s := strings.TrimSpace(raw)
+	if strings.HasPrefix(s, "npub1") {
+		hexKey, err := nip19.DecodePublicKey(s)
+		if err != nil {
+			return "", fmt.Errorf("%q is not a valid npub", s)
+		}
+		return hexKey, nil
+	}
+	if len(s) == 64 {
+		if _, err := hex.DecodeString(s); err == nil {
+			return strings.ToLower(s), nil
+		}
+	}
+	return "", fmt.Errorf("%q is not an npub or 64 hex characters", s)
 }
 
 // errTokensFileMode is returned for a tokens file others can read or write.

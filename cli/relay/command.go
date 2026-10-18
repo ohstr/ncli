@@ -122,6 +122,10 @@ type RelayConfig struct {
 	// PprofAddr, when set (e.g. "127.0.0.1:6060"), serves net/http/pprof
 	// there. Unauthenticated: keep it on loopback.
 	PprofAddr string `mapstructure:"pprofAddr"`
+
+	// Homepage, on unless false, shows browsers that open the relay's URL a
+	// page built from its NIP-11 document.
+	Homepage *bool `mapstructure:"homepage"`
 }
 
 // PowConfig configures NIP-13 proof-of-work enforcement for published

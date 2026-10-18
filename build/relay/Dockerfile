@@ -12,6 +12,7 @@ FROM golang:1.26.9 AS builder
 WORKDIR /app/ncli
 COPY . .
 COPY --from=dashboard /app/web/dashboard/dist ./web/dashboard/dist
+COPY --from=dashboard /app/web/dashboard/dist-home ./web/dashboard/dist-home
 
 RUN CGO_ENABLED=0 go build -o /go/bin/ncli ./cmd/ncli
 

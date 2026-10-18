@@ -12,3 +12,4 @@ build/relay/.dev
 .env
 .env.*web/dashboard/node_modules
 web/dashboard/dist
+web/dashboard/dist-home

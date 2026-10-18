@@ -1,0 +1,404 @@
+:root {
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --text: #1c2026;
+  --muted: #646b75;
+  --border: #e3e6ea;
+  --ok: #1f8a4c;
+  --warn: #b7791f;
+  --bad: #c53030;
+  --accent: #5b4bdb;
+  --accent-soft: #ecebfb;
+  --on-accent: #ffffff;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1216;
+    --panel: #171b21;
+    --text: #e6e9ee;
+    --muted: #949ba6;
+    --border: #262c35;
+    --ok: #3fbf7a;
+    --warn: #e0a640;
+    --bad: #f06a6a;
+    --accent: #8f83ff;
+    --accent-soft: #221f3d;
+    --on-accent: #12101f;
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.home {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.error {
+  color: var(--bad);
+}
+
+h1 {
+  font-size: 28px;
+  line-height: 1.2;
+  margin: 0;
+}
+
+h2 {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin: 0 0 12px;
+}
+
+h2 .count {
+  font-weight: 500;
+  margin-left: 4px;
+}
+
+section,
+.hero {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+  margin-top: 16px;
+}
+
+.hero {
+  overflow: hidden;
+  padding-top: 0;
+}
+
+.banner {
+  display: block;
+  width: calc(100% + 40px);
+  margin: 0 -20px;
+  height: 160px;
+  object-fit: cover;
+}
+
+.hero-body {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-top: 20px;
+}
+
+.icon {
+  width: 72px;
+  height: 72px;
+  border-radius: 16px;
+  object-fit: cover;
+  flex: none;
+  border: 1px solid var(--border);
+  background: var(--accent-soft);
+}
+
+.icon.placeholder {
+  display: grid;
+  place-items: center;
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.hero-text {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.status {
+  align-self: flex-start;
+  font-size: 13px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.status.online {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+
+.status.offline {
+  color: var(--bad);
+  border-color: var(--bad);
+}
+
+.description {
+  margin: 16px 0 0;
+  white-space: pre-line;
+}
+
+.connect {
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.copyfield {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.copyfield code {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 14px ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding: 9px 12px;
+  border-radius: 6px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+button {
+  font: inherit;
+  font-size: 14px;
+  padding: 7px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+  cursor: pointer;
+  flex: none;
+}
+
+button.ghost {
+  background: transparent;
+  color: var(--accent);
+  margin-top: 10px;
+}
+
+.access {
+  display: grid;
+  gap: 8px;
+}
+
+.access-item {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border-left: 3px solid var(--ok);
+  background: var(--bg);
+}
+
+.access-item.gate {
+  border-left-color: var(--warn);
+}
+
+.access-item span {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.limits {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+  margin: 12px 0 0;
+}
+
+.limits div {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.limits dt {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.limits dd {
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.highlights,
+.groups,
+.nips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.highlights {
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+}
+
+.highlights li {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+}
+
+.highlights span {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.groups {
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+
+.groups li {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-width: 0;
+}
+
+.groups img,
+.group-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex: none;
+}
+
+.group-icon {
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.groups div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.groups span {
+  font-size: 13px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nips {
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+}
+
+.nips:not(.all) li:nth-child(n + 13) {
+  display: none;
+}
+
+.nips a {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 8px;
+  border-radius: 6px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.nips a:hover {
+  background: var(--bg);
+}
+
+.nip {
+  font: 600 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+  min-width: 34px;
+  text-align: center;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.operator {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.operator img {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex: none;
+}
+
+.operator > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+.operator p {
+  margin: 0;
+  white-space: pre-line;
+}
+
+.operator a,
+footer a {
+  color: var(--accent);
+}
+
+footer {
+  margin-top: 24px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+@media (max-width: 520px) {
+  h1 {
+    font-size: 22px;
+  }
+  .icon {
+    width: 56px;
+    height: 56px;
+  }
+}

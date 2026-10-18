@@ -1,6 +1,6 @@
-// Package dashboard embeds the relay dashboard's built files. Build them with
-// `just ui` before `go build`; without them the admin listener serves a page
-// saying so, and its API and /metrics work as usual.
+// Package dashboard embeds the relay's web pages: the admin dashboard and
+// the public homepage. Build them with `just ui` before `go build`; without
+// them the admin listener says so and the homepage falls back to plain HTML.
 package dashboard
 
 import (
@@ -11,11 +11,23 @@ import (
 //go:embed all:dist
 var dist embed.FS
 
+//go:embed all:dist-home
+var distHome embed.FS
+
 // FS returns the built dashboard, rooted at its index.html.
 func FS() fs.FS {
 	sub, err := fs.Sub(dist, "dist")
 	if err != nil {
 		panic(err) // dist is always embedded
+	}
+	return sub
+}
+
+// HomeFS returns the built homepage, rooted at its home.html.
+func HomeFS() fs.FS {
+	sub, err := fs.Sub(distHome, "dist-home")
+	if err != nil {
+		panic(err)
 	}
 	return sub
 }

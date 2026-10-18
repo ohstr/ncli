@@ -258,6 +258,26 @@ try {
 
   approving = false;
   await approver;
+
+  // 7. The relay's public homepage, read from its NIP-11.
+  {
+    const ctx = await browser.newContext();
+    const page = await ctx.newPage();
+    watch(page, "homepage");
+    await page.addInitScript(cspProbe);
+    await page.goto(`http://127.0.0.1:${port}/`);
+    await page.getByRole("status").filter({ hasText: "Online" }).waitFor({ timeout: 10000 });
+    check(await page.getByRole("heading", { name: "e2e" }).isVisible(), "homepage shows the relay's name");
+    check((await page.getByLabel("Relay address").textContent()) === `ws://127.0.0.1:${port}`, "homepage shows the address to add");
+    check((await page.locator(".nips li").count()) > 5, "homepage lists supported NIPs");
+    check((await page.getByLabel("Operator npub").textContent())?.startsWith("npub1") ?? false, "homepage shows the operator's npub");
+    await page.setViewportSize({ width: 390, height: 844 });
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    check(overflow <= 0, `homepage fits a phone (overflow ${overflow}px)`);
+    const nip11 = await (await fetch(`http://127.0.0.1:${port}/`, { headers: { Accept: "application/nostr+json" } })).json();
+    check(nip11.name === "e2e", "NIP-11 clients still get JSON");
+    await ctx.close();
+  }
   ncli(["bunker", "stop", "--json", "-q"]);
 
   await browser.close();

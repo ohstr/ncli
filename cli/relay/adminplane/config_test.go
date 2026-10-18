@@ -107,6 +107,16 @@ func TestTokensFileRules(t *testing.T) {
 	}
 }
 
+func TestAddTokenCreatesItsDirectory(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "data", "metrics.tokens")
+	if _, err := AddToken(path, "prometheus", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if fi, err := os.Stat(filepath.Dir(path)); err != nil || fi.Mode().Perm() != 0o700 {
+		t.Fatalf("token dir: %v %v", fi, err)
+	}
+}
+
 func TestTokenLifecycle(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "metrics.tokens")
 	now := time.Date(2026, 10, 18, 0, 0, 0, 0, time.UTC)

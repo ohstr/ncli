@@ -428,71 +428,39 @@ and the fully-documented one in
 
 ## `relay status`/`index`/`jobs`/`dashboard`
 
-A running relay has an admin listener, separate from its public port
-(`127.0.0.1:<port+1>` unless `admin.listen` says otherwise). These commands
-sign each request with `nip11.privkey` (NIP-98); the key must be the relay's
-or in `nip86.admins`.
+Monitor and maintain a running relay through its admin listener
+(`127.0.0.1:<port+1>` by default), signed with `nip11.privkey`:
 
 ```sh
-# health and live metrics; --watch refreshes every 2s
-ncli relay status --config relay.yaml
+# health and live metrics
+ncli relay status --watch
 
-# indexes, with their running and last job
-ncli relay index list
-
-# rebuild zaps beside the live index, swap it in, wait for it
+# rebuild an index and wait for it
 ncli relay index rebuild zaps --follow
 
-# rebuild search into a fresh index (drops profiles no longer stored)
-ncli relay index rebuild search --fresh --follow
-
-# how many items a rebuild would scan
-ncli relay index rebuild all --dry-run
-
-# empty an index (asks first; --yes in scripts)
-ncli relay index drop search --yes
-
-# running and recent jobs; cancel one
+# list or cancel jobs
 ncli relay jobs list
-ncli relay jobs cancel <id>
 
-# the dashboard in your browser, signed by this CLI (nothing to enable)
+# open the dashboard in your browser
 ncli relay dashboard
 ```
 
-Prometheus and the relay-served dashboard are opt-in:
+To serve Prometheus metrics, or the dashboard from the relay itself:
 
 ```yaml
 admin:
-  listen: 127.0.0.1:5501
-  dashboard:
-    enabled: true
-  metrics:
-    enabled: true
-    tokensFile: /etc/ncli/metrics.tokens
+  dashboard: {enabled: true}
+  metrics: {enabled: true, tokensFile: ./data/metrics.tokens}
 ```
 
 ```sh
-# print a scrape token once; only its hash is stored
-ncli relay metrics token add prometheus --config relay.yaml
+# create a scrape token (printed once)
+ncli relay metrics token add prometheus
 ```
 
-- `/metrics` answers only `Authorization: Bearer <token>`; the token opens
-  nothing else.
-- The relay-served dashboard (`/admin/ui/`) signs in with a NIP-07 browser
-  extension; sessions last `admin.dashboard.sessionTTL` (15m).
-- Off loopback the listener needs `admin.tls` (add `clientCA` for mTLS) and
-  can be narrowed with `admin.allowCIDRs`; the relay refuses to start
-  otherwise.
-- It answers only to its own address (and `localhost` on loopback); a
-  reverse proxy's public name goes in `admin.hosts`. A NIP-98 signature made
-  for any other host is refused.
-- Metrics cost the relay no measurable latency: the hot path only bumps
-  counters, and heavier figures are sampled in the background.
-
-Ready-made scrape config, Grafana dashboard and alerts:
-[`examples/monitoring/`](examples/monitoring/). A minimal relay with all of
-it on: [`examples/relay/dashboard-relay.yaml`](examples/relay/dashboard-relay.yaml).
+Examples: [`dashboard-relay.yaml`](examples/relay/dashboard-relay.yaml),
+[`examples/monitoring/`](examples/monitoring/). Security and the full
+reference: `ncli skills show ncli-relay-ops`.
 
 ## `prefs`
 

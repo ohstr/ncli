@@ -1,6 +1,9 @@
 # Changelog
 
-## [0.8.0-rc.24]
+## [0.8.0-rc.25]
+
+Relay monitoring: Prometheus metrics, a one-page dashboard, and index jobs
+that replace `relay stats`/`reindex`/`clear`.
 
 ### Added
 
@@ -18,7 +21,6 @@
   serves it with `admin.dashboard.enabled` (sign in with a NIP-07 extension),
   or `ncli relay dashboard` serves it locally and signs for you.
   ([#156](https://github.com/ohstr/ncli/pull/156))
-
 - Adds `admin.hosts`: the admin listener answers only to its own address and
   these names, so a NIP-98 signature an admin made for another site can't be
   used against it. ([#158](https://github.com/ohstr/ncli/pull/158))
@@ -35,6 +37,14 @@
   top-zapped index. ([#154](https://github.com/ohstr/ncli/pull/154))
 - Fixes search reindexing covering only the newest `max_limit` profiles; a
   rebuild now indexes every stored profile. ([#155](https://github.com/ohstr/ncli/pull/155))
+
+### Changed
+
+- Updates nmilat to v0.5.0-rc.25, which reports relay activity for these
+  metrics and keeps NIP-57 receipts when the zap index is rebuilt.
+  ([#158](https://github.com/ohstr/ncli/pull/158))
+
+## [0.8.0-rc.24]
 
 ### Changed
 

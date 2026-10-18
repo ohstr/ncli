@@ -275,6 +275,15 @@ ncli relay dashboard --config relay.yaml
   loopback); behind a reverse proxy list its name in `admin.hosts`, or every
   request gets `421`. This is what stops a NIP-98 signature the admin gave
   another site from working here.
+- Who may sign in: the relay's key, `nip86.admins`, and `admin.pubkeys`
+  (npub or hex) -- list personal keys there so admins don't use the relay's.
+  The dashboard signs in with a NIP-07 extension, an nsec (signed in the
+  page, never sent or stored) or a NIP-46 signer (`bunker://` URL, or a
+  `nostrconnect://` QR for Amber/nsec.app/`ncli bunker connect`). Its CSP
+  allows WebSockets to any `wss://` relay (and `ws://localhost`) for that.
+- A browser opening the relay's public URL gets a homepage built from its
+  NIP-11, the operator's kind 0 and public NIP-29 groups. WebSocket and
+  NIP-11 clients are unaffected; `homepage: false` turns it off.
 - Credentials don't cross: a metrics token opens only `/metrics`; a NIP-98
   signature or dashboard session opens only `/admin/api/*`.
 - Tokens rotate without a restart: add the new one, switch the scraper,

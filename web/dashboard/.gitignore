@@ -1,3 +1,6 @@
 node_modules/
 dist/*
 !dist/.placeholder
+dist-home/*
+!dist-home/.placeholder
+test-results/

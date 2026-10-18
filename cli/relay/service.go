@@ -67,6 +67,10 @@ func newServer(store *relay.EventStore, searchService search.Service, m *metrics
 		// silent one.
 		Logger:   log.Logger,
 		Observer: m,
+		// Web clients on any site connect to a public relay; access is
+		// decided by NIP-42/NIP-43, not by Origin. WithSessionConfig drops
+		// the SDK's own "*" default, which left only localhost allowed.
+		AllowedOrigins: []string{"*"},
 	}
 
 	if d, err := time.ParseDuration(config.PingInterval); err == nil {
@@ -192,24 +196,35 @@ func newServer(store *relay.EventStore, searchService search.Service, m *metrics
 	buildNip11()
 	moderation.onNip11Change = buildNip11
 
+	home := newHomepage(dashboard.HomeFS(), func() nip11.Metadata {
+		md := nip11Metadata
+		moderation.applyNip11(&md)
+		return md
+	})
+
 	mux := http.NewServeMux()
 	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
 			http.NotFound(w, r)
 			return
 		}
-		// Three protocols share this URL, told apart by headers alone: NIP-86
-		// by its content type, NIP-11 by its Accept, and the WebSocket upgrade
-		// by everything else.
+		// Four uses share this URL, told apart by headers alone: NIP-86 by
+		// its content type, NIP-11 by its Accept, a browser's page load by
+		// asking for HTML, and the WebSocket upgrade by everything else.
 		switch {
 		case nip86Handler != nil && (nip86.IsManagementRequest(r) || r.Method == http.MethodOptions):
 			nip86Metered.ServeHTTP(w, r)
 		case r.Header.Get("Accept") == nip11.ContentTypeHeader:
 			(*nip11Handler.Load()).ServeHTTP(w, r)
+		case homepageEnabled() && wantsHomepage(r):
+			home.servePage(w, r)
 		default:
 			wsHandler.ServeHTTP(w, r)
 		}
 	}))
+	if homepageEnabled() {
+		mux.HandleFunc("GET /_home/", home.serveAssets)
+	}
 
 	if queryEnabled() {
 		// Unwrapped by adminAuth below: nmilat's handler does its own NIP-98
@@ -330,7 +345,7 @@ func (s *Service) startAdmin() error {
 	}
 	admin, err := adminplane.New(adminplane.Options{
 		Settings: adminSettings,
-		Admins:   nip86Admins,
+		Admins:   func() []string { return append(nip86Admins(), adminSettings.Pubkeys...) },
 		UI:       dashboard.FS(),
 		Metrics:  s.metrics,
 		History:  s.history,

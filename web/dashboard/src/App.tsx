@@ -1,8 +1,12 @@
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { api, ApiError, hasSigner, login, setCsrf, type IndexInfo, type Job, type Point, type Session } from "./api";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { api, setCsrf, type IndexInfo, type Job, type Point, type Session } from "./api";
 import { Chart, type Line } from "./Chart";
 import { ago, formatBytes, formatMs, formatUptime, formatValue } from "./format";
 import { MetricsStore } from "./store";
+
+// The sign-in screen carries the signing libraries; a signed-in dashboard
+// never loads them.
+const Login = lazy(() => import("./Login").then((m) => ({ default: m.Login })));
 
 // ---- chart specs: module-level so charts never rebuild on a React render.
 
@@ -334,38 +338,6 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
   );
 }
 
-function Login({ onSession }: { onSession: (s: Session) => void }) {
-  const [error, setError] = useState("");
-  const [pending, setPending] = useState(false);
-  const signer = hasSigner();
-  return (
-    <div className="login">
-      <h1>Relay Monitor</h1>
-      <p className="muted">Sign in with the relay's admin key.</p>
-      <button
-        disabled={!signer || pending}
-        onClick={async () => {
-          setPending(true);
-          setError("");
-          try {
-            const s = await login();
-            setCsrf(s.csrf);
-            onSession(s);
-          } catch (e) {
-            setError(e instanceof ApiError && e.status === 401 ? "This key is not an admin of this relay." : (e as Error).message);
-          } finally {
-            setPending(false);
-          }
-        }}
-      >
-        {pending ? "Waiting for signer…" : "Sign in with Nostr extension"}
-      </button>
-      {!signer && <p className="muted">No NIP-07 signer found. Or run <code>ncli relay dashboard</code>, which signs for you.</p>}
-      {error && <p className="error">{error}</p>}
-    </div>
-  );
-}
-
 export function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [checked, setChecked] = useState(false);
@@ -382,7 +354,12 @@ export function App() {
   }, []);
 
   if (!checked) return null;
-  if (!session) return <Login onSession={setSession} />;
+  if (!session)
+    return (
+      <Suspense fallback={null}>
+        <Login onSession={setSession} />
+      </Suspense>
+    );
   return (
     <Dashboard
       session={session}

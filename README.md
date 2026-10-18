@@ -449,14 +449,22 @@ To serve Prometheus metrics, or the dashboard from the relay itself:
 
 ```yaml
 admin:
+  # who may sign in, besides the relay's own key
+  pubkeys: [npub1...]
   dashboard: {enabled: true}
   metrics: {enabled: true, tokensFile: ./data/metrics.tokens}
 ```
+
+Sign in with a browser extension, an nsec (signed in the page, never sent)
+or a remote signer (`bunker://` or a `nostrconnect://` QR code).
 
 ```sh
 # create a scrape token (printed once)
 ncli relay metrics token add prometheus
 ```
+
+Opening the relay's URL in a browser shows a homepage built from its NIP-11
+(`homepage: false` turns it off).
 
 Examples: [`dashboard-relay.yaml`](examples/relay/dashboard-relay.yaml),
 [`examples/monitoring/`](examples/monitoring/). Security and the full

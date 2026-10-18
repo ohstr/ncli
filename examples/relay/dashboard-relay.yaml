@@ -23,6 +23,8 @@ logdir: ./data/logs
 admin:
   # Loopback: reach it from elsewhere with an SSH tunnel, or add tls.
   listen: 127.0.0.1:5501
+  # Personal keys that may sign in, so nobody needs the relay's key.
+  # pubkeys: [npub1...]
   dashboard:
     enabled: true
   metrics:

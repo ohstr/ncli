@@ -115,23 +115,42 @@ function nonce(): string {
   return [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
 }
 
-// login signs one NIP-98 event (kind 27235) for POST /admin/api/login with
-// the browser's signer and trades it for a session cookie.
-export async function login(): Promise<Session> {
-  const nostr = (window as unknown as { nostr?: Nip07 }).nostr;
-  if (!nostr) throw new Error("No Nostr signer extension (NIP-07) found in this browser.");
-  const url = `${location.origin}/admin/api/login`;
-  const signed = await nostr.signEvent({
+export interface LoginTemplate {
+  kind: number;
+  created_at: number;
+  tags: string[][];
+  content: string;
+}
+
+// SignFn signs the login event; whatever holds the key does it (an
+// extension, this tab, or a remote signer).
+export type SignFn = (ev: LoginTemplate) => Promise<object>;
+
+export async function loginTemplate(): Promise<LoginTemplate> {
+  return {
     kind: 27235,
     created_at: Math.floor(Date.now() / 1000),
     tags: [
-      ["u", url],
+      ["u", `${location.origin}/admin/api/login`],
       ["method", "POST"],
       ["payload", await sha256Hex("")],
       ["nonce", nonce()],
     ],
     content: "",
-  });
+  };
+}
+
+// loginWith signs one NIP-98 event (kind 27235) for POST /admin/api/login
+// and trades it for a session cookie. Only the signed event leaves the tab.
+export async function loginWith(sign: SignFn): Promise<Session> {
+  const signed = await sign(await loginTemplate());
   const header = "Nostr " + btoa(JSON.stringify(signed));
   return call<Session>("POST", "/admin/api/login", undefined, { Authorization: header });
+}
+
+// login signs in with the browser's NIP-07 extension.
+export async function login(): Promise<Session> {
+  const nostr = (window as unknown as { nostr?: Nip07 }).nostr;
+  if (!nostr) throw new Error("No Nostr signer extension (NIP-07) found in this browser.");
+  return loginWith((ev) => nostr.signEvent(ev));
 }

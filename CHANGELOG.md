@@ -6,16 +6,16 @@
 
 - Adds dashboard sign-in with a secret key, signed in the browser and never
   sent or stored, or with a NIP-46 remote signer: a `bunker://` URL or a
-  `nostrconnect://` QR code for apps such as Amber and nsec.app.
+  `nostrconnect://` QR code for apps such as Amber and nsec.app. ([#160](https://github.com/ohstr/ncli/pull/160))
 - Adds `admin.pubkeys`: personal keys that may sign in to the dashboard and
-  use the admin API, so admins no longer need the relay's own key.
+  use the admin API, so admins no longer need the relay's own key. ([#160](https://github.com/ohstr/ncli/pull/160))
 - Adds a homepage at the relay's URL for browsers, built from its NIP-11, the
-  operator's profile and its public groups; `homepage: false` turns it off.
+  operator's profile and its public groups; `homepage: false` turns it off. ([#160](https://github.com/ohstr/ncli/pull/160))
 
 ### Fixed
 
 - Fixes browsers on any site but localhost being refused (HTTP 403) when they
-  opened a WebSocket to `ncli relay`, which locked out every web client.
+  opened a WebSocket to `ncli relay`, which locked out every web client. ([#160](https://github.com/ohstr/ncli/pull/160))
 
 ## [0.8.0-rc.25]
 

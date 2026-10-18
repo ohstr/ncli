@@ -61,6 +61,27 @@ jobs:
       - name: Command matrix (local relays, blossom container)
         run: go test ./integration/climatrix/... -v -count=1 -timeout 20m
 
+  dashboard:
+    # Typecheck, build and size-budget the relay dashboard embedded in ncli.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web/dashboard
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/dashboard/package-lock.json
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Build (typecheck, bundle, size budget)
+        run: npm run build
+
   lint:
     runs-on: ubuntu-latest
     steps:

@@ -8,12 +8,12 @@
   by default) serving Prometheus metrics at `/metrics` to bearer tokens from
   `ncli relay metrics token add`. The relay refuses to start when it would be
   reachable off loopback without TLS, and collecting metrics adds no measurable
-  latency.
+  latency. ([#154](https://github.com/ohstr/ncli/pull/154))
 
 ### Fixed
 
 - Fixes zap reindexing dropping every NIP-57 (kind 9735) receipt from the
-  top-zapped index.
+  top-zapped index. ([#154](https://github.com/ohstr/ncli/pull/154))
 
 ### Changed
 

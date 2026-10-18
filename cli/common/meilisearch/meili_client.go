@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	meilisearch "github.com/meilisearch/meilisearch-go"
 	"github.com/ohstr/nmilat/config"
@@ -133,6 +134,47 @@ func (m *MeiliClient) Initialize(ctx context.Context) error {
 func (m *MeiliClient) DeleteIndex(ctx context.Context) error {
 	_, err := m.client.Index(m.indexName).DeleteAllDocuments(&meilisearch.DocumentOptions{})
 	return err
+}
+
+// IndexName returns the index this client writes to.
+func (m *MeiliClient) IndexName() string { return m.indexName }
+
+// SwapWith exchanges this index's contents with other's in one Meilisearch
+// task, after every task queued before it, and waits for it.
+func (m *MeiliClient) SwapWith(ctx context.Context, other string) error {
+	info, err := m.client.SwapIndexesWithContext(ctx, []*meilisearch.SwapIndexesParams{{Indexes: []string{m.indexName, other}}})
+	if err != nil {
+		return err
+	}
+	return m.wait(ctx, info.TaskUID)
+}
+
+// RemoveIndex deletes the index itself, settings included, and waits for
+// it. A missing index is not an error.
+func (m *MeiliClient) RemoveIndex(ctx context.Context) error {
+	if m.client == nil {
+		m.client = meilisearch.New(m.host, meilisearch.WithAPIKey(m.apiKey))
+	}
+	info, err := m.client.DeleteIndexWithContext(ctx, m.indexName)
+	if err != nil {
+		return err
+	}
+	err = m.wait(ctx, info.TaskUID)
+	if err != nil && strings.Contains(err.Error(), "index_not_found") {
+		return nil
+	}
+	return err
+}
+
+func (m *MeiliClient) wait(ctx context.Context, taskUID int64) error {
+	task, err := m.client.WaitForTaskWithContext(ctx, taskUID, 100*time.Millisecond)
+	if err != nil {
+		return err
+	}
+	if task.Status == meilisearch.TaskStatusFailed {
+		return fmt.Errorf("meilisearch task %d failed: %s: %s", taskUID, task.Error.Code, task.Error.Message)
+	}
+	return nil
 }
 
 func (m *MeiliClient) Shutdown(ctx context.Context) error {

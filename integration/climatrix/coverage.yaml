@@ -86,30 +86,38 @@
 "profile": {modes: [json, errors], tests: [TestQuery]}
 "publish": {modes: [json, errors], tests: [TestPublish, TestSignerPublish, TestRelayLogin_AuthRequired, TestRelayLogin_MembershipRequired]}
 "relay": {modes: [json, errors], tests: [TestRelayAdmin, TestRelayJSONLogs, TestHarness_RelaySeedsCorpus], pending: "-c context creation (phase 5)"}
-"relay clear": {modes: [errors], tests: [TestBareGroupCommands]}
-"relay clear search": {modes: [errors], tests: [TestRelayAdmin]}
-"relay clear zaps": {modes: [json], tests: [TestRelayAdmin]}
 "relay context": {modes: [json], tests: [TestRelayContext]}
 "relay context add": {modes: [json, errors], tests: [TestRelayContext]}
 "relay context list": {modes: [json], tests: [TestRelayContext]}
 "relay context remove": {modes: [json], tests: [TestRelayContext]}
 "relay context use": {modes: [json, errors], tests: [TestRelayContext]}
+"relay dashboard": {modes: [errors], tests: [TestAttack_AdminHTTP], pending: "serving runs until interrupted; its proxy is unit-tested"}
+"relay index": {modes: [errors], tests: [TestBareGroupCommands]}
+"relay index drop": {modes: [json, errors], tests: [TestRelayAdmin]}
+"relay index list": {modes: [json], tests: [TestRelayAdmin], pending: "text table"}
+"relay index rebuild": {modes: [json, errors], tests: [TestRelayAdmin]}
 "relay invites": {modes: [errors], tests: [TestBareGroupCommands]}
 "relay invites create": {modes: [json, errors], tests: [TestRelayAdmin, TestAttack_NIP43Membership]}
 "relay invites list": {modes: [json], tests: [TestRelayAdmin]}
 "relay invites revoke": {modes: [json, errors], tests: [TestRelayAdmin, TestAttack_NIP43Membership]}
+"relay jobs": {modes: [errors], tests: [TestBareGroupCommands]}
+"relay jobs cancel": {modes: [json], tests: [TestRelayAdmin], pending: "cancelling a running job (covered by unit tests)"}
+"relay jobs list": {modes: [json], tests: [TestRelayAdmin]}
+"relay jobs show": {modes: [json, errors], tests: [TestRelayAdmin]}
 "relay members": {modes: [errors], tests: [TestBareGroupCommands]}
+"relay metrics": {modes: [errors], tests: [TestBareGroupCommands]}
+"relay metrics token": {modes: [errors], tests: [TestBareGroupCommands]}
+"relay metrics token add": {modes: [json, errors], tests: [TestRelayMetricsToken]}
+"relay metrics token list": {modes: [json, errors], tests: [TestRelayMetricsToken]}
+"relay metrics token remove": {modes: [json, errors], tests: [TestRelayMetricsToken]}
 "relay members add": {modes: [json, errors], tests: [TestRelayAdmin, TestAttack_AdminHTTP]}
 "relay members list": {modes: [json, errors], tests: [TestRelayAdmin, TestAttack_AdminHTTP]}
 "relay members remove": {modes: [json], tests: [TestRelayAdmin, TestAttack_NIP43Membership]}
 "relay members show": {modes: [json, errors], tests: [TestRelayAdmin]}
-"relay reindex": {modes: [errors], tests: [TestBareGroupCommands]}
-"relay reindex search": {modes: [errors], tests: [TestRelayAdmin]}
-"relay reindex zaps": {modes: [json], tests: [TestRelayAdmin]}
 "relay roles": {modes: [errors], tests: [TestBareGroupCommands]}
 "relay roles create": {modes: [json], tests: [TestRelayAdmin]}
 "relay roles list": {modes: [json], tests: [TestRelayAdmin]}
-"relay stats": {modes: [json, text, errors], tests: [TestRelayAdmin, TestAttack_AdminHTTP]}
+"relay status": {modes: [json, text, errors], tests: [TestRelayAdmin, TestAttack_AdminHTTP]}
 "signer": {modes: [errors], tests: [TestBareGroupCommands]}
 "signer check": {modes: [json, errors], tests: [TestSignerCLI]}
 "signer serve": {modes: [json, errors], tests: [TestSignerCLI, TestSignerPublish, TestSignerServeErrors, TestSignerServeVault]}

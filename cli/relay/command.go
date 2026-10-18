@@ -14,6 +14,8 @@ import (
 
 	"github.com/ohstr/ncli/cli/common"
 	"github.com/ohstr/ncli/cli/common/meilisearch"
+	"github.com/ohstr/ncli/cli/relay/adminplane"
+	"github.com/ohstr/ncli/cli/relay/metrics"
 	"github.com/ohstr/nmilat/nip11"
 	_ "github.com/ohstr/nmilat/nip29/relayreg"
 	_ "github.com/ohstr/nmilat/nip47/relayreg"
@@ -75,6 +77,10 @@ const (
 var (
 	config RelayConfig
 
+	// adminSettings is config.Admin validated by initConfig; nil when the
+	// admin listener is off.
+	adminSettings *adminplane.Settings
+
 	// errNoRelayConfig is returned wherever viper resolved no config
 	// source at all -- no --config, no current `ncli relay context`, and
 	// no ncli.yaml/relay.yaml in the working directory -- so callers can
@@ -91,15 +97,16 @@ type RelayConfig struct {
 	RelayNotesDb string `mapstructure:"store"`
 	Port         int    `mapstructure:"port"`
 
-	Logs       *LogConfig        `mapstructure:"logs"`
-	Cache      *CacheConfig      `mapstructure:"cache"`
-	Pow        *PowConfig        `mapstructure:"pow"`
-	Membership *MembershipConfig `mapstructure:"membership"`
-	Nip86      *Nip86Config      `mapstructure:"nip86"`
-	AgentAuth  *AgentAuthConfig  `mapstructure:"agent_auth"`
-	Groups     *GroupsConfig     `mapstructure:"groups"`
-	Huddle     *HuddleConfig     `mapstructure:"huddle"`
-	HTTPBridge *HTTPBridgeConfig `mapstructure:"httpBridge"`
+	Logs       *LogConfig         `mapstructure:"logs"`
+	Cache      *CacheConfig       `mapstructure:"cache"`
+	Pow        *PowConfig         `mapstructure:"pow"`
+	Membership *MembershipConfig  `mapstructure:"membership"`
+	Nip86      *Nip86Config       `mapstructure:"nip86"`
+	AgentAuth  *AgentAuthConfig   `mapstructure:"agent_auth"`
+	Groups     *GroupsConfig      `mapstructure:"groups"`
+	Huddle     *HuddleConfig      `mapstructure:"huddle"`
+	HTTPBridge *HTTPBridgeConfig  `mapstructure:"httpBridge"`
+	Admin      *adminplane.Config `mapstructure:"admin"`
 
 	HandshakeTimeout string `mapstructure:"handshakeTimeout"`
 	PingInterval     string `mapstructure:"pingInterval"`
@@ -326,13 +333,35 @@ type EventsConfig struct {
 	Enabled bool `mapstructure:"enabled"`
 }
 
+// removedRelayCommands maps relay subcommands that no longer exist to what
+// replaced them, so `ncli relay stats` says where it went instead of trying
+// to start a relay.
+var removedRelayCommands = map[string]string{
+	"stats":   "ncli relay status",
+	"reindex": "ncli relay index rebuild <search|zaps>",
+	"clear":   "ncli relay index drop <search|zaps>",
+}
+
+// relayArgs rejects positional arguments: `relay` itself takes none, so one
+// is a mistyped or removed subcommand.
+func relayArgs(cmd *cobra.Command, args []string) error {
+	if len(args) == 0 {
+		return nil
+	}
+	if repl, ok := removedRelayCommands[args[0]]; ok {
+		return common.UsageError(cmd, fmt.Errorf("`ncli relay %s` was removed; use `%s`", args[0], repl))
+	}
+	return common.UsageError(cmd, fmt.Errorf("unknown command %q for \"ncli relay\"", args[0]))
+}
+
 func NewRelayCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "relay",
 		Short: "Run and operate a Nostr relay",
 		Example: `  ncli relay --config relay.yaml
   ncli relay --context myrelay
-  ncli relay stats --config relay.yaml`,
+  ncli relay status --config relay.yaml`,
+		Args: relayArgs,
 		PreRunE: func(cmd *cobra.Command, args []string) error {
 			ctxName, _ := cmd.Flags().GetString("context")
 			if ctxName != "" {
@@ -358,6 +387,8 @@ func NewRelayCommand() *cobra.Command {
 	cmd.Flags().String("identity", "", `identity for a newly created context's relay key (vault label or nsec); a fresh one is generated and saved to the vault (labeled after the context) if omitted`)
 
 	addRemoteAdminCommands(cmd)
+	addMetricsCommands(cmd)
+	addDashboardCommand(cmd)
 	addContextCommands(cmd)
 	return cmd
 }
@@ -490,6 +521,20 @@ func initConfig() error {
 	if config.Port == 0 {
 		config.Port = defaultPort
 	}
+
+	settings, err := adminplane.Resolve(config.Admin, config.Port, nip86Admins())
+	if err != nil {
+		var ce *adminplane.ConfigError
+		if errors.As(err, &ce) && ce.Usage {
+			return &common.CLIError{Err: err, Code: common.CodeUsage}
+		}
+		input := ""
+		if ce != nil {
+			input = ce.Input
+		}
+		return &common.CLIError{Err: err, Code: common.CodeInvalidInput, Input: input}
+	}
+	adminSettings = settings
 	if config.OutgoingBufferSize == 0 {
 		config.OutgoingBufferSize = defaultOutgoingBufferSize
 	}
@@ -623,7 +668,8 @@ func RunRelay(jsonMode bool) error {
 		return fmt.Errorf("failed to create directory for event store db: %w", err)
 	}
 
-	store, err := relay.NewEventStore(config.RelayNotesDb, &config.Nip11.Limitation)
+	m := metrics.New(common.ReadBuildInfo().Version)
+	store, err := relay.NewEventStore(config.RelayNotesDb, &config.Nip11.Limitation, relay.WithEventStoreObserver(m))
 	if err != nil {
 		return fmt.Errorf("failed to connect to event store: %w", err)
 	}
@@ -654,7 +700,11 @@ func RunRelay(jsonMode bool) error {
 		}
 	}
 
-	s := NewServer(store, searchService)
+	s := newServer(store, searchService, m)
+	if err := s.startAdmin(); err != nil {
+		s.Stop()
+		return err
+	}
 
 	stopCh := make(chan os.Signal, 1)
 	signal.Notify(stopCh, syscall.SIGINT, syscall.SIGTERM)

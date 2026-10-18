@@ -3,7 +3,6 @@ package relay
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -11,8 +10,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ohstr/ncli/cli/reindex"
+	"github.com/ohstr/ncli/cli/common"
+	"github.com/ohstr/ncli/cli/relay/adminplane"
+	"github.com/ohstr/ncli/cli/relay/jobs"
+	"github.com/ohstr/ncli/cli/relay/metrics"
 	"github.com/ohstr/ncli/client"
+	"github.com/ohstr/ncli/web/dashboard"
 	"github.com/ohstr/nmilat/huddle/room"
 	"github.com/ohstr/nmilat/nip11"
 	"github.com/ohstr/nmilat/nip86"
@@ -20,7 +23,6 @@ import (
 	"github.com/ohstr/nmilat/relay"
 	"github.com/ohstr/nmilat/search"
 	"github.com/rs/zerolog/log"
-	"github.com/spf13/viper"
 )
 
 type Service struct {
@@ -30,9 +32,26 @@ type Service struct {
 	// huddleRooms is nil unless huddle audio is enabled. Held so Stop can end
 	// live calls, which Shutdown cannot do for hijacked WebSocket connections.
 	huddleRooms *room.Manager
+
+	metrics *metrics.Metrics
+	history *metrics.History
+	admin   *adminplane.Server
+	jobs    *jobs.Manager
+	// stopSampling ends the metrics samplers.
+	stopSampling context.CancelFunc
 }
 
+// historyInterval and historyWindow size the dashboard's built-in history.
+const (
+	historyInterval = 2 * time.Second
+	historyWindow   = time.Hour
+)
+
 func NewServer(store *relay.EventStore, searchService search.Service) *Service {
+	return newServer(store, searchService, metrics.New(common.ReadBuildInfo().Version))
+}
+
+func newServer(store *relay.EventStore, searchService search.Service, m *metrics.Metrics) *Service {
 
 	// Parse timeouts
 	sessionConfig := relay.SessionConfig{
@@ -46,7 +65,8 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 		// zerolog/log logger ConfigureLogging just set up above, so
 		// route the SDK's through the same sink rather than a second,
 		// silent one.
-		Logger: log.Logger,
+		Logger:   log.Logger,
+		Observer: m,
 	}
 
 	if d, err := time.ParseDuration(config.PingInterval); err == nil {
@@ -124,7 +144,10 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 	// able to end that member's live calls. The root handler closes over the
 	// variable and reads it per request, so the order here does not matter.
 	var nip86Handler *nip86.Handler
-	nip86Replay := newReplayGuard()
+	nip86Replay := adminplane.NewReplayGuard()
+	nip86Metered := m.HTTP("nip86", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		adminplane.ServeOnce(nip86Replay, nip86Handler, w, r)
+	}))
 
 	if nip86Enabled() {
 		// Advertised so a client can tell the API is there before trying it.
@@ -180,7 +203,7 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 		// by everything else.
 		switch {
 		case nip86Handler != nil && (nip86.IsManagementRequest(r) || r.Method == http.MethodOptions):
-			serveOnce(nip86Replay, nip86Handler, w, r)
+			nip86Metered.ServeHTTP(w, r)
 		case r.Header.Get("Accept") == nip11.ContentTypeHeader:
 			(*nip11Handler.Load()).ServeHTTP(w, r)
 		default:
@@ -198,7 +221,7 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 		// MembershipService: a NIP-43 join/leave processed over the
 		// WebSocket must be visible to /query immediately, not through a
 		// separate cache of the same store that updates on its own schedule.
-		mux.Handle("/query", relay.NewQueryHandler(store, &config.Nip11.Limitation, wsHandler.Membership(), wsHandler.Groups()))
+		mux.Handle("/query", m.HTTP("query", relay.NewQueryHandler(store, &config.Nip11.Limitation, wsHandler.Membership(), wsHandler.Groups())))
 	}
 
 	if eventsEnabled() {
@@ -207,11 +230,11 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 		// admin-pubkey allowlist. wsHandler.Membership() for the same
 		// reason /query shares it -- one live membership view, not a
 		// second cache.
-		mux.Handle("/events", relay.NewEventsHandler(store, &config.Nip11.Limitation, wsHandler.Membership(), config.Nip11.Self, relay.WithEventsPolicy(moderation.eventPolicy)))
+		mux.Handle("/events", m.HTTP("events", relay.NewEventsHandler(store, &config.Nip11.Limitation, wsHandler.Membership(), config.Nip11.Self, relay.WithEventsPolicy(moderation.eventPolicy))))
 	}
 
 	// ADMIN ENDPOINTS
-	adminReplay := newReplayGuard()
+	adminReplay := adminplane.NewReplayGuard()
 	adminAuth := func(next http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			// Read the body here so the signature can be checked against it,
@@ -238,119 +261,13 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 				http.Error(w, err.Error(), http.StatusUnauthorized)
 				return
 			}
-			if !adminReplay.first(r.Header.Get("Authorization"), time.Now()) {
+			if !adminReplay.First(r.Header.Get("Authorization"), time.Now()) {
 				http.Error(w, "NIP-98 event already used", http.StatusUnauthorized)
 				return
 			}
 			next.ServeHTTP(w, r)
 		}
 	}
-
-	mux.HandleFunc("/admin/reindex/search", adminAuth(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
-			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		if searchService == nil {
-			http.Error(w, "search is not enabled on this relay (cache.search.enabled)", http.StatusNotImplemented)
-			return
-		}
-		status := reindex.SearchState.GetStatus()
-		if status["is_running"].(bool) {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusConflict) // already reindexing
-			_ = json.NewEncoder(w).Encode(status)
-			return
-		}
-
-		go func() {
-			if err := reindex.ExecuteSearchReindex(&reindex.Config{
-				RelayNotesDb: viper.GetString("store"),
-				Search: struct {
-					Host      string `mapstructure:"host"`
-					Key       string `mapstructure:"key"`
-					IndexName string `mapstructure:"index_name"`
-				}{
-					Host:      viper.GetString("cache.search.host"),
-					Key:       viper.GetString("cache.search.key"),
-					IndexName: viper.GetString("cache.search.index_name"),
-				},
-			}, store); err != nil {
-				log.Error().Err(err).Msg("search reindex triggered via /admin/reindex/search failed")
-			}
-		}()
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusAccepted)
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "started"})
-	}))
-
-	mux.HandleFunc("/admin/reindex/zaps", adminAuth(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
-			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		status := reindex.ZapsState.GetStatus()
-		if status["is_running"].(bool) {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusConflict)
-			_ = json.NewEncoder(w).Encode(status)
-			return
-		}
-
-		go func() {
-			if err := reindex.ExecuteZapReindex(store); err != nil {
-				log.Error().Err(err).Msg("zap reindex triggered via /admin/reindex/zaps failed")
-			}
-		}()
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusAccepted)
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "started"})
-	}))
-
-	mux.HandleFunc("/admin/worker/stats", adminAuth(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "GET" {
-			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-			return
-		}
-
-		stats := map[string]interface{}{
-			"status":              "active",
-			"verification_worker": wsHandler.VerificationWorker.GetStats(),
-			"search_reindex":      reindex.SearchState.GetStatus(),
-			"zaps_reindex":        reindex.ZapsState.GetStatus(),
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(stats)
-	}))
-
-	mux.HandleFunc("/admin/search", adminAuth(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "DELETE" {
-			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		if searchService == nil {
-			http.Error(w, "search is not enabled on this relay (cache.search.enabled)", http.StatusNotImplemented)
-			return
-		}
-		if searchService != nil {
-			// search.Service doesn't expose a Delete method, so this only works
-			// against the concrete Meilisearch-backed implementation; other
-			// search.Service implementations silently no-op here.
-			if impl, ok := searchService.(*search.ServiceImpl); ok {
-				err := impl.DeleteIndex(context.Background())
-				if err != nil {
-					http.Error(w, err.Error(), 500)
-					return
-				}
-			}
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "deleted"})
-	}))
 
 	// Huddle first: both the membership admin routes and NIP-86 need the rooms
 	// manager so removing a member ends that member's live calls.
@@ -364,24 +281,32 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 	}
 	nip86Handler = handler
 
-	mux.HandleFunc("/admin/zaps", adminAuth(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "DELETE" {
-			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		if err := store.ClearZapIndex(r.Context()); err != nil {
-			http.Error(w, err.Error(), 500)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "deleted"})
-	}))
+	jobManager := jobs.New(config.RelayNotesDb+".jobs.json", log.Logger,
+		searchIndex(store, searchService, wsHandler.VerificationWorker),
+		&jobs.ZapIndex{Store: store},
+	)
+	jobManager.OnFinish = func(j jobs.Job) { m.JobFinished(j.Index, string(j.State)) }
+
+	sampleCtx, stopSampling := context.WithCancel(context.Background())
+	m.Attach(sampleCtx, metrics.Sources{
+		Handler:   wsHandler,
+		Store:     store,
+		StorePath: config.RelayNotesDb,
+		Search:    searchService,
+		Rooms:     huddleRooms,
+		Jobs:      jobManager.Running,
+	})
+	history := metrics.NewHistory(m, historyInterval, historyWindow)
+	go history.Run(sampleCtx)
 
 	s := &Service{
 		store:              store,
 		verificationWorker: wsHandler.VerificationWorker,
 		huddleRooms:        huddleRooms,
+		metrics:            m,
+		history:            history,
+		jobs:               jobManager,
+		stopSampling:       stopSampling,
 		server: &http.Server{
 			Handler: moderation.ipGate(mux),
 			Addr:    fmt.Sprintf(":%d", config.Port),
@@ -395,6 +320,54 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 	go s.serve()
 
 	return s
+}
+
+// startAdmin starts the admin listener, if configured. A bind failure is
+// returned rather than logged, so the relay refuses to run without it.
+func (s *Service) startAdmin() error {
+	if adminSettings == nil {
+		return nil
+	}
+	admin, err := adminplane.New(adminplane.Options{
+		Settings: adminSettings,
+		Admins:   nip86Admins,
+		UI:       dashboard.FS(),
+		Metrics:  s.metrics,
+		History:  s.history,
+		Logger:   log.Logger,
+	})
+	if err != nil {
+		return err
+	}
+	s.jobs.Routes(admin)
+	if err := admin.Start(); err != nil {
+		if adminSettings.Defaulted && !adminSettings.Dashboard && !adminSettings.Metrics {
+			log.Warn().Err(err).Msg("admin listener not started; set admin.listen to choose a free address")
+			return nil
+		}
+		return err
+	}
+	s.admin = admin
+	return nil
+}
+
+// searchIndex describes the search index for maintenance jobs, or why it
+// can't be maintained on this relay.
+func searchIndex(store *relay.EventStore, svc search.Service, worker *relay.ProfileVerificationWorker) *jobs.SearchIndex {
+	ix := &jobs.SearchIndex{Store: store, Worker: worker}
+	var cfg *SearchConfig
+	if config.Cache != nil {
+		cfg = config.Cache.Search
+	}
+	switch {
+	case cfg == nil || !cfg.Enabled || svc == nil:
+		ix.Disabled = "search is not enabled on this relay (cache.search.enabled)"
+	case cfg.Readonly:
+		ix.Disabled = "search is read-only on this relay (cache.search.readonly)"
+	default:
+		ix.Host, ix.Key, ix.IndexName = cfg.Host, cfg.Key, cfg.IndexName
+	}
+	return ix
 }
 
 func (s *Service) serve() {
@@ -426,6 +399,17 @@ func (s *Service) Stop() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownGracePeriod)
 	defer cancel()
+	if s.admin != nil {
+		if err := s.admin.Shutdown(ctx); err != nil {
+			log.Warn().Err(err).Msg("admin listener did not stop cleanly")
+		}
+	}
+	if s.stopSampling != nil {
+		s.stopSampling()
+	}
+	if s.jobs != nil {
+		s.jobs.Shutdown(ctx)
+	}
 	if err := s.server.Shutdown(ctx); err != nil {
 		// Shutdown itself never force-closes anything on timeout -- per its
 		// own doc comment, it just stops waiting and returns ctx's error,

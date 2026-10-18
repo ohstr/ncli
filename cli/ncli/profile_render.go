@@ -8,7 +8,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// The profile card reuses relay stats' palette (cli/relay/admin.go) so the
+// The profile card reuses relay status' palette (cli/relay/admin.go) so the
 // two commands look like the same program.
 var (
 	profileTitleStyle = lipgloss.NewStyle().

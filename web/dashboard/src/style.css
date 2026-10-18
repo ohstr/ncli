@@ -1,0 +1,332 @@
+:root {
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --text: #1c2026;
+  --muted: #646b75;
+  --border: #e3e6ea;
+  --grid: #eceef1;
+  --ok: #1f8a4c;
+  --warn: #b7791f;
+  --bad: #c53030;
+  --accent: #5b4bdb;
+  --on-accent: #ffffff;
+  --c1: #2f6fd0;
+  --c2: #e07b2a;
+  --c3: #239a5f;
+  --c4: #c2477a;
+  --c5: #7f5ad1;
+  --c6: #b8961c;
+  --c7: #1a98a6;
+  --c8: #737985;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1216;
+    --panel: #171b21;
+    --text: #e6e9ee;
+    --muted: #949ba6;
+    --border: #262c35;
+    --grid: #222830;
+    --ok: #3fbf7a;
+    --warn: #e0a640;
+    --bad: #f06a6a;
+    --accent: #8f83ff;
+    --on-accent: #12101f;
+    --c1: #5b97f0;
+    --c2: #f29a55;
+    --c3: #4cc488;
+    --c4: #e472a2;
+    --c5: #a688f0;
+    --c6: #d8b84a;
+    --c7: #3ec2d0;
+    --c8: #9aa1ad;
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.page {
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+h1 {
+  font-size: 18px;
+  margin: 0;
+}
+
+h2 {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin: 22px 0 8px;
+}
+
+h3 {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0 0 6px;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.mono,
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--warn);
+}
+
+.dot.live {
+  background: var(--ok);
+}
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.kpi {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  border-radius: 6px;
+  min-width: 0;
+}
+
+.kpi.ok {
+  border-left-color: var(--ok);
+}
+
+.kpi.warn {
+  border-left-color: var(--warn);
+}
+
+.kpi.bad {
+  border-left-color: var(--bad);
+}
+
+.kpi-label {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.kpi-value {
+  font-size: 20px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kpi.bad .kpi-value {
+  color: var(--bad);
+}
+
+.kpi-sub {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 10px;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px 6px;
+  min-width: 0;
+}
+
+.panel.wide {
+  margin-top: 22px;
+}
+
+.chart {
+  width: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+/* A chart whose series appear only once counted: say so rather than
+   showing a blank axis. */
+.chart.empty::after {
+  content: "none so far";
+  position: absolute;
+  inset: 0 0 40px 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.u-legend {
+  font-size: 11px;
+  color: var(--muted);
+  text-align: left;
+}
+
+.u-legend .u-marker {
+  width: 10px;
+  height: 3px;
+}
+
+.u-legend th {
+  font-weight: 500;
+}
+
+.indexes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 10px;
+}
+
+.index {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.index-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.index p {
+  margin: 6px 0;
+}
+
+.bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--grid);
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+.bar span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.5s;
+}
+
+.actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+button {
+  font: inherit;
+  font-size: 13px;
+  padding: 5px 12px;
+  border-radius: 5px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+button.ghost {
+  background: transparent;
+  color: var(--text);
+  border-color: var(--border);
+}
+
+button.danger {
+  background: transparent;
+  color: var(--bad);
+  border-color: var(--bad);
+}
+
+.state.succeeded {
+  color: var(--ok);
+}
+
+.state.failed {
+  color: var(--bad);
+}
+
+.state.cancelled {
+  color: var(--warn);
+}
+
+.error {
+  color: var(--bad);
+}
+
+.login {
+  max-width: 380px;
+  margin: 18vh auto 0;
+  padding: 24px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.login button {
+  margin-top: 8px;
+  width: 100%;
+}
+
+@media (max-width: 480px) {
+  .grid,
+  .indexes {
+    grid-template-columns: 1fr;
+  }
+  header .mono {
+    display: none;
+  }
+}

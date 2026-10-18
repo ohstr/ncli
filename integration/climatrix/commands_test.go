@@ -81,31 +81,82 @@ func TestRelayAdmin(t *testing.T) {
 	cfg := r.ConfigPath
 	bob := A(t, "bob")
 
-	t.Run("stats", func(t *testing.T) {
-		var s map[string]any
-		e.MustOK(t, "relay", "stats", "--config", cfg, "--json").JSON(t, &s)
-		if s["status"] != "active" {
-			t.Errorf("stats: %v", s)
+	t.Run("status", func(t *testing.T) {
+		var s struct {
+			Metrics struct {
+				V      map[string]float64 `json:"v"`
+				Totals map[string]float64 `json:"totals"`
+			}
+			Indexes []struct{ Name string }
 		}
-		if !strings.Contains(e.MustOK(t, "relay", "stats", "--config", cfg).Stdout, "ACTIVE") {
-			t.Errorf("text stats lacks status")
+		e.MustOK(t, "relay", "status", "--config", cfg, "--json").JSON(t, &s)
+		if _, ok := s.Metrics.V["uptime_seconds"]; !ok {
+			t.Errorf("status metrics lack uptime: %v", s.Metrics.V)
+		}
+		if s.Metrics.Totals["events_total:accepted"] == 0 {
+			t.Errorf("status shows no accepted events after seeding")
+		}
+		if len(s.Indexes) != 2 {
+			t.Errorf("status indexes: %+v", s.Indexes)
+		}
+		if out := e.MustOK(t, "relay", "status", "--config", cfg).Stdout; !strings.Contains(out, "Connections") {
+			t.Errorf("text status:\n%s", out)
 		}
 	})
 
-	t.Run("reindex and clear", func(t *testing.T) {
-		var s struct{ Status string }
-		e.MustOK(t, "relay", "reindex", "zaps", "--config", cfg, "--json").JSON(t, &s)
-		if s.Status == "" {
-			t.Errorf("reindex zaps: empty status")
+	t.Run("index jobs", func(t *testing.T) {
+		out := e.MustOK(t, "relay", "index", "rebuild", "zaps", "--follow", "--config", cfg, "--json").Stdout
+		lines := strings.Split(strings.TrimSpace(out), "\n")
+		var last struct{ ID, State string }
+		if err := json.Unmarshal([]byte(lines[len(lines)-1]), &last); err != nil || last.State != "succeeded" {
+			t.Fatalf("rebuild --follow last line %q: %v", lines[len(lines)-1], err)
 		}
-		e.MustOK(t, "relay", "clear", "zaps", "--config", cfg, "--json").JSON(t, &s)
-		if s.Status != "deleted" {
-			t.Errorf("clear zaps: %q", s.Status)
+		var shown struct{ ID, State, Kind string }
+		e.MustOK(t, "relay", "jobs", "show", last.ID, "--config", cfg, "--json").JSON(t, &shown)
+		if shown.ID != last.ID || shown.Kind != "rebuild" {
+			t.Errorf("jobs show: %+v", shown)
 		}
+		// Cancelling a finished job reports it unchanged.
+		var cancelled struct{ ID, State string }
+		e.MustOK(t, "relay", "jobs", "cancel", last.ID, "--config", cfg, "--json").JSON(t, &cancelled)
+		if cancelled.State != "succeeded" {
+			t.Errorf("cancel of a finished job: %+v", cancelled)
+		}
+		var list struct{ Jobs []struct{ ID string } }
+		e.MustOK(t, "relay", "jobs", "list", "--config", cfg, "--json").JSON(t, &list)
+		if len(list.Jobs) == 0 || list.Jobs[0].ID != last.ID {
+			t.Errorf("jobs list: %+v", list.Jobs)
+		}
+		var dry struct {
+			DryRun []map[string]any `json:"dry_run"`
+		}
+		e.MustOK(t, "relay", "index", "rebuild", "all", "--dry-run", "--config", cfg, "--json").JSON(t, &dry)
+		if len(dry.DryRun) != 1 || dry.DryRun[0]["index"] != "zaps" {
+			t.Errorf("dry run over available indexes: %+v", dry.DryRun)
+		}
+
+		e.Run(t, "relay", "index", "drop", "zaps", "--config", cfg, "--json").ExpectErr(t, "usage")
+		var dropped struct{ State string }
+		e.MustOK(t, "relay", "index", "drop", "zaps", "--yes", "--config", cfg, "--json").JSON(t, &dropped)
+		if dropped.State != "succeeded" {
+			t.Errorf("drop zaps: %q", dropped.State)
+		}
+
 		// Search isn't configured on this relay: a feature that's off is
 		// usage, not a "started" that silently fails in the background.
-		for _, c := range [][]string{{"reindex", "search"}, {"clear", "search"}} {
-			e.Run(t, append(append([]string{"relay"}, c...), "--config", cfg, "--json")...).ExpectErr(t, "usage")
+		e.Run(t, "relay", "index", "rebuild", "search", "--config", cfg, "--json").ExpectErr(t, "usage")
+		e.Run(t, "relay", "index", "drop", "search", "--yes", "--config", cfg, "--json").ExpectErr(t, "usage")
+		e.Run(t, "relay", "index", "rebuild", "nope", "--config", cfg, "--json").ExpectErr(t, "not_found")
+		e.Run(t, "relay", "jobs", "show", "deadbeef", "--config", cfg, "--json").ExpectErr(t, "not_found")
+		e.Run(t, "relay", "status", "--config", r.AdminConfig(t, bob.PrivHex), "--json").ExpectErr(t, "auth")
+	})
+
+	t.Run("removed commands point to their replacements", func(t *testing.T) {
+		for old, hint := range map[string]string{"stats": "relay status", "reindex": "index rebuild", "clear": "index drop"} {
+			rep := e.Run(t, "relay", old, "--config", cfg, "--json").ExpectErr(t, "usage")
+			if !strings.Contains(rep.Error, hint) {
+				t.Errorf("relay %s: %q lacks %q", old, rep.Error, hint)
+			}
 		}
 	})
 

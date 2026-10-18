@@ -2,6 +2,11 @@ version: 2
 
 project_name: ncli
 
+# The relay dashboard is embedded into the binary; build it first.
+before:
+  hooks:
+    - sh -c "cd web/dashboard && npm ci --no-audit --no-fund && npm run build"
+
 builds:
   - id: ncli
     main: ./cmd/ncli

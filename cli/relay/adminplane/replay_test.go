@@ -1,4 +1,4 @@
-package relay
+package adminplane
 
 import (
 	"encoding/base64"
@@ -9,14 +9,14 @@ import (
 )
 
 func TestServeOnce(t *testing.T) {
-	g := newReplayGuard()
+	g := NewReplayGuard()
 	status := http.StatusOK
 	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(status) })
 	call := func(h string) int {
 		req := httptest.NewRequest("POST", "/", nil)
 		req.Header.Set("Authorization", h)
 		rec := httptest.NewRecorder()
-		serveOnce(g, next, rec, req)
+		ServeOnce(g, next, rec, req)
 		return rec.Code
 	}
 	if c := call(header("ok")); c != http.StatusOK {
@@ -38,22 +38,22 @@ func header(id string) string {
 }
 
 func TestReplayGuard(t *testing.T) {
-	g := newReplayGuard()
+	g := NewReplayGuard()
 	now := time.Now()
-	if !g.first(header("a"), now) {
+	if !g.First(header("a"), now) {
 		t.Fatal("first use rejected")
 	}
-	if g.first(header("a"), now.Add(time.Second)) {
+	if g.First(header("a"), now.Add(time.Second)) {
 		t.Fatal("replay within the window accepted")
 	}
-	if !g.first(header("b"), now) {
+	if !g.First(header("b"), now) {
 		t.Fatal("a different event rejected")
 	}
-	if !g.first(header("a"), now.Add(nip98Window+time.Second)) {
+	if !g.First(header("a"), now.Add(nip98Window+time.Second)) {
 		t.Fatal("id not forgotten after the window")
 	}
 	for _, bad := range []string{"", "Nostr", "Nostr !!", "Bearer x", "Nostr " + base64.StdEncoding.EncodeToString([]byte("{}"))} {
-		if g.first(bad, now) {
+		if g.First(bad, now) {
 			t.Errorf("header %q with no event id accepted", bad)
 		}
 	}

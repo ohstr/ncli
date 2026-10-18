@@ -1,5 +1,49 @@
 # Changelog
 
+## [0.8.0-rc.25]
+
+Relay monitoring: Prometheus metrics, a one-page dashboard, and index jobs
+that replace `relay stats`/`reindex`/`clear`.
+
+### Added
+
+- Adds an admin listener to `ncli relay` (`admin:` block, `127.0.0.1:<port+1>`
+  by default) serving Prometheus metrics at `/metrics` to bearer tokens from
+  `ncli relay metrics token add`. The relay refuses to start when it would be
+  reachable off loopback without TLS, and collecting metrics adds no measurable
+  latency. ([#154](https://github.com/ohstr/ncli/pull/154))
+- Adds `ncli relay status`, `relay index list|rebuild|drop` and `relay jobs
+  list|show|cancel`, which run index maintenance as jobs with progress,
+  `--follow` and cancel. Rebuilds swap the new index in atomically, so search
+  and top-zapped answers never go empty mid-rebuild. ([#155](https://github.com/ohstr/ncli/pull/155))
+- Adds a one-page relay dashboard embedded in `ncli`: live traffic, latency,
+  rejections, queues, access and process charts plus index jobs. The relay
+  serves it with `admin.dashboard.enabled` (sign in with a NIP-07 extension),
+  or `ncli relay dashboard` serves it locally and signs for you.
+  ([#156](https://github.com/ohstr/ncli/pull/156))
+- Adds `admin.hosts`: the admin listener answers only to its own address and
+  these names, so a NIP-98 signature an admin made for another site can't be
+  used against it. ([#158](https://github.com/ohstr/ncli/pull/158))
+
+### Removed
+
+- Removes `ncli relay stats`, `relay reindex` and `relay clear`, and their
+  routes on the public relay port; each now names its replacement (`relay
+  status`, `relay index rebuild`, `relay index drop`). ([#155](https://github.com/ohstr/ncli/pull/155))
+
+### Fixed
+
+- Fixes zap reindexing dropping every NIP-57 (kind 9735) receipt from the
+  top-zapped index. ([#154](https://github.com/ohstr/ncli/pull/154))
+- Fixes search reindexing covering only the newest `max_limit` profiles; a
+  rebuild now indexes every stored profile. ([#155](https://github.com/ohstr/ncli/pull/155))
+
+### Changed
+
+- Updates nmilat to v0.5.0-rc.25, which reports relay activity for these
+  metrics and keeps NIP-57 receipts when the zap index is rebuilt.
+  ([#158](https://github.com/ohstr/ncli/pull/158))
+
 ## [0.8.0-rc.24]
 
 ### Changed

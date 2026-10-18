@@ -1,0 +1,185 @@
+// Browser smoke test of the dashboard against a real relay: both ways of
+// serving it, sign-in, every chart, an index job, themes and phone width.
+// Fails on any console error or CSP violation.
+//
+//   NCLI_BIN=../../bin/ncli npm run e2e
+import { spawn, spawnSync } from "node:child_process";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { createServer } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { chromium } from "playwright";
+
+const bin = process.env.NCLI_BIN;
+if (!bin) throw new Error("set NCLI_BIN to the ncli binary");
+const dir = mkdtempSync(join(tmpdir(), "ncli-dash-e2e-"));
+const children = [];
+const problems = [];
+let failures = 0;
+
+function check(ok, what) {
+  console.log(`${ok ? "ok  " : "FAIL"} ${what}`);
+  if (!ok) failures++;
+}
+
+const ncli = (args, input) => {
+  const r = spawnSync(bin, args, { input, encoding: "utf8", env: { ...process.env, HOME: dir, NO_COLOR: "1" } });
+  if (r.status !== 0) throw new Error(`ncli ${args.join(" ")}: ${r.stderr}`);
+  return r.stdout;
+};
+
+const freePort = () =>
+  new Promise((resolve) => {
+    const s = createServer().listen(0, "127.0.0.1", () => {
+      const { port } = s.address();
+      s.close(() => resolve(port));
+    });
+  });
+
+function start(args) {
+  const p = spawn(bin, args, { env: { ...process.env, HOME: dir }, stdio: ["ignore", "pipe", "pipe"] });
+  children.push(p);
+  return p;
+}
+
+async function waitFor(url, ms = 15000) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    try {
+      await fetch(url);
+      return;
+    } catch {
+      await new Promise((r) => setTimeout(r, 200));
+    }
+  }
+  throw new Error(`nothing answered at ${url}`);
+}
+
+// The browser logs every 401 response, including the expected ones: the
+// session check before sign-in, and this test's probe after sign-out.
+const expected401 = /Failed to load resource: the server responded with a status of 401/;
+
+function watch(page, label) {
+  page.on("console", (m) => {
+    if (m.type() === "error" && !expected401.test(m.text())) problems.push(`${label}: console: ${m.text()}`);
+  });
+  page.on("pageerror", (e) => problems.push(`${label}: ${e.message}`));
+}
+
+const cspProbe = () =>
+  document.addEventListener("securitypolicyviolation", (e) => console.error(`CSP: ${e.violatedDirective} ${e.blockedURI}`));
+
+try {
+  const key = JSON.parse(ncli(["id", "--json", "-q"]));
+  const port = await freePort();
+  const adminPort = await freePort();
+  const cfg = join(dir, "relay.yaml");
+  writeFileSync(
+    cfg,
+    [
+      `port: ${port}`,
+      `nip11: {name: e2e, privkey: ${key.priv_hex}}`,
+      `store: ${join(dir, "notes.db")}`,
+      `logdir: ${dir}`,
+      `admin: {listen: "127.0.0.1:${adminPort}", dashboard: {enabled: true}}`,
+    ].join("\n"),
+  );
+  start(["relay", "--config", cfg]);
+  const admin = `http://127.0.0.1:${adminPort}`;
+  await waitFor(`${admin}/admin/ui/`);
+  // Some traffic for the charts.
+  for (let i = 0; i < 3; i++) spawnSync(bin, ["find", "-s", `ws://127.0.0.1:${port}`, "--kinds", "1", "-q"]);
+
+  const browser = await chromium.launch();
+
+  // 1. Relay-served, no signer: the login screen says what to do instead.
+  {
+    const ctx = await browser.newContext();
+    const page = await ctx.newPage();
+    watch(page, "no-signer");
+    await page.addInitScript(cspProbe);
+    await page.goto(`${admin}/admin/ui/`);
+    await page.getByText("Sign in with Nostr extension").waitFor();
+    check(await page.getByRole("button", { name: /Sign in/ }).isDisabled(), "sign-in disabled without a NIP-07 signer");
+    check(await page.getByText("ncli relay dashboard").isVisible(), "login screen points to `ncli relay dashboard`");
+    await ctx.close();
+  }
+
+  // 2. Relay-served with a NIP-07 signer backed by `ncli id sign`.
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    await ctx.exposeFunction("__ncliSign", (ev) => {
+      const out = ncli(["id", "sign", "-e", "-", "-o", "-", "--identity", key.nsec, "-q"], JSON.stringify(ev));
+      const signed = JSON.parse(out);
+      return Array.isArray(signed) ? signed[0] : signed;
+    });
+    await ctx.addInitScript(() => {
+      window.nostr = { getPublicKey: async () => "", signEvent: (ev) => window.__ncliSign(ev) };
+    });
+    const page = await ctx.newPage();
+    watch(page, "relay-served");
+    await page.addInitScript(cspProbe);
+    await page.goto(`${admin}/admin/ui/`);
+    await page.getByRole("button", { name: /Sign in/ }).click();
+    await page.locator(".kpis").waitFor();
+    await page.waitForTimeout(5000);
+    check((await page.locator(".chart canvas").count()) === 18, "18 charts render");
+    check((await page.locator(".kpi").count()) === 11, "11 KPI tiles render");
+    check((await page.locator(".dot.live").count()) === 1, "live stream connected");
+    check(await page.getByText(key.pub_hex.slice(0, 8)).isVisible(), "header shows the signed-in admin");
+
+    // An index job from the page.
+    const zaps = page.locator(".index", { hasText: "zaps" });
+    await zaps.getByRole("button", { name: "Rebuild" }).click();
+    await zaps.getByText(/last rebuild/).waitFor({ timeout: 15000 });
+    check(await zaps.getByText("succeeded").isVisible(), "rebuild from the page succeeds and shows it");
+    check(await page.locator(".index", { hasText: "search" }).getByText("cache.search.enabled").isVisible(), "unavailable index says why");
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForTimeout(300);
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    check(overflow <= 0, `no horizontal scroll at 390px (overflow ${overflow}px)`);
+
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.waitForTimeout(300);
+    const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+    check(bg !== "rgb(246, 247, 249)", `dark theme applies (body ${bg})`);
+
+    await page.getByRole("button", { name: "Sign out" }).click();
+    await page.getByText("Sign in with Nostr extension").waitFor();
+    const after = await page.evaluate(() => fetch("/admin/api/metrics").then((r) => r.status));
+    check(after === 401, `API refused after sign out (${after})`);
+    await ctx.close();
+  }
+
+  // 3. Local mode: the CLI serves and signs; nothing to sign in to.
+  {
+    const dash = start(["relay", "dashboard", "--config", cfg, "--no-open", "--json", "--port", String(await freePort())]);
+    const link = await new Promise((resolve, reject) => {
+      dash.stdout.once("data", (d) => resolve(JSON.parse(String(d).split("\n")[0]).url));
+      setTimeout(() => reject(new Error("no dashboard link")), 15000);
+    });
+    const ctx = await browser.newContext();
+    const page = await ctx.newPage();
+    watch(page, "local");
+    await page.addInitScript(cspProbe);
+    await page.goto(link);
+    await page.locator(".kpis").waitFor();
+    await page.waitForTimeout(3000);
+    check((await page.locator(".chart canvas").count()) === 18, "local mode renders every chart");
+    check((await page.getByRole("button", { name: "Sign out" }).count()) === 0, "local mode has no sign-out");
+    const reuse = await (await fetch(link, { redirect: "manual" })).status;
+    check(reuse === 401, `the one-time link works once (${reuse})`);
+    await ctx.close();
+  }
+
+  await browser.close();
+  check(problems.length === 0, "no console errors or CSP violations");
+  for (const p of problems) console.log(`     ${p}`);
+} catch (e) {
+  console.error(e);
+  failures++;
+} finally {
+  for (const c of children) c.kill("SIGINT");
+}
+process.exit(failures ? 1 : 0);

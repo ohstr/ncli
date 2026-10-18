@@ -20,7 +20,8 @@ that priority order.
 | `ncli ping <relay...>` / `-t <targets.yaml>` | Probe whether targets are reachable (connect + subscribe), no events fetched |
 | `ncli prefs relays add/list/remove/clear` | Manage the default relay list `find`/`dump`/`ping`/`miner check` fall back to |
 | `ncli relay --config <relay.yaml>` | Run the relay server; `groups` block hosts NIP-29 groups: `roles` (which roles may send which moderation kinds), `roleDescriptions` (kind 39003), `admins` (moderate every group), `moderationLog`, `pendingJoins`; `agent_auth` block enables NIP-AA (an agent key gains virtual membership from its owner's NIP-43 membership via a NIP-OA credential, no separate enrollment); `nip86` block serves the NIP-86 management API on the relay URL so an app can moderate (ban pubkeys/events, allow/disallow kinds, block IPs, rename the relay; saved in `<store>.moderation.json`) and administer membership without a terminal; `query` block serves buzz's NIP-CW `POST /query` bridge, a one-shot HTTP alternative to a WS REQ/EOSE round trip -- NIP-98 there binds identity; results are further gated to the signer's own NIP-43 membership when `nip11.limitation.membership_required` is set, same as REQ/COUNT |
-| `ncli relay stats` / `ncli relay reindex search/zaps` / `ncli relay clear search/zaps` | Administer a *running* relay over NIP-98 HTTP: live metrics, rebuild or wipe the search and zap indexes |
+| `ncli relay status` / `relay index list/rebuild/drop` / `relay jobs list/show/cancel` | Administer a *running* relay over its admin listener (`admin.listen`, default `127.0.0.1:<port+1>`, NIP-98-signed with `nip11.privkey`): health and live metrics (`--watch`), rebuild an index from stored events as a job (`--follow` waits, `--fresh` swaps a new search index in, `--dry-run` estimates), drop one (`--yes`), list/inspect/cancel jobs. `stats`/`reindex`/`clear` were removed and say so |
+| `ncli relay dashboard` / `ncli relay metrics token add/list/remove` | Open the embedded one-page dashboard locally, signed by the CLI (no relay setting needed); manage the bearer tokens Prometheus scrapes `/metrics` with (`admin.metrics.tokensFile`, sha256 hashes only). The relay itself serves `/metrics` and `/admin/ui/` only when `admin.metrics`/`admin.dashboard` are enabled, and refuses to listen off loopback without `admin.tls` |
 | `ncli relay members list/show/add/remove` / `ncli relay invites create/list/revoke` / `ncli relay roles list/create` | Administer a *running* relay's NIP-43 membership over NIP-98 HTTP: enroll/remove members, issue/revoke invite codes, define roles |
 | `ncli relay context list/add/use/remove` | Save named relay `--config` shortcuts and switch the current one, so `relay` subcommands stop needing `--config` repeated on every call |
 | `ncli relay -c/--context <name>` | Run directly against a saved context by name (bypassing "current"); if `<name>` doesn't exist yet, offers (or `-q`/`--json` auto-confirms) to create a minimal relay backed by a fresh vault identity under `<AppConfigDir>/relays/<name>/` |
@@ -64,7 +65,7 @@ and errors go to **stderr** — so piping stdout into `jq` or a script's
 parser never picks up log noise. `--json` and `-q/--quiet` are global flags
 (declared once on the root command, available on every subcommand) rather
 than per-command. `id`, `id list`, `id import`, `id relabel`, `id rm`, `id sign`, `version`, `skills list`/`show`/`install`, `id delegate`, `relay
-stats`/`reindex`/`clear`, `relay members`/`invites`/`roles`, `ping`,
+status`/`index`/`jobs`/`metrics token`, `relay members`/`invites`/`roles`, `ping`,
 `miner mine`/`check`, `publish`, `huddle list`, `space create`/
 `list`/`show`/`chat send`/`chat list`, `bunker`/`status`/`stop`/
 `connect`/`history`/`sessions`/`pending`, `signer status`/`check`, `event verify`/`show`/`encode`/`seen`/
@@ -78,7 +79,9 @@ is guaranteed to be exactly one JSON array on every successful run — `[]`
 when nothing matched, never bare `null` and never empty output — so a
 script never needs a no-result special case. The same holds for every
 list in any command's `--json` output: an empty list is `[]`, never `null`.
-`space join` and `signer serve` are the streaming commands. Without a
+`space join` and `signer serve` are the streaming commands, as are
+`relay status --watch` and `relay index rebuild --follow` / `relay jobs
+show --follow` under `--json` (one JSON object per line). Without a
 terminal or with `--json`, `space join`'s stdout is NDJSON (one JSON
 object per line, ending with an `ended` line), not a single document.
 `signer serve` always writes one decision object per line, for as long as
@@ -117,10 +120,10 @@ and never when `NO_COLOR` is set or stderr is piped.
 
 | `code` | exit | retryable | meaning |
 |---|---|---|---|
-| `usage` | 2 | no | bad/missing/conflicting flags/args/config, a relay-side feature that isn't turned on (e.g. `relay members ...` against a relay with `membership.enabled: false`), or a group command (`relay members`/`invites`/`roles`/`reindex`/`clear`, `prefs`, `prefs relays`, `miner`, `blossom`, `blossom servers`, `bunker sessions`) invoked without one of its own subcommands |
+| `usage` | 2 | no | bad/missing/conflicting flags/args/config, a relay-side feature that isn't turned on (e.g. `relay members ...` against a relay with `membership.enabled: false`), or a group command (`relay members`/`invites`/`roles`/`index`/`jobs`/`metrics`, `prefs`, `prefs relays`, `miner`, `blossom`, `blossom servers`, `bunker sessions`) invoked without one of its own subcommands |
 | `invalid_input` | 3 | no | a supplied value failed validation/parsing (bad identifier, URL, key, duration, kind, ...) |
 | `not_found` | 4 | no | the referenced thing doesn't exist (vault entry, configured relay, ...) |
-| `conflict` | 5 | yes | collides with existing state (vault label taken, reindex already running) |
+| `conflict` | 5 | yes | collides with existing state (vault label taken, another job running on that index) |
 | `network` | 6 | yes | a remote call failed (relay connection, admin HTTP request, nip-05 fetch) |
 | `auth` | 7 | no | wrong credentials or a rejected signature |
 | `unsupported` | 8 | no | the target server doesn't support the requested capability at all (`blossom list` against a server with BUD-02 disabled, `huddle list`/`space join` against a relay with huddles disabled), distinct from `not_found`'s "this one specific resource is missing" |
@@ -171,8 +174,9 @@ or invoking a command in that area:
 - Querying/exporting events, or testing relay connectivity (`dump`,
   `find`, `ping`, `filters.yaml`, `targets.yaml`, `prefs`) →
   `skills/ncli-query/SKILL.md`
-- Configuring or operating a relay (`relay.yaml`, `relay stats`/`reindex`/
-  `clear`, incl. reindexing search/zaps, NIP-43 membership via `relay
+- Configuring or operating a relay (`relay.yaml`, `relay status`/`index`/
+  `jobs`, Prometheus metrics and the dashboard (`admin:`, `relay metrics
+  token`, `relay dashboard`), NIP-43 membership via `relay
   members`/`invites`/`roles`, or NIP-AA `agent_auth`) →
   `skills/ncli-relay-ops/SKILL.md`
 - Generating/importing/managing keys or delegation tokens (`id`, `id import`, `id delegate`), or

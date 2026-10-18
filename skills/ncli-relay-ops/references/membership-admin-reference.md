@@ -6,8 +6,9 @@ as of writing. Update by hand if these change. -->
 
 NIP-43 relay-membership admin surface: enroll/remove members directly, issue
 invite codes out-of-band, and define roles — all against an **already
-running** relay, over the same NIP-98-authenticated HTTP mechanism as `ncli
-relay stats`/`reindex`/`clear` (see `references/admin-reindex-reference.md`).
+running** relay, over NIP-98-authenticated HTTP to its public port (the
+monitoring and index commands use the admin listener instead; see
+`references/admin-plane-reference.md`).
 Requires `membership.enabled: true` in the relay's config (see
 `examples/relay/community-membership-relay.yaml`) — every endpoint below
 returns `501` if it isn't.

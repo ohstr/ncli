@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.8.0-rc.30]
+
+### Added
+
+- Adds `nip11.banner` to the relay config, served in the NIP-11 document. ([#166](https://github.com/ohstr/ncli/pull/166))
+- Adds the operator's latest notes to the relay homepage. ([#166](https://github.com/ohstr/ncli/pull/166))
+
+### Changed
+
+- The relay homepage hero is laid out like a Nostr profile: the banner on
+  top with the icon over its edge. It uses the NIP-11 banner, or an ncli
+  banner when there is none or it fails to load. ([#166](https://github.com/ohstr/ncli/pull/166))
+- The dashboard, relay homepage and docs site use the ohstr favicon in place
+  of the `n_` tile, which is removed. ([#166](https://github.com/ohstr/ncli/pull/166))
+
 ## [0.8.0-rc.29]
 
 ### Fixed

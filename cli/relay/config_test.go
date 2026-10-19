@@ -603,6 +603,23 @@ store: "test.db"
 		assert.Contains(t, rec.Body.String(), `"icon":"https://example.com/icon.png"`)
 	})
 
+	t.Run("banner is configurable and reaches the NIP-11 document", func(t *testing.T) {
+		cfg := loadRelayConfigFromYAML(t, `
+nip11:
+  pubkey: "`+validPubkey+`"
+  banner: "https://example.com/banner.png"
+store: "test.db"
+`)
+		finalizeNip11(&cfg)
+		assert.Equal(t, "https://example.com/banner.png", cfg.Nip11.Banner)
+
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.Header.Set("Accept", "application/nostr+json")
+		rec := httptest.NewRecorder()
+		nip11.NewHandler(&cfg.Nip11, nip11.NIPSet{}).ServeHTTP(rec, req)
+		assert.Contains(t, rec.Body.String(), `"banner":"https://example.com/banner.png"`)
+	})
+
 	t.Run("a NIP-86 icon overrides the configured one", func(t *testing.T) {
 		cfg := loadRelayConfigFromYAML(t, `
 nip11:

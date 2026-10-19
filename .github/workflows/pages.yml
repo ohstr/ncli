@@ -32,5 +32,5 @@ jobs:
       description: A Nostr relay server and command-line client toolkit for streaming, syncing, inspecting, querying, and mining events.
       accent-hue: 262 # brand purple #7B3FE4
       logo: docs/brand/ncli-mark.svg
-      favicon: docs/brand/ncli-icon.svg
+      favicon: docs/brand/ohstr-icon-192.png
       extra-public-dir: docs/public # install.sh, install.ps1, PROMPT.md

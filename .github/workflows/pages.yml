@@ -8,6 +8,7 @@ on:
       - AGENTS.md
       - CHANGELOG.md
       - docs/public/**
+      - docs/brand/**
       - .github/workflows/pages.yml
   # The header shows the latest release, read at build time. The push build
   # runs before a release exists, so rebuild once Release finishes.
@@ -29,6 +30,7 @@ jobs:
     with:
       title: ncli
       description: A Nostr relay server and command-line client toolkit for streaming, syncing, inspecting, querying, and mining events.
-      accent-hue: 262 # violet, nods at the Nostr ecosystem's usual branding
-      favicon-glyph: ">_"
+      accent-hue: 262 # brand purple #7B3FE4
+      logo: docs/brand/ncli-mark.svg
+      favicon: docs/brand/ncli-icon.svg
       extra-public-dir: docs/public # install.sh, install.ps1, PROMPT.md

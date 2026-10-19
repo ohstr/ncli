@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 453 160" role="img" aria-label="ncli">
+<title>ncli</title>
+<style>.word{fill:#1A1028}@media (prefers-color-scheme:dark){.word{fill:#FFFFFF}}</style>
+<defs><linearGradient id="mring" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5A189A"/><stop offset=".4" stop-color="#7B3FE4"/><stop offset=".78" stop-color="#9D4EDD"/><stop offset="1" stop-color="#C026D3"/></linearGradient><linearGradient id="mhead" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#E9D5FF"/><stop offset="1" stop-color="#C9A8FF"/></linearGradient><clipPath id="minside"><ellipse cx="80" cy="80" rx="54" ry="60" transform="rotate(-24 80 80)"/></clipPath></defs>
+<g clip-path="url(#minside)"><g transform="translate(78 84) scale(.84) translate(-94 -92)">
+<path d="M62 210C64 160 70 104 66 84C62 74 62 58 72 50C82 42 98 46 102 58L126 68C120 74 108 78 96 78C88 84 84 104 86 126C88 160 90 190 92 210Z" fill="url(#mhead)" stroke="#7B3FE4" stroke-width="2.5" stroke-linejoin="round"/>
+<path d="M58 59H75" stroke="#7B3FE4" stroke-width="3" stroke-linecap="round"/>
+<rect x="74" y="51" width="26" height="15" rx="7.5" fill="#0C0A14"/>
+<path d="M80 55l5 3.5-5 3.5" fill="none" stroke="#FF3DFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="87" y="60.2" width="7" height="2.4" rx=".6" fill="#FF3DFF"/>
+</g></g>
+<ellipse cx="80" cy="80" rx="54" ry="60" transform="rotate(-24 80 80)" fill="none" stroke="url(#mring)" stroke-width="22"/>
+<path class="word" d="M210.2 132H191.2V57.6H195.8L202.1 64.8Q206.6 60.7 212.4 58.4Q218.2 56.1 224.6 56.1Q231.4 56.1 237.4 58.7Q243.5 61.3 248 65.9Q252.5 70.4 255.1 76.5Q257.7 82.6 257.7 89.5V132H238.7V89.5Q238.7 86.6 237.6 84Q236.5 81.4 234.6 79.4Q232.6 77.5 230.1 76.4Q227.5 75.2 224.6 75.2Q221.6 75.2 218.9 76.4Q216.3 77.5 214.4 79.4Q212.4 81.4 211.3 84Q210.2 86.6 210.2 89.5Z M336.2 72.4 322.3 86.4Q321.3 83.4 319.5 81.1Q317.7 78.8 315.4 77.2Q313.1 75.6 310.5 74.8Q307.9 73.9 305.1 73.9Q301.2 73.9 297.8 75.5Q294.3 77.1 291.8 80Q289.3 82.9 287.8 86.8Q286.3 90.8 286.3 95.6Q286.3 99.5 287.8 102.9Q289.3 106.3 291.8 108.9Q294.3 111.4 297.8 112.9Q301.2 114.4 305.1 114.4Q307.9 114.4 310.4 113.6Q313 112.8 315.3 111.4Q317.5 110 319.3 107.9Q321.1 105.9 322.2 103.4L336.1 117.3Q333.4 121.1 330 124.1Q326.6 127.1 322.6 129.2Q318.6 131.2 314.2 132.3Q309.7 133.4 305.1 133.4Q297.2 133.4 290.3 130.4Q283.4 127.5 278.2 122.3Q273.1 117.2 270.1 110.3Q267.1 103.4 267.1 95.6Q267.1 87.1 270.1 79.6Q273.1 72.2 278.2 66.7Q283.4 61.1 290.3 57.9Q297.2 54.7 305.1 54.7Q309.7 54.7 314.2 55.9Q318.7 57.1 322.8 59.4Q326.8 61.6 330.3 64.9Q333.7 68.2 336.2 72.4Z M364.6 132H345.5V28H364.6Z M401.4 37.4Q401.4 40 400.4 42.3Q399.4 44.6 397.6 46.3Q395.9 48 393.6 49Q391.2 50 388.6 50Q386 50 383.6 49Q381.3 48 379.6 46.3Q377.9 44.6 376.9 42.3Q375.9 40 375.9 37.4Q375.9 34.8 376.9 32.5Q377.9 30.2 379.6 28.5Q381.3 26.7 383.6 25.7Q386 24.7 388.6 24.7Q391.2 24.7 393.6 25.7Q395.9 26.7 397.6 28.5Q399.4 30.2 400.4 32.5Q401.4 34.8 401.4 37.4ZM398.1 132H379V57.6H398.1Z"/>
+<rect x="413" y="120" width="34" height="12" rx="2.5" fill="#FF3DFF"/>
+</svg>

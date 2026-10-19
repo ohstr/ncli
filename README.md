@@ -1,4 +1,4 @@
-# >_ ncli
+# <picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/ncli-logo-on-dark.svg"><img alt="ncli" src="docs/brand/ncli-logo-on-light.svg" width="300"></picture>
 
 [![Release](https://img.shields.io/github/v/release/ohstr/ncli)](https://github.com/ohstr/ncli/releases/latest)
 [![CI](https://github.com/ohstr/ncli/actions/workflows/ci.yml/badge.svg)](https://github.com/ohstr/ncli/actions/workflows/ci.yml)

@@ -3,6 +3,7 @@ import { api, canRenew, onSession, renew, setCsrf, setRenewer, type IndexInfo, t
 import { Chart, type Line } from "./Chart";
 import { ago, formatBytes, formatMs, formatUptime, formatValue } from "./format";
 import { MetricsStore } from "./store";
+import mark from "./brand/ncli-mark.svg";
 
 // The sign-in screen carries the signing libraries; a signed-in dashboard
 // never loads them.
@@ -287,6 +288,7 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
   return (
     <div className="page">
       <header>
+        <img className="brand" src={mark} alt="" width="26" height="26" />
         <h1>Relay Monitor</h1>
         <span className={`dot ${live ? "live" : ""}`} title={live ? "live" : "reconnecting"} />
         <span className="muted">{live ? "live" : "reconnecting…"}</span>

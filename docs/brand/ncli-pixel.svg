@@ -1,0 +1,6 @@
+<svg shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="ncli">
+<title>ncli</title>
+<defs><linearGradient id="px" gradientUnits="userSpaceOnUse" x1="0" y1="20" x2="0" y2="140"><stop offset="0" stop-color="#C026D3"/><stop offset=".45" stop-color="#7B3FE4"/><stop offset="1" stop-color="#5A189A"/></linearGradient></defs>
+<g fill="url(#px)"><rect x="72" y="20" width="24" height="8"/><rect x="64" y="28" width="40" height="16"/><rect x="64" y="44" width="32" height="8"/><rect x="72" y="52" width="24" height="8"/><rect x="72" y="60" width="16" height="8"/><rect x="64" y="68" width="16" height="8"/><rect x="56" y="76" width="16" height="24"/><rect x="56" y="100" width="48" height="8"/><rect x="40" y="108" width="80" height="8"/><rect x="32" y="116" width="88" height="8"/><rect x="40" y="124" width="72" height="8"/><rect x="64" y="132" width="8" height="8"/><rect x="88" y="132" width="8" height="8"/></g>
+<rect x="56" y="36" width="48" height="8" fill="#E9D5FF"/><rect x="88" y="36" width="8" height="8" fill="#FF3DFF"/><rect x="96" y="44" width="40" height="8" fill="#C9A8FF"/><rect x="96" y="52" width="24" height="8" fill="#C9A8FF"/><rect x="104" y="132" width="24" height="8" fill="#FF3DFF"/>
+</svg>

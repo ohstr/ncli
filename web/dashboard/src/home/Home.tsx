@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { npubEncode } from "./bech32";
 import { HIGHLIGHTS, NIP_TITLES, nipLink } from "./nips";
 import { contactLink, fetchInfo, query, relayURL, safeURL, type Info, type NostrEvent } from "./relay";
+import mark from "../brand/ncli-mark.svg";
 
 interface Profile {
   name?: string;
@@ -118,6 +119,15 @@ export function Home() {
       })
       .catch((e) => setError((e as Error).message));
   }, []);
+
+  // The tab shows the relay's own icon once known; ncli's is the fallback.
+  useEffect(() => {
+    const icon = info && (safeURL(info.icon) || safeURL(profile?.picture));
+    const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+    if (!icon || !link) return;
+    link.removeAttribute("type");
+    link.href = icon;
+  }, [info, profile]);
 
   useEffect(() => {
     if (!info) return;
@@ -270,6 +280,7 @@ export function Home() {
       </section>
 
       <footer>
+        <img className="by" src={mark} alt="" width="16" height="16" />
         {info.software ? (
           <a href={safeURL(info.software) || "https://github.com/ohstr/ncli"} target="_blank" rel="noreferrer noopener">
             ncli

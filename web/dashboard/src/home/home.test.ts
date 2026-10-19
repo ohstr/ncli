@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { npubEncode as reference } from "nostr-tools/nip19";
 import { npubEncode } from "./bech32";
 import { nipLink } from "./nips";
-import { contactLink, relayURL, safeURL } from "./relay";
+import { contactLink, iconCandidates, relayURL, safeURL } from "./relay";
 
 describe("homepage helpers", () => {
   it("encodes npubs exactly like nostr-tools", () => {
@@ -17,6 +17,12 @@ describe("homepage helpers", () => {
     expect(safeURL("javascript:alert(1)")).toBe("");
     expect(safeURL("data:text/html,<b>")).toBe("");
     expect(safeURL(42)).toBe("");
+  });
+
+  it("orders icon sources NIP-11 first, dropping unusable ones", () => {
+    expect(iconCandidates("https://r.example/i.png", "https://p.example/p.png")).toEqual(["https://r.example/i.png", "https://p.example/p.png"]);
+    expect(iconCandidates("javascript:x", "https://p.example/p.png")).toEqual(["https://p.example/p.png"]);
+    expect(iconCandidates(undefined, undefined)).toEqual([]);
   });
 
   it("links contacts it recognizes, and nothing unsafe", () => {

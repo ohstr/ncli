@@ -102,6 +102,13 @@ export function safeURL(u: unknown): string {
   }
 }
 
+// iconCandidates lists the hero icon's usable sources in order: the NIP-11
+// icon, then the operator's profile picture. The page falls through to the
+// next one when an image fails to load, then to a letter placeholder.
+export function iconCandidates(icon: unknown, picture: unknown): string[] {
+  return [safeURL(icon), safeURL(picture)].filter((u) => u !== "");
+}
+
 // contactLink turns NIP-11's free-form contact into a link when it is one.
 export function contactLink(contact: string): { href: string; label: string } | null {
   const c = contact.trim();

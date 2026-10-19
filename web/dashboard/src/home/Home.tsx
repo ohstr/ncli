@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { npubEncode } from "./bech32";
 import { HIGHLIGHTS, NIP_TITLES, nipLink } from "./nips";
-import { contactLink, fetchInfo, query, relayURL, safeURL, type Info, type NostrEvent } from "./relay";
+import { contactLink, fetchInfo, iconCandidates, query, relayURL, safeURL, type Info, type NostrEvent } from "./relay";
 import mark from "../brand/ncli-mark.svg";
 
 interface Profile {
@@ -109,7 +109,11 @@ export function Home() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [groups, setGroups] = useState<Group[]>([]);
   const [showAll, setShowAll] = useState(false);
+  // Image URLs that failed to load, so the icon falls through to the next one.
+  const [broken, setBroken] = useState<ReadonlySet<string>>(new Set());
   const url = relayURL();
+  const icon = info ? iconCandidates(info.icon, profile?.picture).find((u) => !broken.has(u)) ?? "" : "";
+  const markBroken = (u: string) => setBroken((b) => new Set(b).add(u));
 
   useEffect(() => {
     fetchInfo()
@@ -119,15 +123,6 @@ export function Home() {
       })
       .catch((e) => setError((e as Error).message));
   }, []);
-
-  // The tab shows the relay's own icon once known; ncli's is the fallback.
-  useEffect(() => {
-    const icon = info && (safeURL(info.icon) || safeURL(profile?.picture));
-    const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
-    if (!icon || !link) return;
-    link.removeAttribute("type");
-    link.href = icon;
-  }, [info, profile]);
 
   useEffect(() => {
     if (!info) return;
@@ -167,7 +162,6 @@ export function Home() {
   if (!info) return <main className="home" aria-busy="true" />;
 
   const nips = (info.supported_nips ?? []).map(String);
-  const icon = safeURL(info.icon) || safeURL(profile?.picture);
   const banner = safeURL(profile?.banner);
   const npub = npubEncode(info.pubkey ?? "");
   const contact = contactLink(info.contact ?? "");
@@ -179,7 +173,7 @@ export function Home() {
       <header className="hero">
         {banner && <img className="banner" src={banner} alt="" referrerPolicy="no-referrer" />}
         <div className="hero-body">
-          {icon ? <img className="icon" src={icon} alt="" referrerPolicy="no-referrer" /> : <div className="icon placeholder">{(info.name || "R").slice(0, 1).toUpperCase()}</div>}
+          {icon ? <img key={icon} className="icon" src={icon} alt="" referrerPolicy="no-referrer" onError={() => markBroken(icon)} /> : <div className="icon placeholder">{(info.name || "R").slice(0, 1).toUpperCase()}</div>}
           <div className="hero-text">
             <h1>{info.name || "Nostr relay"}</h1>
             <span className={`status ${status.state}`} role="status">

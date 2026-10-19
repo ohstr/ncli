@@ -2,6 +2,8 @@ package relay
 
 import (
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -138,7 +140,7 @@ nip11:
 // via the real common.LoadViperConfig + viper.Unmarshal path (same as
 // initConfig), and returns the resulting RelayConfig. initConfig() itself
 // isn't called directly: its defaulting logic is exercised in isolated
-// pieces below (applyPortDefault, applyNip11Reset, checkTopZappedRequiresPrivKey)
+// pieces below (applyPortDefault, finalizeNip11, checkTopZappedRequiresPrivKey)
 // so each subtest can check one concern without also having to satisfy
 // initConfig()'s other requirements (e.g. a valid pubkey) just to reach it.
 func loadRelayConfigFromYAML(t *testing.T, yamlContent string) RelayConfig {
@@ -167,57 +169,6 @@ func loadRelayConfigFromYAML(t *testing.T, yamlContent string) RelayConfig {
 func applyPortDefault(cfg *RelayConfig) {
 	if cfg.Port == 0 {
 		cfg.Port = defaultPort
-	}
-}
-
-// applyNip11Reset mirrors the Nip11 field-overwrite block in initConfig
-// (command.go): Name/Description default to hardcoded strings only if
-// empty; PubKey/Contact/PrivKey survive as-is. Software/Version are always
-// derived from build info (not config input) - a relay must not be able to
-// self-report a different software identity/version than what it's
-// actually running. Limitation starts from whatever the user configured
-// and only fills in fields left at their zero value with the hardcoded
-// defaults below.
-func applyNip11Reset(cfg *RelayConfig) {
-	priv := cfg.Nip11.PrivKey
-	url := cfg.Nip11.URL
-	build := common.ReadBuildInfo()
-
-	if cfg.Nip11.Name == "" {
-		cfg.Nip11.Name = "ncli Relay"
-	}
-	if cfg.Nip11.Description == "" {
-		cfg.Nip11.Description = "ncli relay"
-	}
-
-	limitation := cfg.Nip11.Limitation
-	if limitation.MaxLimit == 0 {
-		limitation.MaxLimit = defaultMaxLimit
-	}
-	if limitation.MaxMessageLength == 0 {
-		limitation.MaxMessageLength = defaultMaxMessageLength
-	}
-	if limitation.MaxSubscriptions == 0 {
-		limitation.MaxSubscriptions = defaultMaxSubscriptions
-	}
-	if limitation.MaxIndexableTags == 0 {
-		limitation.MaxIndexableTags = defaultMaxIndexableTags
-	}
-	if cfg.Pow != nil {
-		limitation.MinPowDifficulty = cfg.Pow.Min
-		limitation.StrictPow = cfg.Pow.Strict
-	}
-
-	cfg.Nip11 = nip11.Metadata{
-		Name:        cfg.Nip11.Name,
-		PubKey:      cfg.Nip11.PubKey,
-		Contact:     cfg.Nip11.Contact,
-		Description: cfg.Nip11.Description,
-		Software:    build.Software,
-		Version:     build.Version,
-		Limitation:  limitation,
-		PrivKey:     priv,
-		URL:         url,
 	}
 }
 
@@ -282,7 +233,7 @@ store: "test.db"
 		assert.Nil(t, cfg.Pow)
 		assert.NoError(t, checkPowMinNonNegative(&cfg))
 
-		applyNip11Reset(&cfg)
+		finalizeNip11(&cfg)
 		assert.Equal(t, 0, cfg.Nip11.Limitation.MinPowDifficulty)
 		assert.False(t, cfg.Nip11.Limitation.StrictPow)
 	})
@@ -300,7 +251,7 @@ pow:
 		assert.Equal(t, 20, cfg.Pow.Min)
 		assert.False(t, cfg.Pow.Strict)
 
-		applyNip11Reset(&cfg)
+		finalizeNip11(&cfg)
 		assert.Equal(t, 20, cfg.Nip11.Limitation.MinPowDifficulty)
 		assert.False(t, cfg.Nip11.Limitation.StrictPow, "advisory mode: min is advertised but not enforced")
 	})
@@ -314,7 +265,7 @@ pow:
   strict: true
   min: 20
 `)
-		applyNip11Reset(&cfg)
+		finalizeNip11(&cfg)
 		assert.Equal(t, 20, cfg.Nip11.Limitation.MinPowDifficulty)
 		assert.True(t, cfg.Nip11.Limitation.StrictPow)
 	})
@@ -332,7 +283,7 @@ store: "test.db"
 pow:
   min: 5
 `)
-		applyNip11Reset(&cfg)
+		finalizeNip11(&cfg)
 		assert.Equal(t, 5, cfg.Nip11.Limitation.MinPowDifficulty)
 	})
 
@@ -627,12 +578,49 @@ nip11:
   version: "9.9.9"
 store: "test.db"
 `)
-		applyNip11Reset(&cfg)
+		finalizeNip11(&cfg)
 
 		build := common.ReadBuildInfo()
 		assert.Equal(t, "my custom relay", cfg.Nip11.Description)
 		assert.Equal(t, build.Software, cfg.Nip11.Software)
 		assert.Equal(t, build.Version, cfg.Nip11.Version)
+	})
+
+	t.Run("icon is configurable and reaches the NIP-11 document", func(t *testing.T) {
+		cfg := loadRelayConfigFromYAML(t, `
+nip11:
+  pubkey: "`+validPubkey+`"
+  icon: "https://example.com/icon.png"
+store: "test.db"
+`)
+		finalizeNip11(&cfg)
+		assert.Equal(t, "https://example.com/icon.png", cfg.Nip11.Icon)
+
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.Header.Set("Accept", "application/nostr+json")
+		rec := httptest.NewRecorder()
+		nip11.NewHandler(&cfg.Nip11, nip11.NIPSet{}).ServeHTTP(rec, req)
+		assert.Contains(t, rec.Body.String(), `"icon":"https://example.com/icon.png"`)
+	})
+
+	t.Run("a NIP-86 icon overrides the configured one", func(t *testing.T) {
+		cfg := loadRelayConfigFromYAML(t, `
+nip11:
+  pubkey: "`+validPubkey+`"
+  icon: "https://example.com/config.png"
+store: "test.db"
+`)
+		finalizeNip11(&cfg)
+		md := cfg.Nip11
+
+		set := "https://example.com/nip86.png"
+		m := &relayModeration{}
+		m.state.Icon = &set
+		m.applyNip11(&md)
+		assert.Equal(t, set, md.Icon)
+
+		(&relayModeration{}).applyNip11(&cfg.Nip11)
+		assert.Equal(t, "https://example.com/config.png", cfg.Nip11.Icon)
 	})
 
 	t.Run("description omitted falls back to the hardcoded default", func(t *testing.T) {
@@ -641,7 +629,7 @@ nip11:
   pubkey: "`+validPubkey+`"
 store: "test.db"
 `)
-		applyNip11Reset(&cfg)
+		finalizeNip11(&cfg)
 		assert.Equal(t, "ncli relay", cfg.Nip11.Description)
 	})
 
@@ -656,7 +644,7 @@ nip11:
     max_indexable_tags: 4
 store: "test.db"
 `)
-		applyNip11Reset(&cfg)
+		finalizeNip11(&cfg)
 
 		assert.Equal(t, 1, cfg.Nip11.Limitation.MaxLimit)
 		assert.EqualValues(t, 2, cfg.Nip11.Limitation.MaxMessageLength)
@@ -670,7 +658,7 @@ nip11:
   pubkey: "`+validPubkey+`"
 store: "test.db"
 `)
-		applyNip11Reset(&cfg)
+		finalizeNip11(&cfg)
 
 		assert.Equal(t, defaultMaxLimit, cfg.Nip11.Limitation.MaxLimit)
 		assert.EqualValues(t, defaultMaxMessageLength, cfg.Nip11.Limitation.MaxMessageLength)
@@ -686,7 +674,7 @@ nip11:
     auth_required: true
 store: "test.db"
 `)
-		applyNip11Reset(&cfg)
+		finalizeNip11(&cfg)
 		assert.True(t, cfg.Nip11.Limitation.AuthRequired)
 	})
 
@@ -699,7 +687,7 @@ nip11:
     auth_required: true
 store: "test.db"
 `)
-		applyNip11Reset(&cfg)
+		finalizeNip11(&cfg)
 		assert.Equal(t, "wss://relay.example.com", cfg.Nip11.URL)
 	})
 
@@ -711,7 +699,7 @@ nip11:
     membership_required: true
 store: "test.db"
 `)
-		applyNip11Reset(&cfg)
+		finalizeNip11(&cfg)
 		assert.True(t, cfg.Nip11.Limitation.MembershipRequired)
 	})
 }

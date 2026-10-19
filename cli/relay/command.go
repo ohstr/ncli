@@ -549,17 +549,27 @@ func initConfig() error {
 		config.VerificationWorkers = defaultVerificationWorkers
 	}
 
-	if config.Nip11.Name == "" {
-		config.Nip11.Name = "ncli Relay"
+	finalizeNip11(&config)
+
+	return nil
+}
+
+// finalizeNip11 fills cfg.Nip11's defaults and startup-derived fields.
+// It edits the decoded struct in place rather than rebuilding it, so every
+// config-settable field (icon, and any nip11.Metadata adds later) survives.
+func finalizeNip11(cfg *RelayConfig) {
+	md := &cfg.Nip11
+	if md.Name == "" {
+		md.Name = "ncli Relay"
 	}
-	if config.Nip11.Description == "" {
-		config.Nip11.Description = "ncli relay"
+	if md.Description == "" {
+		md.Description = "ncli relay"
 	}
 
-	// Preserve fields before resetting defaults
-	priv := config.Nip11.PrivKey
-	url := config.Nip11.URL
+	// Always build info, never config: a relay can't misreport what it runs.
 	build := common.ReadBuildInfo()
+	md.Software = build.Software
+	md.Version = build.Version
 
 	// Self mirrors PubKey, populated only when membership.enabled -- an
 	// explicit opt-in, not a side effect of nip11.privkey merely being set
@@ -567,54 +577,36 @@ func initConfig() error {
 	// it). Enabled already guarantees PrivKey != "" (validated above), and
 	// PubKey == the key derived from PrivKey (validated earlier still), so
 	// this is the same operational identity, not a second one.
-	var self string
-	if config.Membership != nil && config.Membership.Enabled {
-		self = config.Nip11.PubKey
+	md.Self = ""
+	if cfg.Membership != nil && cfg.Membership.Enabled {
+		md.Self = md.PubKey
 	}
 
 	// Start from whatever the user configured under nip11.limitation and
-	// only fill in a field left at its zero value — a prior version of this
-	// code unconditionally overwrote all four with hardcoded defaults,
-	// silently discarding anything the user set.
-	limitation := config.Nip11.Limitation
-	if limitation.MaxLimit == 0 {
-		limitation.MaxLimit = defaultMaxLimit
+	// only fill in a field left at its zero value.
+	if md.Limitation.MaxLimit == 0 {
+		md.Limitation.MaxLimit = defaultMaxLimit
 	}
-	if limitation.MaxMessageLength == 0 {
-		limitation.MaxMessageLength = defaultMaxMessageLength
+	if md.Limitation.MaxMessageLength == 0 {
+		md.Limitation.MaxMessageLength = defaultMaxMessageLength
 	}
-	if limitation.MaxSubscriptions == 0 {
-		limitation.MaxSubscriptions = defaultMaxSubscriptions
+	if md.Limitation.MaxSubscriptions == 0 {
+		md.Limitation.MaxSubscriptions = defaultMaxSubscriptions
 	}
-	if limitation.MaxIndexableTags == 0 {
-		limitation.MaxIndexableTags = defaultMaxIndexableTags
+	if md.Limitation.MaxIndexableTags == 0 {
+		md.Limitation.MaxIndexableTags = defaultMaxIndexableTags
 	}
 
 	// pow.min/pow.strict are the single source of truth for
 	// Limitation.MinPowDifficulty/StrictPow -- those two Limitation fields
 	// are mapstructure:"-" specifically so nip11.limitation in YAML can't
 	// set them directly, avoiding two config paths for the same value.
-	// config.Pow == nil leaves both at their zero value (0/false), i.e. no
+	// cfg.Pow == nil leaves both at their zero value (0/false), i.e. no
 	// requirement, same as omitting the block.
-	if config.Pow != nil {
-		limitation.MinPowDifficulty = config.Pow.Min
-		limitation.StrictPow = config.Pow.Strict
+	if cfg.Pow != nil {
+		md.Limitation.MinPowDifficulty = cfg.Pow.Min
+		md.Limitation.StrictPow = cfg.Pow.Strict
 	}
-
-	config.Nip11 = nip11.Metadata{
-		Name:        config.Nip11.Name,
-		PubKey:      config.Nip11.PubKey,
-		Contact:     config.Nip11.Contact,
-		Description: config.Nip11.Description,
-		Software:    build.Software,
-		Version:     build.Version,
-		Limitation:  limitation,
-		PrivKey:     priv,
-		URL:         url,
-		Self:        self,
-	}
-
-	return nil
 }
 
 // RunRelay starts the relay server and blocks until SIGINT/SIGTERM. Startup

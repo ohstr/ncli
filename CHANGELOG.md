@@ -6,6 +6,13 @@
 
 - Fixes `nip11.icon` in the relay config being dropped at startup, so the
   NIP-11 document had no icon unless one was set through NIP-86. ([#165](https://github.com/ohstr/ncli/pull/165))
+- Fixes the relay homepage showing a broken image when the icon URL doesn't
+  load; it falls back to the operator's picture, then the placeholder. ([#165](https://github.com/ohstr/ncli/pull/165))
+
+### Changed
+
+- The relay homepage's tab always shows the ncli favicon, no longer the
+  relay's icon. ([#165](https://github.com/ohstr/ncli/pull/165))
 
 ## [0.8.0-rc.28]
 

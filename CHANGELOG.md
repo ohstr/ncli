@@ -6,7 +6,7 @@
 
 - Adds the ncli logo to the relay dashboard and homepage, with a favicon on
   both. The homepage's tab switches to the relay's own NIP-11 icon once it
-  loads.
+  loads. ([#164](https://github.com/ohstr/ncli/pull/164))
 
 ## [0.8.0-rc.27]
 

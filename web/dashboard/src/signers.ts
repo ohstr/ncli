@@ -36,6 +36,15 @@ export function secretKeySigner(sk: Uint8Array): SignFn {
   };
 }
 
+// keptKeySigner signs with sk for as long as this tab keeps it, so the
+// session can be renewed; release() wipes it (sign-out, or tab closing).
+export function keptKeySigner(sk: Uint8Array): { sign: SignFn; release: () => void } {
+  return {
+    sign: async (ev: LoginTemplate) => finalizeEvent(ev, sk),
+    release: () => sk.fill(0),
+  };
+}
+
 export const DEFAULT_SIGNER_RELAY = "wss://relay.nsec.app";
 
 interface Remote {

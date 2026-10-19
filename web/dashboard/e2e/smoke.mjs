@@ -205,6 +205,57 @@ try {
     await ctx.close();
   }
 
+  // 4b. Remember the key, encrypted; unlock it later; survive expiry.
+  {
+    const ctx = await browser.newContext();
+    const page = await ctx.newPage();
+    watch(page, "saved-key");
+    await page.addInitScript(cspProbe);
+    await page.goto(`${admin}/admin/ui/`);
+    await page.getByRole("tab", { name: "Secret key" }).click();
+    await page.getByLabel("nsec or hex secret key").fill(key.nsec);
+    await page.getByLabel(/Remember on this browser/).check();
+    await page.getByLabel("Password", { exact: true }).fill("correct horse battery");
+    await page.getByLabel("Repeat password").fill("correct horse battery");
+    await page.getByRole("button", { name: "Sign in", exact: true }).click();
+    await signedIn(page, "remembered key");
+    const stored = await page.evaluate(() => localStorage.getItem("ncli-dashboard:saved-key") ?? "");
+    check(stored.includes("ncryptsec1") && !stored.includes(key.nsec) && !stored.includes(key.priv_hex), "only an ncryptsec is stored");
+
+    // Expiry with the key kept in the tab: renewed silently.
+    await ctx.clearCookies();
+    await page.waitForTimeout(4500);
+    check((await page.locator(".kpis").count()) === 1, "an expired session renews while the tab keeps the key");
+
+    // A reload keeps a live session; after signing out the saved key is
+    // offered first, behind the password.
+    await page.reload();
+    await page.locator(".kpis").waitFor();
+    check(true, "a reload keeps the session");
+    await page.getByRole("button", { name: "Sign out" }).click();
+    await page.getByRole("tab", { name: "Saved key" }).waitFor();
+    check((await page.getByRole("tab", { name: "Saved key" }).getAttribute("aria-selected")) === "true", "a saved key is offered first");
+    await page.getByLabel("Password", { exact: true }).fill("wrong password!");
+    await page.getByRole("button", { name: "Unlock and sign in" }).click();
+    await page.getByRole("alert").getByText("Wrong password.").waitFor({ timeout: 15000 });
+    check(true, "a wrong password is refused");
+    await page.getByLabel(/Stay signed in/).uncheck();
+    await page.getByLabel("Password", { exact: true }).fill("correct horse battery");
+    await page.getByRole("button", { name: "Unlock and sign in" }).click();
+    await signedIn(page, "unlocked key");
+
+    // Expiry without a kept key: back to sign-in, not a broken page.
+    await ctx.clearCookies();
+    await page.getByRole("tab", { name: "Saved key" }).waitFor({ timeout: 15000 });
+    check(true, "an expired session without a kept key returns to sign-in");
+
+    page.once("dialog", (d) => void d.accept());
+    await page.getByRole("button", { name: "Forget this key" }).click();
+    check((await page.getByRole("tab", { name: "Saved key" }).count()) === 0, "forget removes the saved key");
+    check((await page.evaluate(() => localStorage.getItem("ncli-dashboard:saved-key"))) === null, "nothing left in storage");
+    await ctx.close();
+  }
+
   // NIP-46 against ncli's own bunker, on the test relay.
   const relayWS = `ws://127.0.0.1:${port}`;
   ncli(["bunker", "--identity", key.nsec, "--relay", relayWS, "--json", "-q"]);
@@ -230,7 +281,7 @@ try {
     watch(page, "bunker");
     await page.addInitScript(cspProbe);
     await page.goto(`${admin}/admin/ui/`);
-    await page.getByRole("tab", { name: "Remote signer" }).click();
+    await page.getByRole("tab", { name: "Remote" }).click();
     await page.getByLabel("bunker:// URL or NIP-05 name").fill(bunkerURL ?? "");
     await page.getByRole("button", { name: "Connect and sign in" }).click();
     await signedIn(page, "bunker://");
@@ -244,7 +295,7 @@ try {
     watch(page, "nostrconnect");
     await page.addInitScript(cspProbe);
     await page.goto(`${admin}/admin/ui/`);
-    await page.getByRole("tab", { name: "Remote signer" }).click();
+    await page.getByRole("tab", { name: "Remote" }).click();
     await page.getByLabel("Scan with signer app").check();
     await page.getByLabel("Relay your signer listens on").fill(relayWS);
     await page.getByRole("button", { name: "Show code" }).click();

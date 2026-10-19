@@ -393,6 +393,11 @@ footer {
   font-size: 13px;
 }
 
+footer .by {
+  vertical-align: -3px;
+  margin-right: 6px;
+}
+
 @media (max-width: 520px) {
   h1 {
     font-size: 22px;

@@ -3,6 +3,7 @@ import { encode } from "uqr";
 import { npubEncode } from "nostr-tools/nip19";
 import { ApiError, hasSigner, login, loginWith, setCsrf, setRenewer, type Session } from "./api";
 import { canRemember, forgetKey, MIN_PASSWORD, savedKey, saveKey, unlockKey } from "./keystore";
+import mark from "./brand/ncli-mark.svg";
 import {
   bunkerSigner,
   DEFAULT_SIGNER_RELAY,
@@ -76,6 +77,7 @@ export function Login({ onSession }: { onSession: (s: Session) => void }) {
 
   return (
     <div className="login">
+      <img className="brand" src={mark} alt="" width="48" height="48" />
       <h1>Relay Monitor</h1>
       <p className="muted">Sign in with the relay's admin key. Only a signed login event leaves this page.</p>
 

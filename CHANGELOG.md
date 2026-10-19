@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0-rc.29]
+
+### Fixed
+
+- Fixes `nip11.icon` in the relay config being dropped at startup, so the
+  NIP-11 document had no icon unless one was set through NIP-86.
+
 ## [0.8.0-rc.28]
 
 ### Added

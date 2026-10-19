@@ -9,6 +9,8 @@ nip11:
   pubkey: 3c1db3dd55e2ff09ba5317dd8eec2339797e9e2ddf74591172735c47f3a2ad6e
   contact: admin@example.com
   description: "A community relay"
+  # URL of the relay's icon. NIP-86 changerelayicon overrides it at runtime.
+  icon: "https://relay.example.com/icon.png"
 
   # url: required if limitation.auth_required is true.
   # url: "wss://relay.example.com"
@@ -119,9 +121,9 @@ membership:
   publishAddRemoveEvents: false
 
 # NIP-86, the Relay Management API (optional): bans, kind rules, blocked IPs
-# and the relay's name/description/icon on any relay, plus the NIP-43
-# membership methods when membership.enabled is on. Moderation state is kept
-# in <store>.moderation.json. Omitting this block leaves it off.
+# and runtime overrides of nip11's name/description/icon on any relay, plus
+# the NIP-43 membership methods when membership.enabled is on. Moderation
+# state is kept in <store>.moderation.json. Omitting this block leaves it off.
 nip86:
   # Serves the API for requests to the relay URL carrying
   # Content-Type: application/nostr+json+rpc. The WebSocket upgrade and the

@@ -278,7 +278,9 @@ ncli relay dashboard --config relay.yaml
 - Who may sign in: the relay's key, `nip86.admins`, and `admin.pubkeys`
   (npub or hex) -- list personal keys there so admins don't use the relay's.
   The dashboard signs in with a NIP-07 extension, an nsec (signed in the
-  page, never sent or stored) or a NIP-46 signer (`bunker://` URL, or a
+  page, never sent; "remember" saves it in that browser only as a NIP-49
+  `ncryptsec` under a password, unlocked on the next visit; "stay signed in"
+  keeps it in the tab's memory to renew the session) or a NIP-46 signer (`bunker://` URL, or a
   `nostrconnect://` QR for Amber/nsec.app/`ncli bunker connect`). Its CSP
   allows WebSockets to any `wss://` relay (and `ws://localhost`) for that.
 - A browser opening the relay's public URL gets a homepage built from its

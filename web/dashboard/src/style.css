@@ -461,3 +461,30 @@ button.danger {
   width: auto;
   margin-top: 0;
 }
+
+.method label.check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.saved-who {
+  margin: 0;
+  font-size: 13px;
+}
+
+.login .ghost {
+  margin-top: 0;
+}
+
+.tabs {
+  gap: 0;
+}
+
+.tab {
+  min-width: 0;
+  padding: 6px 4px;
+  font-size: 13px;
+}

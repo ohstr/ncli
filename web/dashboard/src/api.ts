@@ -62,14 +62,73 @@ export function setCsrf(token: string) {
   csrf = token;
 }
 
-async function call<T>(method: string, path: string, body?: unknown, headers: Record<string, string> = {}): Promise<T> {
+// When the tab still holds a signer (a key sign-in kept for this tab), an
+// expired session is renewed without asking; otherwise the app is told the
+// session is gone so it can show the sign-in screen.
+let renewer: SignFn | null = null;
+let release: (() => void) | null = null;
+let renewing: Promise<Session> | null = null;
+let expired: () => void = () => {};
+let renewed: (s: Session) => void = () => {};
+
+// setRenewer keeps sign for renewals; the previous one's key is released.
+// setRenewer(null) on sign-out wipes it.
+export function setRenewer(sign: SignFn | null, onRelease?: () => void) {
+  release?.();
+  renewer = sign;
+  release = onRelease ?? null;
+}
+
+export function canRenew(): boolean {
+  return renewer !== null;
+}
+
+export function onSession(handlers: { expired: () => void; renewed: (s: Session) => void }) {
+  expired = handlers.expired;
+  renewed = handlers.renewed;
+}
+
+// renew signs in again with the kept signer; concurrent callers share one try.
+export function renew(): Promise<Session> {
+  if (!renewer) return Promise.reject(new ApiError(401, "session expired"));
+  if (!renewing) {
+    const sign = renewer;
+    renewing = loginWith(sign)
+      .then((s) => {
+        setCsrf(s.csrf);
+        renewed(s);
+        return s;
+      })
+      .finally(() => {
+        renewing = null;
+      });
+  }
+  return renewing;
+}
+
+async function send(method: string, path: string, body?: unknown, headers: Record<string, string> = {}): Promise<Response> {
   const init: RequestInit = { method, credentials: "same-origin", headers: { ...headers } };
   if (method !== "GET") (init.headers as Record<string, string>)["X-CSRF-Token"] = csrf;
   if (body !== undefined) {
     init.body = JSON.stringify(body);
     (init.headers as Record<string, string>)["Content-Type"] = "application/json";
   }
-  const res = await fetch(path, init);
+  return fetch(path, init);
+}
+
+async function call<T>(method: string, path: string, body?: unknown, headers: Record<string, string> = {}): Promise<T> {
+  let res = await send(method, path, body, headers);
+  if (res.status === 401 && path !== "/admin/api/login") {
+    if (renewer) {
+      try {
+        await renew();
+        res = await send(method, path, body, headers);
+      } catch {
+        /* fall through to expiry */
+      }
+    }
+    if (res.status === 401) expired();
+  }
   const text = await res.text();
   if (!res.ok) {
     let msg = text.trim() || res.statusText;

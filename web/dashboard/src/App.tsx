@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { api, setCsrf, type IndexInfo, type Job, type Point, type Session } from "./api";
+import { api, canRenew, onSession, renew, setCsrf, setRenewer, type IndexInfo, type Job, type Point, type Session } from "./api";
 import { Chart, type Line } from "./Chart";
 import { ago, formatBytes, formatMs, formatUptime, formatValue } from "./format";
 import { MetricsStore } from "./store";
@@ -276,6 +276,14 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
     return () => store.stop();
   }, [store]);
 
+  // A dropped stream may be an expired session: asking renews it (when the
+  // tab keeps a key) or returns to the sign-in screen.
+  useEffect(() => {
+    if (live) return;
+    const t = setTimeout(() => void api.session().catch(() => {}), 3000);
+    return () => clearTimeout(t);
+  }, [live]);
+
   return (
     <div className="page">
       <header>
@@ -338,9 +346,30 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
   );
 }
 
+// renewLead is how long before expiry a kept key renews the session.
+const renewLead = 60;
+
 export function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [checked, setChecked] = useState(false);
+
+  useEffect(() => {
+    onSession({
+      expired: () => {
+        setRenewer(null);
+        setSession(null);
+      },
+      renewed: setSession,
+    });
+  }, []);
+
+  // Renew a minute before the session ends, while the tab keeps a key.
+  useEffect(() => {
+    if (!session?.expires_at || !canRenew()) return;
+    const ms = Math.max(5, session.expires_at - Date.now() / 1000 - renewLead) * 1000;
+    const t = setTimeout(() => void renew().catch(() => setSession(null)), ms);
+    return () => clearTimeout(t);
+  }, [session]);
 
   useEffect(() => {
     api
@@ -364,6 +393,7 @@ export function App() {
     <Dashboard
       session={session}
       onLogout={() => {
+        setRenewer(null);
         void api.logout().finally(() => setSession(null));
       }}
     />

@@ -455,8 +455,9 @@ admin:
   metrics: {enabled: true, tokensFile: ./data/metrics.tokens}
 ```
 
-Sign in with a browser extension, an nsec (signed in the page, never sent)
-or a remote signer (`bunker://` or a `nostrconnect://` QR code).
+Sign in with a browser extension, an nsec (signed in the page, never sent;
+optionally remembered encrypted with a password) or a remote signer
+(`bunker://` or a `nostrconnect://` QR code).
 
 ```sh
 # create a scrape token (printed once)

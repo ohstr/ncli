@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.8.0-rc.27]
+
+### Added
+
+- Adds "remember on this browser" to the dashboard's secret-key sign-in: the
+  key is saved only as a password-encrypted NIP-49 `ncryptsec` and unlocked
+  with the password on the next visit. Left off, sign-in stays temporary.
+- Adds session renewal: after a key sign-in the dashboard renews its session
+  while the tab stays open.
+
+### Fixed
+
+- Fixes the dashboard staying on "reconnecting…" with failing panels when its
+  session expired; it now returns to the sign-in screen.
+
 ## [0.8.0-rc.26]
 
 ### Added

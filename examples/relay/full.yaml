@@ -11,6 +11,9 @@ nip11:
   description: "A community relay"
   # URL of the relay's icon. NIP-86 changerelayicon overrides it at runtime.
   icon: "https://relay.example.com/icon.png"
+  # URL of a wide banner image (about 3:1). The homepage shows an ncli banner
+  # when it's unset or fails to load.
+  banner: "https://relay.example.com/banner.png"
 
   # url: required if limitation.auth_required is true.
   # url: "wss://relay.example.com"

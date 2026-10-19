@@ -5,7 +5,7 @@
 ### Fixed
 
 - Fixes `nip11.icon` in the relay config being dropped at startup, so the
-  NIP-11 document had no icon unless one was set through NIP-86.
+  NIP-11 document had no icon unless one was set through NIP-86. ([#165](https://github.com/ohstr/ncli/pull/165))
 
 ## [0.8.0-rc.28]
 

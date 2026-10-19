@@ -17,6 +17,7 @@ export interface Info {
   pubkey?: string;
   contact?: string;
   icon?: string;
+  banner?: string;
   software?: string;
   version?: string;
   supported_nips?: (number | string)[];
@@ -107,6 +108,53 @@ export function safeURL(u: unknown): string {
 // next one when an image fails to load, then to a letter placeholder.
 export function iconCandidates(icon: unknown, picture: unknown): string[] {
   return [safeURL(icon), safeURL(picture)].filter((u) => u !== "");
+}
+
+// isTopLevelNote keeps kind-1 notes that aren't replies (no "e" tag), the
+// way a profile's "Notes" tab does.
+export function isTopLevelNote(ev: NostrEvent): boolean {
+  return ev.kind === 1 && !ev.tags.some((t) => t[0] === "e");
+}
+
+export type NotePart = { type: "text" | "link" | "image" | "mention"; value: string };
+
+const NOTE_TOKEN = /(https?:\/\/[^\s<>"]+|nostr:(?:npub|nprofile|note|nevent|naddr)1[02-9ac-hj-np-z]+)/gi;
+const IMAGE_EXT = /\.(png|jpe?g|gif|webp|avif)(\?[^\s]*)?$/i;
+
+// noteParts splits a note's content into text, links, inline images and
+// nostr: mentions, so it renders as text nodes and never as HTML.
+export function noteParts(content: string): NotePart[] {
+  const parts: NotePart[] = [];
+  let last = 0;
+  for (const m of content.matchAll(NOTE_TOKEN)) {
+    let token = m[0];
+    // Trailing punctuation belongs to the sentence, not the URL.
+    const trail = token.match(/[.,;:!?)\]]+$/)?.[0] ?? "";
+    token = token.slice(0, token.length - trail.length);
+    const start = m.index ?? 0;
+    if (start > last) parts.push({ type: "text", value: content.slice(last, start) });
+    if (token.startsWith("nostr:")) parts.push({ type: "mention", value: token.slice(6) });
+    else if (safeURL(token)) parts.push({ type: IMAGE_EXT.test(new URL(token).pathname) ? "image" : "link", value: safeURL(token) });
+    else parts.push({ type: "text", value: token });
+    last = start + token.length;
+  }
+  if (last < content.length) parts.push({ type: "text", value: content.slice(last) });
+  return parts;
+}
+
+// ago formats a Unix timestamp relative to now, coarse like a feed.
+export function ago(ts: number, now = Date.now() / 1000): string {
+  const s = Math.max(0, Math.floor(now - ts));
+  if (s < 60) return "now";
+  if (s < 3600) return `${Math.floor(s / 60)}m`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h`;
+  if (s < 30 * 86400) return `${Math.floor(s / 86400)}d`;
+  return new Date(ts * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+// shortKey abbreviates a bech32 entity for display: npub1abcd…wxyz.
+export function shortKey(s: string): string {
+  return s.length > 20 ? `${s.slice(0, 10)}…${s.slice(-4)}` : s;
 }
 
 // contactLink turns NIP-11's free-form contact into a link when it is one.

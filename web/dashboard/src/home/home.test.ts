@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { npubEncode as reference } from "nostr-tools/nip19";
 import { npubEncode } from "./bech32";
 import { nipLink } from "./nips";
-import { contactLink, iconCandidates, relayURL, safeURL } from "./relay";
+import { ago, contactLink, iconCandidates, isTopLevelNote, noteParts, relayURL, safeURL } from "./relay";
 
 describe("homepage helpers", () => {
   it("encodes npubs exactly like nostr-tools", () => {
@@ -17,6 +17,34 @@ describe("homepage helpers", () => {
     expect(safeURL("javascript:alert(1)")).toBe("");
     expect(safeURL("data:text/html,<b>")).toBe("");
     expect(safeURL(42)).toBe("");
+  });
+
+  it("splits note content into text, links, images and mentions", () => {
+    const npub = "npub1sg6plzptd64u62a878hep2kev88swjh3tw00gjsfl8f237lmu63q0uf63m";
+    expect(noteParts(`hi https://x.example/a.png and https://x.example/page. nostr:${npub}!`)).toEqual([
+      { type: "text", value: "hi " },
+      { type: "image", value: "https://x.example/a.png" },
+      { type: "text", value: " and " },
+      { type: "link", value: "https://x.example/page" },
+      { type: "text", value: ". " },
+      { type: "mention", value: npub },
+      { type: "text", value: "!" },
+    ]);
+    expect(noteParts("<script>alert(1)</script>")).toEqual([{ type: "text", value: "<script>alert(1)</script>" }]);
+  });
+
+  it("keeps top-level notes only", () => {
+    const ev = { id: "a", pubkey: "p", kind: 1, created_at: 0, content: "" };
+    expect(isTopLevelNote({ ...ev, tags: [] })).toBe(true);
+    expect(isTopLevelNote({ ...ev, tags: [["e", "x"]] })).toBe(false);
+    expect(isTopLevelNote({ ...ev, kind: 7, tags: [] })).toBe(false);
+  });
+
+  it("formats relative times", () => {
+    expect(ago(1000, 1030)).toBe("now");
+    expect(ago(1000, 1000 + 5 * 60)).toBe("5m");
+    expect(ago(1000, 1000 + 3 * 3600)).toBe("3h");
+    expect(ago(1000, 1000 + 2 * 86400)).toBe("2d");
   });
 
   it("orders icon sources NIP-11 first, dropping unusable ones", () => {

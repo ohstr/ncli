@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { npubEncode } from "./bech32";
 import { HIGHLIGHTS, NIP_TITLES, nipLink } from "./nips";
-import { contactLink, fetchInfo, iconCandidates, query, relayURL, safeURL, type Info, type NostrEvent } from "./relay";
+import { ago, contactLink, fetchInfo, iconCandidates, isTopLevelNote, noteParts, query, relayURL, safeURL, shortKey, type Info, type NostrEvent } from "./relay";
+import fallbackBanner from "../brand/ncli-banner.svg";
 import mark from "../brand/ncli-mark.svg";
 
 interface Profile {
@@ -102,17 +103,70 @@ function Limits({ lim }: { lim: Info["limitation"] }) {
   );
 }
 
+const NOTES_SHOWN = 10;
+
+function NoteContent({ content }: { content: string }) {
+  return (
+    <div className="note-body">
+      {noteParts(content).map((p, i) => {
+        switch (p.type) {
+          case "image":
+            return (
+              <a key={i} href={p.value} target="_blank" rel="noreferrer noopener">
+                <img className="note-img" src={p.value} alt="" loading="lazy" referrerPolicy="no-referrer" onError={(e) => (e.currentTarget.style.display = "none")} />
+              </a>
+            );
+          case "link":
+            return (
+              <a key={i} href={p.value} target="_blank" rel="noreferrer noopener">
+                {p.value.replace(/^https?:\/\//, "")}
+              </a>
+            );
+          case "mention":
+            return (
+              <span key={i} className="mention">
+                {shortKey(p.value)}
+              </span>
+            );
+          default:
+            return <span key={i}>{p.value}</span>;
+        }
+      })}
+    </div>
+  );
+}
+
+function Note({ ev, name, picture }: { ev: NostrEvent; name: string; picture: string }) {
+  return (
+    <li className="note">
+      {picture ? <img className="note-avatar" src={picture} alt="" referrerPolicy="no-referrer" /> : <span className="note-avatar placeholder">{name.slice(0, 1).toUpperCase()}</span>}
+      <div className="note-main">
+        <div className="note-head">
+          <strong>{name}</strong>
+          <time className="muted" dateTime={new Date(ev.created_at * 1000).toISOString()} title={new Date(ev.created_at * 1000).toLocaleString()}>
+            {ago(ev.created_at)}
+          </time>
+        </div>
+        <NoteContent content={ev.content} />
+      </div>
+    </li>
+  );
+}
+
 export function Home() {
   const [info, setInfo] = useState<Info | null>(null);
   const [error, setError] = useState("");
   const [status, setStatus] = useState<Status>({ state: "checking" });
   const [profile, setProfile] = useState<Profile | null>(null);
   const [groups, setGroups] = useState<Group[]>([]);
+  const [notes, setNotes] = useState<NostrEvent[]>([]);
   const [showAll, setShowAll] = useState(false);
-  // Image URLs that failed to load, so the icon falls through to the next one.
+  // Image URLs that failed to load, so the icon and banner fall back.
   const [broken, setBroken] = useState<ReadonlySet<string>>(new Set());
   const url = relayURL();
   const icon = info ? iconCandidates(info.icon, profile?.picture).find((u) => !broken.has(u)) ?? "" : "";
+  const nip11Banner = safeURL(info?.banner);
+  const banner = nip11Banner && !broken.has(nip11Banner) ? nip11Banner : fallbackBanner;
   const markBroken = (u: string) => setBroken((b) => new Set(b).add(u));
 
   useEffect(() => {
@@ -142,6 +196,18 @@ export function Home() {
         }
       })
       .catch((e) => setStatus({ state: "offline", why: (e as Error).message }));
+    if (/^[0-9a-f]{64}$/.test(pk) && !restricted) {
+      query(url, { kinds: [1], authors: [pk], limit: 30 })
+        .then((p) =>
+          setNotes(
+            p.events
+              .filter(isTopLevelNote)
+              .sort((a, b) => b.created_at - a.created_at)
+              .slice(0, NOTES_SHOWN),
+          ),
+        )
+        .catch(() => {});
+    }
     const nips = (info.supported_nips ?? []).map(String);
     if (nips.includes("29") && !restricted) {
       query(url, { kinds: [39000], limit: 24 })
@@ -162,7 +228,6 @@ export function Home() {
   if (!info) return <main className="home" aria-busy="true" />;
 
   const nips = (info.supported_nips ?? []).map(String);
-  const banner = safeURL(profile?.banner);
   const npub = npubEncode(info.pubkey ?? "");
   const contact = contactLink(info.contact ?? "");
   const highlights = HIGHLIGHTS.filter((h) => nips.includes(h.nip));
@@ -171,24 +236,36 @@ export function Home() {
   return (
     <main className="home">
       <header className="hero">
-        {banner && <img className="banner" src={banner} alt="" referrerPolicy="no-referrer" />}
+        <img key={banner} className="banner" src={banner} alt="" referrerPolicy="no-referrer" onError={() => banner !== fallbackBanner && markBroken(banner)} />
         <div className="hero-body">
-          {icon ? <img key={icon} className="icon" src={icon} alt="" referrerPolicy="no-referrer" onError={() => markBroken(icon)} /> : <div className="icon placeholder">{(info.name || "R").slice(0, 1).toUpperCase()}</div>}
-          <div className="hero-text">
-            <h1>{info.name || "Nostr relay"}</h1>
+          <div className="hero-top">
+            {icon ? <img key={icon} className="icon" src={icon} alt="" referrerPolicy="no-referrer" onError={() => markBroken(icon)} /> : <div className="icon placeholder">{(info.name || "R").slice(0, 1).toUpperCase()}</div>}
             <span className={`status ${status.state}`} role="status">
               {status.state === "checking" && "Checking…"}
               {status.state === "online" && `Online · ${status.ms} ms`}
               {status.state === "offline" && `Unreachable: ${status.why}`}
             </span>
           </div>
-        </div>
-        {info.description && <p className="description">{info.description}</p>}
-        <div className="connect">
-          <span className="label">Add this relay to your Nostr client</span>
-          <CopyField value={url} label="Relay address" />
+          <h1>{info.name || "Nostr relay"}</h1>
+          {(profile?.nip05 || npub) && <span className="handle">{profile?.nip05 || shortKey(npub)}</span>}
+          {info.description && <p className="description">{info.description}</p>}
+          <div className="connect">
+            <span className="label">Add this relay to your Nostr client</span>
+            <CopyField value={url} label="Relay address" />
+          </div>
         </div>
       </header>
+
+      {notes.length > 0 && (
+        <section>
+          <h2>Latest notes</h2>
+          <ul className="notes">
+            {notes.map((n) => (
+              <Note key={n.id} ev={n} name={operator || info.name || shortKey(npub)} picture={safeURL(profile?.picture) || icon} />
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section>
         <h2>Who can use it</h2>

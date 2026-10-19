@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 400" preserveAspectRatio="xMidYMid slice" role="img" aria-label="ncli">
+<title>ncli</title>
+<defs>
+<radialGradient id="glowA" cx="0.12" cy="1" r="0.75"><stop offset="0" stop-color="#7B3FE4" stop-opacity=".55"/><stop offset="1" stop-color="#7B3FE4" stop-opacity="0"/></radialGradient>
+<radialGradient id="glowB" cx="0.85" cy="0.05" r="0.6"><stop offset="0" stop-color="#C026D3" stop-opacity=".38"/><stop offset="1" stop-color="#C026D3" stop-opacity="0"/></radialGradient>
+<radialGradient id="glowC" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#5A189A" stop-opacity=".35"/><stop offset="1" stop-color="#5A189A" stop-opacity="0"/></radialGradient>
+<linearGradient id="ring" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5A189A"/><stop offset=".4" stop-color="#7B3FE4"/><stop offset=".78" stop-color="#9D4EDD"/><stop offset="1" stop-color="#C026D3"/></linearGradient>
+<pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.4" fill="#9D4EDD" fill-opacity=".16"/></pattern>
+</defs>
+<rect width="1200" height="400" fill="#0C0A14"/>
+<rect width="1200" height="400" fill="url(#dots)"/>
+<rect width="1200" height="400" fill="url(#glowC)"/>
+<rect width="1200" height="400" fill="url(#glowA)"/>
+<rect width="1200" height="400" fill="url(#glowB)"/>
+<ellipse cx="980" cy="210" rx="250" ry="280" transform="rotate(-24 980 210)" fill="none" stroke="#9D4EDD" stroke-opacity=".14" stroke-width="2"/>
+<ellipse cx="980" cy="210" rx="170" ry="190" transform="rotate(-24 980 210)" fill="none" stroke="url(#ring)" stroke-width="56" stroke-opacity=".9"/>
+<ellipse cx="190" cy="430" rx="150" ry="170" transform="rotate(-24 190 430)" fill="none" stroke="url(#ring)" stroke-width="18" stroke-opacity=".35"/>
+<path d="M934 196l26 18-26 18" fill="none" stroke="#FF3DFF" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="972" y="224" width="40" height="11" rx="3" fill="#FF3DFF"/>
+</svg>

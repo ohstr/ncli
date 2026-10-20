@@ -98,7 +98,7 @@ func TestNewServer_QueryServesAnyValidSigner_NotJustMembers(t *testing.T) {
 	url := bootQueryServer(t, &QueryConfig{Enabled: true})
 	queryURL := url + "/query"
 
-	const nonMemberPrivKey = "0000000000000000000000000000000000000000000000000000000000000f"
+	const nonMemberPrivKey = "000000000000000000000000000000000000000000000000000000000000000f"
 	body := []byte(`[{"kinds":[1]}]`)
 	header, err := common.GenerateNIP98Header(nonMemberPrivKey, queryURL, http.MethodPost, body)
 	require.NoError(t, err)

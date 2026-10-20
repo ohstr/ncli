@@ -4,7 +4,12 @@
 
 ### Fixed
 
+- Fixes relay search (NIP-50) returning profiles newest first; results now come best match first, with `limit` applied after ranking. ([#175](https://github.com/ohstr/ncli/pull/175))
 - Fixes the relay's index job history (`<store>.jobs.json`) being left stale or unreadable when two jobs finished at once, losing `relay jobs list` history on restart. ([#172](https://github.com/ohstr/ncli/pull/172))
+
+### Changed
+
+- Updates nmilat to v0.5.0-rc.31, which also escapes tags like content when computing event ids and tightens NIP-04, NIP-44, private key and NWC response checks. ([#175](https://github.com/ohstr/ncli/pull/175))
 
 ## [0.8.0-rc.30]
 

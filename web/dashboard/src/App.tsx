@@ -101,12 +101,18 @@ interface PanelSpec {
   title: string;
   unit: Unit;
   desc?: string;
+  // w is the width in 24ths (default: the row's); h the plot height in px.
+  w?: Width;
+  h?: number;
 }
 
-const ROWS: { id: string; title: string; panels: PanelSpec[] }[] = [
+type Width = 6 | 8 | 12 | 24;
+
+const ROWS: { id: string; title: string; w: Width; panels: PanelSpec[] }[] = [
   {
     id: "traffic",
     title: "Traffic",
+    w: 12,
     panels: [
       { id: "messages", title: "Messages / s", unit: "rate", desc: "Client messages by type." },
       { id: "events", title: "Events / s", unit: "rate", desc: "EVENT outcomes." },
@@ -117,6 +123,7 @@ const ROWS: { id: string; title: string; panels: PanelSpec[] }[] = [
   {
     id: "latency",
     title: "Latency",
+    w: 8,
     panels: [
       { id: "eventOK", title: "EVENT → OK", unit: "ms", desc: "Time from an EVENT to its OK." },
       { id: "eose", title: "REQ → EOSE", unit: "ms", desc: "Time from a REQ to its EOSE." },
@@ -126,6 +133,7 @@ const ROWS: { id: string; title: string; panels: PanelSpec[] }[] = [
   {
     id: "load",
     title: "Connections and load",
+    w: 8,
     panels: [
       { id: "connections", title: "Sessions and subscriptions", unit: "count" },
       { id: "churn", title: "Connects and send problems / s", unit: "rate" },
@@ -138,6 +146,7 @@ const ROWS: { id: string; title: string; panels: PanelSpec[] }[] = [
   {
     id: "access",
     title: "Access",
+    w: 12,
     panels: [
       { id: "auth", title: "AUTH and admin / s", unit: "rate" },
       { id: "refusedReads", title: "Refused reads / s", unit: "rate" },
@@ -146,6 +155,7 @@ const ROWS: { id: string; title: string; panels: PanelSpec[] }[] = [
   {
     id: "process",
     title: "Process",
+    w: 8,
     panels: [
       { id: "cpu", title: "CPU", unit: "cores" },
       { id: "memory", title: "Memory", unit: "bytes" },
@@ -324,7 +334,7 @@ function Indexes({ onRunning, paused, viewing, onView }: IndexesProps) {
   };
 
   return (
-    <Panel id="indexes" title="Indexes" desc="Search and zap indexes; rebuilds run as jobs." className="wide" viewing={viewing} onView={onView}>
+    <Panel id="indexes" title="Indexes" desc="Search and zap indexes; rebuilds run as jobs." className="w-24 wide" viewing={viewing} onView={onView}>
       {error && <p className="error">{error}</p>}
       <div className="indexes">
         {indexes.map((ix) => (
@@ -442,7 +452,7 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
             {!shut && (
               <div className="grid">
                 {row.panels.map((p) => (
-                  <Chart key={p.id} store={store} {...tv} {...p} lines={CHARTS[p.id]} viewing={view === p.id} onView={setView} />
+                  <Chart key={p.id} store={store} {...tv} w={row.w} {...p} lines={CHARTS[p.id]} viewing={view === p.id} onView={setView} />
                 ))}
               </div>
             )}

@@ -245,10 +245,43 @@ code {
   color: var(--muted);
 }
 
+/* Grafana's 24-column grid; panels span w-6/8/12/24. */
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(24, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.w-6 {
+  grid-column: span 6;
+}
+
+.w-8 {
+  grid-column: span 8;
+}
+
+.w-12 {
+  grid-column: span 12;
+}
+
+.w-24 {
+  grid-column: span 24;
+}
+
+@media (max-width: 1200px) {
+  .w-6,
+  .w-8 {
+    grid-column: span 12;
+  }
+}
+
+@media (max-width: 767px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .grid > * {
+    grid-column: 1 / -1;
+  }
 }
 
 .panel {
@@ -507,7 +540,6 @@ button.danger {
 }
 
 @media (max-width: 480px) {
-  .grid,
   .indexes {
     grid-template-columns: 1fr;
   }

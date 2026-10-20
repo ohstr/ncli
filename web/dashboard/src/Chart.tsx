@@ -33,7 +33,9 @@ interface Props {
   unit: Unit;
   lines: (store: MetricsStore) => Line[];
   desc?: string;
-  height?: number;
+  // w is the grid width in 24ths; h the plot height.
+  w: number;
+  h?: number;
   // range is the visible window in seconds; until freezes it (paused).
   range: number;
   until?: number;
@@ -43,7 +45,7 @@ interface Props {
 
 // Chart draws one panel with uPlot. It redraws from the store on each
 // animation-frame notification and rebuilds only when its series change.
-export function Chart({ id, store, title, unit, lines, desc, height = 150, range, until, viewing, onView }: Props) {
+export function Chart({ id, store, title, unit, lines, desc, w, h: height = 200, range, until, viewing, onView }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const [legend, setLegend] = useState(true);
   const view = useRef({ range, until, viewing, redraw: () => {}, csv: (): string => "" });
@@ -153,7 +155,7 @@ export function Chart({ id, store, title, unit, lines, desc, height = 150, range
       title={title}
       hint={UNITS[unit]}
       desc={desc}
-      className={legend ? "" : "no-legend"}
+      className={`w-${w}${legend ? "" : " no-legend"}`}
       viewing={viewing}
       onView={onView}
       menu={[

@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.8.0-rc.32]
+
+### Fixed
+
+- Fixes `bunker history` losing requests resolved at the same moment as an event log compaction, after a restart.
+
 ## [0.8.0-rc.31]
 
 ### Added

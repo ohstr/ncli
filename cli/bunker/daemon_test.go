@@ -2019,10 +2019,9 @@ func TestDaemon_EventLog_RuntimeCompactionBoundsTheFile(t *testing.T) {
 // checks what -race alone can't: the file stays well under total (proving
 // the runtime trigger actually fired repeatedly rather than only
 // LoadEventLog's own once-at-startup trim eventually catching up) and, once
-// everything settles, the file is still perfectly parseable. Concurrent
-// recordHistory calls race on two independent locks (historyMu, then
-// EventLog's own mu) in sequence rather than one combined one, so this is
-// what proves that's still safe, not just assumed; run with -race.
+// everything settles, the file still parses and holds exactly the entries
+// (and signed events) in daemon.History() -- nothing dropped by a
+// compaction racing another append (#176); run with -race.
 func TestDaemon_EventLog_RuntimeCompactionUnderConcurrency(t *testing.T) {
 	store, err := LoadStore(filepath.Join(t.TempDir(), "sessions.yaml"))
 	if err != nil {
@@ -2047,10 +2046,14 @@ func TestDaemon_EventLog_RuntimeCompactionUnderConcurrency(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
+			id := fmt.Sprintf("req-%d", i)
 			daemon.recordHistory(ResolvedEvent{
-				Pending: Pending{ID: fmt.Sprintf("req-%d", i), Method: "ping"},
+				Pending: Pending{ID: id, Method: "ping"},
 				Verdict: Allow,
 			})
+			if i%2 == 0 {
+				daemon.recordSignedEvent(id, &nip01.Event{Content: id})
+			}
 		}(i)
 	}
 	wg.Wait()
@@ -2076,4 +2079,28 @@ func TestDaemon_EventLog_RuntimeCompactionUnderConcurrency(t *testing.T) {
 	if len(history) != maxHistoryTail {
 		t.Fatalf("daemon.History() len = %d, want maxHistoryTail (%d)", len(history), maxHistoryTail)
 	}
+
+	// Counts alone hide a dropped entry replaced by another one: the file
+	// must hold exactly the in-memory entries, signed events included.
+	inMemory := make(map[string]string, len(history))
+	for _, h := range history {
+		inMemory[h.ID] = signedContent(h)
+	}
+	for _, h := range reloadedHistory {
+		want, ok := inMemory[h.ID]
+		if !ok {
+			t.Errorf("reloaded entry %s is not in daemon.History()", h.ID)
+			continue
+		}
+		if got := signedContent(h); got != want {
+			t.Errorf("reloaded entry %s signed event = %q, want %q", h.ID, got, want)
+		}
+	}
+}
+
+func signedContent(h HistoryEntry) string {
+	if h.Event == nil {
+		return ""
+	}
+	return h.Event.Content
 }

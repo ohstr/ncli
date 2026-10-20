@@ -256,34 +256,30 @@ func (d *Daemon) recordHistory(ev ResolvedEvent) {
 		Event: ev.Pending.Event,
 	}
 
-	if d.cfg.EventLog != nil {
-		if err := d.cfg.EventLog.AppendResolved(h); err != nil {
-			d.log("failed to persist resolved request %s to the event log: %v", h.ID, err)
-		}
-	}
-
+	// historyMu covers the WAL append, the tail append and compaction
+	// together, so a compaction never rewrites events.wal from a tail
+	// missing an entry another resolution already wrote to the file.
+	var appendErr, compactErr error
 	d.historyMu.Lock()
+	if d.cfg.EventLog != nil {
+		appendErr = d.cfg.EventLog.AppendResolved(h)
+	}
 	d.historyTail = append(d.historyTail, h)
 	if len(d.historyTail) > maxHistoryTail {
 		d.historyTail = d.historyTail[len(d.historyTail)-maxHistoryTail:]
 	}
-	d.historyMu.Unlock()
-
-	// A long-lived daemon never restarts, so LoadEventLog's own one-time
-	// startup compact never gets another chance to run -- without this,
-	// events.wal would grow for as long as the process stays up instead of
-	// staying bounded like historyTail already is. CompactDue is a cheap
-	// counter check, so it's fine to ask on every resolution; the actual
-	// rewrite (which needs a fresh copy of historyTail, taken under its own
-	// lock) only happens the rare time the answer is yes.
+	// A long-lived daemon never restarts, so LoadEventLog's one-time
+	// startup compact never runs again -- this keeps events.wal bounded
+	// like historyTail. CompactDue is a cheap counter check.
 	if d.cfg.EventLog != nil && d.cfg.EventLog.CompactDue() {
-		d.historyMu.Lock()
-		tail := make([]HistoryEntry, len(d.historyTail))
-		copy(tail, d.historyTail)
-		d.historyMu.Unlock()
-		if err := d.cfg.EventLog.compact(tail); err != nil {
-			d.log("failed to compact event log: %v", err)
-		}
+		compactErr = d.cfg.EventLog.compact(d.historyTail)
+	}
+	d.historyMu.Unlock()
+	if appendErr != nil {
+		d.log("failed to persist resolved request %s to the event log: %v", h.ID, appendErr)
+	}
+	if compactErr != nil {
+		d.log("failed to compact event log: %v", compactErr)
 	}
 
 	outcome := "rejected"
@@ -323,21 +319,20 @@ func (d *Daemon) recordAutoApproved(p Pending) {
 // history row left to attach to, and nothing else depends on this
 // succeeding.
 func (d *Daemon) recordSignedEvent(requestID string, event *nip01.Event) {
-	found := false
+	// Held across the WAL append too, for the same reason as recordHistory.
+	var err error
 	d.historyMu.Lock()
 	for i := len(d.historyTail) - 1; i >= 0; i-- {
 		if d.historyTail[i].ID == requestID {
 			d.historyTail[i].Event = event
-			found = true
+			if d.cfg.EventLog != nil {
+				err = d.cfg.EventLog.AppendSigned(requestID, event)
+			}
 			break
 		}
 	}
 	d.historyMu.Unlock()
-
-	if !found || d.cfg.EventLog == nil {
-		return
-	}
-	if err := d.cfg.EventLog.AppendSigned(requestID, event); err != nil {
+	if err != nil {
 		d.log("failed to persist signed event for request %s to the event log: %v", requestID, err)
 	}
 }

@@ -243,7 +243,7 @@ func TestHistoryPersists(t *testing.T) {
 	reopened := New(path, zerolog.Nop(), ix)
 	list := reopened.List()
 	if len(list) != keptJobs || list[0].ID != last.ID {
-		t.Fatalf("reloaded %d jobs, newest %s; want %d, newest %s", len(list), list[0].ID, keptJobs, last.ID)
+		t.Fatalf("reloaded %d jobs; want %d, newest %s", len(list), keptJobs, last.ID)
 	}
 
 	// A job recorded as running died with the old process.

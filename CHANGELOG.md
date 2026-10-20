@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.8.0-rc.31]
+
+### Fixed
+
+- Fixes the relay's index job history (`<store>.jobs.json`) being left stale or unreadable when two jobs finished at once, losing `relay jobs list` history on restart. ([#172](https://github.com/ohstr/ncli/pull/172))
+
 ## [0.8.0-rc.30]
 
 ### Added

@@ -35,10 +35,13 @@ func TestStreamBoardFooterFollowsFocus(t *testing.T) {
 	board.down.Update()
 	app.Load(board)
 
-	global := []string{"Switch Panel", "<r> Restart", "Save Snapshot"}
+	global := []string{"<Tab>/<Shift+Tab> Panels", "<r> Restart", "<Ctrl+S> Save", "<Ctrl+C> Quit"}
 
-	// Initial focus: the log.
+	// Initial focus: the log. Its keys lead; board-wide keys follow on line 2.
 	assertHints(t, footerText(app), append(global, "Toggle Wrap", "Toggle AutoScroll"), []string{"Delete", "Sort"})
+	if !strings.HasPrefix(footerText(app), "<w> Toggle Wrap") {
+		t.Errorf("footer %q: want the focused panel's keys first", footerText(app))
+	}
 
 	// Sources: delete and its column sort keys, no log toggles.
 	app.Focus(1)
@@ -57,7 +60,12 @@ func TestInspectBoardFooterEvents(t *testing.T) {
 	board := NewInspectBoard(app, t.Context(), &stream, &FlowLogger{}, events)
 	app.Load(board)
 
-	assertHints(t, footerText(app), []string{"<Enter> View", "Toggle AutoScroll", "Save Event"}, []string{"Save Snapshot", "Wrap", "Delete"})
+	lines := strings.Split(footerText(app), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("footer %q: want 2 lines", footerText(app))
+	}
+	assertHints(t, lines[0], []string{"<Enter> View", "Toggle AutoScroll", "<Ctrl+S> Save Event"}, []string{"Wrap", "Delete"})
+	assertHints(t, lines[1], []string{"<r> Restart", "<Ctrl+C> Quit"}, []string{"Ctrl+S"})
 }
 
 // A single-panel board has nothing to switch to.
@@ -65,5 +73,5 @@ func TestSyncBoardFooterHasNoPanelSwitch(t *testing.T) {
 	app := NewApp().Init()
 	app.Load(NewSyncBoard(app, t.Context(), &FlowLogger{}))
 
-	assertHints(t, footerText(app), []string{"Toggle Wrap", "Save Snapshot"}, []string{"Switch Panel"})
+	assertHints(t, footerText(app), []string{"Toggle Wrap", "<Ctrl+S> Save"}, []string{"Panels"})
 }

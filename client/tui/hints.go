@@ -20,24 +20,29 @@ type hintPanel interface {
 	hints() []string
 }
 
-// applyFooter lists the board-wide keys, then only the focused panel's own.
+// applyFooter puts the focused panel's keys on the first line and the
+// board-wide ones on the second, each short enough for 80 columns.
 func applyFooter(focused tview.Primitive, panels ...hintPanel) string {
-	var hints []string
-	if len(panels) > 1 {
-		hints = append(hints, HintTag("<Tab>/<Shift+Tab>", "Switch Panel"))
-	}
-	hints = append(hints, HintTag("<r>", "Restart"))
-	// A focused EventSaver takes Ctrl+S itself (see App.handleKey).
-	if _, ok := focused.(EventSaver); !ok {
-		hints = append(hints, HintTag("<Ctrl+S>", "Save Snapshot"))
-	}
+	var own []string
 	for _, p := range panels {
 		if p.focusTarget() == focused {
-			hints = append(hints, p.hints()...)
+			own = p.hints()
 			break
 		}
 	}
-	return strings.Join(hints, "   \t")
+
+	var global []string
+	if len(panels) > 1 {
+		global = append(global, HintTag("<Tab>/<Shift+Tab>", "Panels"))
+	}
+	global = append(global, HintTag("<r>", "Restart"))
+	// A focused EventSaver takes Ctrl+S itself (see App.handleKey).
+	if _, ok := focused.(EventSaver); !ok {
+		global = append(global, HintTag("<Ctrl+S>", "Save"))
+	}
+	global = append(global, HintTag("<Ctrl+C>", "Quit"))
+
+	return strings.Join(own, "   ") + "\n" + strings.Join(global, "   ")
 }
 
 func (t *Logger) focusTarget() tview.Primitive { return t.logs }

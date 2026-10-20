@@ -207,6 +207,7 @@ maxConcurrentStoreTasks: 2048
 verificationWorkers: 50
 
 logs:
+  level: info
   filename: ./data/logs/nrelay.log
   maxSize: 100
   maxBackups: 3

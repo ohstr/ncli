@@ -268,9 +268,13 @@ verificationWorkers: 50       # number of signature-verification worker goroutin
 #     tokensFile: /etc/ncli/metrics.tokens
 #     scrapeCacheTTL: 5s
 
-# Custom log rotation (optional). If omitted, logs go to
-# <logdir>/nrelay.log with the same defaults shown here.
+# Logging (optional). If omitted, info and above go to stderr and to
+# <logdir>/nrelay.log (JSON lines) with the rotation defaults shown here.
 logs:
+  # debug also logs every connection and rejected client message
+  level: info
+  # false: stderr only, e.g. when a container runtime already keeps it
+  file: true
   filename: ./data/logs/nrelay.log
   maxSize: 100 # megabytes
   maxBackups: 3

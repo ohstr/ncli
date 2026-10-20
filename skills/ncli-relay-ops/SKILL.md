@@ -72,8 +72,10 @@ Full field table: `references/config-schema.md`.
 ncli relay --config relay.yaml
 ```
 
-Foreground process; stops cleanly on SIGINT/SIGTERM. Logs go to `logdir`
-(or a custom `logs:` rotation block).
+Foreground process; stops cleanly on SIGINT/SIGTERM. Logs go to stderr and
+to `<logdir>/nrelay.log` as JSON lines (or a custom `logs:` rotation block).
+`logs.level: debug` adds per-connection lines; `logs.file: false` keeps
+stderr only.
 
 ## `ncli relay context` — stop repeating `--config`
 

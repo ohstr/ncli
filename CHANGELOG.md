@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.8.0-rc.31]
+
+### Added
+
+- Adds `logs.level` and `logs.file` to the relay config. Per-connection lines now need `debug`, and `file: false` stops writing `nrelay.log` when stderr is already kept.
+
+### Changed
+
+- Writes `nrelay.log` as JSON lines, which costs less CPU per line and reads with `jq`.
+
+### Fixed
+
+- Fixes a `logs:` block without `filename` writing its log to a temp directory instead of `<logdir>/nrelay.log`.
+
 ## [0.8.0-rc.30]
 
 ### Added

@@ -52,6 +52,10 @@ func NewServer(store *relay.EventStore, searchService search.Service) *Service {
 }
 
 func newServer(store *relay.EventStore, searchService search.Service, m *metrics.Metrics) *Service {
+	// Handlers below keep pointers into the config for the server's whole
+	// lifetime, including WebSocket sessions that outlive Close; a copy keeps
+	// them off the package global so swapping it (tests do) can't race them.
+	cfg := config
 
 	// Parse timeouts
 	sessionConfig := relay.SessionConfig{
@@ -129,7 +133,7 @@ func newServer(store *relay.EventStore, searchService search.Service, m *metrics
 
 	wsHandler := relay.NewSessionHandler(
 		store,
-		&config.Nip11,
+		&cfg.Nip11,
 		searchService,
 		relay.WithSessionConfig(sessionConfig),
 	)
@@ -236,7 +240,7 @@ func newServer(store *relay.EventStore, searchService search.Service, m *metrics
 		// MembershipService: a NIP-43 join/leave processed over the
 		// WebSocket must be visible to /query immediately, not through a
 		// separate cache of the same store that updates on its own schedule.
-		mux.Handle("/query", m.HTTP("query", relay.NewQueryHandler(store, &config.Nip11.Limitation, wsHandler.Membership(), wsHandler.Groups())))
+		mux.Handle("/query", m.HTTP("query", relay.NewQueryHandler(store, &cfg.Nip11.Limitation, wsHandler.Membership(), wsHandler.Groups())))
 	}
 
 	if eventsEnabled() {
@@ -245,7 +249,7 @@ func newServer(store *relay.EventStore, searchService search.Service, m *metrics
 		// admin-pubkey allowlist. wsHandler.Membership() for the same
 		// reason /query shares it -- one live membership view, not a
 		// second cache.
-		mux.Handle("/events", m.HTTP("events", relay.NewEventsHandler(store, &config.Nip11.Limitation, wsHandler.Membership(), config.Nip11.Self, relay.WithEventsPolicy(moderation.eventPolicy))))
+		mux.Handle("/events", m.HTTP("events", relay.NewEventsHandler(store, &cfg.Nip11.Limitation, wsHandler.Membership(), config.Nip11.Self, relay.WithEventsPolicy(moderation.eventPolicy))))
 	}
 
 	// ADMIN ENDPOINTS

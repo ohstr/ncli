@@ -1,7 +1,8 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { api, canRenew, onSession, renew, setCsrf, setRenewer, type IndexInfo, type Job, type Point, type Session } from "./api";
 import { Chart, type Line } from "./Chart";
-import { ago, formatBytes, formatMs, formatUptime, formatValue } from "./format";
+import { Panel } from "./Panel";
+import { ago, formatBytes, formatMs, formatUptime, formatValue, type Unit } from "./format";
 import { MetricsStore } from "./store";
 import mark from "./brand/ncli-mark.svg";
 import { applyTheme, savedTheme, type Theme } from "./theme";
@@ -91,6 +92,66 @@ const CHARTS = {
     { key: "open_fds", label: "open fds" },
   ]),
 };
+
+type ChartId = keyof typeof CHARTS;
+
+interface PanelSpec {
+  id: ChartId;
+  title: string;
+  unit: Unit;
+  desc?: string;
+}
+
+const ROWS: { id: string; title: string; panels: PanelSpec[] }[] = [
+  {
+    id: "traffic",
+    title: "Traffic",
+    panels: [
+      { id: "messages", title: "Messages / s", unit: "rate", desc: "Client messages by type." },
+      { id: "events", title: "Events / s", unit: "rate", desc: "EVENT outcomes." },
+      { id: "classes", title: "Events by kind / s", unit: "rate" },
+      { id: "rejected", title: "Rejections by reason / s", unit: "rate" },
+    ],
+  },
+  {
+    id: "latency",
+    title: "Latency",
+    panels: [
+      { id: "eventOK", title: "EVENT → OK", unit: "ms", desc: "Time from an EVENT to its OK." },
+      { id: "eose", title: "REQ → EOSE", unit: "ms", desc: "Time from a REQ to its EOSE." },
+      { id: "store", title: "Store, COUNT and sends", unit: "ms" },
+    ],
+  },
+  {
+    id: "load",
+    title: "Connections and load",
+    panels: [
+      { id: "connections", title: "Sessions and subscriptions", unit: "count" },
+      { id: "churn", title: "Connects and send problems / s", unit: "rate" },
+      { id: "storeQueues", title: "Store queues", unit: "count" },
+      { id: "workers", title: "Workers", unit: "count" },
+      { id: "backpressure", title: "Backpressure / s", unit: "rate", desc: "Work dropped or refused because a queue was full." },
+      { id: "http", title: "HTTP bridges / s", unit: "rate" },
+    ],
+  },
+  {
+    id: "access",
+    title: "Access",
+    panels: [
+      { id: "auth", title: "AUTH and admin / s", unit: "rate" },
+      { id: "refusedReads", title: "Refused reads / s", unit: "rate" },
+    ],
+  },
+  {
+    id: "process",
+    title: "Process",
+    panels: [
+      { id: "cpu", title: "CPU", unit: "cores" },
+      { id: "memory", title: "Memory", unit: "bytes" },
+      { id: "goroutines", title: "Goroutines and fds", unit: "count" },
+    ],
+  },
+];
 
 // ---- live values
 
@@ -219,7 +280,14 @@ function IndexRow({ ix, onAction, busy }: { ix: IndexInfo; onAction: (fn: () => 
   );
 }
 
-function Indexes({ onRunning, paused }: { onRunning: (n: number) => void; paused: boolean }) {
+interface IndexesProps {
+  onRunning: (n: number) => void;
+  paused: boolean;
+  viewing: boolean;
+  onView: (id: string | null) => void;
+}
+
+function Indexes({ onRunning, paused, viewing, onView }: IndexesProps) {
   const [indexes, setIndexes] = useState<IndexInfo[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -255,15 +323,14 @@ function Indexes({ onRunning, paused }: { onRunning: (n: number) => void; paused
   };
 
   return (
-    <section className="panel wide">
-      <h3>Indexes</h3>
+    <Panel id="indexes" title="Indexes" desc="Search and zap indexes; rebuilds run as jobs." className="wide" viewing={viewing} onView={onView}>
       {error && <p className="error">{error}</p>}
       <div className="indexes">
         {indexes.map((ix) => (
           <IndexRow key={ix.name} ix={ix} onAction={act} busy={busy} />
         ))}
       </div>
-    </section>
+    </Panel>
   );
 }
 
@@ -278,6 +345,13 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
   // until is the newest time shown while paused.
   const [until, setUntil] = useState<number | undefined>();
   const tv = { range, until };
+  const [view, setView] = useState<string | null>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setView(null);
+    addEventListener("keydown", onKey);
+    return () => removeEventListener("keydown", onKey);
+  }, []);
   const latest = useLatest(store);
 
   useEffect(() => {
@@ -347,45 +421,18 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
 
       <Kpis p={latest} jobs={jobs} />
 
-      <h2>Traffic</h2>
-      <div className="grid">
-        <Chart store={store} {...tv} title="Messages / s" unit="rate" lines={CHARTS.messages} />
-        <Chart store={store} {...tv} title="Events / s" unit="rate" lines={CHARTS.events} />
-        <Chart store={store} {...tv} title="Events by kind / s" unit="rate" lines={CHARTS.classes} />
-        <Chart store={store} {...tv} title="Rejections by reason / s" unit="rate" lines={CHARTS.rejected} />
-      </div>
+      {ROWS.map((row) => (
+        <div key={row.id}>
+          <h2>{row.title}</h2>
+          <div className="grid">
+            {row.panels.map((p) => (
+              <Chart key={p.id} store={store} {...tv} {...p} lines={CHARTS[p.id]} viewing={view === p.id} onView={setView} />
+            ))}
+          </div>
+        </div>
+      ))}
 
-      <h2>Latency</h2>
-      <div className="grid">
-        <Chart store={store} {...tv} title="EVENT → OK" unit="ms" lines={CHARTS.eventOK} />
-        <Chart store={store} {...tv} title="REQ → EOSE" unit="ms" lines={CHARTS.eose} />
-        <Chart store={store} {...tv} title="Store, COUNT and sends" unit="ms" lines={CHARTS.store} />
-      </div>
-
-      <h2>Connections and load</h2>
-      <div className="grid">
-        <Chart store={store} {...tv} title="Sessions and subscriptions" unit="count" lines={CHARTS.connections} />
-        <Chart store={store} {...tv} title="Connects and send problems / s" unit="rate" lines={CHARTS.churn} />
-        <Chart store={store} {...tv} title="Store queues" unit="count" lines={CHARTS.storeQueues} />
-        <Chart store={store} {...tv} title="Workers" unit="count" lines={CHARTS.workers} />
-        <Chart store={store} {...tv} title="Backpressure / s" unit="rate" lines={CHARTS.backpressure} />
-        <Chart store={store} {...tv} title="HTTP bridges / s" unit="rate" lines={CHARTS.http} />
-      </div>
-
-      <h2>Access</h2>
-      <div className="grid">
-        <Chart store={store} {...tv} title="AUTH and admin / s" unit="rate" lines={CHARTS.auth} />
-        <Chart store={store} {...tv} title="Refused reads / s" unit="rate" lines={CHARTS.refusedReads} />
-      </div>
-
-      <h2>Process</h2>
-      <div className="grid">
-        <Chart store={store} {...tv} title="CPU" unit="cores" lines={CHARTS.cpu} />
-        <Chart store={store} {...tv} title="Memory" unit="bytes" lines={CHARTS.memory} />
-        <Chart store={store} {...tv} title="Goroutines and fds" unit="count" lines={CHARTS.goroutines} />
-      </div>
-
-      <Indexes onRunning={setJobs} paused={until != null} />
+      <Indexes onRunning={setJobs} paused={until != null} viewing={view === "indexes"} onView={setView} />
     </div>
   );
 }

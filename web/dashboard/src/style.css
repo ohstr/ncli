@@ -233,13 +233,111 @@ code {
 .panel {
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 10px 12px 6px;
+  border-radius: 4px;
+  padding: 0 8px 6px;
   min-width: 0;
 }
 
 .panel.wide {
   margin-top: 22px;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+}
+
+.panel-head h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hint {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.info {
+  display: inline-grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--muted);
+  border-radius: 50%;
+  color: var(--muted);
+  font-size: 9px;
+  font-style: italic;
+  cursor: help;
+}
+
+.menu {
+  position: relative;
+}
+
+@media (hover: hover) {
+  .panel-head .menu {
+    opacity: 0;
+  }
+  .panel:hover .menu,
+  .menu:focus-within {
+    opacity: 1;
+  }
+}
+
+button.icon {
+  padding: 0 6px;
+  line-height: 22px;
+  border-color: transparent;
+}
+
+button.icon:hover,
+.menu-list button:hover {
+  background: var(--hover);
+}
+
+.menu-list {
+  position: absolute;
+  right: 0;
+  top: 26px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  padding: 4px 0;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 4px 16px #0000003d;
+}
+
+.menu-list button {
+  border: none;
+  border-radius: 0;
+  text-align: left;
+  padding: 6px 12px;
+}
+
+.panel.viewing {
+  position: fixed;
+  inset: 16px;
+  z-index: 40;
+  margin: 0;
+  overflow: auto;
+  box-shadow: 0 0 0 100vmax #000000a0;
+}
+
+.panel.viewing .menu {
+  opacity: 1;
+}
+
+.no-legend .u-legend {
+  display: none;
 }
 
 .chart {

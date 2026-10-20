@@ -3,7 +3,8 @@ import { api, canRenew, onSession, renew, setCsrf, setRenewer, type IndexInfo, t
 import { Chart, type Line } from "./Chart";
 import { Panel } from "./Panel";
 import { ago, formatValue, type Unit } from "./format";
-import { Kpis } from "./Stats";
+import { EOSE_P99, Kpis, OK_P99 } from "./Stats";
+import type { Thresholds } from "./stats";
 import { MetricsStore } from "./store";
 import mark from "./brand/ncli-mark.svg";
 import { applyTheme, savedTheme, type Theme } from "./theme";
@@ -105,6 +106,7 @@ interface PanelSpec {
   // w is the width in 24ths (default: the row's); h the plot height in px.
   w?: Width;
   h?: number;
+  thresholds?: Thresholds;
 }
 
 type Width = 6 | 8 | 12 | 24;
@@ -126,8 +128,8 @@ const ROWS: { id: string; title: string; w: Width; panels: PanelSpec[] }[] = [
     title: "Latency",
     w: 8,
     panels: [
-      { id: "eventOK", title: "EVENT → OK", unit: "ms", desc: "Time from an EVENT to its OK." },
-      { id: "eose", title: "REQ → EOSE", unit: "ms", desc: "Time from a REQ to its EOSE." },
+      { id: "eventOK", title: "EVENT → OK", unit: "ms", desc: "Time from an EVENT to its OK; dashed lines are the p99 stat thresholds.", thresholds: OK_P99 },
+      { id: "eose", title: "REQ → EOSE", unit: "ms", desc: "Time from a REQ to its EOSE; dashed lines are the p99 stat thresholds.", thresholds: EOSE_P99 },
       { id: "store", title: "Store, COUNT and sends", unit: "ms" },
     ],
   },

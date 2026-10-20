@@ -169,7 +169,7 @@ try {
 
     const messages = page.locator('[data-panel="messages"]');
     await messages.hover();
-    await messages.getByRole("button", { name: "Messages / s menu" }).click();
+    await messages.getByRole("button", { name: "Messages menu" }).click();
     await page.getByRole("menuitem", { name: "View" }).click();
     check((await page.locator(".panel.viewing").count()) === 1 && (await search()).includes("view=messages"), "panel View opens full screen");
     await page.keyboard.press("Escape");

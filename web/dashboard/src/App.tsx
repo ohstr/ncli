@@ -118,10 +118,10 @@ const ROWS: { id: string; title: string; w: Width; panels: PanelSpec[] }[] = [
     title: "Traffic",
     w: 12,
     panels: [
-      { id: "messages", title: "Messages / s", unit: "rate", desc: "Client messages by type." },
-      { id: "events", title: "Events / s", unit: "rate", desc: "EVENT outcomes." },
-      { id: "classes", title: "Events by kind / s", unit: "rate" },
-      { id: "rejected", title: "Rejections by reason / s", unit: "rate" },
+      { id: "messages", title: "Messages", unit: "rate", desc: "Client messages by type." },
+      { id: "events", title: "Events", unit: "rate", desc: "EVENT outcomes." },
+      { id: "classes", title: "Events by kind", unit: "rate" },
+      { id: "rejected", title: "Rejections by reason", unit: "rate" },
     ],
   },
   {
@@ -140,11 +140,11 @@ const ROWS: { id: string; title: string; w: Width; panels: PanelSpec[] }[] = [
     w: 8,
     panels: [
       { id: "connections", title: "Sessions and subscriptions", unit: "count" },
-      { id: "churn", title: "Connects and send problems / s", unit: "rate" },
+      { id: "churn", title: "Connects and send problems", unit: "rate" },
       { id: "storeQueues", title: "Store queues", unit: "count" },
       { id: "workers", title: "Workers", unit: "count" },
-      { id: "backpressure", title: "Backpressure / s", unit: "rate", desc: "Work dropped or refused because a queue was full." },
-      { id: "http", title: "HTTP bridges / s", unit: "rate" },
+      { id: "backpressure", title: "Backpressure", unit: "rate", desc: "Work dropped or refused because a queue was full." },
+      { id: "http", title: "HTTP bridges", unit: "rate" },
     ],
   },
   {
@@ -152,8 +152,8 @@ const ROWS: { id: string; title: string; w: Width; panels: PanelSpec[] }[] = [
     title: "Access",
     w: 12,
     panels: [
-      { id: "auth", title: "AUTH and admin / s", unit: "rate" },
-      { id: "refusedReads", title: "Refused reads / s", unit: "rate" },
+      { id: "auth", title: "AUTH and admin", unit: "rate" },
+      { id: "refusedReads", title: "Refused reads", unit: "rate" },
     ],
   },
   {

@@ -174,6 +174,7 @@ pow:
   min: 0
 
 cache:
+  # also required for `relay index rebuild|drop zaps`
   topZapped:
     enabled: false
     window: 24h

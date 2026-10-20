@@ -218,13 +218,13 @@ where they connect.
 ```sh
 # health and live metrics (--watch: every 2s; NDJSON with --json)
 ncli relay status
-# indexes with their running/last job and an item estimate
+# indexes with their running/last job and approximate entry count
 ncli relay index list
 # rebuild zaps beside the live index and swap it in; wait with progress
 ncli relay index rebuild zaps --follow
 # search: upsert in place, or --fresh to build a new index and swap it in
 ncli relay index rebuild search --fresh --follow
-# estimate only
+# items a rebuild would scan, and entries now; nothing runs
 ncli relay index rebuild all --dry-run
 # empty an index (prompts; --yes required with --json or no terminal)
 ncli relay index drop search --yes
@@ -245,8 +245,13 @@ ncli relay jobs cancel <id>
   own verification queue — leave it off unless verification logic changed.
 - A search rebuild covers every stored profile, past `max_limit`.
 - `search` is `usage` (exit 2) when `cache.search.enabled` is off or
-  `readonly` is set; an unknown index or job id is `not_found` (exit 4); a
-  key that isn't admin is `auth` (exit 7); a stopped relay is `network`.
+  `readonly` is set, and `zaps` when `cache.topZapped.enabled` is off; an
+  unknown index or job id is `not_found` (exit 4); a key that isn't admin
+  is `auth` (exit 7); a stopped relay is `network`.
+- `estimate` is the index's entries (stored profiles for search, zap
+  receipts — kinds 9735/9521 — for zaps); `scan_estimate` is what a rebuild
+  reads (every stored event for zaps). The store indexes zap receipts on
+  ingest even with top-zapped off, so turning it on needs no rebuild.
 - `ncli relay stats`/`reindex`/`clear` no longer exist; they fail with
   `usage` naming the replacement.
 

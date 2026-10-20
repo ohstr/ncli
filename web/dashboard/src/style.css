@@ -88,21 +88,39 @@ body {
 }
 
 .page {
-  max-width: 1600px;
-  margin: 0 auto;
   padding: 16px;
 }
 
-header {
+.topbar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 14px;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  margin: -16px -16px 14px;
+  padding: 8px 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
 }
 
 h1 {
-  font-size: 18px;
+  font-size: 16px;
+  font-weight: 500;
   margin: 0;
+  white-space: nowrap;
 }
 
 .brand {
@@ -374,7 +392,8 @@ button.danger {
   .indexes {
     grid-template-columns: 1fr;
   }
-  header .mono {
+  .topbar .mono,
+  .topbar .status {
     display: none;
   }
 }

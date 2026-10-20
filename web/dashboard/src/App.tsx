@@ -5,6 +5,7 @@ import { ago, formatBytes, formatMs, formatUptime, formatValue } from "./format"
 import { MetricsStore } from "./store";
 import mark from "./brand/ncli-mark.svg";
 import { applyTheme, savedTheme, type Theme } from "./theme";
+import { RANGES } from "./window";
 
 // The sign-in screen carries the signing libraries; a signed-in dashboard
 // never loads them.
@@ -218,7 +219,7 @@ function IndexRow({ ix, onAction, busy }: { ix: IndexInfo; onAction: (fn: () => 
   );
 }
 
-function Indexes({ onRunning }: { onRunning: (n: number) => void }) {
+function Indexes({ onRunning, paused }: { onRunning: (n: number) => void; paused: boolean }) {
   const [indexes, setIndexes] = useState<IndexInfo[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -236,9 +237,10 @@ function Indexes({ onRunning }: { onRunning: (n: number) => void }) {
 
   useEffect(() => {
     void refresh();
+    if (paused) return;
     const timer = setInterval(() => !document.hidden && void refresh(), 3000);
     return () => clearInterval(timer);
-  }, [refresh]);
+  }, [refresh, paused]);
 
   const act = async (fn: () => Promise<unknown>) => {
     setBusy(true);
@@ -272,6 +274,10 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
   const [live, setLive] = useState(false);
   const [jobs, setJobs] = useState(0);
   const [theme, setTheme] = useState<Theme>(savedTheme);
+  const [range, setRange] = useState(3600);
+  // until is the newest time shown while paused.
+  const [until, setUntil] = useState<number | undefined>();
+  const tv = { range, until };
   const latest = useLatest(store);
 
   useEffect(() => {
@@ -289,76 +295,97 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
 
   return (
     <div className="page">
-      <header>
-        <img className="brand" src={mark} alt="" width="26" height="26" />
-        <h1>Relay Monitor</h1>
-        <span className={`dot ${live ? "live" : ""}`} title={live ? "live" : "reconnecting"} />
-        <span className="muted">{live ? "live" : "reconnecting…"}</span>
+      <header className="topbar">
+        <img className="brand" src={mark} alt="" width="24" height="24" />
+        <nav className="crumbs">
+          <span className="muted">ncli</span>
+          <span className="muted">/</span>
+          <h1>Relay Monitor</h1>
+        </nav>
         <span className="spacer" />
-        <select
-          aria-label="Theme"
-          value={theme}
-          onChange={(e) => {
-            const t = e.target.value as Theme;
-            setTheme(t);
-            applyTheme(t);
-          }}
-        >
-          <option value="auto">Auto</option>
-          <option value="dark">Dark</option>
-          <option value="light">Light</option>
-        </select>
-        <span className="muted mono" title={session.pubkey}>
-          {session.pubkey.slice(0, 8)}…{session.pubkey.slice(-6)}
-        </span>
-        {session.expires_at > 0 && (
-          <button onClick={onLogout} className="ghost">
-            Sign out
-          </button>
-        )}
+        <div className="tools">
+          <select aria-label="Time range" value={range} onChange={(e) => setRange(Number(e.target.value))}>
+            {RANGES.map(([label, sec]) => (
+              <option key={sec} value={sec}>
+                Last {label}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="Refresh"
+            value={until == null ? "live" : "paused"}
+            onChange={(e) => setUntil(e.target.value === "paused" ? (store.times.at(-1) ?? Date.now() / 1000) : undefined)}
+          >
+            <option value="live">Live</option>
+            <option value="paused">Paused</option>
+          </select>
+          <span className={`dot ${live ? "live" : ""}`} title={live ? "live" : "reconnecting"} />
+          <span className="muted status">{live ? "live" : "reconnecting…"}</span>
+          <select
+            aria-label="Theme"
+            value={theme}
+            onChange={(e) => {
+              const t = e.target.value as Theme;
+              setTheme(t);
+              applyTheme(t);
+            }}
+          >
+            <option value="auto">Auto</option>
+            <option value="dark">Dark</option>
+            <option value="light">Light</option>
+          </select>
+          <span className="muted mono" title={session.pubkey}>
+            {session.pubkey.slice(0, 8)}…{session.pubkey.slice(-6)}
+          </span>
+          {session.expires_at > 0 && (
+            <button onClick={onLogout} className="ghost">
+              Sign out
+            </button>
+          )}
+        </div>
       </header>
 
       <Kpis p={latest} jobs={jobs} />
 
       <h2>Traffic</h2>
       <div className="grid">
-        <Chart store={store} title="Messages / s" unit="rate" lines={CHARTS.messages} />
-        <Chart store={store} title="Events / s" unit="rate" lines={CHARTS.events} />
-        <Chart store={store} title="Events by kind / s" unit="rate" lines={CHARTS.classes} />
-        <Chart store={store} title="Rejections by reason / s" unit="rate" lines={CHARTS.rejected} />
+        <Chart store={store} {...tv} title="Messages / s" unit="rate" lines={CHARTS.messages} />
+        <Chart store={store} {...tv} title="Events / s" unit="rate" lines={CHARTS.events} />
+        <Chart store={store} {...tv} title="Events by kind / s" unit="rate" lines={CHARTS.classes} />
+        <Chart store={store} {...tv} title="Rejections by reason / s" unit="rate" lines={CHARTS.rejected} />
       </div>
 
       <h2>Latency</h2>
       <div className="grid">
-        <Chart store={store} title="EVENT → OK" unit="ms" lines={CHARTS.eventOK} />
-        <Chart store={store} title="REQ → EOSE" unit="ms" lines={CHARTS.eose} />
-        <Chart store={store} title="Store, COUNT and sends" unit="ms" lines={CHARTS.store} />
+        <Chart store={store} {...tv} title="EVENT → OK" unit="ms" lines={CHARTS.eventOK} />
+        <Chart store={store} {...tv} title="REQ → EOSE" unit="ms" lines={CHARTS.eose} />
+        <Chart store={store} {...tv} title="Store, COUNT and sends" unit="ms" lines={CHARTS.store} />
       </div>
 
       <h2>Connections and load</h2>
       <div className="grid">
-        <Chart store={store} title="Sessions and subscriptions" unit="count" lines={CHARTS.connections} />
-        <Chart store={store} title="Connects and send problems / s" unit="rate" lines={CHARTS.churn} />
-        <Chart store={store} title="Store queues" unit="count" lines={CHARTS.storeQueues} />
-        <Chart store={store} title="Workers" unit="count" lines={CHARTS.workers} />
-        <Chart store={store} title="Backpressure / s" unit="rate" lines={CHARTS.backpressure} />
-        <Chart store={store} title="HTTP bridges / s" unit="rate" lines={CHARTS.http} />
+        <Chart store={store} {...tv} title="Sessions and subscriptions" unit="count" lines={CHARTS.connections} />
+        <Chart store={store} {...tv} title="Connects and send problems / s" unit="rate" lines={CHARTS.churn} />
+        <Chart store={store} {...tv} title="Store queues" unit="count" lines={CHARTS.storeQueues} />
+        <Chart store={store} {...tv} title="Workers" unit="count" lines={CHARTS.workers} />
+        <Chart store={store} {...tv} title="Backpressure / s" unit="rate" lines={CHARTS.backpressure} />
+        <Chart store={store} {...tv} title="HTTP bridges / s" unit="rate" lines={CHARTS.http} />
       </div>
 
       <h2>Access</h2>
       <div className="grid">
-        <Chart store={store} title="AUTH and admin / s" unit="rate" lines={CHARTS.auth} />
-        <Chart store={store} title="Refused reads / s" unit="rate" lines={CHARTS.refusedReads} />
+        <Chart store={store} {...tv} title="AUTH and admin / s" unit="rate" lines={CHARTS.auth} />
+        <Chart store={store} {...tv} title="Refused reads / s" unit="rate" lines={CHARTS.refusedReads} />
       </div>
 
       <h2>Process</h2>
       <div className="grid">
-        <Chart store={store} title="CPU" unit="cores" lines={CHARTS.cpu} />
-        <Chart store={store} title="Memory" unit="bytes" lines={CHARTS.memory} />
-        <Chart store={store} title="Goroutines and fds" unit="count" lines={CHARTS.goroutines} />
+        <Chart store={store} {...tv} title="CPU" unit="cores" lines={CHARTS.cpu} />
+        <Chart store={store} {...tv} title="Memory" unit="bytes" lines={CHARTS.memory} />
+        <Chart store={store} {...tv} title="Goroutines and fds" unit="count" lines={CHARTS.goroutines} />
       </div>
 
-      <Indexes onRunning={setJobs} />
+      <Indexes onRunning={setJobs} paused={until != null} />
     </div>
   );
 }

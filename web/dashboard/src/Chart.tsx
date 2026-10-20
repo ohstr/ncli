@@ -4,6 +4,7 @@ import "uplot/dist/uPlot.min.css";
 import type { MetricsStore } from "./store";
 import { formatValue, type Unit } from "./format";
 import { onThemeChange } from "./theme";
+import { windowRange } from "./window";
 
 export interface Line {
   key: string;
@@ -27,14 +28,19 @@ interface Props {
   title: string;
   unit: Unit;
   lines: (store: MetricsStore) => Line[];
-  stacked?: boolean;
   height?: number;
+  // range is the visible window in seconds; until freezes it (paused).
+  range: number;
+  until?: number;
 }
 
 // Chart draws one panel with uPlot. It redraws from the store on each
 // animation-frame notification and rebuilds only when its series change.
-export function Chart({ store, title, unit, lines, height = 150 }: Props) {
+export function Chart({ store, title, unit, lines, height = 150, range, until }: Props) {
   const host = useRef<HTMLDivElement>(null);
+  const view = useRef({ range, until, redraw: () => {} });
+  view.current.range = range;
+  view.current.until = until;
 
   useEffect(() => {
     const el = host.current;
@@ -43,13 +49,16 @@ export function Chart({ store, title, unit, lines, height = 150 }: Props) {
     let signature = "";
     let current: Line[] = [];
 
-    const data = (): uPlot.AlignedData => [
-      store.times,
-      ...current.map((l) => {
-        const col = store.get(l.key);
-        return l.scale ? col.map((v) => (v == null ? null : v * l.scale!)) : col;
-      }),
-    ];
+    const data = (): uPlot.AlignedData => {
+      const [a, b] = windowRange(store.times, view.current.range, view.current.until);
+      return [
+        store.times.slice(a, b),
+        ...current.map((l) => {
+          const col = store.get(l.key).slice(a, b);
+          return l.scale ? col.map((v) => (v == null ? null : v * l.scale!)) : col;
+        }),
+      ];
+    };
 
     const build = () => {
       plot?.destroy();
@@ -61,7 +70,10 @@ export function Chart({ store, title, unit, lines, height = 150 }: Props) {
           height,
           legend: { live: true },
           cursor: { points: { size: 5 }, drag: { x: false, y: false } },
-          scales: { x: { time: true }, y: { range: (_u, _min, max) => [0, max > 0 ? max * 1.1 : 1] } },
+          scales: {
+            x: { time: true, range: (_u, min, max) => (max == null ? [min, max] : [max - view.current.range, max]) },
+            y: { range: (_u, _min, max) => [0, max > 0 ? max * 1.1 : 1] },
+          },
           axes: [
             { ...axis, space: 70, values: (_u, ticks) => ticks.map(clock) },
             { ...axis, size: 64, values: (_u, ticks) => ticks.map((v) => formatValue(v, unit, true)) },
@@ -83,7 +95,8 @@ export function Chart({ store, title, unit, lines, height = 150 }: Props) {
       );
     };
 
-    const update = () => {
+    const update = (force = false) => {
+      if (plot && !force && view.current.until != null) return;
       const next = lines(store);
       const sig = next.map((l) => l.key).join("|");
       if (sig !== signature || !plot) {
@@ -97,12 +110,13 @@ export function Chart({ store, title, unit, lines, height = 150 }: Props) {
     };
 
     update();
-    const unsubscribe = store.subscribe(update);
+    view.current.redraw = () => update(true);
+    const unsubscribe = store.subscribe(() => update());
     const ro = new ResizeObserver(() => plot?.setSize({ width: Math.max(el.clientWidth, 200), height }));
     ro.observe(el);
     const offTheme = onThemeChange(() => {
       signature = "";
-      update();
+      update(true);
     });
     return () => {
       unsubscribe();
@@ -111,6 +125,8 @@ export function Chart({ store, title, unit, lines, height = 150 }: Props) {
       plot?.destroy();
     };
   }, [store, lines, unit, height]);
+
+  useEffect(() => view.current.redraw(), [range, until]);
 
   return (
     <section className="panel">

@@ -2,7 +2,8 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useState, useSyncExter
 import { api, canRenew, onSession, renew, setCsrf, setRenewer, type IndexInfo, type Job, type Point, type Session } from "./api";
 import { Chart, type Line } from "./Chart";
 import { Panel } from "./Panel";
-import { ago, formatBytes, formatMs, formatUptime, formatValue, type Unit } from "./format";
+import { ago, formatValue, type Unit } from "./format";
+import { Kpis } from "./Stats";
 import { MetricsStore } from "./store";
 import mark from "./brand/ncli-mark.svg";
 import { applyTheme, savedTheme, type Theme } from "./theme";
@@ -170,55 +171,6 @@ function useLatest(store: MetricsStore): Point | null {
   return useSyncExternalStore(
     (fn) => store.subscribe(fn),
     () => store.latest,
-  );
-}
-
-type Level = "ok" | "warn" | "bad" | "";
-
-function Kpi({ label, value, sub, level = "" }: { label: string; value: string; sub?: string; level?: Level }) {
-  return (
-    <div className={`kpi ${level}`}>
-      <span className="kpi-label">{label}</span>
-      <span className="kpi-value">{value}</span>
-      {sub && <span className="kpi-sub">{sub}</span>}
-    </div>
-  );
-}
-
-function level(v: number, warn: number, bad: number): Level {
-  if (!Number.isFinite(v)) return "";
-  return v >= bad ? "bad" : v >= warn ? "warn" : "ok";
-}
-
-function Kpis({ p, jobs }: { p: Point | null; jobs: number }) {
-  const v = p?.v ?? {};
-  const t = p?.totals ?? {};
-  const n = (k: string) => v[k] ?? NaN;
-  const accepted = n("events_total:accepted") || 0;
-  const rejected = n("events_total:rejected") || 0;
-  const handled = accepted + rejected + (n("events_total:duplicate") || 0);
-  const rejectPct = handled > 0 ? (rejected / handled) * 100 : 0;
-  const okP99 = n("event_ok_seconds.p99") * 1000;
-  const eoseP99 = n("req_eose_seconds.p99") * 1000;
-  const queuePct = (n("store_task_queue_depth") / (n("store_task_queue_capacity") || 1)) * 100;
-  const denied = Object.entries(t)
-    .filter(([k]) => k.startsWith("admin_denied_total:"))
-    .reduce((a, [, x]) => a + x, 0);
-  const ms = (x: number) => (Number.isFinite(x) ? formatMs(x) : "–");
-  return (
-    <div className="kpis">
-      <Kpi label="Uptime" value={p ? formatUptime(n("uptime_seconds")) : "–"} />
-      <Kpi label="Sessions" value={formatValue(n("ws_sessions") || 0, "count")} sub={`${formatValue(n("subscriptions_active") || 0, "count")} subs`} />
-      <Kpi label="Events accepted" value={formatValue(accepted, "rate")} sub={`${formatValue(n("messages_total:REQ") || 0, "rate")} REQ`} />
-      <Kpi label="Rejected" value={formatValue(rejectPct, "percent")} level={handled > 0 ? level(rejectPct, 5, 25) : ""} />
-      <Kpi label="EVENT→OK p99" value={ms(okP99)} level={level(okP99, 250, 1000)} />
-      <Kpi label="REQ→EOSE p99" value={ms(eoseP99)} level={level(eoseP99, 500, 2000)} />
-      <Kpi label="Write queue" value={Number.isFinite(queuePct) ? formatValue(queuePct, "percent") : "–"} level={level(queuePct, 50, 90)} />
-      <Kpi label="Store" value={Number.isFinite(n("store_size_bytes")) ? formatBytes(n("store_size_bytes")) : "–"} />
-      <Kpi label="CPU" value={Number.isFinite(n("cpu_seconds_total")) ? formatValue(n("cpu_seconds_total"), "cores") : "–"} sub={Number.isFinite(n("rss_bytes")) ? formatBytes(n("rss_bytes")) : ""} />
-      <Kpi label="Admin denied" value={formatValue(denied, "count")} level={denied > 0 ? "warn" : "ok"} />
-      <Kpi label="Jobs" value={String(jobs)} sub={jobs ? "running" : "idle"} />
-    </div>
   );
 }
 
@@ -436,7 +388,7 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
         </div>
       </header>
 
-      <Kpis p={latest} jobs={jobs} />
+      <Kpis p={latest} jobs={jobs} store={store} {...tv} />
 
       {ROWS.map((row) => {
         const shut = collapsed.includes(row.id);

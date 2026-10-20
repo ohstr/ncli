@@ -1,50 +1,79 @@
+/* Grafana-like palettes: light by default, dark from the OS or a pinned
+   data-theme. */
 :root {
-  --bg: #f6f7f9;
+  --bg: #f4f5f5;
   --panel: #ffffff;
-  --text: #1c2026;
-  --muted: #646b75;
-  --border: #e3e6ea;
-  --grid: #eceef1;
-  --ok: #1f8a4c;
-  --warn: #b7791f;
-  --bad: #c53030;
-  --accent: #5b4bdb;
+  --text: #24292e;
+  --muted: #5f6368;
+  --border: #24292e1f;
+  --grid: #24292e14;
+  --hover: #24292e0d;
+  --ok: #1a7f4b;
+  --warn: #c4620f;
+  --bad: #d10e5c;
+  --accent: #3d71d9;
   --on-accent: #ffffff;
-  --c1: #2f6fd0;
-  --c2: #e07b2a;
-  --c3: #239a5f;
-  --c4: #c2477a;
-  --c5: #7f5ad1;
-  --c6: #b8961c;
-  --c7: #1a98a6;
-  --c8: #737985;
+  --c1: #37872d;
+  --c2: #e0b400;
+  --c3: #1f60c4;
+  --c4: #fa6400;
+  --c5: #c4162a;
+  --c6: #5794f2;
+  --c7: #8f3bb8;
+  --c8: #b88c00;
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0f1216;
-    --panel: #171b21;
-    --text: #e6e9ee;
-    --muted: #949ba6;
-    --border: #262c35;
-    --grid: #222830;
-    --ok: #3fbf7a;
-    --warn: #e0a640;
-    --bad: #f06a6a;
-    --accent: #8f83ff;
-    --on-accent: #12101f;
-    --c1: #5b97f0;
-    --c2: #f29a55;
-    --c3: #4cc488;
-    --c4: #e472a2;
-    --c5: #a688f0;
-    --c6: #d8b84a;
-    --c7: #3ec2d0;
-    --c8: #9aa1ad;
+  :root:not([data-theme="light"]) {
+    --bg: #111217;
+    --panel: #181b1f;
+    --text: #ccccdc;
+    --muted: #8e8e9a;
+    --border: #ccccdc1f;
+    --grid: #ccccdc14;
+    --hover: #ccccdc14;
+    --ok: #73bf69;
+    --warn: #ff9830;
+    --bad: #f2495c;
+    --accent: #3d71d9;
+    --on-accent: #ffffff;
+    --c1: #73bf69;
+    --c2: #f2cc0c;
+    --c3: #8ab8ff;
+    --c4: #ff780a;
+    --c5: #f2495c;
+    --c6: #5794f2;
+    --c7: #b877d9;
+    --c8: #fade2a;
     color-scheme: dark;
   }
 }
+
+:root[data-theme="dark"] {
+  --bg: #111217;
+  --panel: #181b1f;
+  --text: #ccccdc;
+  --muted: #8e8e9a;
+  --border: #ccccdc1f;
+  --grid: #ccccdc14;
+  --hover: #ccccdc14;
+  --ok: #73bf69;
+  --warn: #ff9830;
+  --bad: #f2495c;
+  --accent: #3d71d9;
+  --on-accent: #ffffff;
+  --c1: #73bf69;
+  --c2: #f2cc0c;
+  --c3: #8ab8ff;
+  --c4: #ff780a;
+  --c5: #f2495c;
+  --c6: #5794f2;
+  --c7: #b877d9;
+  --c8: #fade2a;
+  color-scheme: dark;
+}
+
 
 * {
   box-sizing: border-box;
@@ -281,6 +310,16 @@ button {
   background: var(--accent);
   color: var(--on-accent);
   cursor: pointer;
+}
+
+select {
+  font: inherit;
+  font-size: 13px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
 }
 
 button:disabled {

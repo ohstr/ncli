@@ -145,7 +145,7 @@ try {
     await page.emulateMedia({ colorScheme: "dark" });
     await page.waitForTimeout(300);
     const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-    check(bg !== "rgb(246, 247, 249)", `dark theme applies (body ${bg})`);
+    check(bg !== "rgb(244, 245, 245)", `dark theme applies (body ${bg})`);
 
     await page.getByRole("button", { name: "Sign out" }).click();
     await page.getByText("Sign in with Nostr extension").waitFor();

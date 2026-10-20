@@ -4,6 +4,7 @@ import { Chart, type Line } from "./Chart";
 import { ago, formatBytes, formatMs, formatUptime, formatValue } from "./format";
 import { MetricsStore } from "./store";
 import mark from "./brand/ncli-mark.svg";
+import { applyTheme, savedTheme, type Theme } from "./theme";
 
 // The sign-in screen carries the signing libraries; a signed-in dashboard
 // never loads them.
@@ -270,6 +271,7 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
   const store = useMemo(() => new MetricsStore(), []);
   const [live, setLive] = useState(false);
   const [jobs, setJobs] = useState(0);
+  const [theme, setTheme] = useState<Theme>(savedTheme);
   const latest = useLatest(store);
 
   useEffect(() => {
@@ -293,6 +295,19 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
         <span className={`dot ${live ? "live" : ""}`} title={live ? "live" : "reconnecting"} />
         <span className="muted">{live ? "live" : "reconnecting…"}</span>
         <span className="spacer" />
+        <select
+          aria-label="Theme"
+          value={theme}
+          onChange={(e) => {
+            const t = e.target.value as Theme;
+            setTheme(t);
+            applyTheme(t);
+          }}
+        >
+          <option value="auto">Auto</option>
+          <option value="dark">Dark</option>
+          <option value="light">Light</option>
+        </select>
         <span className="muted mono" title={session.pubkey}>
           {session.pubkey.slice(0, 8)}…{session.pubkey.slice(-6)}
         </span>

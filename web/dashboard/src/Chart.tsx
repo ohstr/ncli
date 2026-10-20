@@ -3,6 +3,7 @@ import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 import type { MetricsStore } from "./store";
 import { formatValue, type Unit } from "./format";
+import { onThemeChange } from "./theme";
 
 export interface Line {
   key: string;
@@ -99,16 +100,14 @@ export function Chart({ store, title, unit, lines, height = 150 }: Props) {
     const unsubscribe = store.subscribe(update);
     const ro = new ResizeObserver(() => plot?.setSize({ width: Math.max(el.clientWidth, 200), height }));
     ro.observe(el);
-    const theme = matchMedia("(prefers-color-scheme: dark)");
-    const onTheme = () => {
+    const offTheme = onThemeChange(() => {
       signature = "";
       update();
-    };
-    theme.addEventListener("change", onTheme);
+    });
     return () => {
       unsubscribe();
       ro.disconnect();
-      theme.removeEventListener("change", onTheme);
+      offTheme();
       plot?.destroy();
     };
   }, [store, lines, unit, height]);

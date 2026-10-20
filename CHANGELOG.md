@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.8.0-rc.32]
+
+### Changed
+
+- Restyles the relay dashboard like a Grafana dashboard, with dark and light palettes and an Auto/Dark/Light toggle.
+
 ## [0.8.0-rc.31]
 
 ### Added

@@ -2825,7 +2825,7 @@ func (b *BunkerBoard) Childs() []tview.Primitive {
 // behind every hint string in this file (FooterHints' own four variants,
 // plus the Grants overlay's own hint line).
 func hintTag(key, label string) string {
-	return fmt.Sprintf("[%s:-:b]%s [%s:-:-]%s", tui.ColorAccent, key, tui.ColorMuted, label)
+	return tui.HintTag(key, label)
 }
 
 // FooterHints implements client/tui.FooterHintsProvider, replacing the

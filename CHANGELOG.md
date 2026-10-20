@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.8.0-rc.31]
+
+### Fixed
+
+- Fixes the `apply` footer always showing Wrap/AutoScroll whatever panel is focused. It now lists the focused panel's own keys (delete, column sort, view/save event) plus Restart and Save Snapshot.
+
 ## [0.8.0-rc.30]
 
 ### Added

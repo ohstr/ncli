@@ -107,7 +107,6 @@ func Ping(ctx context.Context, targets *TargetsSpec, opts PingOptions) *PingRepo
 	switch {
 	case useTUI:
 		app = tui.NewApp().Init()
-		app.RegisterCallback(func() {}, func() {})
 		board, l := tui.NewConnectivityBoard(app, ctx)
 		app.Load(board)
 		logger = l

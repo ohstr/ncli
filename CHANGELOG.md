@@ -13,9 +13,11 @@
 
 ### Fixed
 
-- Fixes a `logs:` block without `filename` writing its log to a temp directory instead of `<logdir>/nrelay.log`. ([#168](https://github.com/ohstr/ncli/pull/168))
 - Fixes relay search (NIP-50) returning profiles newest first; results now come best match first, with `limit` applied after ranking. ([#175](https://github.com/ohstr/ncli/pull/175))
 - Fixes the relay's index job history (`<store>.jobs.json`) being left stale or unreadable when two jobs finished at once, losing `relay jobs list` history on restart. ([#172](https://github.com/ohstr/ncli/pull/172))
+- Fixes the `apply` footer always showing Wrap/AutoScroll whatever panel is focused. It now shows the focused panel's own keys (delete, column sort, view/save event), then Restart, Save and Quit. ([#170](https://github.com/ohstr/ncli/pull/170))
+- Fixes `r` in the `ping` TUI opening a Restart dialog that did nothing. ([#170](https://github.com/ohstr/ncli/pull/170))
+- Fixes a `logs:` block without `filename` writing its log to a temp directory instead of `<logdir>/nrelay.log`. ([#168](https://github.com/ohstr/ncli/pull/168))
 
 ## [0.8.0-rc.30]
 

@@ -7,6 +7,7 @@ import { MetricsStore } from "./store";
 import mark from "./brand/ncli-mark.svg";
 import { applyTheme, savedTheme, type Theme } from "./theme";
 import { RANGES } from "./window";
+import { load, save } from "./persist";
 
 // The sign-in screen carries the signing libraries; a signed-in dashboard
 // never loads them.
@@ -346,6 +347,12 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
   const [until, setUntil] = useState<number | undefined>();
   const tv = { range, until };
   const [view, setView] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState<string[]>(() => (load("collapsed") ?? "").split(",").filter(Boolean));
+  const toggleRow = (id: string) => {
+    const next = collapsed.includes(id) ? collapsed.filter((c) => c !== id) : [...collapsed, id];
+    setCollapsed(next);
+    save("collapsed", next.join(",") || null);
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setView(null);
@@ -421,16 +428,27 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
 
       <Kpis p={latest} jobs={jobs} />
 
-      {ROWS.map((row) => (
-        <div key={row.id}>
-          <h2>{row.title}</h2>
-          <div className="grid">
-            {row.panels.map((p) => (
-              <Chart key={p.id} store={store} {...tv} {...p} lines={CHARTS[p.id]} viewing={view === p.id} onView={setView} />
-            ))}
+      {ROWS.map((row) => {
+        const shut = collapsed.includes(row.id);
+        return (
+          <div key={row.id} className="row">
+            <h2>
+              <button className="row-head" aria-expanded={!shut} onClick={() => toggleRow(row.id)}>
+                <span className="chevron">{shut ? "▸" : "▾"}</span>
+                {row.title}
+                {shut && <span className="count">({row.panels.length} panels)</span>}
+              </button>
+            </h2>
+            {!shut && (
+              <div className="grid">
+                {row.panels.map((p) => (
+                  <Chart key={p.id} store={store} {...tv} {...p} lines={CHARTS[p.id]} viewing={view === p.id} onView={setView} />
+                ))}
+              </div>
+            )}
           </div>
-        </div>
-      ))}
+        );
+      })}
 
       <Indexes onRunning={setJobs} paused={until != null} viewing={view === "indexes"} onView={setView} />
     </div>

@@ -1,31 +1,20 @@
+import { load, save } from "./persist";
+
 // Theme: "auto" follows the OS; dark or light pins it via data-theme on <html>.
 export type Theme = "auto" | "dark" | "light";
 
-const key = "ncli-dashboard:theme";
 const listeners = new Set<() => void>();
 
 export function savedTheme(): Theme {
-  try {
-    const t = localStorage.getItem(key);
-    if (t === "dark" || t === "light") return t;
-  } catch {
-    /* storage blocked */
-  }
-  return "auto";
+  const t = load("theme");
+  return t === "dark" || t === "light" ? t : "auto";
 }
 
-export function applyTheme(t: Theme, save = true) {
+export function applyTheme(t: Theme, keep = true) {
   const root = document.documentElement;
   if (t === "auto") delete root.dataset.theme;
   else root.dataset.theme = t;
-  if (save) {
-    try {
-      if (t === "auto") localStorage.removeItem(key);
-      else localStorage.setItem(key, t);
-    } catch {
-      /* storage blocked */
-    }
-  }
+  if (keep) save("theme", t === "auto" ? null : t);
   listeners.forEach((fn) => fn());
 }
 

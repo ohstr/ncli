@@ -133,12 +133,33 @@ h1 {
 }
 
 h2 {
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  margin: 14px 0 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.row-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  border: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.row-head .chevron {
+  width: 12px;
   color: var(--muted);
-  margin: 22px 0 8px;
+}
+
+.row-head .count {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 h3 {

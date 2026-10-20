@@ -1899,7 +1899,9 @@ func TestDaemon_EventLog_InterruptedPendingSurfacesAsExpiredAfterRestart(t *test
 	req := buildRequest(t, signerPub, nip46.MethodSignEvent, []string{string(raw)})
 
 	go daemon.handler.Handle(req, nip46.EncryptionNIP04) // deliberately never resolved -- see doc comment
-	waitFor(t, func() bool { return len(queue.List()) == 1 })
+	// OnAdded (the WAL write) fires after Queue.Add releases its lock, so
+	// the request can be listed before its "added" line is on disk.
+	waitFor(t, func() bool { return len(queue.List()) == 1 && countLines(t, walPath) == 1 })
 
 	// Simulate the crash/restart: load the same path fresh, with no
 	// in-process Queue state carried over.

@@ -20,6 +20,8 @@ type loggingConfig struct {
 	console    bool
 	fileWriter io.Writer
 	jsonOutput bool
+	jsonFile   bool
+	level      *zerolog.Level
 }
 
 // LoggingOption configures ConfigureLogging.
@@ -49,6 +51,17 @@ func WithFileWriter(w io.Writer) LoggingOption {
 // --json, which defeats the point for a script/agent parsing stderr.
 func WithJSON(enabled bool) LoggingOption {
 	return func(c *loggingConfig) { c.jsonOutput = enabled }
+}
+
+// WithJSONFile writes the file copy as JSON lines instead of console text,
+// skipping the per-record re-parse ConsoleWriter does.
+func WithJSONFile() LoggingOption {
+	return func(c *loggingConfig) { c.jsonFile = true }
+}
+
+// WithLevel drops records below level on every writer.
+func WithLevel(level zerolog.Level) LoggingOption {
+	return func(c *loggingConfig) { c.level = &level }
 }
 
 // current holds the options from the most recent ConfigureLogging call, so
@@ -87,7 +100,9 @@ func SuspendConsole() {
 	if !current.console {
 		return
 	}
-	apply(loggingConfig{fileWriter: current.fileWriter})
+	c := current
+	c.console = false
+	apply(c)
 }
 
 // ResumeConsole restores the console writer dropped by SuspendConsole.
@@ -148,7 +163,10 @@ func apply(cfg loggingConfig) {
 	}
 	fileOnly = nil
 	if cfg.fileWriter != nil {
-		fw := zerolog.ConsoleWriter{Out: cfg.fileWriter, TimeFormat: time.RFC3339, NoColor: true}
+		fw := cfg.fileWriter
+		if !cfg.jsonFile {
+			fw = zerolog.ConsoleWriter{Out: cfg.fileWriter, TimeFormat: time.RFC3339, NoColor: true}
+		}
 		writers = append(writers, fw)
 		l := zerolog.New(fw).With().Timestamp().Logger()
 		fileOnly = &l
@@ -162,6 +180,9 @@ func apply(cfg loggingConfig) {
 		w = writers[0]
 	}
 	log.Logger = zerolog.New(w).With().Timestamp().Logger()
+	if cfg.level != nil {
+		log.Logger = log.Logger.Level(*cfg.level)
+	}
 }
 
 // LogFailureToFile records msg at error level in the log file only, printing

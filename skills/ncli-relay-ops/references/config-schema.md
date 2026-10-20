@@ -53,11 +53,15 @@ defaults shown here)
 
 | Field | Type | Default |
 |---|---|---|
-| `filename` | string | `<logdir>/nrelay.log` |
+| `level` | `debug`/`info`/`warn`/`error` | `info` (per-connection and rejected-client lines are `debug`) |
+| `file` | bool | `true`; `false` logs to stderr only, e.g. in a container |
+| `filename` | string | `<logdir>/nrelay.log`; the rotation fields below apply only when it's set |
 | `maxSize` | int (MB) | `100` |
 | `maxBackups` | int | `3` |
 | `maxAge` | int (days) | `28` |
 | `compress` | bool | `true` |
+
+The file is JSON lines (`jq` reads it); stderr stays human-readable unless `--json`.
 
 ## `pow`
 

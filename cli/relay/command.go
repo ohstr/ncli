@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -33,6 +34,7 @@ import (
 	"github.com/ohstr/nmilat/relay"
 	"github.com/ohstr/nmilat/search"
 	"github.com/ohstr/nmilat/utils"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -150,6 +152,11 @@ type PowConfig struct {
 }
 
 type LogConfig struct {
+	// Level is debug, info (default), warn or error.
+	Level string `mapstructure:"level"`
+	// File false turns off the log file, e.g. when a container runtime
+	// already keeps stderr.
+	File       *bool  `mapstructure:"file"`
 	Filename   string `mapstructure:"filename"`
 	MaxSize    int    `mapstructure:"maxSize"`
 	MaxBackups int    `mapstructure:"maxBackups"`
@@ -481,6 +488,12 @@ func initConfig() error {
 		}
 	}
 
+	if config.Logs != nil && config.Logs.Level != "" {
+		if _, err := parseLogLevel(config.Logs.Level); err != nil {
+			return &common.CLIError{Err: err, Code: common.CodeInvalidInput, Input: config.Logs.Level}
+		}
+	}
+
 	if config.Pow != nil {
 		if config.Pow.Min < 0 {
 			return &common.CLIError{Err: errors.New("pow.min must be >= 0"), Code: common.CodeInvalidInput}
@@ -616,43 +629,34 @@ func finalizeNip11(cfg *RelayConfig) {
 // got a bare styled log line on stderr instead of the same structured
 // {"error","code"} shape every other failure produces.
 func RunRelay(jsonMode bool) error {
-	// Initialize Logging
-	cwd, _ := os.Getwd()
-	var logWriter *lumberjack.Logger
+	logs := LogConfig{}
 	if config.Logs != nil {
-		logWriter = &lumberjack.Logger{
-			Filename:   config.Logs.Filename,
-			MaxSize:    config.Logs.MaxSize,
-			MaxBackups: config.Logs.MaxBackups,
-			MaxAge:     config.Logs.MaxAge,
-			Compress:   config.Logs.Compress,
-		}
-	} else {
-		logDir := config.LogDir
-		if logDir == "" {
-			logDir = cwd
-		}
-		logWriter = &lumberjack.Logger{
-			Filename:   filepath.Join(logDir, logFileName),
-			MaxSize:    100,
-			MaxBackups: 3,
-			MaxAge:     28,
-			Compress:   true,
-		}
+		logs = *config.Logs
 	}
-
-	common.ConfigureLogging(common.WithConsole(), common.WithFileWriter(logWriter), common.WithJSON(jsonMode))
-	// Log the effective rotation settings actually in force -- not
-	// config.Logs directly, which is nil whenever the config omits the
-	// optional `logs:` block (i.e. whenever the defaults above are the ones
-	// being used) and would otherwise print the unhelpful "logs=null".
-	log.Info().
-		Str("file", logWriter.Filename).
-		Int("max_size_mb", logWriter.MaxSize).
-		Int("max_backups", logWriter.MaxBackups).
-		Int("max_age_days", logWriter.MaxAge).
-		Bool("compress", logWriter.Compress).
-		Msg("logging initialized")
+	level := zerolog.InfoLevel
+	if logs.Level != "" {
+		// Already validated by initConfig.
+		level, _ = parseLogLevel(logs.Level)
+	}
+	opts := []common.LoggingOption{common.WithConsole(), common.WithJSON(jsonMode), common.WithLevel(level)}
+	var logWriter *lumberjack.Logger
+	if logs.File == nil || *logs.File {
+		logWriter = newLogWriter(logs)
+		opts = append(opts, common.WithFileWriter(logWriter), common.WithJSONFile())
+	}
+	common.ConfigureLogging(opts...)
+	if logWriter != nil {
+		log.Info().
+			Str("log_level", level.String()).
+			Str("file", logWriter.Filename).
+			Int("max_size_mb", logWriter.MaxSize).
+			Int("max_backups", logWriter.MaxBackups).
+			Int("max_age_days", logWriter.MaxAge).
+			Bool("compress", logWriter.Compress).
+			Msg("logging initialized")
+	} else {
+		log.Info().Str("log_level", level.String()).Str("file", "off").Msg("logging initialized")
+	}
 
 	// nip11.pubkey and store are both already validated by initConfig,
 	// which PreRunE guarantees ran successfully before Run (this function)
@@ -708,4 +712,44 @@ func RunRelay(jsonMode bool) error {
 	<-stopCh
 	s.Stop()
 	return nil
+}
+
+// newLogWriter builds the rotating log file. Rotation settings apply only
+// with a filename; without one it's <logdir>/nrelay.log with the defaults.
+func newLogWriter(logs LogConfig) *lumberjack.Logger {
+	if logs.Filename != "" {
+		return &lumberjack.Logger{
+			Filename:   logs.Filename,
+			MaxSize:    logs.MaxSize,
+			MaxBackups: logs.MaxBackups,
+			MaxAge:     logs.MaxAge,
+			Compress:   logs.Compress,
+		}
+	}
+	logDir := config.LogDir
+	if logDir == "" {
+		logDir, _ = os.Getwd()
+	}
+	return &lumberjack.Logger{
+		Filename:   filepath.Join(logDir, logFileName),
+		MaxSize:    100,
+		MaxBackups: 3,
+		MaxAge:     28,
+		Compress:   true,
+	}
+}
+
+// parseLogLevel accepts the levels logs.level documents.
+func parseLogLevel(s string) (zerolog.Level, error) {
+	switch strings.ToLower(s) {
+	case "debug":
+		return zerolog.DebugLevel, nil
+	case "info":
+		return zerolog.InfoLevel, nil
+	case "warn", "warning":
+		return zerolog.WarnLevel, nil
+	case "error":
+		return zerolog.ErrorLevel, nil
+	}
+	return zerolog.NoLevel, fmt.Errorf("invalid logs.level %q: want debug, info, warn or error", s)
 }

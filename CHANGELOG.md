@@ -2,16 +2,22 @@
 
 ## [0.8.0-rc.31]
 
-### Fixed
+### Added
 
-- Fixes the `apply` footer always showing Wrap/AutoScroll whatever panel is focused. It now shows the focused panel's own keys (delete, column sort, view/save event), then Restart, Save and Quit. ([#170](https://github.com/ohstr/ncli/pull/170))
-- Fixes `r` in the `ping` TUI opening a Restart dialog that did nothing. ([#170](https://github.com/ohstr/ncli/pull/170))
-- Fixes relay search (NIP-50) returning profiles newest first; results now come best match first, with `limit` applied after ranking. ([#175](https://github.com/ohstr/ncli/pull/175))
-- Fixes the relay's index job history (`<store>.jobs.json`) being left stale or unreadable when two jobs finished at once, losing `relay jobs list` history on restart. ([#172](https://github.com/ohstr/ncli/pull/172))
+- Adds `logs.level` and `logs.file` to the relay config. Per-connection lines now need `debug`, and `file: false` stops writing `nrelay.log` when stderr is already kept. ([#168](https://github.com/ohstr/ncli/pull/168))
 
 ### Changed
 
+- Writes `nrelay.log` as JSON lines, which costs less CPU per line and reads with `jq`. ([#168](https://github.com/ohstr/ncli/pull/168))
 - Updates nmilat to v0.5.0-rc.31, which also escapes tags like content when computing event ids and tightens NIP-04, NIP-44, private key and NWC response checks. ([#175](https://github.com/ohstr/ncli/pull/175))
+
+### Fixed
+
+- Fixes relay search (NIP-50) returning profiles newest first; results now come best match first, with `limit` applied after ranking. ([#175](https://github.com/ohstr/ncli/pull/175))
+- Fixes the relay's index job history (`<store>.jobs.json`) being left stale or unreadable when two jobs finished at once, losing `relay jobs list` history on restart. ([#172](https://github.com/ohstr/ncli/pull/172))
+- Fixes the `apply` footer always showing Wrap/AutoScroll whatever panel is focused. It now shows the focused panel's own keys (delete, column sort, view/save event), then Restart, Save and Quit. ([#170](https://github.com/ohstr/ncli/pull/170))
+- Fixes `r` in the `ping` TUI opening a Restart dialog that did nothing. ([#170](https://github.com/ohstr/ncli/pull/170))
+- Fixes a `logs:` block without `filename` writing its log to a temp directory instead of `<logdir>/nrelay.log`. ([#168](https://github.com/ohstr/ncli/pull/168))
 
 ## [0.8.0-rc.30]
 

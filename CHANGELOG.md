@@ -4,7 +4,7 @@
 
 ### Changed
 
-- Restyles the relay dashboard like a Grafana dashboard, with dark and light palettes and an Auto/Dark/Light toggle.
+- Restyles the relay dashboard like a Grafana dashboard: dark and light palettes, a toolbar with time range (5m to 1h), live/paused, theme and kiosk, collapsible rows on a 24-column grid, and stat panels with sparklines and bar gauges. Charts share a crosshair, show a sorted tooltip and a Last/Max/Mean legend, open full screen or export CSV, and the view is kept in the URL.
 
 ## [0.8.0-rc.31]
 

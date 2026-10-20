@@ -73,6 +73,7 @@ export function Chart({ id, store, title, unit, lines, desc, w, h: height = 200,
     let signature = "";
     let current: Line[] = [];
     let cells: HTMLElement[][] = [];
+    let colors: string[] = [];
     const hidden = new Set<string>();
     const fmt = (v: number | null | undefined) => (v == null ? "–" : formatValue(v, unit));
     const size = () => ({
@@ -119,7 +120,7 @@ export function Chart({ id, store, title, unit, lines, desc, w, h: height = 200,
       });
     };
 
-    const buildLegend = (colors: string[]) => {
+    const buildLegend = () => {
       body.replaceChildren();
       cells = current.map((l, i) => {
         const tr = document.createElement("tr");
@@ -159,14 +160,18 @@ export function Chart({ id, store, title, unit, lines, desc, w, h: height = 200,
             }
             const rows = u.series
               .slice(1)
-              .map((s, j) => ({ s, v: u.data[j + 1][i] }))
+              .map((s, j) => ({ s, v: u.data[j + 1][i], c: colors[j] }))
               .filter((r) => r.s.show && r.v != null)
               .sort((a, b) => b.v! - a.v!);
+            if (!rows.length) {
+              tip.hidden = true;
+              return;
+            }
             tip.replaceChildren(h("div", "tip-time", clock(u.data[0][i])));
             for (const r of rows) {
               const line = h("div");
               const mark = h("i");
-              mark.style.background = String(r.s.stroke instanceof Function ? "" : r.s.stroke);
+              mark.style.background = r.c;
               line.append(mark, h("span", "", String(r.s.label)), h("b", "", fmt(r.v)));
               tip.append(line);
             }
@@ -209,14 +214,14 @@ export function Chart({ id, store, title, unit, lines, desc, w, h: height = 200,
       plot?.destroy();
       const grid = { stroke: cssVar("--grid"), width: 1 };
       const axis = { stroke: cssVar("--muted"), grid, ticks: grid, font: "11px system-ui, sans-serif" };
-      const colors = current.map((_, i) => cssVar(PALETTE[i % PALETTE.length]));
+      colors = current.map((_, i) => cssVar(PALETTE[i % PALETTE.length]));
       const single = current.length === 1;
       plot = new uPlot(
         {
           ...size(),
           legend: { show: false },
           plugins: [tooltip(), thresholdLines()],
-          cursor: { sync: { key: SYNC }, points: { size: 5 }, drag: { x: false, y: false } },
+          cursor: { sync: { key: SYNC }, y: false, points: { size: 5 }, drag: { x: false, y: false } },
           scales: {
             x: { time: true, range: (_u, min, max) => (max == null ? [min, max] : [max - view.current.range, max]) },
             y: { range: (_u, _min, max) => [0, max > 0 ? max * 1.1 : 1] },
@@ -249,7 +254,7 @@ export function Chart({ id, store, title, unit, lines, desc, w, h: height = 200,
         data(),
         el,
       );
-      buildLegend(colors);
+      buildLegend();
       fillLegend();
     };
 

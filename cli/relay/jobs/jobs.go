@@ -249,7 +249,9 @@ func (m *Manager) execute(ctx context.Context, ix Index, r *run) {
 	if len(m.history) > keptJobs {
 		m.history = m.history[:keptJobs]
 	}
-	history := append([]Job(nil), m.history...)
+	// Saved under the lock: concurrent saves would share the .tmp file, and
+	// the job shouldn't read as finished before its history is on disk.
+	m.save(m.history)
 	m.mu.Unlock()
 
 	ev := m.logger.Info()
@@ -259,7 +261,6 @@ func (m *Manager) execute(ctx context.Context, ix Index, r *run) {
 	ev.Str("job", finished.ID).Str("index", finished.Index).Str("state", string(finished.State)).
 		Int64("scanned", finished.Scanned).Int64("indexed", finished.Indexed).
 		Int64("seconds", finished.FinishedAt-finished.StartedAt).Msg("index job finished")
-	m.save(history)
 	if m.OnFinish != nil {
 		m.OnFinish(finished)
 	}

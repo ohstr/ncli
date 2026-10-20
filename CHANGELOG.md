@@ -4,15 +4,15 @@
 
 ### Added
 
-- Adds `logs.level` and `logs.file` to the relay config. Per-connection lines now need `debug`, and `file: false` stops writing `nrelay.log` when stderr is already kept.
+- Adds `logs.level` and `logs.file` to the relay config. Per-connection lines now need `debug`, and `file: false` stops writing `nrelay.log` when stderr is already kept. ([#168](https://github.com/ohstr/ncli/pull/168))
 
 ### Changed
 
-- Writes `nrelay.log` as JSON lines, which costs less CPU per line and reads with `jq`.
+- Writes `nrelay.log` as JSON lines, which costs less CPU per line and reads with `jq`. ([#168](https://github.com/ohstr/ncli/pull/168))
 
 ### Fixed
 
-- Fixes a `logs:` block without `filename` writing its log to a temp directory instead of `<logdir>/nrelay.log`.
+- Fixes a `logs:` block without `filename` writing its log to a temp directory instead of `<logdir>/nrelay.log`. ([#168](https://github.com/ohstr/ncli/pull/168))
 
 ## [0.8.0-rc.30]
 

@@ -415,7 +415,7 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
           <div key={row.id} className="row">
             <h2>
               <button className="row-head" aria-expanded={!shut} onClick={() => toggleRow(row.id)}>
-                <span className="chevron">{shut ? "▸" : "▾"}</span>
+                <span className="chevron" aria-hidden="true">{shut ? "▸" : "▾"}</span>
                 {row.title}
                 {shut && <span className="count">({row.panels.length} panels)</span>}
               </button>

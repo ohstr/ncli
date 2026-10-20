@@ -137,6 +137,45 @@ try {
     check(await zaps.getByText("succeeded").isVisible(), "rebuild from the page succeeds and shows it");
     check(await page.locator(".index", { hasText: "search" }).getByText("cache.search.enabled").isVisible(), "unavailable index says why");
 
+    // Toolbar, rows, panels.
+    const search = () => page.evaluate(() => location.search);
+    const bodyBg = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+    await page.getByLabel("Time range").selectOption({ label: "Last 5m" });
+    check((await search()).includes("from=now-5m"), "time range picker sets the window");
+    const span = await page.evaluate(() => {
+      const t = document.querySelector('[data-panel="messages"] .legend');
+      return t ? t.textContent : "";
+    });
+    check(Boolean(span), "legend table renders");
+
+    const latency = page.getByRole("button", { name: /^Latency/ });
+    await latency.click();
+    check((await page.locator(".chart canvas").count()) === 15 && (await page.getByText("(3 panels)").isVisible()), "a collapsed row unmounts its charts");
+    check((await search()).includes("collapsed=latency"), "collapsed rows are in the URL");
+    await latency.click();
+    check((await page.locator(".chart canvas").count()) === 18, "an expanded row draws its charts again");
+
+    await page.getByLabel("Theme").selectOption("dark");
+    const darkBg = await bodyBg();
+    await page.getByLabel("Theme").selectOption("light");
+    const lightBg = await bodyBg();
+    check(darkBg !== lightBg && lightBg === "rgb(244, 245, 245)", `theme toggle switches palettes (${darkBg} / ${lightBg})`);
+    await page.getByLabel("Theme").selectOption("auto");
+
+    await page.getByRole("button", { name: "Kiosk" }).click();
+    check(!(await page.locator(".topbar").isVisible()), "kiosk mode hides the toolbar");
+    await page.keyboard.press("Escape");
+    check(await page.locator(".topbar").isVisible(), "Esc leaves kiosk mode");
+
+    const messages = page.locator('[data-panel="messages"]');
+    await messages.hover();
+    await messages.getByRole("button", { name: "Messages / s menu" }).click();
+    await page.getByRole("menuitem", { name: "View" }).click();
+    check((await page.locator(".panel.viewing").count()) === 1 && (await search()).includes("view=messages"), "panel View opens full screen");
+    await page.keyboard.press("Escape");
+    check((await page.locator(".panel.viewing").count()) === 0, "Esc closes the panel view");
+    await page.getByLabel("Time range").selectOption({ label: "Last 1h" });
+
     await page.setViewportSize({ width: 390, height: 844 });
     await page.waitForTimeout(300);
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);

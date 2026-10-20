@@ -191,7 +191,7 @@ function IndexRow({ ix, onAction, busy }: { ix: IndexInfo; onAction: (fn: () => 
     <div className="index">
       <div className="index-head">
         <strong>{ix.name}</strong>
-        <span className="muted">~{formatValue(ix.estimate, "count")} items</span>
+        {ix.available && <span className="muted">~{formatValue(ix.estimate, "count")} entries</span>}
       </div>
       {!ix.available ? (
         <p className="muted">{ix.unavailable}</p>

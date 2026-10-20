@@ -481,9 +481,13 @@ func runIndexList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	_, _ = fmt.Fprintln(tw, "INDEX\tESTIMATE\tSTATE")
+	_, _ = fmt.Fprintln(tw, "INDEX\tENTRIES\tSTATE")
 	for _, ix := range out.Indexes {
-		_, _ = fmt.Fprintf(tw, "%s\t~%d\t%s\n", ix.Name, ix.Estimate, indexSummary(ix))
+		estimate := "-"
+		if ix.Available {
+			estimate = fmt.Sprintf("~%d", ix.Estimate)
+		}
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\n", ix.Name, estimate, indexSummary(ix))
 	}
 	return tw.Flush()
 }
@@ -532,7 +536,7 @@ func runIndexRebuild(cmd *cobra.Command, args []string) error {
 			return nil
 		}
 		for _, r := range results {
-			fmt.Printf("%v: would scan ~%v items\n", r["index"], r["estimate"])
+			fmt.Printf("%v: would scan ~%v items (~%v entries now)\n", r["index"], r["scan_estimate"], r["estimate"])
 		}
 		return nil
 	}

@@ -30,12 +30,53 @@ func eventSequence(store *relay.EventStore) int64 {
 	return int64(seq)
 }
 
-// ZapIndex is the top-zapped index, kept in the event store.
-type ZapIndex struct{ Store *relay.EventStore }
+// storedCount counts stored events of some kinds, cached for a minute
+// since it reads an index.
+type storedCount struct {
+	mu sync.Mutex
+	n  int64
+	at time.Time
+}
+
+func (c *storedCount) get(store *relay.EventStore, kinds ...int) int64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.at.IsZero() && time.Since(c.at) < time.Minute {
+		return c.n
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	f := nip01.NewSubscriptionFilterGroup()
+	f.Add(&nip01.SubscriptionFilter{Kinds: kinds})
+	if n, err := store.CountEvents(ctx, f); err == nil {
+		c.n, c.at = n, time.Now()
+	}
+	return c.n
+}
+
+// zapReceiptKinds are the events the zap index holds: NIP-57 zap receipts
+// and AltZap receipts, the kinds nmilat indexes.
+var zapReceiptKinds = []int{9735, 9521}
+
+// ZapIndex is the top-zapped index, kept in the event store. The store
+// indexes zap receipts on ingest even with top-zapped off; only queries
+// are gated on it.
+type ZapIndex struct {
+	Store *relay.EventStore
+	// Disabled explains why top-zapped can't be maintained ("" when it can).
+	Disabled string
+
+	count storedCount
+}
 
 func (z *ZapIndex) Name() string      { return "zaps" }
-func (z *ZapIndex) Available() string { return "" }
-func (z *ZapIndex) Estimate() int64   { return eventSequence(z.Store) }
+func (z *ZapIndex) Available() string { return z.Disabled }
+
+// Estimate counts stored zap receipts.
+func (z *ZapIndex) Estimate() int64 { return z.count.get(z.Store, zapReceiptKinds...) }
+
+// ScanEstimate is every stored event: a rebuild reads them all.
+func (z *ZapIndex) ScanEstimate() int64 { return eventSequence(z.Store) }
 
 // Rebuild always builds a new index beside the live one and swaps it in;
 // Options.Fresh changes nothing here.
@@ -60,9 +101,7 @@ type SearchIndex struct {
 	// Worker re-verifies profiles on a Reverify rebuild.
 	Worker *relay.ProfileVerificationWorker
 
-	estimateMu sync.Mutex
-	estimate   int64
-	estimateAt time.Time
+	count storedCount
 }
 
 // searchBatch is how many profiles go to Meilisearch per request.
@@ -71,25 +110,11 @@ const searchBatch = 500
 func (s *SearchIndex) Name() string      { return "search" }
 func (s *SearchIndex) Available() string { return s.Disabled }
 
-// Estimate counts stored profiles, cached for a minute since it reads an
-// index.
-func (s *SearchIndex) Estimate() int64 {
-	s.estimateMu.Lock()
-	defer s.estimateMu.Unlock()
-	if time.Since(s.estimateAt) < time.Minute {
-		return s.estimate
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	if n, err := s.Store.CountEvents(ctx, profilesFilter(0)); err == nil {
-		s.estimate, s.estimateAt = n, time.Now()
-	}
-	return s.estimate
-}
+// Estimate counts stored profiles, one document each.
+func (s *SearchIndex) Estimate() int64 { return s.count.get(s.Store, 0) }
 
-func profilesFilter(since uint64) *nip01.SubscriptionFilterGroup {
-	return profilesPage(since, 0)
-}
+// ScanEstimate is the same: a rebuild reads every stored profile.
+func (s *SearchIndex) ScanEstimate() int64 { return s.Estimate() }
 
 func profilesPage(since, until uint64) *nip01.SubscriptionFilterGroup {
 	f := nip01.NewSubscriptionFilterGroup()

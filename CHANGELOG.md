@@ -6,6 +6,11 @@
 
 - Restyles the relay dashboard like a Grafana dashboard: dark and light palettes, a toolbar with time range (5m to 1h), live/paused, theme and kiosk, collapsible rows on a 24-column grid, and stat panels with sparklines and bar gauges. Charts share a crosshair, show a sorted tooltip and a Last/Max/Mean legend, open full screen or export CSV, and the view is kept in the URL. ([#178](https://github.com/ohstr/ncli/pull/178))
 
+### Fixed
+
+- Fixes the zaps index showing as available, with Rebuild and Drop, when `cache.topZapped.enabled` is off; it now reports why and `relay index rebuild|drop zaps` exits `usage`. Its estimate now counts zap receipts instead of every stored event, with the rebuild's scan size reported separately as `scan_estimate`. ([#180](https://github.com/ohstr/ncli/pull/180))
+- Fixes `bunker history` losing requests resolved at the same moment as an event log compaction, after a restart. ([#177](https://github.com/ohstr/ncli/pull/177))
+
 ## [0.8.0-rc.31]
 
 ### Added

@@ -37,6 +37,7 @@ export interface IndexInfo {
   available: boolean;
   unavailable?: string;
   estimate: number;
+  scan_estimate: number;
   running?: Job;
   last?: Job;
 }

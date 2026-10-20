@@ -67,8 +67,10 @@ type Index interface {
 	Name() string
 	// Available returns "" when the index can be maintained, or why not.
 	Available() string
-	// Estimate returns the approximate number of items a rebuild scans.
+	// Estimate returns the approximate number of entries in the index.
 	Estimate() int64
+	// ScanEstimate returns the approximate number of items a rebuild scans.
+	ScanEstimate() int64
 	Rebuild(ctx context.Context, opts Options, progress Progress) error
 	Drop(ctx context.Context) error
 }
@@ -124,9 +126,12 @@ type IndexInfo struct {
 	Name        string `json:"name"`
 	Available   bool   `json:"available"`
 	Unavailable string `json:"unavailable,omitempty"`
-	Estimate    int64  `json:"estimate"`
-	Running     *Job   `json:"running,omitempty"`
-	Last        *Job   `json:"last,omitempty"`
+	// Estimate is the approximate number of entries in the index.
+	Estimate int64 `json:"estimate"`
+	// ScanEstimate is the approximate number of items a rebuild scans.
+	ScanEstimate int64 `json:"scan_estimate"`
+	Running      *Job  `json:"running,omitempty"`
+	Last         *Job  `json:"last,omitempty"`
 }
 
 // Indexes lists every index with its running and last job.
@@ -139,7 +144,7 @@ func (m *Manager) Indexes() []IndexInfo {
 		why := ix.Available()
 		info := IndexInfo{Name: name, Available: why == "", Unavailable: why}
 		if why == "" {
-			info.Estimate = ix.Estimate()
+			info.Estimate, info.ScanEstimate = ix.Estimate(), ix.ScanEstimate()
 		}
 		if r, ok := m.running[name]; ok {
 			j := r.job
@@ -157,13 +162,13 @@ func (m *Manager) Indexes() []IndexInfo {
 	return out
 }
 
-// Estimate returns an index's scan estimate, for a dry run.
-func (m *Manager) Estimate(index string) (int64, error) {
+// Estimate returns an index's entry and scan estimates, for a dry run.
+func (m *Manager) Estimate(index string) (entries, scan int64, err error) {
 	ix, err := m.lookup(index)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
-	return ix.Estimate(), nil
+	return ix.Estimate(), ix.ScanEstimate(), nil
 }
 
 func (m *Manager) lookup(index string) (Index, error) {
@@ -204,7 +209,7 @@ func (m *Manager) Start(index string, kind Kind, opts Options) (job Job, started
 		done:   make(chan struct{}),
 	}
 	if kind == KindRebuild {
-		r.job.Total = ix.Estimate()
+		r.job.Total = ix.ScanEstimate()
 	}
 	m.running[index] = r
 	go m.execute(ctx, ix, r)

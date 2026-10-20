@@ -35,7 +35,7 @@ func TestRoutesRebuildLifecycle(t *testing.T) {
 	ix := &fakeIndex{name: "zaps", release: make(chan struct{})}
 	m, h := newRoutes(t, ix, &fakeIndex{name: "search", why: "search is off"})
 
-	if code, out := call(t, h, "POST", "/admin/api/indexes/zaps/rebuild", `{"dry_run":true}`); code != 200 || out["estimate"] != float64(42) || m.Running() != 0 {
+	if code, out := call(t, h, "POST", "/admin/api/indexes/zaps/rebuild", `{"dry_run":true}`); code != 200 || out["estimate"] != float64(5) || out["scan_estimate"] != float64(42) || m.Running() != 0 {
 		t.Fatalf("dry run = %d %v (running %d)", code, out, m.Running())
 	}
 	code, first := call(t, h, "POST", "/admin/api/indexes/zaps/rebuild", `{"fresh":true}`)

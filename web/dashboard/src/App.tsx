@@ -10,6 +10,7 @@ import mark from "./brand/ncli-mark.svg";
 import { applyTheme, savedTheme, type Theme } from "./theme";
 import { RANGES } from "./window";
 import { load, save } from "./persist";
+import { parse, serialize } from "./urlstate";
 
 // The sign-in screen carries the signing libraries; a signed-in dashboard
 // never loads them.
@@ -305,18 +306,25 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
   const store = useMemo(() => new MetricsStore(), []);
   const [live, setLive] = useState(false);
   const [jobs, setJobs] = useState(0);
-  const [theme, setTheme] = useState<Theme>(savedTheme);
-  const [range, setRange] = useState(3600);
+  // The URL wins over saved preferences, so a link opens what it shows.
+  const [url] = useState(() => parse(location.search));
+  const [theme, setTheme] = useState<Theme>(() => url.theme ?? savedTheme());
+  const [range, setRange] = useState(url.range);
   // until is the newest time shown while paused.
-  const [until, setUntil] = useState<number | undefined>();
+  const [until, setUntil] = useState<number | undefined>(() => (url.paused ? Date.now() / 1000 : undefined));
   const tv = { range, until };
-  const [view, setView] = useState<string | null>(null);
-  const [collapsed, setCollapsed] = useState<string[]>(() => (load("collapsed") ?? "").split(",").filter(Boolean));
+  const [view, setView] = useState<string | null>(url.view);
+  const [collapsed, setCollapsed] = useState<string[]>(() => url.collapsed ?? (load("collapsed") ?? "").split(",").filter(Boolean));
   const toggleRow = (id: string) => {
     const next = collapsed.includes(id) ? collapsed.filter((c) => c !== id) : [...collapsed, id];
     setCollapsed(next);
     save("collapsed", next.join(",") || null);
   };
+
+  useEffect(() => {
+    const q = serialize(location.search, { range, paused: until != null, theme, kiosk: false, view, collapsed });
+    history.replaceState(history.state, "", location.pathname + q + location.hash);
+  }, [range, until, theme, view, collapsed]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setView(null);

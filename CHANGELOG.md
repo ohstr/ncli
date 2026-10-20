@@ -8,7 +8,7 @@
 
 ### Changed
 
-- Updates nmilat to v0.5.0-rc.30, which also escapes tags like content when computing event ids and tightens NIP-04, NIP-44, private key and NWC response checks. ([#175](https://github.com/ohstr/ncli/pull/175))
+- Updates nmilat to v0.5.0-rc.31, which also escapes tags like content when computing event ids and tightens NIP-04, NIP-44, private key and NWC response checks. ([#175](https://github.com/ohstr/ncli/pull/175))
 
 ## [0.8.0-rc.30]
 

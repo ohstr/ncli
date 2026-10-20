@@ -552,19 +552,44 @@ button.icon:hover,
   margin: 6px 0;
 }
 
+/* Bar gauges: a stat's percent and an index job's progress. */
+.gauge,
 .bar {
-  height: 6px;
-  border-radius: 3px;
+  position: relative;
+  height: 8px;
+  border-radius: 2px;
   background: var(--grid);
   overflow: hidden;
+}
+
+.gauge {
+  margin-top: auto;
+}
+
+.bar {
+  height: 10px;
   margin-top: 8px;
 }
 
+.gauge span,
 .bar span {
   display: block;
   height: 100%;
-  background: var(--accent);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--tone) 45%, transparent), var(--tone));
   transition: width 0.5s;
+}
+
+.bar span {
+  --tone: var(--accent);
+}
+
+.gauge i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--muted);
+  opacity: 0.6;
 }
 
 .actions {

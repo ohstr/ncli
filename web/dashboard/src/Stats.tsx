@@ -25,6 +25,8 @@ interface StatSpec {
   ready?: (c: Ctx) => boolean;
   // spark is the store column drawn under the value.
   spark?: string;
+  // gauge draws a 0-100% bar gauge instead of a sparkline.
+  gauge?: boolean;
 }
 
 const handled = (c: Ctx) => (c.n("events_total:accepted") || 0) + (c.n("events_total:rejected") || 0) + (c.n("events_total:duplicate") || 0);
@@ -55,7 +57,7 @@ const STATS: StatSpec[] = [
     fmt: (v) => formatValue(v, "percent"),
     thresholds: [5, 25],
     ready: (c) => handled(c) > 0,
-    spark: "events_total:rejected",
+    gauge: true,
   },
   { label: "EVENT→OK p99", value: (c) => c.n("event_ok_seconds.p99") * 1000, fmt: ms, thresholds: OK_P99, spark: "event_ok_seconds.p99" },
   { label: "REQ→EOSE p99", value: (c) => c.n("req_eose_seconds.p99") * 1000, fmt: ms, thresholds: EOSE_P99, spark: "req_eose_seconds.p99" },
@@ -64,7 +66,7 @@ const STATS: StatSpec[] = [
     value: (c) => (c.n("store_task_queue_depth") / (c.n("store_task_queue_capacity") || 1)) * 100,
     fmt: (v) => formatValue(v, "percent"),
     thresholds: [50, 90],
-    spark: "store_task_queue_depth",
+    gauge: true,
   },
   { label: "Store", value: (c) => c.n("store_size_bytes"), fmt: formatBytes, spark: "store_size_bytes" },
   {
@@ -88,6 +90,20 @@ const STATS: StatSpec[] = [
 function split(s: string): [string, string] {
   const m = /^(-?[\d.]+)\s*(\D*)$/.exec(s);
   return m ? [m[1], m[2]] : [s, ""];
+}
+
+// Gauge is a Grafana bar gauge: the fill takes the threshold color and the
+// thresholds show as ticks on the track.
+function Gauge({ pct, marks }: { pct: number; marks: Thresholds }) {
+  const clamp = (x: number) => `${Math.max(0, Math.min(100, x))}%`;
+  return (
+    <div className="gauge" role="meter" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}>
+      <span style={{ width: clamp(pct) }} />
+      {marks.filter((m) => m < 100).map((m) => (
+        <i key={m} style={{ left: clamp(m) }} />
+      ))}
+    </div>
+  );
 }
 
 function Spark({ col }: { col: (number | null)[] }) {
@@ -129,6 +145,7 @@ export function Kpis({ p, jobs, store, range, until }: Props) {
             </span>
             {s.sub && <span className="kpi-sub">{s.sub(c)}</span>}
             {s.spark && <Spark col={col} />}
+            {s.gauge && <Gauge pct={Number.isFinite(x) ? x : 0} marks={s.thresholds ?? [100, 100]} />}
           </div>
         );
       })}

@@ -41,12 +41,12 @@ func (m *Manager) Routes(r Router) {
 		}
 		name := req.PathValue("name")
 		if body.DryRun {
-			n, err := m.Estimate(name)
+			entries, scan, err := m.Estimate(name)
 			if err != nil {
 				writeStartError(w, err, nil)
 				return
 			}
-			writeJSON(w, http.StatusOK, map[string]any{"index": name, "estimate": n, "dry_run": true})
+			writeJSON(w, http.StatusOK, map[string]any{"index": name, "estimate": entries, "scan_estimate": scan, "dry_run": true})
 			return
 		}
 		job, started, err := m.Start(name, KindRebuild, Options{Fresh: body.Fresh, Reverify: body.Reverify})

@@ -109,9 +109,10 @@ type fakeIndex struct {
 	drops   int
 }
 
-func (f *fakeIndex) Name() string      { return f.name }
-func (f *fakeIndex) Available() string { return f.why }
-func (f *fakeIndex) Estimate() int64   { return 42 }
+func (f *fakeIndex) Name() string        { return f.name }
+func (f *fakeIndex) Available() string   { return f.why }
+func (f *fakeIndex) Estimate() int64     { return 5 }
+func (f *fakeIndex) ScanEstimate() int64 { return 42 }
 func (f *fakeIndex) Rebuild(ctx context.Context, _ Options, progress Progress) error {
 	progress(7, 3)
 	select {
@@ -275,5 +276,37 @@ func TestZapIndexRebuild(t *testing.T) {
 	top, err := store.GetTopZapped(context.Background(), 0, 1000, 10)
 	if err != nil || len(top) != 1 || top[0].Pubkey != receiver || top[0].TotalMLoki != 21000 {
 		t.Errorf("top zapped = %+v, %v", top, err)
+	}
+}
+
+func TestZapIndexEstimateCountsZapReceipts(t *testing.T) {
+	store := newStore(t, 500)
+	insert(t, store, signed(t, 2, 1, 100), signed(t, 3, 1, 101), signed(t, 4, 0, 102))
+	if got := (&ZapIndex{Store: store}).Estimate(); got != 0 {
+		t.Errorf("estimate with no zap receipts = %d, want 0", got)
+	}
+
+	_, receiver := testKey(t, 1)
+	insert(t, store,
+		signed(t, 5, 9735, 103, []string{"p", receiver}, []string{"amount", "21000"}),
+		signed(t, 6, 9735, 104, []string{"p", receiver}, []string{"amount", "1000"}),
+	)
+	ix := &ZapIndex{Store: store}
+	if got := ix.Estimate(); got != 2 {
+		t.Errorf("estimate = %d, want the 2 zap receipts", got)
+	}
+	if got := ix.ScanEstimate(); got != 5 {
+		t.Errorf("scan estimate = %d, want all 5 stored events", got)
+	}
+}
+
+func TestZapIndexUnavailableWhenDisabled(t *testing.T) {
+	m := New("", zerolog.Nop(), &ZapIndex{Store: newStore(t, 500), Disabled: "top-zapped is off"})
+	if _, _, err := m.Start("zaps", KindRebuild, Options{}); !errors.Is(err, ErrUnavailable) {
+		t.Errorf("rebuild of a disabled zap index = %v, want ErrUnavailable", err)
+	}
+	info := m.Indexes()[0]
+	if info.Available || info.Unavailable != "top-zapped is off" || info.Estimate != 0 {
+		t.Errorf("disabled zap index = %+v", info)
 	}
 }

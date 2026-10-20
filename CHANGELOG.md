@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.8.0-rc.32]
+
+### Fixed
+
+- Fixes the zaps index showing as available, with Rebuild and Drop, when `cache.topZapped.enabled` is off; it now reports why and `relay index rebuild|drop zaps` exits `usage`. Its estimate now counts zap receipts instead of every stored event, with the rebuild's scan size reported separately as `scan_estimate`.
+
 ## [0.8.0-rc.31]
 
 ### Added

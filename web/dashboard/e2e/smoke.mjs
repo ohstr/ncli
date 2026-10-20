@@ -81,6 +81,8 @@ try {
       `nip11: {name: e2e, privkey: ${key.priv_hex}}`,
       `store: ${join(dir, "notes.db")}`,
       `logdir: ${dir}`,
+      // The zaps index is only maintainable with top-zapped on.
+      `cache: {topZapped: {enabled: true}}`,
       `admin: {listen: "127.0.0.1:${adminPort}", dashboard: {enabled: true}}`,
     ].join("\n"),
   );

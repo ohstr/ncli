@@ -298,7 +298,7 @@ func newServer(store *relay.EventStore, searchService search.Service, m *metrics
 
 	jobManager := jobs.New(config.RelayNotesDb+".jobs.json", log.Logger,
 		searchIndex(store, searchService, wsHandler.VerificationWorker),
-		&jobs.ZapIndex{Store: store},
+		zapIndex(store),
 	)
 	jobManager.OnFinish = func(j jobs.Job) { m.JobFinished(j.Index, string(j.State)) }
 
@@ -381,6 +381,16 @@ func searchIndex(store *relay.EventStore, svc search.Service, worker *relay.Prof
 		ix.Disabled = "search is read-only on this relay (cache.search.readonly)"
 	default:
 		ix.Host, ix.Key, ix.IndexName = cfg.Host, cfg.Key, cfg.IndexName
+	}
+	return ix
+}
+
+// zapIndex describes the top-zapped index for maintenance jobs, or why it
+// can't be maintained on this relay.
+func zapIndex(store *relay.EventStore) *jobs.ZapIndex {
+	ix := &jobs.ZapIndex{Store: store}
+	if config.Cache == nil || config.Cache.TopZapped == nil || !config.Cache.TopZapped.Enabled {
+		ix.Disabled = "top-zapped is not enabled on this relay (cache.topZapped.enabled)"
 	}
 	return ix
 }

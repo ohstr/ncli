@@ -102,6 +102,16 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
+/* Kiosk: no toolbar, rows become plain spacing. */
+.kiosk .topbar,
+.kiosk h2 {
+  display: none;
+}
+
+.kiosk .row + .row {
+  margin-top: 8px;
+}
+
 .crumbs {
   display: flex;
   align-items: center;

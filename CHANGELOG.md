@@ -4,7 +4,8 @@
 
 ### Fixed
 
-- Fixes the `apply` footer always showing Wrap/AutoScroll whatever panel is focused. It now lists the focused panel's own keys (delete, column sort, view/save event) plus Restart and Save Snapshot. ([#170](https://github.com/ohstr/ncli/pull/170))
+- Fixes the `apply` footer always showing Wrap/AutoScroll whatever panel is focused. It now shows the focused panel's own keys (delete, column sort, view/save event), then Restart, Save and Quit. ([#170](https://github.com/ohstr/ncli/pull/170))
+- Fixes `r` in the `ping` TUI opening a Restart dialog that did nothing. ([#170](https://github.com/ohstr/ncli/pull/170))
 
 ## [0.8.0-rc.30]
 

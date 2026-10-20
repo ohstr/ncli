@@ -4,6 +4,7 @@ import { npubEncode } from "nostr-tools/nip19";
 import { ApiError, hasSigner, login, loginWith, setCsrf, setRenewer, type Session } from "./api";
 import { canRemember, forgetKey, MIN_PASSWORD, savedKey, saveKey, unlockKey } from "./keystore";
 import mark from "./brand/ncli-mark.svg";
+import "./login.css";
 import {
   bunkerSigner,
   DEFAULT_SIGNER_RELAY,

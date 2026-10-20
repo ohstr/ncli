@@ -1,9 +1,16 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { api, canRenew, onSession, renew, setCsrf, setRenewer, type IndexInfo, type Job, type Point, type Session } from "./api";
 import { Chart, type Line } from "./Chart";
-import { ago, formatBytes, formatMs, formatUptime, formatValue } from "./format";
+import { Panel } from "./Panel";
+import { ago, formatValue, type Unit } from "./format";
+import { EOSE_P99, Kpis, OK_P99 } from "./Stats";
+import type { Thresholds } from "./stats";
 import { MetricsStore } from "./store";
 import mark from "./brand/ncli-mark.svg";
+import { applyTheme, savedTheme, type Theme } from "./theme";
+import { RANGES } from "./window";
+import { load, save } from "./persist";
+import { parse, serialize } from "./urlstate";
 
 // The sign-in screen carries the signing libraries; a signed-in dashboard
 // never loads them.
@@ -90,61 +97,83 @@ const CHARTS = {
   ]),
 };
 
+type ChartId = keyof typeof CHARTS;
+
+interface PanelSpec {
+  id: ChartId;
+  title: string;
+  unit: Unit;
+  desc?: string;
+  // w is the width in 24ths (default: the row's); h the plot height in px.
+  w?: Width;
+  h?: number;
+  thresholds?: Thresholds;
+}
+
+type Width = 6 | 8 | 12 | 24;
+
+const ROWS: { id: string; title: string; w: Width; panels: PanelSpec[] }[] = [
+  {
+    id: "traffic",
+    title: "Traffic",
+    w: 12,
+    panels: [
+      { id: "messages", title: "Messages", unit: "rate", desc: "Client messages by type." },
+      { id: "events", title: "Events", unit: "rate", desc: "EVENT outcomes." },
+      { id: "classes", title: "Events by kind", unit: "rate" },
+      { id: "rejected", title: "Rejections by reason", unit: "rate" },
+    ],
+  },
+  {
+    id: "latency",
+    title: "Latency",
+    w: 8,
+    panels: [
+      { id: "eventOK", title: "EVENT → OK", unit: "ms", desc: "Time from an EVENT to its OK; dashed lines are the p99 stat thresholds.", thresholds: OK_P99 },
+      { id: "eose", title: "REQ → EOSE", unit: "ms", desc: "Time from a REQ to its EOSE; dashed lines are the p99 stat thresholds.", thresholds: EOSE_P99 },
+      { id: "store", title: "Store, COUNT and sends", unit: "ms" },
+    ],
+  },
+  {
+    id: "load",
+    title: "Connections and load",
+    w: 8,
+    panels: [
+      { id: "connections", title: "Sessions and subscriptions", unit: "count" },
+      { id: "churn", title: "Connects and send problems", unit: "rate" },
+      { id: "storeQueues", title: "Store queues", unit: "count" },
+      { id: "workers", title: "Workers", unit: "count" },
+      { id: "backpressure", title: "Backpressure", unit: "rate", desc: "Work dropped or refused because a queue was full." },
+      { id: "http", title: "HTTP bridges", unit: "rate" },
+    ],
+  },
+  {
+    id: "access",
+    title: "Access",
+    w: 12,
+    panels: [
+      { id: "auth", title: "AUTH and admin", unit: "rate" },
+      { id: "refusedReads", title: "Refused reads", unit: "rate" },
+    ],
+  },
+  {
+    id: "process",
+    title: "Process",
+    w: 8,
+    panels: [
+      { id: "cpu", title: "CPU", unit: "cores" },
+      { id: "memory", title: "Memory", unit: "bytes" },
+      { id: "goroutines", title: "Goroutines and fds", unit: "count" },
+    ],
+  },
+];
+
 // ---- live values
 
 function useLatest(store: MetricsStore): Point | null {
   return useSyncExternalStore(
     (fn) => store.subscribe(fn),
     () => store.latest,
-  );
-}
-
-type Level = "ok" | "warn" | "bad" | "";
-
-function Kpi({ label, value, sub, level = "" }: { label: string; value: string; sub?: string; level?: Level }) {
-  return (
-    <div className={`kpi ${level}`}>
-      <span className="kpi-label">{label}</span>
-      <span className="kpi-value">{value}</span>
-      {sub && <span className="kpi-sub">{sub}</span>}
-    </div>
-  );
-}
-
-function level(v: number, warn: number, bad: number): Level {
-  if (!Number.isFinite(v)) return "";
-  return v >= bad ? "bad" : v >= warn ? "warn" : "ok";
-}
-
-function Kpis({ p, jobs }: { p: Point | null; jobs: number }) {
-  const v = p?.v ?? {};
-  const t = p?.totals ?? {};
-  const n = (k: string) => v[k] ?? NaN;
-  const accepted = n("events_total:accepted") || 0;
-  const rejected = n("events_total:rejected") || 0;
-  const handled = accepted + rejected + (n("events_total:duplicate") || 0);
-  const rejectPct = handled > 0 ? (rejected / handled) * 100 : 0;
-  const okP99 = n("event_ok_seconds.p99") * 1000;
-  const eoseP99 = n("req_eose_seconds.p99") * 1000;
-  const queuePct = (n("store_task_queue_depth") / (n("store_task_queue_capacity") || 1)) * 100;
-  const denied = Object.entries(t)
-    .filter(([k]) => k.startsWith("admin_denied_total:"))
-    .reduce((a, [, x]) => a + x, 0);
-  const ms = (x: number) => (Number.isFinite(x) ? formatMs(x) : "–");
-  return (
-    <div className="kpis">
-      <Kpi label="Uptime" value={p ? formatUptime(n("uptime_seconds")) : "–"} />
-      <Kpi label="Sessions" value={formatValue(n("ws_sessions") || 0, "count")} sub={`${formatValue(n("subscriptions_active") || 0, "count")} subs`} />
-      <Kpi label="Events accepted" value={formatValue(accepted, "rate")} sub={`${formatValue(n("messages_total:REQ") || 0, "rate")} REQ`} />
-      <Kpi label="Rejected" value={formatValue(rejectPct, "percent")} level={handled > 0 ? level(rejectPct, 5, 25) : ""} />
-      <Kpi label="EVENT→OK p99" value={ms(okP99)} level={level(okP99, 250, 1000)} />
-      <Kpi label="REQ→EOSE p99" value={ms(eoseP99)} level={level(eoseP99, 500, 2000)} />
-      <Kpi label="Write queue" value={Number.isFinite(queuePct) ? formatValue(queuePct, "percent") : "–"} level={level(queuePct, 50, 90)} />
-      <Kpi label="Store" value={Number.isFinite(n("store_size_bytes")) ? formatBytes(n("store_size_bytes")) : "–"} />
-      <Kpi label="CPU" value={Number.isFinite(n("cpu_seconds_total")) ? formatValue(n("cpu_seconds_total"), "cores") : "–"} sub={Number.isFinite(n("rss_bytes")) ? formatBytes(n("rss_bytes")) : ""} />
-      <Kpi label="Admin denied" value={formatValue(denied, "count")} level={denied > 0 ? "warn" : "ok"} />
-      <Kpi label="Jobs" value={String(jobs)} sub={jobs ? "running" : "idle"} />
-    </div>
   );
 }
 
@@ -217,7 +246,14 @@ function IndexRow({ ix, onAction, busy }: { ix: IndexInfo; onAction: (fn: () => 
   );
 }
 
-function Indexes({ onRunning }: { onRunning: (n: number) => void }) {
+interface IndexesProps {
+  onRunning: (n: number) => void;
+  paused: boolean;
+  viewing: boolean;
+  onView: (id: string | null) => void;
+}
+
+function Indexes({ onRunning, paused, viewing, onView }: IndexesProps) {
   const [indexes, setIndexes] = useState<IndexInfo[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -235,9 +271,10 @@ function Indexes({ onRunning }: { onRunning: (n: number) => void }) {
 
   useEffect(() => {
     void refresh();
+    if (paused) return;
     const timer = setInterval(() => !document.hidden && void refresh(), 3000);
     return () => clearInterval(timer);
-  }, [refresh]);
+  }, [refresh, paused]);
 
   const act = async (fn: () => Promise<unknown>) => {
     setBusy(true);
@@ -252,15 +289,14 @@ function Indexes({ onRunning }: { onRunning: (n: number) => void }) {
   };
 
   return (
-    <section className="panel wide">
-      <h3>Indexes</h3>
+    <Panel id="indexes" title="Indexes" desc="Search and zap indexes; rebuilds run as jobs." className="w-24 wide" viewing={viewing} onView={onView}>
       {error && <p className="error">{error}</p>}
       <div className="indexes">
         {indexes.map((ix) => (
           <IndexRow key={ix.name} ix={ix} onAction={act} busy={busy} />
         ))}
       </div>
-    </section>
+    </Panel>
   );
 }
 
@@ -270,6 +306,37 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
   const store = useMemo(() => new MetricsStore(), []);
   const [live, setLive] = useState(false);
   const [jobs, setJobs] = useState(0);
+  // The URL wins over saved preferences, so a link opens what it shows.
+  const [url] = useState(() => parse(location.search));
+  const [theme, setTheme] = useState<Theme>(() => url.theme ?? savedTheme());
+  const [range, setRange] = useState(url.range);
+  // until is the newest time shown while paused.
+  const [until, setUntil] = useState<number | undefined>(() => (url.paused ? Date.now() / 1000 : undefined));
+  const tv = { range, until };
+  const [view, setView] = useState<string | null>(url.view);
+  const [kiosk, setKiosk] = useState(url.kiosk);
+  const [collapsed, setCollapsed] = useState<string[]>(() => url.collapsed ?? (load("collapsed") ?? "").split(",").filter(Boolean));
+  const toggleRow = (id: string) => {
+    const next = collapsed.includes(id) ? collapsed.filter((c) => c !== id) : [...collapsed, id];
+    setCollapsed(next);
+    save("collapsed", next.join(",") || null);
+  };
+
+  useEffect(() => {
+    const q = serialize(location.search, { range, paused: until != null, theme, kiosk, view, collapsed });
+    history.replaceState(history.state, "", location.pathname + q + location.hash);
+  }, [range, until, theme, kiosk, view, collapsed]);
+
+  useEffect(() => {
+    // Esc closes a viewed panel first, then leaves kiosk mode.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (view) setView(null);
+      else setKiosk(false);
+    };
+    addEventListener("keydown", onKey);
+    return () => removeEventListener("keydown", onKey);
+  }, [view]);
   const latest = useLatest(store);
 
   useEffect(() => {
@@ -286,64 +353,85 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
   }, [live]);
 
   return (
-    <div className="page">
-      <header>
-        <img className="brand" src={mark} alt="" width="26" height="26" />
-        <h1>Relay Monitor</h1>
-        <span className={`dot ${live ? "live" : ""}`} title={live ? "live" : "reconnecting"} />
-        <span className="muted">{live ? "live" : "reconnecting…"}</span>
+    <div className={kiosk ? "page kiosk" : "page"}>
+      <header className="topbar">
+        <img className="brand" src={mark} alt="" width="24" height="24" />
+        <nav className="crumbs">
+          <span className="muted">ncli</span>
+          <span className="muted">/</span>
+          <h1>Relay Monitor</h1>
+        </nav>
         <span className="spacer" />
-        <span className="muted mono" title={session.pubkey}>
-          {session.pubkey.slice(0, 8)}…{session.pubkey.slice(-6)}
-        </span>
-        {session.expires_at > 0 && (
-          <button onClick={onLogout} className="ghost">
-            Sign out
+        <div className="tools">
+          <select aria-label="Time range" value={range} onChange={(e) => setRange(Number(e.target.value))}>
+            {RANGES.map(([label, sec]) => (
+              <option key={sec} value={sec}>
+                Last {label}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="Refresh"
+            value={until == null ? "live" : "paused"}
+            onChange={(e) => setUntil(e.target.value === "paused" ? (store.times.at(-1) ?? Date.now() / 1000) : undefined)}
+          >
+            <option value="live">Live</option>
+            <option value="paused">Paused</option>
+          </select>
+          <span className={`dot ${live ? "live" : ""}`} title={live ? "live" : "reconnecting"} />
+          <span className="muted status">{live ? "live" : "reconnecting…"}</span>
+          <select
+            aria-label="Theme"
+            value={theme}
+            onChange={(e) => {
+              const t = e.target.value as Theme;
+              setTheme(t);
+              applyTheme(t);
+            }}
+          >
+            <option value="auto">Auto</option>
+            <option value="dark">Dark</option>
+            <option value="light">Light</option>
+          </select>
+          <button className="ghost" title="Kiosk mode: hide the toolbars (Esc exits)" onClick={() => setKiosk(true)}>
+            Kiosk
           </button>
-        )}
+          <span className="muted mono" title={session.pubkey}>
+            {session.pubkey.slice(0, 8)}…{session.pubkey.slice(-6)}
+          </span>
+          {session.expires_at > 0 && (
+            <button onClick={onLogout} className="ghost">
+              Sign out
+            </button>
+          )}
+        </div>
       </header>
 
-      <Kpis p={latest} jobs={jobs} />
+      <Kpis p={latest} jobs={jobs} store={store} {...tv} />
 
-      <h2>Traffic</h2>
-      <div className="grid">
-        <Chart store={store} title="Messages / s" unit="rate" lines={CHARTS.messages} />
-        <Chart store={store} title="Events / s" unit="rate" lines={CHARTS.events} />
-        <Chart store={store} title="Events by kind / s" unit="rate" lines={CHARTS.classes} />
-        <Chart store={store} title="Rejections by reason / s" unit="rate" lines={CHARTS.rejected} />
-      </div>
+      {ROWS.map((row) => {
+        const shut = collapsed.includes(row.id);
+        return (
+          <div key={row.id} className="row">
+            <h2>
+              <button className="row-head" aria-expanded={!shut} onClick={() => toggleRow(row.id)}>
+                <span className="chevron" aria-hidden="true">{shut ? "▸" : "▾"}</span>
+                {row.title}
+                {shut && <span className="count">({row.panels.length} panels)</span>}
+              </button>
+            </h2>
+            {!shut && (
+              <div className="grid">
+                {row.panels.map((p) => (
+                  <Chart key={p.id} store={store} {...tv} w={row.w} {...p} lines={CHARTS[p.id]} viewing={view === p.id} onView={setView} />
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
 
-      <h2>Latency</h2>
-      <div className="grid">
-        <Chart store={store} title="EVENT → OK" unit="ms" lines={CHARTS.eventOK} />
-        <Chart store={store} title="REQ → EOSE" unit="ms" lines={CHARTS.eose} />
-        <Chart store={store} title="Store, COUNT and sends" unit="ms" lines={CHARTS.store} />
-      </div>
-
-      <h2>Connections and load</h2>
-      <div className="grid">
-        <Chart store={store} title="Sessions and subscriptions" unit="count" lines={CHARTS.connections} />
-        <Chart store={store} title="Connects and send problems / s" unit="rate" lines={CHARTS.churn} />
-        <Chart store={store} title="Store queues" unit="count" lines={CHARTS.storeQueues} />
-        <Chart store={store} title="Workers" unit="count" lines={CHARTS.workers} />
-        <Chart store={store} title="Backpressure / s" unit="rate" lines={CHARTS.backpressure} />
-        <Chart store={store} title="HTTP bridges / s" unit="rate" lines={CHARTS.http} />
-      </div>
-
-      <h2>Access</h2>
-      <div className="grid">
-        <Chart store={store} title="AUTH and admin / s" unit="rate" lines={CHARTS.auth} />
-        <Chart store={store} title="Refused reads / s" unit="rate" lines={CHARTS.refusedReads} />
-      </div>
-
-      <h2>Process</h2>
-      <div className="grid">
-        <Chart store={store} title="CPU" unit="cores" lines={CHARTS.cpu} />
-        <Chart store={store} title="Memory" unit="bytes" lines={CHARTS.memory} />
-        <Chart store={store} title="Goroutines and fds" unit="count" lines={CHARTS.goroutines} />
-      </div>
-
-      <Indexes onRunning={setJobs} />
+      <Indexes onRunning={setJobs} paused={until != null} viewing={view === "indexes"} onView={setView} />
     </div>
   );
 }

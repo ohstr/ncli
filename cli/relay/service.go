@@ -2,6 +2,7 @@ package relay
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -60,10 +61,11 @@ func newServer(store *relay.EventStore, searchService search.Service, m *metrics
 	// them off the package global so swapping it (tests do) can't race them.
 	cfg := config
 
-	// Parse timeouts
+	// nmilat fills zero sizes into the shared SessionConfig on every
+	// connection, racing itself; set them here so it never writes.
 	sessionConfig := relay.SessionConfig{
-		OutgoingBufferSize:      config.OutgoingBufferSize,
-		MaxConcurrentStoreTasks: config.MaxConcurrentStoreTasks,
+		OutgoingBufferSize:      cmp.Or(config.OutgoingBufferSize, defaultOutgoingBufferSize),
+		MaxConcurrentStoreTasks: cmp.Or(config.MaxConcurrentStoreTasks, defaultMaxConcurrentStoreTasks),
 		// Without this, every SDK-internal log.Logger.Warn/Error call
 		// (membership/groups cache load failures, the websocket upgrade
 		// warning, nmilat#72's missing-nip11.url startup warning) writes

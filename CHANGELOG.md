@@ -4,7 +4,12 @@
 
 ### Changed
 
-- The relay dashboard's time range now goes up to 24h: the relay keeps a day of 1-minute rollups (mean, max for latency quantiles) behind its hour of 2s samples. Charts start where the data does, so a relay up for a few minutes fills the chart instead of its right edge. Kiosk mode is gone; old `?kiosk` links still open.
+- The relay dashboard's time range now goes up to 24h: the relay keeps a day of 1-minute rollups (mean, max for latency quantiles) behind its hour of 2s samples. Charts start where the data does, so a relay up for a few minutes fills the chart instead of its right edge. Kiosk mode is gone; old `?kiosk` links still open. ([#181](https://github.com/ohstr/ncli/pull/181))
+- Builds with nmilat v0.5.0-rc.32 and Go 1.26.10, which fixes a `crypto/x509` vulnerability (GO-2026-6809). ([#181](https://github.com/ohstr/ncli/pull/181))
+
+### Fixed
+
+- Fixes a data race when a relay built without explicit `outgoingBufferSize`/`maxConcurrentStoreTasks` accepted two connections at once. ([#181](https://github.com/ohstr/ncli/pull/181))
 
 ## [0.8.0-rc.32]
 

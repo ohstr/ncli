@@ -75,7 +75,7 @@ func TestRelayJSONLogs(t *testing.T) {
 
 func TestRelayAdmin(t *testing.T) {
 	needsRelay(t)
-	r := StartRelay(t, "", map[string]any{"membership": map[string]any{"enabled": true}})
+	r := StartRelay(t, "", map[string]any{"membership": map[string]any{"enabled": true}, "cache": zapsIndex})
 	r.Seed(t)
 	e := NewEnv(t)
 	cfg := r.ConfigPath

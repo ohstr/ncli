@@ -164,10 +164,9 @@ try {
     check(darkBg !== lightBg && lightBg === "rgb(244, 245, 245)", `theme toggle switches palettes (${darkBg} / ${lightBg})`);
     await page.getByLabel("Theme").selectOption("auto");
 
-    await page.getByRole("button", { name: "Kiosk" }).click();
-    check(!(await page.locator(".topbar").isVisible()), "kiosk mode hides the toolbar");
-    await page.keyboard.press("Escape");
-    check(await page.locator(".topbar").isVisible(), "Esc leaves kiosk mode");
+    check((await page.getByRole("button", { name: "Kiosk" }).count()) === 0, "no kiosk button");
+    await page.getByLabel("Time range").selectOption({ label: "Last 24h" });
+    check((await search()).includes("from=now-24h"), "ranges reach 24h");
 
     const messages = page.locator('[data-panel="messages"]');
     await messages.hover();

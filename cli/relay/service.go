@@ -41,10 +41,13 @@ type Service struct {
 	stopSampling context.CancelFunc
 }
 
-// historyInterval and historyWindow size the dashboard's built-in history.
+// The dashboard's built-in history: an hour of 2s samples, then a day of 1m
+// rollups.
 const (
 	historyInterval = 2 * time.Second
 	historyWindow   = time.Hour
+	rollupStep      = time.Minute
+	rollupWindow    = 24 * time.Hour
 )
 
 func NewServer(store *relay.EventStore, searchService search.Service) *Service {
@@ -315,7 +318,7 @@ func newServer(store *relay.EventStore, searchService search.Service, m *metrics
 		Rooms:     huddleRooms,
 		Jobs:      jobManager.Running,
 	})
-	history := metrics.NewHistory(m, historyInterval, historyWindow)
+	history := metrics.NewHistory(m, historyInterval, historyWindow).WithRollup(rollupStep, rollupWindow)
 	go history.Run(sampleCtx)
 
 	s := &Service{

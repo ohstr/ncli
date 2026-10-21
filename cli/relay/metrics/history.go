@@ -14,16 +14,19 @@ import (
 
 // History samples the registry on a fixed interval into a ring of points, so
 // the dashboard can draw charts without Prometheus, and fans each new point
-// out to live viewers. Sampling runs on its own goroutine: viewers only ever
-// read what it already computed.
+// out to live viewers. An optional rollup keeps coarser points for longer.
+// Sampling runs on its own goroutine: viewers only ever read what it already
+// computed.
 type History struct {
 	m        *Metrics
 	interval time.Duration
-	capacity int
 
 	mu     sync.RWMutex
-	times  []int64              // unix ms, oldest first
-	series map[string][]float64 // aligned with times; NaN where absent
+	raw    *ring
+	rollup *ring
+	step   int64 // rollup step, ms
+	bucket int64 // start of the rollup bucket being filled, ms
+	acc    map[string]*accum
 	latest Point
 	prev   map[string]sample
 
@@ -56,11 +59,19 @@ func NewHistory(m *Metrics, interval, window time.Duration) *History {
 	return &History{
 		m:        m,
 		interval: interval,
-		capacity: int(window / interval),
-		series:   map[string][]float64{},
+		raw:      newRing(int(window / interval)),
 		prev:     map[string]sample{},
 		subs:     map[chan Point]struct{}{},
 	}
+}
+
+// WithRollup also keeps window worth of step-sized points: each the mean of
+// its samples, or their max for quantiles so a latency spike survives.
+func (h *History) WithRollup(step, window time.Duration) *History {
+	h.rollup = newRing(int(window / step))
+	h.step = step.Milliseconds()
+	h.acc = map[string]*accum{}
+	return h
 }
 
 // Run samples until ctx is done.
@@ -135,30 +146,79 @@ func (h *History) Sample(now time.Time) {
 	h.mu.Lock()
 	h.prev = next
 	h.latest = p
-	h.append(p)
+	h.raw.append(p.Time, p.Values)
+	if h.rollup != nil {
+		h.roll(p)
+	}
 	h.mu.Unlock()
 	h.publish(p)
 }
 
-func (h *History) append(p Point) {
-	full := len(h.times) == h.capacity
-	if full {
-		h.times = h.times[1:]
+type accum struct{ sum, max, n float64 }
+
+// roll adds p to the rollup bucket it falls in, closing the previous bucket
+// when p starts a new one.
+func (h *History) roll(p Point) {
+	b := p.Time - p.Time%h.step
+	if b != h.bucket && len(h.acc) > 0 {
+		vals := make(map[string]float64, len(h.acc))
+		for key, a := range h.acc {
+			if isQuantile(key) {
+				vals[key] = a.max
+			} else {
+				vals[key] = a.sum / a.n
+			}
+		}
+		h.rollup.append(h.bucket, vals)
+		h.acc = map[string]*accum{}
 	}
-	h.times = append(h.times, p.Time)
-	n := len(h.times)
-	for key, col := range h.series {
+	h.bucket = b
+	for key, v := range p.Values {
+		a := h.acc[key]
+		if a == nil {
+			a = &accum{max: v}
+			h.acc[key] = a
+		}
+		a.sum += v
+		a.n++
+		a.max = math.Max(a.max, v)
+	}
+}
+
+func isQuantile(key string) bool {
+	return strings.HasSuffix(key, ".p50") || strings.HasSuffix(key, ".p95") || strings.HasSuffix(key, ".p99")
+}
+
+// ring holds up to capacity points as columns.
+type ring struct {
+	capacity int
+	times    []int64              // unix ms, oldest first
+	series   map[string][]float64 // aligned with times; NaN where absent
+}
+
+func newRing(capacity int) *ring {
+	return &ring{capacity: max(capacity, 1), series: map[string][]float64{}}
+}
+
+func (r *ring) append(t int64, values map[string]float64) {
+	full := len(r.times) == r.capacity
+	if full {
+		r.times = r.times[1:]
+	}
+	r.times = append(r.times, t)
+	n := len(r.times)
+	for key, col := range r.series {
 		if full && len(col) > 0 {
 			col = col[1:]
 		}
-		v, ok := p.Values[key]
+		v, ok := values[key]
 		if !ok {
 			v = math.NaN()
 		}
-		h.series[key] = append(col, v)
+		r.series[key] = append(col, v)
 	}
-	for key, v := range p.Values {
-		if _, ok := h.series[key]; ok {
+	for key, v := range values {
+		if _, ok := r.series[key]; ok {
 			continue
 		}
 		col := make([]float64, n)
@@ -166,7 +226,7 @@ func (h *History) append(p Point) {
 			col[i] = math.NaN()
 		}
 		col[n-1] = v
-		h.series[key] = col
+		r.series[key] = col
 	}
 }
 
@@ -178,11 +238,14 @@ func (h *History) Latest() Point {
 }
 
 // Columns is the history in uPlot's columnar shape: one time axis and one
-// aligned column per series, null where a series had no value.
+// aligned column per series, null where a series had no value. Rollup
+// points older than the first raw sample come first.
 type Columns struct {
-	Interval int64                 `json:"interval_ms"`
-	Times    []int64               `json:"t"`
-	Series   map[string][]nullable `json:"series"`
+	Interval int64 `json:"interval_ms"`
+	// Window is how far back the history reaches once full.
+	Window int64                 `json:"window_ms"`
+	Times  []int64               `json:"t"`
+	Series map[string][]nullable `json:"series"`
 }
 
 type nullable float64
@@ -201,17 +264,46 @@ func (h *History) Columns() Columns {
 	defer h.mu.RUnlock()
 	out := Columns{
 		Interval: h.interval.Milliseconds(),
-		Times:    append([]int64(nil), h.times...),
-		Series:   make(map[string][]nullable, len(h.series)),
+		Window:   int64(h.raw.capacity) * h.interval.Milliseconds(),
+		Series:   map[string][]nullable{},
 	}
-	for key, col := range h.series {
-		c := make([]nullable, len(col))
-		for i, v := range col {
-			c[i] = nullable(v)
+	old := 0 // rollup points before the first raw sample
+	if h.rollup != nil {
+		out.Window = max(out.Window, int64(h.rollup.capacity)*h.step)
+		for old < len(h.rollup.times) && (len(h.raw.times) == 0 || h.rollup.times[old] < h.raw.times[0]) {
+			old++
 		}
-		out.Series[key] = c
+		out.Times = append(out.Times, h.rollup.times[:old]...)
+	}
+	out.Times = append(out.Times, h.raw.times...)
+	for _, r := range []*ring{h.raw, h.rollup} {
+		if r == nil {
+			continue
+		}
+		for key := range r.series {
+			if _, ok := out.Series[key]; ok {
+				continue
+			}
+			c := make([]nullable, 0, len(out.Times))
+			if h.rollup != nil {
+				c = appendColumn(c, h.rollup.series[key], old)
+			}
+			out.Series[key] = appendColumn(c, h.raw.series[key], len(h.raw.times))
+		}
 	}
 	return out
+}
+
+// appendColumn appends col's first n values, or n nulls when col is nil.
+func appendColumn(dst []nullable, col []float64, n int) []nullable {
+	for i := range n {
+		if col == nil {
+			dst = append(dst, nullable(math.NaN()))
+		} else {
+			dst = append(dst, nullable(col[i]))
+		}
+	}
+	return dst
 }
 
 // Subscribe returns a channel of new points, or ok=false when maxSubscribers

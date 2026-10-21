@@ -3,6 +3,7 @@ package metrics
 import (
 	"encoding/json"
 	"math"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -144,6 +145,37 @@ func TestHistoryRingKeepsWindowAndNullsGaps(t *testing.T) {
 	}
 	if strings.Contains(string(out), "NaN") {
 		t.Errorf("NaN leaked into JSON: %s", out)
+	}
+}
+
+func TestHistoryRollupPrecedesRawSamples(t *testing.T) {
+	m := New("test")
+	// 3 raw samples kept; 10s rollups.
+	h := NewHistory(m, time.Second, 3*time.Second).WithRollup(10*time.Second, time.Minute)
+	t0 := time.Unix(1000, 0)
+	for i := range 25 {
+		if i < 10 {
+			m.Message(relay.MsgEvent)
+		}
+		h.Sample(t0.Add(time.Duration(i) * time.Second))
+	}
+	cols := h.Columns()
+	// Buckets 1000s and 1010s are closed; 1020s is still filling. Raw starts at 1022s.
+	want := []int64{1000_000, 1010_000, 1022_000, 1023_000, 1024_000}
+	if !slices.Equal(cols.Times, want) {
+		t.Fatalf("times = %v, want %v", cols.Times, want)
+	}
+	if cols.Window != 60_000 {
+		t.Errorf("window = %d, want the rollup's 60000", cols.Window)
+	}
+	ev := cols.Series["messages_total:EVENT"]
+	if len(ev) != len(want) {
+		t.Fatalf("EVENT column has %d points, want %d", len(ev), len(want))
+	}
+	// One EVENT a second for the first 10s: rates 1,1,...(9 of them, the first
+	// sample has none), then 0 from 1010s.
+	if ev[0] != 1 || ev[1] != 0 {
+		t.Errorf("rolled-up EVENT rates = %v, %v; want 1, 0", ev[0], ev[1])
 	}
 }
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.8.0-rc.33]
+
+### Changed
+
+- The relay dashboard's time range now goes up to 24h: the relay keeps a day of 1-minute rollups (mean, max for latency quantiles) behind its hour of 2s samples. Charts start where the data does, so a relay up for a few minutes fills the chart instead of its right edge. Kiosk mode is gone; old `?kiosk` links still open.
+
 ## [0.8.0-rc.32]
 
 ### Changed

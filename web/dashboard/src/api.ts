@@ -12,6 +12,7 @@ export interface Point {
 
 export interface Columns {
   interval_ms: number;
+  window_ms: number;
   t: number[];
   series: Record<string, (number | null)[]>;
 }

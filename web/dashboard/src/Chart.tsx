@@ -223,7 +223,16 @@ export function Chart({ id, store, title, unit, lines, desc, w, h: height = 200,
           plugins: [tooltip(), thresholdLines()],
           cursor: { sync: { key: SYNC }, y: false, points: { size: 5 }, drag: { x: false, y: false } },
           scales: {
-            x: { time: true, range: (_u, min, max) => (max == null ? [min, max] : [max - view.current.range, max]) },
+            // The window, or less when history doesn't reach back that far:
+            // a relay up ten minutes fills the chart rather than its last sixth.
+            x: {
+              time: true,
+              range: (_u, min, max) => {
+                if (max == null) return [min, max];
+                const from = max - view.current.range;
+                return [min != null && min < max ? Math.max(min, from) : from, max];
+              },
+            },
             y: { range: (_u, _min, max) => [0, max > 0 ? max * 1.1 : 1] },
           },
           axes: [

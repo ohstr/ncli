@@ -314,7 +314,6 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
   const [until, setUntil] = useState<number | undefined>(() => (url.paused ? Date.now() / 1000 : undefined));
   const tv = { range, until };
   const [view, setView] = useState<string | null>(url.view);
-  const [kiosk, setKiosk] = useState(url.kiosk);
   const [collapsed, setCollapsed] = useState<string[]>(() => url.collapsed ?? (load("collapsed") ?? "").split(",").filter(Boolean));
   const toggleRow = (id: string) => {
     const next = collapsed.includes(id) ? collapsed.filter((c) => c !== id) : [...collapsed, id];
@@ -323,20 +322,16 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
   };
 
   useEffect(() => {
-    const q = serialize(location.search, { range, paused: until != null, theme, kiosk, view, collapsed });
+    const q = serialize(location.search, { range, paused: until != null, theme, view, collapsed });
     history.replaceState(history.state, "", location.pathname + q + location.hash);
-  }, [range, until, theme, kiosk, view, collapsed]);
+  }, [range, until, theme, view, collapsed]);
 
   useEffect(() => {
-    // Esc closes a viewed panel first, then leaves kiosk mode.
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      if (view) setView(null);
-      else setKiosk(false);
-    };
+    // Esc closes a viewed panel.
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setView(null);
     addEventListener("keydown", onKey);
     return () => removeEventListener("keydown", onKey);
-  }, [view]);
+  }, []);
   const latest = useLatest(store);
 
   useEffect(() => {
@@ -353,7 +348,7 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
   }, [live]);
 
   return (
-    <div className={kiosk ? "page kiosk" : "page"}>
+    <div className="page">
       <header className="topbar">
         <img className="brand" src={mark} alt="" width="24" height="24" />
         <nav className="crumbs">
@@ -393,9 +388,6 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
             <option value="dark">Dark</option>
             <option value="light">Light</option>
           </select>
-          <button className="ghost" title="Kiosk mode: hide the toolbars (Esc exits)" onClick={() => setKiosk(true)}>
-            Kiosk
-          </button>
           <span className="muted mono" title={session.pubkey}>
             {session.pubkey.slice(0, 8)}…{session.pubkey.slice(-6)}
           </span>

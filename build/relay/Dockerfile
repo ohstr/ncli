@@ -7,7 +7,7 @@ COPY web/dashboard/ ./
 RUN npm run build
 
 
-FROM golang:1.26.9 AS builder
+FROM golang:1.26.10 AS builder
 
 WORKDIR /app/ncli
 COPY . .

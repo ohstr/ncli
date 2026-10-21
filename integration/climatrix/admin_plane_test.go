@@ -28,6 +28,9 @@ import (
 
 // adminReq sends one request to a relay's admin listener. host overrides the
 // Host header when set.
+// zapsIndex turns on top-zapped, without which the zaps index is unavailable.
+var zapsIndex = map[string]any{"topZapped": map[string]any{"enabled": true}}
+
 func adminReq(t *testing.T, client *http.Client, method, rawURL, host string, hdr map[string]string, body []byte) (int, string, *http.Response) {
 	t.Helper()
 	req, err := http.NewRequest(method, rawURL, bytes.NewReader(body))
@@ -95,7 +98,7 @@ func sessionCookie(resp *http.Response) string {
 // The browser flow end to end: one NIP-98 login, then cookie + CSRF.
 func TestAdminPlane_DashboardSession(t *testing.T) {
 	needsRelay(t)
-	r := StartRelay(t, "", map[string]any{"admin": map[string]any{"dashboard": map[string]any{"enabled": true, "sessionTTL": "2m"}}})
+	r := StartRelay(t, "", map[string]any{"admin": map[string]any{"dashboard": map[string]any{"enabled": true, "sessionTTL": "2m"}}, "cache": zapsIndex})
 	op, eve := A(t, "operator"), A(t, "eve")
 	base := "http://" + r.AdminAddr
 	login := base + "/admin/api/login"
@@ -388,7 +391,7 @@ func TestRelayStatusWatchStreamsNDJSON(t *testing.T) {
 // Text output is what a person reads: check the parts they rely on.
 func TestRelayAdminTextOutput(t *testing.T) {
 	needsRelay(t)
-	r := StartRelay(t, "", nil)
+	r := StartRelay(t, "", map[string]any{"cache": zapsIndex})
 	r.Seed(t)
 	e := NewEnv(t)
 	cfg := r.ConfigPath
@@ -425,7 +428,7 @@ func TestRelayAdminTextOutput(t *testing.T) {
 // signed forwarding, rebinding guard.
 func TestRelayDashboardLocal(t *testing.T) {
 	needsRelay(t)
-	r := StartRelay(t, "", nil)
+	r := StartRelay(t, "", map[string]any{"cache": zapsIndex})
 	r.Seed(t)
 	port := allocPort(t)
 	cmd := exec.Command(bin(t), "relay", "dashboard", "--no-open", "--port", fmt.Sprint(port), "--config", r.ConfigPath, "--json")

@@ -1,31 +1,31 @@
 // Dashboard state in the query string, Grafana-style:
-// ?from=now-15m&refresh=paused&theme=dark&kiosk&view=eose&collapsed=latency,process
+// ?from=now-15m&refresh=paused&theme=dark&view=eose&collapsed=latency,process
 import type { Theme } from "./theme";
+import { MAX_RANGE } from "./window";
 
 export interface UrlState {
-  range: number; // seconds, at most the 1h ring
+  range: number; // seconds, at most MAX_RANGE
   paused: boolean;
   theme?: Theme;
-  kiosk: boolean;
   view: string | null;
   collapsed?: string[];
 }
 
 export const DEFAULT_RANGE = 3600;
 const UNIT: Record<string, number> = { s: 1, m: 60, h: 3600 };
+// kiosk is gone but still dropped from old links.
 const OWN = ["from", "refresh", "theme", "kiosk", "view", "collapsed"];
 
 export function parse(search: string): UrlState {
   const q = new URLSearchParams(search);
   const m = /^now-(\d+)([smh])$/.exec(q.get("from") ?? "");
-  const range = m ? Math.min(DEFAULT_RANGE, Math.max(60, Number(m[1]) * UNIT[m[2]])) : DEFAULT_RANGE;
+  const range = m ? Math.min(MAX_RANGE, Math.max(60, Number(m[1]) * UNIT[m[2]])) : DEFAULT_RANGE;
   const theme = q.get("theme");
   const collapsed = q.get("collapsed");
   return {
     range,
     paused: q.get("refresh") === "paused",
     theme: theme === "auto" || theme === "dark" || theme === "light" ? theme : undefined,
-    kiosk: q.has("kiosk"),
     view: q.get("view") || null,
     collapsed: collapsed == null ? undefined : collapsed.split(",").filter(Boolean),
   };
@@ -43,9 +43,8 @@ export function serialize(search: string, s: UrlState): string {
   if (s.range !== DEFAULT_RANGE) q.set("from", `now-${span(s.range)}`);
   if (s.paused) q.set("refresh", "paused");
   if (s.theme && s.theme !== "auto") q.set("theme", s.theme);
-  if (s.kiosk) q.set("kiosk", "");
   if (s.view) q.set("view", s.view);
   if (s.collapsed?.length) q.set("collapsed", s.collapsed.join(","));
-  const out = q.toString().replace(/(^|&)kiosk=(&|$)/, "$1kiosk$2").replace(/%2C/g, ",");
+  const out = q.toString().replace(/%2C/g, ",");
   return out ? `?${out}` : "";
 }

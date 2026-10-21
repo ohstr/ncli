@@ -1,11 +1,18 @@
-// Time windows over the store's 1h ring.
+// Time windows over the store's history: 2s points for the last hour, 1m
+// rollups behind them for a day.
 
 export const RANGES: [string, number][] = [
   ["5m", 300],
   ["15m", 900],
   ["30m", 1800],
   ["1h", 3600],
+  ["3h", 10800],
+  ["6h", 21600],
+  ["12h", 43200],
+  ["24h", 86400],
 ];
+
+export const MAX_RANGE = 86400;
 
 // lowerBound returns the first index whose time is >= t.
 function lowerBound(times: number[], t: number): number {

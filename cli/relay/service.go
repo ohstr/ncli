@@ -2,6 +2,7 @@ package relay
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -41,10 +42,13 @@ type Service struct {
 	stopSampling context.CancelFunc
 }
 
-// historyInterval and historyWindow size the dashboard's built-in history.
+// The dashboard's built-in history: an hour of 2s samples, then a day of 1m
+// rollups.
 const (
 	historyInterval = 2 * time.Second
 	historyWindow   = time.Hour
+	rollupStep      = time.Minute
+	rollupWindow    = 24 * time.Hour
 )
 
 func NewServer(store *relay.EventStore, searchService search.Service) *Service {
@@ -57,10 +61,11 @@ func newServer(store *relay.EventStore, searchService search.Service, m *metrics
 	// them off the package global so swapping it (tests do) can't race them.
 	cfg := config
 
-	// Parse timeouts
+	// nmilat fills zero sizes into the shared SessionConfig on every
+	// connection, racing itself; set them here so it never writes.
 	sessionConfig := relay.SessionConfig{
-		OutgoingBufferSize:      config.OutgoingBufferSize,
-		MaxConcurrentStoreTasks: config.MaxConcurrentStoreTasks,
+		OutgoingBufferSize:      cmp.Or(config.OutgoingBufferSize, defaultOutgoingBufferSize),
+		MaxConcurrentStoreTasks: cmp.Or(config.MaxConcurrentStoreTasks, defaultMaxConcurrentStoreTasks),
 		// Without this, every SDK-internal log.Logger.Warn/Error call
 		// (membership/groups cache load failures, the websocket upgrade
 		// warning, nmilat#72's missing-nip11.url startup warning) writes
@@ -315,7 +320,7 @@ func newServer(store *relay.EventStore, searchService search.Service, m *metrics
 		Rooms:     huddleRooms,
 		Jobs:      jobManager.Running,
 	})
-	history := metrics.NewHistory(m, historyInterval, historyWindow)
+	history := metrics.NewHistory(m, historyInterval, historyWindow).WithRollup(rollupStep, rollupWindow)
 	go history.Run(sampleCtx)
 
 	s := &Service{

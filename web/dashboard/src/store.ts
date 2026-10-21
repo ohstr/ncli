@@ -8,28 +8,34 @@ export class MetricsStore {
   times: number[] = []; // unix seconds, uPlot's x unit
   series = new Map<string, (number | null)[]>();
   latest: Point | null = null;
-  private capacity = 1800;
+  // window is how many seconds of history are kept, as the server keeps.
+  window = 3600;
+  private loadedAt = 0;
+  private reloading = false;
   private listeners = new Set<() => void>();
   private frame = 0;
   private source: EventSource | null = null;
   connected = false;
 
   load(cols: Columns) {
-    this.capacity = Math.max(1, Math.round(3_600_000 / (cols.interval_ms || 2000)));
+    this.window = (cols.window_ms || 3_600_000) / 1000;
     this.times = cols.t.map((ms) => ms / 1000);
     this.series = new Map(Object.entries(cols.series));
+    this.loadedAt = this.times.at(-1) ?? 0;
     this.notify();
   }
 
   push(p: Point) {
     this.latest = p;
     const n = this.times.length;
-    if (n > 0 && p.t / 1000 <= this.times[n - 1]) return; // already have it
-    const full = n >= this.capacity;
-    if (full) this.times.shift();
-    this.times.push(p.t / 1000);
+    const t = p.t / 1000;
+    if (n > 0 && t <= this.times[n - 1]) return; // already have it
+    let drop = 0;
+    while (drop < n && this.times[drop] < t - this.window) drop++;
+    this.times.splice(0, drop);
+    this.times.push(t);
     for (const [key, col] of this.series) {
-      if (full) col.shift();
+      col.splice(0, drop);
       col.push(key in p.v ? p.v[key] : null);
     }
     for (const key of Object.keys(p.v)) {
@@ -39,7 +45,22 @@ export class MetricsStore {
         this.series.set(key, col);
       }
     }
+    // Live points are full resolution; after an hour the server has rolled
+    // them up, so fetching again keeps a day-long view small.
+    if (this.source && t - this.loadedAt > 3600) void this.reload();
     this.notify();
+  }
+
+  private async reload() {
+    if (this.reloading) return;
+    this.reloading = true;
+    try {
+      this.load(await api.history());
+    } catch {
+      /* keep what we have; the next point tries again */
+    } finally {
+      this.reloading = false;
+    }
   }
 
   get(key: string): (number | null)[] {

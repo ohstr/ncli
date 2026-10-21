@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.8.0-rc.34]
+
+### Changed
+
+- Builds with nmilat v0.5.0-rc.33.
+
 ## [0.8.0-rc.33]
 
 ### Changed

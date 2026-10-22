@@ -23,6 +23,8 @@ const (
 	syncIntegrationRemoteURL   = "ws://localhost:21520"
 	// Second instance of the same relay config, empty at startup.
 	syncIntegrationRemoteBURL = "ws://localhost:21521"
+	// strfry, which drops any message over 128 KiB.
+	syncIntegrationStrfryURL = "ws://localhost:21522"
 )
 
 // TestSyncIntegration brings up compose.yaml's two real relay containers
@@ -43,13 +45,14 @@ func TestSyncIntegration(t *testing.T) {
 		}
 	})
 
-	waitForAllRelaysReady(t, []string{syncIntegrationRemoteURL, syncIntegrationRemoteBURL}, 60*time.Second)
+	waitForAllRelaysReady(t, []string{syncIntegrationRemoteURL, syncIntegrationRemoteBURL, syncIntegrationStrfryURL}, 60*time.Second)
 
 	t.Run("ReconcileCompleteness", testSyncReconcileCompleteness)
 	t.Run("FilterCorrectness", testSyncFilterCorrectness)
 	t.Run("MaxReconcileRoundsTooLowSurfacesCleanly", testSyncMaxReconcileRoundsTooLowSurfacesCleanly)
 	t.Run("RemoteStallTriggersTimeoutNotHang", testSyncRemoteStallTriggersTimeoutNotHang)
 	t.Run("NegentropyPropagatesBetweenRelayInstances", testSyncNegentropyPropagatesBetweenRelayInstances)
+	t.Run("LargeDiffAgainstStrfry", testSyncLargeDiffAgainstStrfry)
 }
 
 // testSyncReconcileCompleteness: seeds each side of a `direction: both`
@@ -345,6 +348,91 @@ func testSyncNegentropyPropagatesBetweenRelayInstances(t *testing.T) {
 	runSyncLeg(t, syncIntegrationRemoteBURL, localPath, SyncDirectionUp, scope)
 	if missing := waitForEventsAtRelay(t, syncIntegrationRemoteBURL, seeded, 20*time.Second); len(missing) > 0 {
 		t.Errorf("push to B: %d/%d event(s) never reached the second relay instance: %v", len(missing), n, missing)
+	}
+}
+
+// testSyncLargeDiffAgainstStrfry pulls from strfry into a local store that
+// shares thousands of events with it and holds thousands strfry lacks. The
+// local IdLists for the mismatched ranges used to go out in one message far
+// over strfry's 128 KiB cap, and strfry dropped the connection mid-reconcile.
+func testSyncLargeDiffAgainstStrfry(t *testing.T) {
+	// Deep enough that strfry still splits where the local ranges are
+	// small: the old client then answered ~4000 IdLists, ~330 KB, at once.
+	const sharedN, remoteOnlyN, localOnlyN = 9000, 3000, 3000
+
+	since := uint64(time.Now().Unix())
+
+	// Interleaved, so the differences spread across every range instead of
+	// sitting in one block of timestamps.
+	var remote, local []*nip01.Event
+	var remoteOnly []string
+	for i := range sharedN + remoteOnlyN + localOnlyN {
+		ev := newIntegrationEvent(t, fmt.Sprintf("strfry-%d", i))
+		switch i % 5 {
+		case 3:
+			remote = append(remote, ev)
+			remoteOnly = append(remoteOnly, ev.ID)
+		case 4:
+			local = append(local, ev)
+		default:
+			remote = append(remote, ev)
+			local = append(local, ev)
+		}
+	}
+	publishEvents(t, syncIntegrationStrfryURL, remote)
+	localPath := filepath.Join(t.TempDir(), "strfry.db")
+	seedLocalSyncStore(t, localPath, local)
+
+	spec := loadTestSyncSpec(t)
+	spec.GetLocal().Path = localPath
+	spec.Direction = SyncDirectionDown
+	// Over strfry's max_limit of 500: each batch comes back short, and the
+	// rest must be asked for again.
+	spec.PullBatchSize = 1000
+	spec.Filters = []*FilterSpec{NewFilterSpec(&nip01.SubscriptionFilter{
+		Kinds:   []int{1},
+		Authors: []string{integrationPubKey},
+		Since:   since,
+	})}
+	spec.remote = newRemoteFlowSpec(t, syncIntegrationStrfryURL, true, 0)
+
+	sm, err := NewSyncModule(spec, nil, false)
+	if err != nil {
+		t.Fatalf("NewSyncModule failed: %v", err)
+	}
+	t.Cleanup(sm.Close)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+	logger, err := sm.Run(ctx)
+	if err != nil {
+		t.Fatalf("sm.Run failed: %v", err)
+	}
+
+	errorMarker := fmt.Sprintf("[%s]●[-]", tui.ColorDanger)
+	deadline := time.Now().Add(90 * time.Second)
+	for done := false; !done; {
+		for _, row := range logger.GetLastLogs() {
+			for _, cell := range row {
+				switch {
+				case strings.Contains(cell, errorMarker):
+					t.Fatalf("sync failed: %s", cell)
+				case strings.Contains(cell, "Max reconciliation rounds reached"):
+					t.Fatalf("sync gave up early: %s", cell)
+				case strings.Contains(cell, "Sync complete"):
+					done = true
+				}
+			}
+		}
+		if !done && time.Now().After(deadline) {
+			t.Fatal("sync did not report completion within the timeout")
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	sm.Close()
+
+	if missing := waitForEventsInLocalStore(t, localPath, remoteOnly, 20*time.Second); len(missing) > 0 {
+		t.Errorf("pull: %d/%d strfry event(s) never landed in the local store", len(missing), remoteOnlyN)
 	}
 }
 

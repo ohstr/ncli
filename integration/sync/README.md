@@ -18,8 +18,9 @@ NEG-OPEN; they never initiate reconciliation with each other.
 ## What's here
 
 - `compose.yaml` -- `remote` (21520) and `remote2` (21521, empty at
-  startup), project `ncli-sync-itest`.
+  startup), plus `strfry` (21522), project `ncli-sync-itest`.
 - `relay.yaml` -- minimal relay config.
+- `strfry.conf` -- strfry with its default 128 KiB message cap.
 - `sync.yaml` -- spec fixture, `direction: both`.
 
 ## Automated: the Go test
@@ -30,7 +31,7 @@ just test-integration-sync
 
 Runs `TestSyncIntegration`. Needs Docker; runs automatically in CI.
 
-Five scenarios:
+Six scenarios:
 
 - **`ReconcileCompleteness`** -- `/Small` and `/Large`: seeds each side
   with events the other lacks, asserts both directions land (verified
@@ -51,6 +52,11 @@ Five scenarios:
   Checks `remote2` is empty first, so the assertion can't pass on
   pre-existing data. This is the hermetic replacement for the deleted
   live-relay negentropy test.
+- **`LargeDiffAgainstStrfry`** -- pulls from strfry into a store sharing
+  9000 events with it and holding 3000 it lacks, interleaved in time.
+  Without a capped message size, round 2 is ~330 KB and strfry drops the
+  connection. `pullBatchSize` is over strfry's `max_limit`, so short
+  batches must be asked for again.
 
 ## Confirmed gap: multiple filter objects don't work correctly for sync
 

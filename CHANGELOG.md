@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.8.0-rc.39]
+
+### Changed
+
+- Changes `maxReconcileRounds`' default for `apply` sync from 20 to 1000, since a large diff now takes many small rounds. Hitting the cap says the sync is partial. ([#189](https://github.com/ohstr/ncli/pull/189))
+- Builds with nmilat v0.5.0-rc.37. ([#189](https://github.com/ohstr/ncli/pull/189))
+
+### Fixed
+
+- Fixes `apply` sync dropping the connection mid-sync when the two sides differ by thousands of events, as against strfry relays like relay.nostr.net: each NIP-77 message now stays under 30 000 bytes. ([#189](https://github.com/ohstr/ncli/pull/189))
+- Fixes `apply` sync skipping events when `pullBatchSize` is above the relay's `max_limit`: what a batch didn't return is asked for again, and events the relay never serves are counted in a warning. ([#189](https://github.com/ohstr/ncli/pull/189))
+
 ## [0.8.0-rc.38]
 
 ### Added

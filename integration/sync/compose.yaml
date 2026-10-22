@@ -33,6 +33,18 @@ services:
       - ./relay.yaml:/config/relay.yaml:ro
       - remote2-data:/app/ncli/data
 
+  # strfry, as most NIP-77 public relays run it: rejects any message over
+  # 128 KiB, which a large diff only stays under if sync caps its frames.
+  strfry:
+    # Only `latest` is published; pinned by digest.
+    image: ghcr.io/hoytech/strfry@sha256:36f1886d185a88ca57c66ebe52e6e9e8428dac2486eea0a5d50ff934f18b60c3
+    ports:
+      - "21522:7777"
+    volumes:
+      - ./strfry.conf:/etc/strfry.conf:ro
+      - strfry-data:/app/strfry-db
+
 volumes:
   remote-data:
   remote2-data:
+  strfry-data:

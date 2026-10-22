@@ -554,8 +554,9 @@ func (ss *SyncSpec) UnmarshalJSON(data []byte) error {
 
 	*ss = SyncSpec(temp)
 
+	// Messages are capped in size, so a large diff takes many small rounds.
 	if ss.MaxReconcileRounds <= 0 {
-		ss.MaxReconcileRounds = 20
+		ss.MaxReconcileRounds = 1000
 	}
 	if ss.PullBatchSize <= 0 {
 		ss.PullBatchSize = 100

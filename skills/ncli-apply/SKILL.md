@@ -146,8 +146,8 @@ spec:
 
   # both (default) | up | down
   direction: down
-  # optional, default 20
-  maxReconcileRounds: 20
+  # optional, default 1000
+  maxReconcileRounds: 1000
   # optional, default 100
   pullBatchSize: 100
   # optional, default false -- see "--strict-pow" above

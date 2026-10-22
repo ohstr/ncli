@@ -42,8 +42,8 @@ spec:
       # last 40 days". Don't prefix it with "-", that flips it to the future.
       since: "40d"
 
-  # maxReconcileRounds (optional, default 20): cap on negentropy round trips.
-  maxReconcileRounds: 20
+  # maxReconcileRounds (optional, default 1000): cap on negentropy round trips.
+  maxReconcileRounds: 1000
 
   # pullBatchSize (optional, default 100): events requested per pull batch.
   pullBatchSize: 100

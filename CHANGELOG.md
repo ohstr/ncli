@@ -2,6 +2,10 @@
 
 ## [0.8.0-rc.39]
 
+### Changed
+
+- Changes `maxReconcileRounds`' default for `apply` sync from 20 to 1000, since a large diff now takes many small rounds. Hitting the cap says the sync is partial.
+
 ### Fixed
 
 - Fixes `apply` sync skipping events when `pullBatchSize` is above the relay's `max_limit`: what a batch didn't return is asked for again, and events the relay never serves are counted in a warning.

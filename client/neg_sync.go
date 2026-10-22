@@ -235,6 +235,8 @@ func (s *SyncModule) execute(ctx context.Context) {
 					reconciledItems += (currIdx - start)
 				}
 			}
+			// Items past the last range are settled: trailing Skips are omitted.
+			reconciledItems += totalItems - currIdx
 
 			progress := 0.0
 			if totalItems > 0 {
@@ -277,7 +279,7 @@ func (s *SyncModule) execute(ctx context.Context) {
 		}
 	}
 
-	s.logger.Warn(fmt.Sprintf("Max reconciliation rounds reached (%d)", s.spec.MaxReconcileRounds), syncAttr)
+	s.logger.Warn(fmt.Sprintf("Max reconciliation rounds reached (%d); syncing what was found so far, raise maxReconcileRounds for the rest", s.spec.MaxReconcileRounds), syncAttr)
 
 reconcileDone:
 

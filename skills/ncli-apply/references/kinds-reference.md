@@ -31,7 +31,7 @@ only its tuning is optional.
 | `to` | single flow | required | See `from` |
 | `direction` | `both`\|`up`\|`down` | `both` | `up` = push local→remote only, `down` = pull remote→local only |
 | `filters` | list of NIP-01 filters | matches everything | Scopes which events participate |
-| `maxReconcileRounds` | int | `20` | Cap on negentropy round trips |
+| `maxReconcileRounds` | int | `1000` | Cap on negentropy round trips |
 | `pullBatchSize` | int | `100` | Events requested per pull batch |
 | `strictPow` | bool | `false` | Drop pulled events whose `nonce` tag fails NIP-13 validation instead of inserting them locally; overridden by `apply --strict-pow` when passed explicitly |
 | `timeouts.*` | same as `stream` | same defaults | |

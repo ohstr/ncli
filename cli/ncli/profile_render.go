@@ -58,6 +58,11 @@ func renderProfile(v *profileView) {
 	fmt.Printf("  %s      %s\n", profileSectionStyle.Render("Following"), renderFollowing(v))
 	fmt.Println()
 
+	if len(v.Stats) > 0 {
+		renderStatsSection(v.Stats[0], len(v.Stats))
+		fmt.Println()
+	}
+
 	renderRelaySection(v)
 	fmt.Println()
 	renderBlossomSection(v)
@@ -110,6 +115,8 @@ func renderNip05(s *nip05Status) string {
 		return notSet
 	}
 	switch {
+	case s.Unchecked:
+		return s.Address + profileDimStyle.Render(" (not checked)")
 	case s.Error != "":
 		return profileWarnStyle.Render("⚠ ") + s.Address + profileDimStyle.Render(" (could not verify)")
 	case s.Verified:
@@ -117,6 +124,53 @@ func renderNip05(s *nip05Status) string {
 	default:
 		return profileErrStyle.Render("✘ ") + s.Address + profileDimStyle.Render(" (does not match this pubkey)")
 	}
+}
+
+// renderStatsSection shows the newest NIP-85 assertion; --json has them all.
+func renderStatsSection(s profileStats, providers int) {
+	for _, line := range statsLines(s, providers) {
+		fmt.Println(line)
+	}
+}
+
+func statsLines(s profileStats, providers int) []string {
+	by := "by " + shortHex(s.Provider)
+	if providers > 1 {
+		by += fmt.Sprintf(" (+%d more in --json)", providers-1)
+	}
+	lines := []string{fmt.Sprintf("  %s          %s", profileSectionStyle.Render("Stats"), profileDimStyle.Render(by))}
+	num := func(name string) string {
+		if v, ok := s.Tags[name]; ok {
+			return withThousands(v)
+		}
+		return "?"
+	}
+	if _, ok := s.Tags["rank"]; ok {
+		lines = append(lines, fmt.Sprintf("    %-12s %s/100", "rank", num("rank")))
+	}
+	lines = append(lines,
+		fmt.Sprintf("    %-12s %s followers · %s following", "follows", num("followers"), num("following")),
+		fmt.Sprintf("    %-12s %s received (%s sats) · %s sent (%s sats)", "zaps",
+			num("zap_cnt_recd"), num("zap_amt_recd"), num("zap_cnt_sent"), num("zap_amt_sent")))
+	if first, ok := s.Tags["zap_first_recd"]; ok {
+		lines = append(lines, fmt.Sprintf("    %-12s first received %s", "", unixDate(first)))
+	}
+	return lines
+}
+
+func shortHex(h string) string {
+	if len(h) > 16 {
+		return h[:8] + "…" + h[len(h)-8:]
+	}
+	return h
+}
+
+func unixDate(s string) string {
+	var ts int64
+	if _, err := fmt.Sscan(s, &ts); err != nil || ts <= 0 {
+		return s
+	}
+	return time.Unix(ts, 0).UTC().Format("2006-01-02")
 }
 
 func renderFollowing(v *profileView) string {

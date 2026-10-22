@@ -34,6 +34,17 @@ same idea: plain positional arguments instead of `-s/--relays` (`ncli
 ping relay.primal.net` needs no flag at all), and no filter flags at all
 — see `## ping` below for why.
 
+### Profile stats (NIP-85)
+
+A relay with `cache.profileStats` answers kind 30382 by `#d` with stats it
+signs: `rank`, `followers`, `following`, `zap_cnt_recd`/`zap_amt_recd`,
+`zap_cnt_sent`/`zap_amt_sent` (sats), first/last zap times, verified
+NIP-05/lightning address. `ncli profile` shows them on its card.
+
+```sh
+ncli find -k 30382 --tag d=<hex-pubkey> -s wss://relay.example.com
+```
+
 ### Relays that require login
 
 `find` and `dump` take **`--auth-identity`** (alias `--signer`): what to

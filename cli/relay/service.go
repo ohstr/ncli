@@ -95,6 +95,13 @@ func newServer(store *relay.EventStore, searchService search.Service, m *metrics
 	log.Info().Str("pubkey", config.Nip11.PubKey).Int("port", config.Port).Msg("server config check")
 	sessionConfig.PrivKey = config.Nip11.PrivKey
 	sessionConfig.EnableTopZapped = config.Cache != nil && config.Cache.TopZapped != nil && config.Cache.TopZapped.Enabled
+	sessionConfig.EnableProfileStats = profileStatsEnabled(&config)
+	if sessionConfig.EnableProfileStats {
+		sessionConfig.MaxStatsTargets = config.Cache.ProfileStats.MaxTargets
+	}
+	// initConfig already validated it.
+	sessionConfig.Verification, _ = verificationSettings(&config)
+	applyScoring(&config)
 
 	// WithSessionConfig (below) replaces the SDK's defaultSessionConfig()
 	// wholesale rather than merging into it, so its built-in
@@ -305,8 +312,9 @@ func newServer(store *relay.EventStore, searchService search.Service, m *metrics
 	nip86Handler = handler
 
 	jobManager := jobs.New(config.RelayNotesDb+".jobs.json", log.Logger,
-		searchIndex(store, searchService, wsHandler.VerificationWorker),
+		searchIndex(store, searchService),
 		zapIndex(store),
+		&jobs.StatsIndex{Store: store},
 	)
 	jobManager.OnFinish = func(j jobs.Job) { m.JobFinished(j.Index, string(j.State)) }
 
@@ -363,6 +371,7 @@ func (s *Service) startAdmin() error {
 		return err
 	}
 	s.jobs.Routes(admin)
+	profileRoutes(admin, s.store, s.verificationWorker)
 	if err := admin.Start(); err != nil {
 		if adminSettings.Defaulted && !adminSettings.Dashboard && !adminSettings.Metrics {
 			log.Warn().Err(err).Msg("admin listener not started; set admin.listen to choose a free address")
@@ -376,8 +385,8 @@ func (s *Service) startAdmin() error {
 
 // searchIndex describes the search index for maintenance jobs, or why it
 // can't be maintained on this relay.
-func searchIndex(store *relay.EventStore, svc search.Service, worker *relay.ProfileVerificationWorker) *jobs.SearchIndex {
-	ix := &jobs.SearchIndex{Store: store, Worker: worker}
+func searchIndex(store *relay.EventStore, svc search.Service) *jobs.SearchIndex {
+	ix := &jobs.SearchIndex{Store: store}
 	var cfg *SearchConfig
 	if config.Cache != nil {
 		cfg = config.Cache.Search

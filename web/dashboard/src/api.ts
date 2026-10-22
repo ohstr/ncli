@@ -23,7 +23,7 @@ export interface Job {
   id: string;
   index: string;
   kind: "rebuild" | "drop";
-  options: { fresh: boolean; reverify: boolean };
+  options: { fresh: boolean };
   state: JobState;
   scanned: number;
   indexed: number;
@@ -150,8 +150,8 @@ export const api = {
   latest: () => call<Point>("GET", "/admin/api/metrics"),
   history: () => call<Columns>("GET", "/admin/api/history"),
   indexes: () => call<{ indexes: IndexInfo[] }>("GET", "/admin/api/indexes").then((r) => r.indexes ?? []),
-  rebuild: (index: string, fresh: boolean, reverify: boolean) =>
-    call<Job>("POST", `/admin/api/indexes/${encodeURIComponent(index)}/rebuild`, { fresh, reverify }),
+  rebuild: (index: string, fresh: boolean) =>
+    call<Job>("POST", `/admin/api/indexes/${encodeURIComponent(index)}/rebuild`, { fresh }),
   drop: (index: string) => call<Job>("POST", `/admin/api/indexes/${encodeURIComponent(index)}/drop`),
   cancel: (id: string) => call<Job>("DELETE", `/admin/api/jobs/${encodeURIComponent(id)}`),
 };

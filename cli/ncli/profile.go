@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os/signal"
+	"sort"
 	"strings"
 	"syscall"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/ohstr/nmilat/nip01"
 	"github.com/ohstr/nmilat/nip65"
 	"github.com/ohstr/nmilat/nipB7"
+	"github.com/ohstr/nmilat/relay"
 	"github.com/spf13/cobra"
 )
 
@@ -21,6 +23,9 @@ import (
 // other three kinds profile reads but not this one, so it's spelled out here
 // rather than left as a bare 3 at the call site.
 const kindContacts = 3
+
+// kindUserAssertion is NIP-85's assertion about a user.
+const kindUserAssertion = relay.KindUserAssertion
 
 // profileView is everything a profile lookup gathered, and the shape --json
 // emits. Each section is independently optional: relays/blossom/following are
@@ -34,8 +39,19 @@ type profileView struct {
 	Following *int                    `json:"following,omitempty"`
 	Relays    []profileRelay          `json:"relays,omitempty"`
 	Blossom   []string                `json:"blossom_servers,omitempty"`
-	UpdatedAt uint64                  `json:"updated_at,omitempty"`
-	Queried   int                     `json:"queried_relays"`
+	// Stats are NIP-85 assertions (kind 30382) about this profile, newest
+	// per provider, newest first.
+	Stats     []profileStats `json:"stats,omitempty"`
+	UpdatedAt uint64         `json:"updated_at,omitempty"`
+	Queried   int            `json:"queried_relays"`
+}
+
+// profileStats is one provider's NIP-85 assertion: its tags as name ->
+// value (rank, followers, zap_cnt_recd, zap_amt_recd in sats, ...).
+type profileStats struct {
+	Provider  string            `json:"provider"`
+	CreatedAt uint64            `json:"created_at"`
+	Tags      map[string]string `json:"tags"`
 }
 
 // profileRelay is one NIP-65 entry. nip65.RelayEntry carries no JSON tags,
@@ -57,6 +73,8 @@ type nip05Status struct {
 	// malformed document) -- distinct from a lookup that succeeded and
 	// disagreed, which is Verified:false with no Error.
 	Error string `json:"error,omitempty"`
+	// Unchecked is set under --no-verify: Verified false means nothing.
+	Unchecked bool `json:"unchecked,omitempty"`
 }
 
 func newProfileCommand() *cobra.Command {
@@ -105,6 +123,10 @@ func runProfile(cmd *cobra.Command, args []string) error {
 	filters := nip01.NewSubscriptionFilterGroup(&nip01.SubscriptionFilter{
 		Kinds:   []int{0, kindContacts, nip65.KindRelayListMetadata, nipB7.KindBlossomServerList},
 		Authors: []string{resolved.PubKeyHex},
+	}, &nip01.SubscriptionFilter{
+		// NIP-85 assertions about this profile, from any provider.
+		Kinds: []int{kindUserAssertion},
+		Tags:  map[string][]string{"d": {resolved.PubKeyHex}},
 	})
 
 	timeout, _ := cmd.Flags().GetDuration("timeout")
@@ -129,6 +151,8 @@ func runProfile(cmd *cobra.Command, args []string) error {
 
 	if noVerify, _ := cmd.Flags().GetBool("no-verify"); !noVerify {
 		view.Nip05 = verifyNip05(cmd, view)
+	} else if view.Nip05 != nil {
+		view.Nip05.Unchecked = true
 	}
 
 	if jsonMode {
@@ -165,14 +189,31 @@ func buildProfileView(resolved *client.IdentityInspection, events []*nip01.Event
 	view := &profileView{Npub: resolved.Npub, PubKeyHex: resolved.PubKeyHex, Queried: queried}
 
 	newest := map[int]*nip01.Event{}
+	stats := map[string]*nip01.Event{}
 	for _, ev := range events {
 		if ev == nil {
+			continue
+		}
+		if ev.Kind == kindUserAssertion {
+			if cur, ok := stats[ev.PubKey]; !ok || ev.CreatedAt > cur.CreatedAt {
+				stats[ev.PubKey] = ev
+			}
 			continue
 		}
 		if cur, ok := newest[ev.Kind]; !ok || ev.CreatedAt > cur.CreatedAt {
 			newest[ev.Kind] = ev
 		}
 	}
+	for provider, ev := range stats {
+		s := profileStats{Provider: provider, CreatedAt: ev.CreatedAt, Tags: map[string]string{}}
+		for _, tag := range ev.Tags {
+			if len(tag) >= 2 && tag[0] != "d" {
+				s.Tags[tag[0]] = tag[1]
+			}
+		}
+		view.Stats = append(view.Stats, s)
+	}
+	sort.Slice(view.Stats, func(i, j int) bool { return view.Stats[i].CreatedAt > view.Stats[j].CreatedAt })
 
 	if ev := newest[0]; ev != nil {
 		if meta, err := common.ParseProfileMetadata(ev.Content); err == nil {

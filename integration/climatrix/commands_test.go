@@ -96,7 +96,7 @@ func TestRelayAdmin(t *testing.T) {
 		if s.Metrics.Totals["events_total:accepted"] == 0 {
 			t.Errorf("status shows no accepted events after seeding")
 		}
-		if len(s.Indexes) != 2 {
+		if len(s.Indexes) != 3 {
 			t.Errorf("status indexes: %+v", s.Indexes)
 		}
 		if out := e.MustOK(t, "relay", "status", "--config", cfg).Stdout; !strings.Contains(out, "Connections") {
@@ -131,7 +131,7 @@ func TestRelayAdmin(t *testing.T) {
 			DryRun []map[string]any `json:"dry_run"`
 		}
 		e.MustOK(t, "relay", "index", "rebuild", "all", "--dry-run", "--config", cfg, "--json").JSON(t, &dry)
-		if len(dry.DryRun) != 1 || dry.DryRun[0]["index"] != "zaps" {
+		if len(dry.DryRun) != 2 || dry.DryRun[0]["index"] != "zaps" || dry.DryRun[1]["index"] != "stats" {
 			t.Errorf("dry run over available indexes: %+v", dry.DryRun)
 		}
 
@@ -147,8 +147,29 @@ func TestRelayAdmin(t *testing.T) {
 		e.Run(t, "relay", "index", "rebuild", "search", "--config", cfg, "--json").ExpectErr(t, "usage")
 		e.Run(t, "relay", "index", "drop", "search", "--yes", "--config", cfg, "--json").ExpectErr(t, "usage")
 		e.Run(t, "relay", "index", "rebuild", "nope", "--config", cfg, "--json").ExpectErr(t, "not_found")
+		rep := e.Run(t, "relay", "index", "rebuild", "search", "--reverify", "--config", cfg, "--json").ExpectErr(t, "usage")
+		if !strings.Contains(rep.Error, "relay verify") {
+			t.Errorf("--reverify: %q lacks the replacement", rep.Error)
+		}
 		e.Run(t, "relay", "jobs", "show", "deadbeef", "--config", cfg, "--json").ExpectErr(t, "not_found")
 		e.Run(t, "relay", "status", "--config", r.AdminConfig(t, bob.PrivHex), "--json").ExpectErr(t, "auth")
+	})
+
+	t.Run("verify", func(t *testing.T) {
+		var out struct {
+			Profiles []struct {
+				Pubkey string
+				Nip05  struct{ Status string }
+				Stats  map[string]any
+			}
+		}
+		e.MustOK(t, "relay", "verify", bob.PubHex, "--config", cfg, "--json").JSON(t, &out)
+		if len(out.Profiles) != 1 || out.Profiles[0].Pubkey != bob.PubHex || out.Profiles[0].Stats == nil {
+			t.Errorf("verify: %+v", out)
+		}
+		// No stored kind 0 to check.
+		e.Run(t, "relay", "verify", bob.PubHex, "--refresh", "--config", cfg, "--json").ExpectErr(t, "not_found")
+		e.Run(t, "relay", "verify", "not-a-key", "--config", cfg, "--json").ExpectErr(t, "invalid_input")
 	})
 
 	t.Run("removed commands point to their replacements", func(t *testing.T) {

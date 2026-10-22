@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.8.0-rc.35]
+
+### Added
+
+- Adds NIP-85 profile stats to `ncli relay`: with `cache.profileStats.enabled`, a REQ for kind 30382 with `#d` pubkeys gets relay-signed rank, followers, following and zaps received/sent. `ncli profile` shows a relay's stats on its card. ([#184](https://github.com/ohstr/ncli/pull/184))
+- Adds `ncli relay verify <pubkey|npub|nip-05...>`, which shows a running relay's stored NIP-05/lightning checks (status, next check, retries, last error), score and stats; `--refresh` re-checks now. ([#184](https://github.com/ohstr/ncli/pull/184))
+- Adds `cache.verification` (TTL, retry backoff, per-host spacing, workers) and `cache.scoring` (profile score weights) to the relay config, and a `stats` index to `ncli relay index`. ([#184](https://github.com/ohstr/ncli/pull/184))
+
+### Changed
+
+- Changes the search score to count followers and zaps received, weighted by who sent them; an index rebuild now rescores from stored results and never re-fetches NIP-05 or lightning addresses. `--reverify` is removed in favour of `ncli relay verify --refresh`. ([#184](https://github.com/ohstr/ncli/pull/184))
+- Deprecates the top-level `verificationWorkers` relay setting in favour of `cache.verification.workers`. ([#184](https://github.com/ohstr/ncli/pull/184))
+- Builds with nmilat v0.5.0-rc.34. ([#184](https://github.com/ohstr/ncli/pull/184))
+
+### Fixed
+
+- Fixes relays marking working NIP-05 and lightning addresses as missing: long TLDs are checked, and a timeout, block or 5xx is retried instead of cached as "not verified" for two weeks. ([#184](https://github.com/ohstr/ncli/pull/184))
+- Fixes `ncli relay index list` showing stored profile counts as the search index's entries; it now reports Meilisearch's own document count. ([#184](https://github.com/ohstr/ncli/pull/184))
+- Fixes top-zapped counting invalid or self-paid zaps and duplicate receipts. ([#184](https://github.com/ohstr/ncli/pull/184))
+- Fixes `ncli profile --no-verify` showing the NIP-05 address as not matching the pubkey; it now says "not checked", and `--json` sets `nip05.unchecked`. ([#184](https://github.com/ohstr/ncli/pull/184))
+
 ## [0.8.0-rc.34]
 
 ### Changed

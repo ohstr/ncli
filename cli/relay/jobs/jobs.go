@@ -40,8 +40,6 @@ type Options struct {
 	// Fresh builds a new index and swaps it in, dropping stale entries;
 	// otherwise entries are upserted into the live index.
 	Fresh bool `json:"fresh"`
-	// Reverify re-queues NIP-05/LUD-16 checks for every profile (search).
-	Reverify bool `json:"reverify"`
 }
 
 // Job is one run, as reported to callers.

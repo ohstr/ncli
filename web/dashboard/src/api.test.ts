@@ -56,11 +56,11 @@ describe("api", () => {
   it("sends the CSRF token on writes, not reads", async () => {
     setCsrf("token-1");
     const calls = stubFetch(200, { id: "j" });
-    await api.rebuild("search", true, false);
+    await api.rebuild("search", true);
     await api.latest();
     const w = calls[0].init.headers as Record<string, string>;
     expect(w["X-CSRF-Token"]).toBe("token-1");
-    expect(JSON.parse(calls[0].init.body as string)).toEqual({ fresh: true, reverify: false });
+    expect(JSON.parse(calls[0].init.body as string)).toEqual({ fresh: true });
     expect((calls[1].init.headers as Record<string, string>)["X-CSRF-Token"]).toBeUndefined();
     expect(calls[0].init.credentials).toBe("same-origin");
   });

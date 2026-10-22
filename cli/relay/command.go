@@ -119,7 +119,8 @@ type RelayConfig struct {
 	// default* constants above and initConfig).
 	OutgoingBufferSize      int `mapstructure:"outgoingBufferSize"`
 	MaxConcurrentStoreTasks int `mapstructure:"maxConcurrentStoreTasks"`
-	VerificationWorkers     int `mapstructure:"verificationWorkers"`
+	// VerificationWorkers is the old spelling of cache.verification.workers.
+	VerificationWorkers int `mapstructure:"verificationWorkers"`
 
 	// PprofAddr, when set (e.g. "127.0.0.1:6060"), serves net/http/pprof
 	// there. Unauthenticated: keep it on loopback.
@@ -184,6 +185,54 @@ type CacheConfig struct {
 
 	// Search enables Meilisearch-backed profile search (optional).
 	Search *SearchConfig `mapstructure:"search"`
+
+	// ProfileStats serves NIP-85 user assertions (kind 30382) signed with
+	// nip11.privkey.
+	ProfileStats *ProfileStatsConfig `mapstructure:"profileStats"`
+
+	// Verification tunes NIP-05/lightning address checks, which run when
+	// search or profileStats is enabled.
+	Verification *VerificationConfig `mapstructure:"verification"`
+
+	// Scoring overrides the built-in profile score weights, by section:
+	// scoring (completeness and penalties), verification (NIP-05/LUD-16
+	// points) and social (followers and zaps); keys as in nmilat's
+	// config.yaml, e.g. {social: {followers_weight: 25}}.
+	Scoring map[string]any `mapstructure:"scoring"`
+}
+
+// ProfileStatsConfig configures NIP-85 user assertions.
+type ProfileStatsConfig struct {
+	// Enabled requires nip11.privkey, which signs the assertions.
+	Enabled bool `mapstructure:"enabled"`
+	// MaxTargets caps the #d pubkeys per request (default 500).
+	MaxTargets int `mapstructure:"maxTargets"`
+}
+
+// VerificationConfig tunes profile checks. A check is fetched only for a
+// new or changed identifier, when its result expires (TTL), on a retry,
+// or by `ncli relay verify --refresh`; never by an index rebuild.
+type VerificationConfig struct {
+	// TTL keeps a result before it's checked again (default 14d); "0"
+	// never re-checks an unchanged identifier.
+	TTL string `mapstructure:"ttl"`
+	// Retry backs off after a timeout, block or 5xx, keeping the previous
+	// result meanwhile.
+	Retry *VerificationRetryConfig `mapstructure:"retry"`
+	// PerHostInterval spaces requests to one host (default 250ms).
+	PerHostInterval string `mapstructure:"perHostInterval"`
+	// Workers is how many checks run at once (default 50).
+	Workers int `mapstructure:"workers"`
+}
+
+type VerificationRetryConfig struct {
+	// Initial wait (default 1h), doubling up to Max (default 24h); a
+	// longer Retry-After from the server wins.
+	Initial string `mapstructure:"initial"`
+	Max     string `mapstructure:"max"`
+	// MaxAttempts failures in a row end the retries until the next TTL
+	// (default 5).
+	MaxAttempts int `mapstructure:"maxAttempts"`
 }
 
 // TopZappedConfig configures the relay's signed "top zapped" cache
@@ -460,6 +509,12 @@ func initConfig() error {
 	if config.Cache != nil && config.Cache.TopZapped != nil && config.Cache.TopZapped.Enabled && config.Nip11.PrivKey == "" {
 		return &common.CLIError{Err: errors.New("cache.topZapped.enabled requires nip11.privkey"), Code: common.CodeUsage}
 	}
+	if profileStatsEnabled(&config) && config.Nip11.PrivKey == "" {
+		return &common.CLIError{Err: errors.New("cache.profileStats.enabled requires nip11.privkey"), Code: common.CodeUsage}
+	}
+	if err := checkVerificationConfig(&config); err != nil {
+		return err
+	}
 
 	// auth_required needs nip11.url to validate AUTH events against, or
 	// every AUTH attempt fails closed.
@@ -557,6 +612,12 @@ func initConfig() error {
 	}
 	if config.MaxConcurrentStoreTasks == 0 {
 		config.MaxConcurrentStoreTasks = defaultMaxConcurrentStoreTasks
+	}
+	if config.VerificationWorkers != 0 {
+		log.Warn().Msg("verificationWorkers is deprecated; use cache.verification.workers")
+	}
+	if config.Cache != nil && config.Cache.Verification != nil && config.Cache.Verification.Workers > 0 {
+		config.VerificationWorkers = config.Cache.Verification.Workers
 	}
 	if config.VerificationWorkers == 0 {
 		config.VerificationWorkers = defaultVerificationWorkers

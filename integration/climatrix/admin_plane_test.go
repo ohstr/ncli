@@ -248,7 +248,7 @@ func TestAdminPlane_TLS(t *testing.T) {
 	e := NewEnv(t)
 	var st struct{ Indexes []any }
 	e.MustOK(t, "relay", "status", "--config", r.ConfigPath, "--json").JSON(t, &st)
-	if len(st.Indexes) != 2 {
+	if len(st.Indexes) != 3 {
 		t.Errorf("status over TLS: %+v", st)
 	}
 

@@ -47,8 +47,9 @@ func addAdminAPICommands(cmd *cobra.Command) {
 
 	indexCmd := &cobra.Command{
 		Use:   "index",
-		Short: "Rebuild or drop a running relay's search and zap indexes",
-		Long: `The search index (Meilisearch profiles) and the zap index (top zapped)
+		Short: "Rebuild or drop a running relay's search, zap and stats indexes",
+		Long: `The search index (Meilisearch profiles), the zap index (top zapped) and
+the stats index (each profile's zaps and follows, for scores and NIP-85)
 are derived from stored events and can be rebuilt from them at any time.`,
 		Example: `  ncli relay index list
   ncli relay index rebuild zaps --follow`,
@@ -62,15 +63,19 @@ are derived from stored events and can be rebuilt from them at any time.`,
 		RunE:    runIndexList,
 	})
 	rebuildCmd := &cobra.Command{
-		Use:   "rebuild <search|zaps|all>",
+		Use:   "rebuild <search|zaps|stats|all>",
 		Short: "Rebuild an index from stored events",
 		Long: `Starts a job and returns its id; --follow waits for it with progress.
 Rebuilding an index that is already rebuilding returns the running job.
 
-zaps always builds a new index beside the live one and swaps it in. search
-upserts into the live index; --fresh builds a new one and swaps it in,
-dropping profiles no longer stored. Either way the relay keeps answering
-from the old index until the new one is ready.`,
+zaps and stats always build a new index beside the live one and swap it
+in. search upserts into the live index; --fresh builds a new one and swaps
+it in, dropping profiles no longer stored. Either way the relay keeps
+answering from the old index until the new one is ready.
+
+A search rebuild rescores every profile from what the relay already
+knows, with the current cache.scoring weights; it never re-fetches a
+NIP-05 or lightning address (see ncli relay verify --refresh).`,
 		Example: `  ncli relay index rebuild zaps --follow
   ncli relay index rebuild search --fresh --follow
   ncli relay index rebuild search --dry-run`,
@@ -78,12 +83,13 @@ from the old index until the new one is ready.`,
 		RunE: runIndexRebuild,
 	}
 	rebuildCmd.Flags().Bool("fresh", false, "build a new index and swap it in (search)")
-	rebuildCmd.Flags().Bool("reverify", false, "also re-check every profile's NIP-05 and lightning address (search)")
+	rebuildCmd.Flags().Bool("reverify", false, "removed: use ncli relay verify <pubkey> --refresh")
+	_ = rebuildCmd.Flags().MarkHidden("reverify")
 	rebuildCmd.Flags().Bool("follow", false, "wait for the job, showing progress, and exit with its outcome")
 	rebuildCmd.Flags().Bool("dry-run", false, "only report how many items a rebuild would scan")
 	indexCmd.AddCommand(rebuildCmd)
 	dropCmd := &cobra.Command{
-		Use:   "drop <search|zaps>",
+		Use:   "drop <search|zaps|stats>",
 		Short: "Empty an index (stored events are kept)",
 		Long: `Search and top-zapped answers stay empty until the index is rebuilt.
 Asks for confirmation; --yes skips it, and is required with --json or no
@@ -126,6 +132,8 @@ terminal. To refresh an index without an empty window, use rebuild.`,
 		RunE:    runJobsCancel,
 	})
 	cmd.AddCommand(jobsCmd)
+
+	addVerifyCommand(cmd)
 }
 
 // adminTarget resolves the admin listener's base URL, and the TLS config
@@ -484,7 +492,10 @@ func runIndexList(cmd *cobra.Command, args []string) error {
 	_, _ = fmt.Fprintln(tw, "INDEX\tENTRIES\tSTATE")
 	for _, ix := range out.Indexes {
 		estimate := "-"
-		if ix.Available {
+		switch {
+		case ix.Available && ix.Estimate < 0:
+			estimate = "unreachable"
+		case ix.Available:
 			estimate = fmt.Sprintf("~%d", ix.Estimate)
 		}
 		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\n", ix.Name, estimate, indexSummary(ix))
@@ -515,7 +526,12 @@ func runIndexRebuild(cmd *cobra.Command, args []string) error {
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 	req := jobs.RebuildRequest{DryRun: dryRun}
 	req.Fresh, _ = cmd.Flags().GetBool("fresh")
-	req.Reverify, _ = cmd.Flags().GetBool("reverify")
+	if reverify, _ := cmd.Flags().GetBool("reverify"); reverify {
+		return &common.CLIError{
+			Err:  errors.New("--reverify was removed: a rebuild never re-fetches NIP-05 or lightning addresses; use ncli relay verify <pubkey> --refresh"),
+			Code: common.CodeUsage,
+		}
+	}
 
 	names, err := indexNames(cmd, args[0])
 	if err != nil {

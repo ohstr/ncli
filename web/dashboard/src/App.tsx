@@ -191,7 +191,7 @@ function IndexRow({ ix, onAction, busy }: { ix: IndexInfo; onAction: (fn: () => 
     <div className="index">
       <div className="index-head">
         <strong>{ix.name}</strong>
-        {ix.available && <span className="muted">~{formatValue(ix.estimate, "count")} entries</span>}
+        {ix.available && <span className="muted">{ix.estimate < 0 ? "index unreachable" : `~${formatValue(ix.estimate, "count")} entries`}</span>}
       </div>
       {!ix.available ? (
         <p className="muted">{ix.unavailable}</p>
@@ -222,11 +222,11 @@ function IndexRow({ ix, onAction, busy }: { ix: IndexInfo; onAction: (fn: () => 
             )}
           </p>
           <div className="actions">
-            <button disabled={busy} onClick={() => onAction(() => api.rebuild(ix.name, ix.name === "zaps", false))}>
+            <button disabled={busy} onClick={() => onAction(() => api.rebuild(ix.name, ix.name !== "search"))}>
               Rebuild
             </button>
             {ix.name === "search" && (
-              <button disabled={busy} onClick={() => onAction(() => api.rebuild(ix.name, true, false))} title="Build a new index and swap it in">
+              <button disabled={busy} onClick={() => onAction(() => api.rebuild(ix.name, true))} title="Build a new index and swap it in">
                 Rebuild fresh
               </button>
             )}

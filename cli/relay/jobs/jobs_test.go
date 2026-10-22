@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ohstr/ncli/cli/relay/internal/zaptest"
 	"github.com/ohstr/nmilat/nip01"
 	"github.com/ohstr/nmilat/nip11"
 	"github.com/ohstr/nmilat/relay"
@@ -261,7 +262,7 @@ func TestZapIndexRebuild(t *testing.T) {
 	store := newStore(t, 500)
 	_, receiver := testKey(t, 1)
 	insert(t, store,
-		signed(t, 2, 9735, 100, []string{"p", receiver}, []string{"amount", "21000"}),
+		zaptest.Receipt(t, zaptest.NewKey(t, 2), zaptest.NewKey(t, 4), receiver, 21000, 100),
 		signed(t, 3, 1, 101),
 	)
 	m := New("", zerolog.Nop(), &ZapIndex{Store: store})

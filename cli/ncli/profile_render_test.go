@@ -81,6 +81,39 @@ func TestBuildProfileView_NewestWins(t *testing.T) {
 	}
 }
 
+// NIP-85 assertions are kept newest per provider, newest first, and the
+// card shows the newest.
+func TestBuildProfileView_Stats(t *testing.T) {
+	events := []*nip01.Event{
+		{Kind: kindUserAssertion, PubKey: "aa", CreatedAt: 100, Tags: [][]string{{"d", "x"}, {"followers", "1"}}},
+		{Kind: kindUserAssertion, PubKey: "aa", CreatedAt: 300, Tags: [][]string{{"d", "x"}, {"followers", "1204"}, {"zap_amt_recd", "21000"}, {"rank", "33"}}},
+		{Kind: kindUserAssertion, PubKey: "bb", CreatedAt: 200, Tags: [][]string{{"d", "x"}, {"followers", "7"}}},
+	}
+	view := buildProfileView(&stubIdentity, events, 1)
+
+	if len(view.Stats) != 2 || view.Stats[0].Provider != "aa" || view.Stats[0].Tags["followers"] != "1204" {
+		t.Fatalf("stats = %+v", view.Stats)
+	}
+	if _, ok := view.Stats[0].Tags["d"]; ok {
+		t.Error("the d tag is the profile itself, not a stat")
+	}
+	got := strings.Join(statsLines(view.Stats[0], len(view.Stats)), "\n")
+	for _, want := range []string{"1,204 followers", "21,000 sats", "33/100", "+1 more in --json"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("card lacks %q:\n%s", want, got)
+		}
+	}
+}
+
+// Under --no-verify the address wasn't checked, so it mustn't read as a
+// mismatch.
+func TestRenderNip05_Unchecked(t *testing.T) {
+	got := renderNip05(&nip05Status{Address: "alice@example.com", Unchecked: true})
+	if !strings.Contains(got, "not checked") || strings.Contains(got, "does not match") {
+		t.Errorf("unchecked nip-05 rendered as %q", got)
+	}
+}
+
 // TestBuildProfileView_MissingRecordsAreNilNotZero is the distinction the
 // sparse card depends on: an identity that never published a contact list
 // must read as "not published", never as "following 0".

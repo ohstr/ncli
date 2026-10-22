@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/ohstr/ncli/cli/relay/internal/zaptest"
 	"github.com/ohstr/nmilat/nip01"
 	"github.com/ohstr/nmilat/nip11"
 	"github.com/ohstr/nmilat/relay"
@@ -40,21 +41,10 @@ func TestNewServer_TopZappedWindowFromYAML(t *testing.T) {
 		require.NoError(t, err)
 
 		now := time.Now()
+		sender, provider := zaptest.NewKey(t, 1), zaptest.NewKey(t, 2)
 		events := []*nip01.Event{
-			{
-				ID:        strings.Repeat("1", 64),
-				PubKey:    strings.Repeat("9", 64),
-				Kind:      9735,
-				CreatedAt: uint64(now.Add(-20 * time.Minute).Unix()),
-				Tags:      [][]string{{"p", userInWindow}, {"amount", "1000"}},
-			},
-			{
-				ID:        strings.Repeat("2", 64),
-				PubKey:    strings.Repeat("9", 64),
-				Kind:      9735,
-				CreatedAt: uint64(now.Add(-45 * time.Minute).Unix()),
-				Tags:      [][]string{{"p", userOutOfWindow}, {"amount", "5000"}},
-			},
+			zaptest.Receipt(t, sender, provider, userInWindow, 1000, uint64(now.Add(-20*time.Minute).Unix())),
+			zaptest.Receipt(t, sender, provider, userOutOfWindow, 5000, uint64(now.Add(-45*time.Minute).Unix())),
 		}
 		require.NoError(t, store.InsertEvents(context.Background(), events))
 		return store

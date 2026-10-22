@@ -90,6 +90,33 @@ func (z *ZapIndex) Rebuild(ctx context.Context, _ Options, progress Progress) er
 
 func (z *ZapIndex) Drop(ctx context.Context) error { return z.Store.ClearZapIndex(ctx) }
 
+// StatsIndex is each profile's zaps and follows (nmilat's social index),
+// behind social scores and NIP-85 assertions. It is kept current on every
+// write; a rebuild only repairs it.
+type StatsIndex struct {
+	Store *relay.EventStore
+}
+
+func (x *StatsIndex) Name() string      { return "stats" }
+func (x *StatsIndex) Available() string { return "" }
+
+// Estimate is the profiles with at least one follower.
+func (x *StatsIndex) Estimate() int64 { return x.Store.CountSocialProfiles() }
+
+// ScanEstimate is every stored event: a rebuild reads them all.
+func (x *StatsIndex) ScanEstimate() int64 { return eventSequence(x.Store) }
+
+// Rebuild builds a new index beside the live one and swaps it in.
+func (x *StatsIndex) Rebuild(ctx context.Context, _ Options, progress Progress) error {
+	_, err := x.Store.RebuildSocialIndex(ctx, progress)
+	if errors.Is(err, relay.ErrSocialRebuildInProgress) {
+		return ErrBusy
+	}
+	return err
+}
+
+func (x *StatsIndex) Drop(ctx context.Context) error { return x.Store.ClearSocialIndex(ctx) }
+
 // SearchIndex is the Meilisearch profile index.
 type SearchIndex struct {
 	Store     *relay.EventStore
@@ -98,8 +125,6 @@ type SearchIndex struct {
 	IndexName string
 	// Disabled explains why search can't be maintained ("" when it can).
 	Disabled string
-	// Worker re-verifies profiles on a Reverify rebuild.
-	Worker *relay.ProfileVerificationWorker
 
 	count storedCount
 }
@@ -110,11 +135,23 @@ const searchBatch = 500
 func (s *SearchIndex) Name() string      { return "search" }
 func (s *SearchIndex) Available() string { return s.Disabled }
 
-// Estimate counts stored profiles, one document each.
-func (s *SearchIndex) Estimate() int64 { return s.count.get(s.Store, 0) }
+// Estimate is the documents in the live Meilisearch index, or -1 when it
+// can't be reached.
+func (s *SearchIndex) Estimate() int64 {
+	if s.Disabled != "" {
+		return 0
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	n, err := meilisearch.NewMeiliClient(s.Host, s.Key, s.IndexName).CountDocuments(ctx)
+	if err != nil {
+		return -1
+	}
+	return n
+}
 
-// ScanEstimate is the same: a rebuild reads every stored profile.
-func (s *SearchIndex) ScanEstimate() int64 { return s.Estimate() }
+// ScanEstimate is the stored profiles a rebuild reads.
+func (s *SearchIndex) ScanEstimate() int64 { return s.count.get(s.Store, 0) }
 
 func profilesPage(since, until uint64) *nip01.SubscriptionFilterGroup {
 	f := nip01.NewSubscriptionFilterGroup()
@@ -272,7 +309,7 @@ func (s *SearchIndex) Rebuild(ctx context.Context, opts Options, progress Progre
 		if err != nil {
 			return err
 		}
-		_, err = s.indexProfiles(ctx, live, 0, opts.Reverify, progress)
+		_, err = s.indexProfiles(ctx, live, 0, progress)
 		return err
 	}
 
@@ -284,7 +321,7 @@ func (s *SearchIndex) Rebuild(ctx context.Context, opts Options, progress Progre
 	if err != nil {
 		return err
 	}
-	if _, err := s.indexProfiles(ctx, next, 0, opts.Reverify, progress); err != nil {
+	if _, err := s.indexProfiles(ctx, next, 0, progress); err != nil {
 		return err
 	}
 	live, err := s.client(s.IndexName)
@@ -298,11 +335,11 @@ func (s *SearchIndex) Rebuild(ctx context.Context, opts Options, progress Progre
 		return err
 	}
 	// Catch-up: profiles stored after the build began.
-	_, err = s.indexProfiles(ctx, live, started, false, nil)
+	_, err = s.indexProfiles(ctx, live, started, nil)
 	return err
 }
 
-func (s *SearchIndex) indexProfiles(ctx context.Context, target *meilisearch.MeiliClient, since uint64, reverify bool, progress Progress) (int, error) {
+func (s *SearchIndex) indexProfiles(ctx context.Context, target *meilisearch.MeiliClient, since uint64, progress Progress) (int, error) {
 	indexed := 0
 	var batch []*search.ProfileDocument
 	var writeErr error
@@ -328,13 +365,8 @@ func (s *SearchIndex) indexProfiles(ctx context.Context, target *meilisearch.Mei
 		if doc == nil {
 			return
 		}
-		if m, err := s.Store.GetProfileMetrics(ev.PubKey); err == nil && m != nil {
-			doc.Score += m.TotalScore() - m.BaseScore
-		}
+		doc.Score += s.storedScore(ev.PubKey)
 		batch = append(batch, doc)
-		if reverify {
-			s.queueVerification(ctx, ev)
-		}
 		if len(batch) >= searchBatch {
 			flush()
 			if progress != nil {
@@ -352,20 +384,18 @@ func (s *SearchIndex) indexProfiles(ctx context.Context, target *meilisearch.Mei
 	return indexed, err
 }
 
-// queueVerification waits for room in the relay's own verification queue
-// rather than flooding it, which would drop live jobs.
-func (s *SearchIndex) queueVerification(ctx context.Context, ev *nip01.Event) {
-	if s.Worker == nil {
-		return
+// storedScore is what a profile earns beyond its kind 0's base score, from
+// what the relay already knows (stored check results, zaps and follows),
+// weighed with the current scoring config. Nothing is fetched.
+func (s *SearchIndex) storedScore(pubkey string) int64 {
+	var score int64
+	if m, err := s.Store.GetProfileMetrics(pubkey); err == nil && m != nil {
+		score += m.CheckScore()
 	}
-	for s.Worker.QueueDepth() > 800 {
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(100 * time.Millisecond):
-		}
+	if social, err := s.Store.ComputeSocialScore(pubkey); err == nil {
+		score += social
 	}
-	s.Worker.QueueJob(ev)
+	return score
 }
 
 // Drop deletes every document from the live index.

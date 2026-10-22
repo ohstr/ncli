@@ -16,9 +16,10 @@ type Router interface {
 
 // RebuildRequest is the body of POST /admin/api/indexes/{name}/rebuild.
 type RebuildRequest struct {
-	Fresh    bool `json:"fresh"`
-	Reverify bool `json:"reverify"`
-	DryRun   bool `json:"dry_run"`
+	Fresh  bool `json:"fresh"`
+	DryRun bool `json:"dry_run"`
+	// Reverify was removed; a request setting it is refused.
+	Reverify bool `json:"reverify,omitempty"`
 }
 
 // dropWait is how long a drop request waits for its job before answering
@@ -39,6 +40,10 @@ func (m *Manager) Routes(r Router) {
 				return
 			}
 		}
+		if body.Reverify {
+			writeError(w, http.StatusBadRequest, "reverify was removed: a rebuild never re-fetches NIP-05 or lightning addresses; use POST /admin/api/profiles/{pubkey}/verify", nil)
+			return
+		}
 		name := req.PathValue("name")
 		if body.DryRun {
 			entries, scan, err := m.Estimate(name)
@@ -49,7 +54,7 @@ func (m *Manager) Routes(r Router) {
 			writeJSON(w, http.StatusOK, map[string]any{"index": name, "estimate": entries, "scan_estimate": scan, "dry_run": true})
 			return
 		}
-		job, started, err := m.Start(name, KindRebuild, Options{Fresh: body.Fresh, Reverify: body.Reverify})
+		job, started, err := m.Start(name, KindRebuild, Options{Fresh: body.Fresh})
 		if err != nil {
 			writeStartError(w, err, &job)
 			return

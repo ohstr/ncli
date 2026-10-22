@@ -59,9 +59,20 @@
 # Shape is [action, params] -- today the only action is "top-zapped"
 # (alias: "get_top_zapped"), which returns the top-zapped pubkeys over
 # `window` (Go duration string, default relay-defined) as a kind:25521
-# event. Only works against a relay with cache.topZapped enabled in its own
-# config (see examples/relay/full.yaml) -- otherwise the request is ignored.
-# A filter with `cache` set is handled standalone; combining it with
-# kinds/authors/etc. in the same filter has no effect, since it never
-# queries the store.
+# event. Counts only valid receipts, never self-zaps or a second receipt for
+# the same payment. Only works against a relay with cache.topZapped enabled
+# in its own config (see examples/relay/full.yaml) -- otherwise the relay
+# answers with an error. A filter with `cache` set is handled standalone;
+# combining it with kinds/authors/etc. in the same filter has no effect,
+# since it never queries the store.
 - cache: ["top-zapped", { window: "24h", limit: 5 }]
+
+# Filter 7: NIP-85 user assertions about one or more profiles. A relay with
+# cache.profileStats enabled answers with one kind:30382 per profile, signed
+# by its own key: rank, followers, following, zap_cnt_recd/zap_amt_recd,
+# zap_cnt_sent/zap_amt_sent (sats), first/last zap times and verified
+# NIP-05/lightning address. #d is required; other relays return whatever
+# stored assertions match.
+- kinds: [30382]
+  "#d":
+    - 3c1db3dd55e2ff09ba5317dd8eec2339797e9e2ddf74591172735c47f3a2ad6e

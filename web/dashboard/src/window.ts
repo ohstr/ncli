@@ -26,6 +26,15 @@ function lowerBound(times: number[], t: number): number {
   return lo;
 }
 
+// historyStart is the oldest point's time when the window reaches further
+// back than the history does (a relay up less than the range), else null.
+// A minute of slack keeps a full day from flickering as rollups age out.
+export function historyStart(times: number[], range: number, until?: number): number | null {
+  const end = until == null ? times.length : lowerBound(times, until + 1e-9);
+  if (end === 0) return null;
+  return times[end - 1] - range < times[0] - 60 ? times[0] : null;
+}
+
 // windowRange returns [start, end) of the points in the last `range` seconds,
 // ending at `until` (a paused view) or at the newest point.
 export function windowRange(times: number[], range: number, until?: number): [number, number] {

@@ -648,6 +648,11 @@ button.danger {
   color: var(--bad);
 }
 
+.history-since {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 @media (max-width: 480px) {
   .indexes {
     grid-template-columns: 1fr;

@@ -366,6 +366,7 @@ func (s *Service) startAdmin() error {
 		Metrics:  s.metrics,
 		History:  s.history,
 		Logger:   log.Logger,
+		Nip05:    func(pubkey string) string { return verifiedNip05(s.store, pubkey) },
 	})
 	if err != nil {
 		return err

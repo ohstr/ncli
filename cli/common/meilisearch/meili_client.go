@@ -16,7 +16,7 @@ import (
 	"github.com/ohstr/nmilat/config"
 	"github.com/ohstr/nmilat/nip19"
 	"github.com/ohstr/nmilat/search"
-	"github.com/ohstr/nmilat/search/ranking"
+	"github.com/ohstr/nmilat/utils"
 )
 
 type MeiliClient struct {
@@ -136,6 +136,15 @@ func (m *MeiliClient) DeleteIndex(ctx context.Context) error {
 	return err
 }
 
+// CountDocuments returns how many documents the index holds.
+func (m *MeiliClient) CountDocuments(ctx context.Context) (int64, error) {
+	stats, err := m.client.Index(m.indexName).GetStatsWithContext(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return stats.NumberOfDocuments, nil
+}
+
 // IndexName returns the index this client writes to.
 func (m *MeiliClient) IndexName() string { return m.indexName }
 
@@ -231,7 +240,7 @@ func (m *MeiliClient) FindProfiles(ctx context.Context, query string, limit int)
 			searchReq.AttributesToSearchOn = []string{"id"}
 			searchQuery = hexStr
 		}
-	} else if strings.Contains(query, "@") && (ranking.IsValidNip05Format(query) || ranking.IsValidLud16Format(query)) {
+	} else if _, _, ok := utils.ParseIdentifier(query); ok {
 		// nip-05 or lud16 address: search only those fields.
 		searchReq.AttributesToSearchOn = []string{"nip05", "lud16"}
 	}

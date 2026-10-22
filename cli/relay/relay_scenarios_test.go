@@ -22,7 +22,6 @@ import (
 	"github.com/ohstr/nmilat/nip11"
 	"github.com/ohstr/nmilat/nip42"
 	"github.com/ohstr/nmilat/nipOA"
-	"github.com/ohstr/nmilat/relay"
 	relayclient "github.com/ohstr/nmilat/relay/client"
 	"github.com/ohstr/nmilat/wire"
 	"github.com/spf13/viper"
@@ -91,8 +90,11 @@ func bootScenario(t *testing.T, cfg RelayConfig) *httptest.Server {
 	t.Cleanup(func() { config = prevConfig })
 	config = cfg
 
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	store, err := relay.NewEventStore(dbPath, &nip11.Limitation{MaxLimit: 1000})
+	// Opened like the relay does, with the indexes its cache block needs.
+	storeCfg := cfg
+	storeCfg.RelayNotesDb = filepath.Join(t.TempDir(), "test.db")
+	storeCfg.Nip11.Limitation = nip11.Limitation{MaxLimit: 1000}
+	store, err := openRelayStore(&storeCfg)
 	require.NoError(t, err)
 
 	s := NewServer(store, nil)

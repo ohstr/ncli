@@ -35,12 +35,23 @@ export interface Job {
 
 export interface IndexInfo {
   name: string;
+  // available: it can be rebuilt; unavailable says why not.
   available: boolean;
   unavailable?: string;
+  // state is disabled, stale, building or ready (absent from older relays).
+  state?: string;
+  // has_data: it holds entries, even while disabled.
+  has_data?: boolean;
   estimate: number;
   scan_estimate: number;
   running?: Job;
   last?: Job;
+}
+
+// indexActions is what an idle index offers: a rebuild needs its feature,
+// a drop also removes what a disabled index still holds.
+export function indexActions(ix: IndexInfo): { rebuild: boolean; drop: boolean } {
+  return { rebuild: ix.available, drop: ix.available || ix.has_data === true };
 }
 
 export interface Session {

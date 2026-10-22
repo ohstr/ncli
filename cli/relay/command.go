@@ -667,7 +667,7 @@ func RunRelay(jsonMode bool) error {
 	}
 
 	m := metrics.New(common.ReadBuildInfo().Version)
-	store, err := relay.NewEventStore(config.RelayNotesDb, &config.Nip11.Limitation, relay.WithEventStoreObserver(m))
+	store, err := openRelayStore(&config, relay.WithEventStoreObserver(m))
 	if err != nil {
 		return fmt.Errorf("failed to connect to event store: %w", err)
 	}
@@ -762,4 +762,26 @@ func parseLogLevel(s string) (zerolog.Level, error) {
 		return zerolog.ErrorLevel, nil
 	}
 	return zerolog.NoLevel, fmt.Errorf("invalid logs.level %q: want debug, info, warn or error", s)
+}
+
+// openRelayStore opens the relay's store with the indexes its cache
+// features read, and warns about data left in one whose feature is off.
+func openRelayStore(cfg *RelayConfig, opts ...relay.EventStoreOption) (*relay.EventStore, error) {
+	opts = append([]relay.EventStoreOption{
+		relay.WithEventStoreIndexes(cfg.derivedIndexes()),
+		relay.WithEventStoreLogger(log.Logger),
+	}, opts...)
+	store, err := relay.NewEventStore(cfg.RelayNotesDb, &cfg.Nip11.Limitation, opts...)
+	if err != nil {
+		return nil, err
+	}
+	for _, ix := range []struct {
+		name  string
+		state relay.IndexState
+	}{{"zaps", store.ZapIndexState()}, {"stats", store.SocialIndexState()}} {
+		if !ix.state.Enabled && ix.state.HasData {
+			log.Warn().Str("index", ix.name).Msgf("the %s index is off but still holds data; remove it with ncli relay index drop %s", ix.name, ix.name)
+		}
+	}
+	return store, nil
 }

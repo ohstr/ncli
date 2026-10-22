@@ -44,7 +44,7 @@ func signed(t *testing.T, i, kind int, createdAt uint64, tags ...[]string) *nip0
 
 func newStore(t *testing.T, maxLimit int) *relay.EventStore {
 	t.Helper()
-	store, err := relay.NewEventStore(filepath.Join(t.TempDir(), "notes.db"), &nip11.Limitation{MaxLimit: maxLimit})
+	store, err := relay.NewEventStore(filepath.Join(t.TempDir(), "notes.db"), &nip11.Limitation{MaxLimit: maxLimit}, relay.WithEventStoreIndexes(relay.DerivedIndexes{Zaps: true, Social: true}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,8 +110,14 @@ type fakeIndex struct {
 	drops   int
 }
 
-func (f *fakeIndex) Name() string        { return f.name }
-func (f *fakeIndex) Available() string   { return f.why }
+func (f *fakeIndex) Name() string          { return f.name }
+func (f *fakeIndex) Available(Kind) string { return f.why }
+func (f *fakeIndex) State() (string, bool) {
+	if f.why != "" {
+		return IndexDisabled, false
+	}
+	return IndexReady, true
+}
 func (f *fakeIndex) Estimate() int64     { return 5 }
 func (f *fakeIndex) ScanEstimate() int64 { return 42 }
 func (f *fakeIndex) Rebuild(ctx context.Context, _ Options, progress Progress) error {

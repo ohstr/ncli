@@ -150,7 +150,7 @@ func (f fakeWeb) RoundTrip(req *http.Request) (*http.Response, error) {
 
 func newProfilesStore(t *testing.T) *relay.EventStore {
 	t.Helper()
-	store, err := relay.NewEventStore(filepath.Join(t.TempDir(), "test.db"), &nip11.Limitation{MaxLimit: 1000})
+	store, err := relay.NewEventStore(filepath.Join(t.TempDir(), "test.db"), &nip11.Limitation{MaxLimit: 1000}, relay.WithEventStoreIndexes(relay.DerivedIndexes{Zaps: true, Social: true}))
 	require.NoError(t, err)
 	t.Cleanup(store.Close)
 	return store
@@ -192,6 +192,19 @@ func TestProfileRoutes(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, code)
 	code, _ = call(http.MethodPost, "/admin/api/profiles/"+zaptest.NewKey(t, 11).Pub+"/verify")
 	assert.Equal(t, http.StatusNotFound, code)
+}
+
+func TestProfileRoutes_StatsOff(t *testing.T) {
+	store, err := relay.NewEventStore(filepath.Join(t.TempDir(), "test.db"), &nip11.Limitation{MaxLimit: 1000})
+	require.NoError(t, err)
+	t.Cleanup(store.Close)
+	mux := http.NewServeMux()
+	profileRoutes(muxRouter{mux}, store, relay.NewProfileVerificationWorker(store, nil, relay.VerificationConfig{}))
+
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/admin/api/profiles/"+zaptest.NewKey(t, 10).Pub, nil))
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.Contains(t, rec.Body.String(), `"stats":null`)
 }
 
 type muxRouter struct{ mux *http.ServeMux }

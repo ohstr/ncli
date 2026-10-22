@@ -38,6 +38,13 @@ type cachedCount struct {
 	at time.Time
 }
 
+// reset makes the next get count again.
+func (c *cachedCount) reset() {
+	c.mu.Lock()
+	c.at = time.Time{}
+	c.mu.Unlock()
+}
+
 func (c *cachedCount) get(count func() int64) int64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -47,20 +54,54 @@ func (c *cachedCount) get(count func() int64) int64 {
 	return c.n
 }
 
-// ZapIndex is the top-zapped index, kept in the event store. The store
-// indexes zap receipts on ingest even with top-zapped off; only queries
-// are gated on it.
+// storeIndexState maps a derived index's state in the store.
+func storeIndexState(st relay.IndexState) (string, bool) {
+	switch {
+	case !st.Enabled:
+		return IndexDisabled, st.HasData
+	case st.Rebuilding:
+		return IndexBuilding, st.HasData
+	case !st.Current:
+		return IndexStale, st.HasData
+	}
+	return IndexReady, st.HasData
+}
+
+// storeIndexAvailable allows a drop whatever the feature, to remove what a
+// disabled index still holds; a rebuild needs the feature.
+func storeIndexAvailable(kind Kind, disabled string) string {
+	if kind == KindDrop {
+		return ""
+	}
+	return disabled
+}
+
+// dropErr reports a drop refused during a rebuild as busy.
+func dropErr(err error) error {
+	if errors.Is(err, relay.ErrZapRebuildInProgress) || errors.Is(err, relay.ErrSocialRebuildInProgress) {
+		return ErrBusy
+	}
+	return err
+}
+
+// ZapIndex is the zap ranking index, kept in the event store only while
+// zap ranking is on.
 type ZapIndex struct {
 	Store *relay.EventStore
 	// Disabled explains why the zap index can't be maintained ("" when it can).
 	Disabled string
 }
 
-func (z *ZapIndex) Name() string      { return "zaps" }
-func (z *ZapIndex) Available() string { return z.Disabled }
+func (z *ZapIndex) Name() string               { return "zaps" }
+func (z *ZapIndex) Available(kind Kind) string { return storeIndexAvailable(kind, z.Disabled) }
+func (z *ZapIndex) State() (string, bool)      { return storeIndexState(z.Store.ZapIndexState()) }
 
-// Estimate counts stored zap receipts (NIP-57 and AltZap).
+// Estimate counts stored zap receipts (NIP-57 and AltZap), or what a
+// disabled index holds.
 func (z *ZapIndex) Estimate() int64 {
+	if z.Disabled != "" {
+		return z.Store.ZapIndexState().Entries
+	}
 	c := z.Store.Counts()
 	return int64(c.Kind(9735) + c.Kind(9521))
 }
@@ -78,11 +119,11 @@ func (z *ZapIndex) Rebuild(ctx context.Context, _ Options, progress Progress) er
 	return err
 }
 
-func (z *ZapIndex) Drop(ctx context.Context) error { return z.Store.ClearZapIndex(ctx) }
+func (z *ZapIndex) Drop(ctx context.Context) error { return dropErr(z.Store.ClearZapIndex(ctx)) }
 
 // StatsIndex is each profile's zaps and follows (nmilat's social index),
-// behind social scores and NIP-85 assertions. It is kept current on every
-// write; a rebuild only repairs it.
+// behind social scores and NIP-85 assertions. The store keeps it current
+// while search or stats is on.
 type StatsIndex struct {
 	Store *relay.EventStore
 	// Disabled explains why the index isn't in use ("" when it is).
@@ -91,8 +132,9 @@ type StatsIndex struct {
 	count cachedCount
 }
 
-func (x *StatsIndex) Name() string      { return "stats" }
-func (x *StatsIndex) Available() string { return x.Disabled }
+func (x *StatsIndex) Name() string               { return "stats" }
+func (x *StatsIndex) Available(kind Kind) string { return storeIndexAvailable(kind, x.Disabled) }
+func (x *StatsIndex) State() (string, bool)      { return storeIndexState(x.Store.SocialIndexState()) }
 
 // Estimate is the pubkeys at least one stored contact list follows.
 func (x *StatsIndex) Estimate() int64 {
@@ -111,7 +153,11 @@ func (x *StatsIndex) Rebuild(ctx context.Context, _ Options, progress Progress) 
 	return err
 }
 
-func (x *StatsIndex) Drop(ctx context.Context) error { return x.Store.ClearSocialIndex(ctx) }
+func (x *StatsIndex) Drop(ctx context.Context) error {
+	err := dropErr(x.Store.ClearSocialIndex(ctx))
+	x.count.reset()
+	return err
+}
 
 // SearchIndex is the Meilisearch profile index.
 type SearchIndex struct {
@@ -128,8 +174,17 @@ type SearchIndex struct {
 // searchBatch is how many profiles go to Meilisearch per request.
 const searchBatch = 500
 
-func (s *SearchIndex) Name() string      { return "search" }
-func (s *SearchIndex) Available() string { return s.Disabled }
+func (s *SearchIndex) Name() string          { return "search" }
+func (s *SearchIndex) Available(Kind) string { return s.Disabled }
+
+// State is disabled when search is off or read-only, else ready: the
+// relay can't tell what a Meilisearch index it doesn't write holds.
+func (s *SearchIndex) State() (string, bool) {
+	if s.Disabled != "" {
+		return IndexDisabled, false
+	}
+	return IndexReady, true
+}
 
 // Estimate is the documents in the live Meilisearch index, or -1 when it
 // can't be reached.

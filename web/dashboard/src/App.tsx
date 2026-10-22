@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { api, canRenew, onSession, renew, setCsrf, setRenewer, type IndexInfo, type Job, type Point, type Session } from "./api";
+import { api, canRenew, indexActions, onSession, renew, setCsrf, setRenewer, type IndexInfo, type Job, type Point, type Session } from "./api";
 import { Chart, type Line } from "./Chart";
 import { Panel } from "./Panel";
 import { npubEncode } from "nostr-tools/nip19";
@@ -196,15 +196,16 @@ function progress(j: Job): number {
 function IndexRow({ ix, onAction, busy }: { ix: IndexInfo; onAction: (fn: () => Promise<unknown>) => void; busy: boolean }) {
   const running = ix.running;
   const last = ix.last;
+  const actions = indexActions(ix);
   return (
     <div className="index">
       <div className="index-head">
         <strong>{ix.name}</strong>
-        {ix.available && <span className="muted">{ix.estimate < 0 ? "index unreachable" : `~${formatValue(ix.estimate, "count")} entries`}</span>}
+        {(ix.available || ix.has_data) && (
+          <span className="muted">{ix.estimate < 0 ? "index unreachable" : `~${formatValue(ix.estimate, "count")} entries`}</span>
+        )}
       </div>
-      {!ix.available ? (
-        <p className="muted">{ix.unavailable}</p>
-      ) : running ? (
+      {running ? (
         <>
           <div className="bar" role="progressbar" aria-valuenow={Math.round(progress(running))} aria-valuemin={0} aria-valuemax={100}>
             <span style={{ width: `${progress(running)}%` }} />
@@ -218,8 +219,12 @@ function IndexRow({ ix, onAction, busy }: { ix: IndexInfo; onAction: (fn: () => 
             </button>
           </div>
         </>
+      ) : !actions.rebuild && !actions.drop ? (
+        <p className="muted">{ix.unavailable}</p>
       ) : (
         <>
+          {!ix.available && <p className="muted">{ix.unavailable}; it still holds data.</p>}
+          {ix.state === "stale" && <p className="muted">Stale: rebuilt on the relay's next start.</p>}
           <p className="muted">
             {last ? (
               <>
@@ -231,10 +236,12 @@ function IndexRow({ ix, onAction, busy }: { ix: IndexInfo; onAction: (fn: () => 
             )}
           </p>
           <div className="actions">
-            <button disabled={busy} onClick={() => onAction(() => api.rebuild(ix.name, ix.name !== "search"))}>
-              Rebuild
-            </button>
-            {ix.name === "search" && (
+            {actions.rebuild && (
+              <button disabled={busy} onClick={() => onAction(() => api.rebuild(ix.name, ix.name !== "search"))}>
+                Rebuild
+              </button>
+            )}
+            {actions.rebuild && ix.name === "search" && (
               <button disabled={busy} onClick={() => onAction(() => api.rebuild(ix.name, true))} title="Build a new index and swap it in">
                 Rebuild fresh
               </button>
@@ -243,7 +250,12 @@ function IndexRow({ ix, onAction, busy }: { ix: IndexInfo; onAction: (fn: () => 
               className="danger"
               disabled={busy}
               onClick={() => {
-                if (confirm(`Empty the ${ix.name} index? Its answers stay empty until a rebuild.`)) onAction(() => api.drop(ix.name));
+                const effect = !ix.available
+                  ? "Its feature is off, so this only frees the space."
+                  : ix.name === "search"
+                    ? "Its answers stay empty until a rebuild."
+                    : "Its answers stay empty until a rebuild or the relay's next start.";
+                if (confirm(`Empty the ${ix.name} index? ${effect}`)) onAction(() => api.drop(ix.name));
               }}
             >
               Drop

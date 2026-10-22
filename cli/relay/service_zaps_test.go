@@ -32,7 +32,7 @@ func TestNewServer_ZapRanking(t *testing.T) {
 
 	prevConfig := config
 	t.Cleanup(func() { config = prevConfig })
-	store, err := relay.NewEventStore(filepath.Join(t.TempDir(), "test.db"), &nip11.Limitation{MaxLimit: 1000})
+	store, err := relay.NewEventStore(filepath.Join(t.TempDir(), "test.db"), &nip11.Limitation{MaxLimit: 1000}, relay.WithEventStoreIndexes(relay.DerivedIndexes{Zaps: true}))
 	require.NoError(t, err)
 	now := time.Now()
 	sender, provider := zaptest.NewKey(t, 1), zaptest.NewKey(t, 2)

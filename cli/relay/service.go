@@ -61,6 +61,10 @@ func newServer(store *relay.EventStore, searchService search.Service, m *metrics
 	// lifetime, including WebSocket sessions that outlive Close; a copy keeps
 	// them off the package global so swapping it (tests do) can't race them.
 	cfg := config
+	if want := cfg.derivedIndexes(); store != nil &&
+		(store.ZapIndexState().Enabled != want.Zaps || store.SocialIndexState().Enabled != want.Social) {
+		log.Warn().Msg("the store was opened with other indexes than the cache block needs; open it with openRelayStore")
+	}
 
 	// nmilat fills zero sizes into the shared SessionConfig on every
 	// connection, racing itself; set them here so it never writes.
@@ -137,7 +141,10 @@ func newServer(store *relay.EventStore, searchService search.Service, m *metrics
 		relay.WithSessionConfig(sessionConfig),
 	)
 
-	wsHandler.VerificationWorker.Start(config.VerificationWorkers)
+	// Profile checks and social scores serve only search and stats.
+	if config.searchEnabled() || config.profileStatsEnabled() {
+		wsHandler.VerificationWorker.Start(config.VerificationWorkers)
+	}
 
 	// groups: roles, role descriptions, extra group admins, moderation log
 	// and pending joins. initConfig already validated it.
@@ -419,7 +426,7 @@ func zapIndex(store *relay.EventStore) *jobs.ZapIndex {
 // NIP-85 stats, which is in use only when search or stats is on.
 func statsIndex(store *relay.EventStore) *jobs.StatsIndex {
 	ix := &jobs.StatsIndex{Store: store}
-	if !config.searchEnabled() && !config.profileStatsEnabled() {
+	if !config.statsInUse() {
 		ix.Disabled = "stats are not enabled on this relay (cache.profiles.search.enabled or cache.profiles.stats.enabled)"
 	}
 	return ix

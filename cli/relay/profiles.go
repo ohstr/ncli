@@ -141,6 +141,9 @@ func newProfileReport(store *relay.EventStore, pubkey string) (*profileReport, e
 		return nil, err
 	}
 	st, err := store.GetProfileStats(pubkey)
+	if errors.Is(err, relay.ErrIndexDisabled) {
+		st, err = nil, nil // stats are off on this relay
+	}
 	if err != nil {
 		return nil, err
 	}

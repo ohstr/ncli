@@ -28,8 +28,8 @@ import (
 
 // adminReq sends one request to a relay's admin listener. host overrides the
 // Host header when set.
-// zapsIndex turns on top-zapped, without which the zaps index is unavailable.
-var zapsIndex = map[string]any{"topZapped": map[string]any{"enabled": true}}
+// zapsIndex turns on the zap ranking, without which the zaps index is unavailable.
+var zapsIndex = map[string]any{"zaps": map[string]any{"enabled": true}}
 
 func adminReq(t *testing.T, client *http.Client, method, rawURL, host string, hdr map[string]string, body []byte) (int, string, *http.Response) {
 	t.Helper()
@@ -397,7 +397,7 @@ func TestRelayAdminTextOutput(t *testing.T) {
 	cfg := r.ConfigPath
 
 	status := e.MustOK(t, "relay", "status", "--config", cfg).Stdout
-	for _, want := range []string{"Uptime", "Connections", "Messages/s", "Events/s", "Latency p99", "Store", "Queues", "Security", "Process", "Index search", "Index zaps", "cache.search.enabled"} {
+	for _, want := range []string{"Uptime", "Connections", "Messages/s", "Events/s", "Latency p99", "Store", "Queues", "Security", "Process", "Index search", "Index zaps", "cache.profiles.search.enabled"} {
 		if !strings.Contains(status, want) {
 			t.Errorf("status text lacks %q:\n%s", want, status)
 		}

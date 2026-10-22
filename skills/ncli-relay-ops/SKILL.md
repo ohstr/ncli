@@ -32,8 +32,9 @@ logdir: ./data/logs
 ```
 
 `pubkey` alone is enough to start; `privkey` is only required if you also
-want `cache.topZapped.enabled`, `cache.profileStats.enabled` or the admin
-commands (`status`, `index`, `jobs`, `verify`, `members`, ...).
+want `cache.zaps.enabled`, `cache.profiles.stats.enabled`,
+`cache.relay.stats.enabled` or the admin commands (`status`, `index`,
+`jobs`, `verify`, `members`, ...).
 
 ## Scenario examples
 
@@ -45,7 +46,7 @@ closest to what you're building and adapt its name/port/store.
 |---|---|---|
 | `personal-relay.yaml` | One person's own outbox/backup -- wide open, low stakes | Nothing beyond minimal, by design |
 | `community-membership-relay.yaml` | Invite-gated community (paid newsletter, friend group, contributor channel) | `membership.enabled` + `nip11.privkey` + `auth_required`+`url` (+ optional `membership_required`) -- NIP-43 relay membership: enrolled pubkeys can REQ/EVENT, everyone else must invite-then-join first |
-| `public-search-relay.yaml` | Public, high-traffic relay where search, "what's trending" and per-profile stats actually work | `cache.search.*` + `cache.topZapped.enabled` + `cache.profileStats.enabled` + `nip11.privkey` -- also the shape the admin commands need, since their auth requires `nip11.privkey` too |
+| `public-search-relay.yaml` | Public, high-traffic relay where search, "what's trending" and per-profile stats actually work | `cache.profiles.search.*` + `cache.profiles.stats.enabled` + `cache.zaps.enabled` + `cache.relay.stats.enabled` + `nip11.privkey`/`url` -- also the shape the admin commands need, since their auth requires `nip11.privkey` too |
 | `anti-spam-relay.yaml` | Public relay fighting spam with mining cost instead of a ban list | `pow.strict: true` + `pow.min` (nonzero) -- actually rejects under-difficulty events instead of just advertising the requirement |
 | `dev-test-relay.yaml` | Throwaway relay for local development or CI | Nothing beyond minimal -- its own port/store so it can run alongside `just dev relay` or another instance of itself |
 | `agent-swarm-relay.yaml` | A team's AI agents post under their own key via a human's membership, no separate bot enrollment | `agent_auth.enabled` on top of membership + `auth_required` + `membership_required` -- NIP-AA |
@@ -57,12 +58,12 @@ closest to what you're building and adapt its name/port/store.
 | `tracked-membership-relay.yaml` | A community wanting a visible roster/roles without gating anything | `membership.enabled` with `membership_required` **left off** -- membership is a label (`members list`, `roles`) for display/moderation tooling, not an admission check |
 
 `examples/relay/full.yaml` documents every field at its default, commented:
-`description`, `limitation.*`, `pow.*`, `cache.topZapped.*`,
-`cache.profileStats.*`, `cache.verification.*`, `cache.scoring.*`,
+`description`, `limitation.*`, `pow.*`, `cache.profiles.*` (search,
+stats, checks, scoring), `cache.zaps.*`, `cache.relay.stats.*`,
 `membership.*`, `nip86.*`, `agent_auth.*`, `httpBridge.*`,
 `handshakeTimeout`/`pingInterval`/`pongTimeout`/`writeTimeout`,
-`outgoingBufferSize`/`maxConcurrentStoreTasks`,
-`logs.*` rotation, `huddle.*`, and full `cache.search.*`.
+`outgoingBufferSize`/`maxConcurrentStoreTasks`, `logs.*` rotation and
+`huddle.*`.
 `examples/relay/minimal.yaml` is the bare quickstart `just dev relay` runs.
 
 Full field table: `references/config-schema.md`.
@@ -243,37 +244,42 @@ ncli relay jobs cancel <id>
   `conflict` (exit 5, retryable). `--follow` exits non-zero unless the job
   succeeds; Ctrl-C stops following, not the job.
 - No rebuild leaves an empty window: zaps and stats build a new generation
-  and swap it atomically; `search --fresh` builds `<index_name>__next`,
+  and swap it atomically; `search --fresh` builds `<index>__next`,
   swaps, then catches up on profiles stored meanwhile.
 - A search rebuild covers every stored profile, past `max_limit`. It
   rescores from stored check results, zaps and follows with the current
-  `cache.scoring` weights and **never re-fetches** a NIP-05 or lightning
+  `cache.profiles.scoring` weights and **never re-fetches** a NIP-05 or lightning
   address. `--reverify` was removed (it fails with `usage`); use
   `ncli relay verify <pubkey> --refresh`.
-- `search` is `usage` (exit 2) when `cache.search.enabled` is off or
-  `readonly` is set, and `zaps` when `cache.topZapped.enabled` is off; an
+- An index is unavailable (`usage`, exit 2; the dashboard says why) when
+  its feature is off: `search` without `cache.profiles.search.enabled` or
+  with `readonly`, `zaps` without `cache.zaps.enabled`, `stats` without
+  `cache.profiles.search.enabled` or `cache.profiles.stats.enabled`. An
   unknown index or job id is `not_found` (exit 4); a key that isn't admin
   is `auth` (exit 7); a stopped relay is `network`.
 - `estimate` is what the index holds: Meilisearch's document count for
-  search (`unreachable` when Meilisearch doesn't answer), zap receipts for
-  zaps, profiles with followers for stats. `scan_estimate` is what a rebuild
-  reads (stored profiles for search, every stored event for zaps/stats).
-  The store indexes zaps and follows on ingest even with top-zapped and
-  profileStats off, so turning them on needs no rebuild; a store from an
-  older version builds the stats index once in the background on start.
+  search (`unreachable` when Meilisearch doesn't answer), stored zap
+  receipts for zaps, pubkeys some stored contact list follows for stats.
+  `scan_estimate` is what a rebuild reads (stored profiles for search,
+  every stored event for zaps/stats). Counts are kept as events are
+  written, or cached for a minute, so polling them is cheap.
+- The store indexes zaps and follows on ingest even with those features
+  off, so turning them on needs no rebuild. A store from an older version
+  rebuilds the zap and stats indexes once in the background on start, to
+  record each zap's coin.
 - `ncli relay stats`/`reindex`/`clear` no longer exist; they fail with
   `usage` naming the replacement.
 
 ### Profile checks, scores and NIP-85 stats
 
-With `cache.search.enabled` or `cache.profileStats.enabled`, the relay
+With `cache.profiles.search.enabled` or `cache.profiles.stats.enabled`, the relay
 checks each profile's NIP-05, lightning address (`lud16`, else `lud06`)
 and picture, and keeps the result. It fetches only when:
 
 | When | What is fetched |
 |---|---|
 | A kind 0 brings a new or changed identifier | that field, right away |
-| A result's `cache.verification.ttl` expires (default 14d; `"0"` never) | that field, by a background sweep |
+| A result's `cache.profiles.checks.ttl` expires (default 14d; `"0"` never) | that field, by a background sweep |
 | A timeout, block (403/429) or 5xx failed it | that field, after `retry.initial` doubling to `retry.max`, up to `retry.maxAttempts` |
 | `ncli relay verify <pubkey> --refresh` | every field of that profile |
 
@@ -284,19 +290,20 @@ by `perHostInterval`.
 
 ```yaml
 cache:
-  verification:
-    ttl: 14d
-    perHostInterval: 250ms
-    workers: 50
-    retry: {initial: 1h, max: 24h, maxAttempts: 5}
-  # NIP-85 user assertions, signed with nip11.privkey
-  profileStats:
-    enabled: true
-    maxTargets: 500
-  # override the built-in score weights (keys as in nmilat's config.yaml)
-  scoring:
-    social: {followers_weight: 20, zaps_weight: 20, per_sender_cap: 100000}
-    verification: {nip05_score: 50}
+  profiles:
+    checks:
+      ttl: 14d
+      perHostInterval: 250ms
+      workers: 50
+      retry: {initial: 1h, max: 24h, maxAttempts: 5}
+    # NIP-85 user assertions, signed with nip11.privkey
+    stats:
+      enabled: true
+      maxTargets: 500
+    # override the built-in score weights (keys as in nmilat's config.yaml)
+    scoring:
+      social: {followers_weight: 20, zaps_weight: 20, per_sender_cap: 100000}
+      verification: {nip05_score: 50}
 ```
 
 ```sh
@@ -308,16 +315,20 @@ ncli relay verify npub1... --refresh --json
 
 - Score = base (name/about/picture, penalties) + checks (NIP-05 50,
   lightning 20/chain up to 40; a broken picture takes its +30 back) +
-  social: `20·log10(1+followers)` capped at 100, plus received zaps
-  weighed per sender — each sender adds at most `per_sender_cap` sats,
+  social: `20·log10(1+followers)` capped at 100, plus received zaps in
+  sats weighed per sender — each sender adds at most `per_sender_cap` sats,
   scaled by that sender's own score, so throwaway keys add little.
 - A zap counts when its receipt validates (NIP-57/NIP-AZ), isn't a self-zap
   or a duplicate payment, and — once the recipient's LNURL server key is
-  verified — that server signed it. Top-zapped uses the same rules.
-- `profileStats` answers `{"kinds":[30382],"#d":[<pubkey>...]}` (no
+  verified — that server signed it. The zap ranking uses the same rules.
+- Each zap's coin comes from its invoice (`lnbc…` sats, `lnfc…` loki), else
+  a 9521's `chain` tag; amounts are never added across coins.
+- `stats` answers `{"kinds":[30382],"#d":[<pubkey>...]}` (no
   `authors`, or the relay's key) with one signed kind 30382 per known
   profile, then EOSE: `rank` (0–100), `followers`, `following`,
-  `zap_cnt_recd`/`zap_amt_recd`/`zap_cnt_sent`/`zap_amt_sent` (sats),
+  `zap_cnt_recd`/`zap_cnt_sent` (every coin), `zap_amt_recd`/`zap_amt_sent`
+  (sats) plus `zap_amt_recd_loki`/`zap_amt_sent_loki` when there are any
+  (each other coin in `cache.zaps.coins`),
   `zappers_recd`, `zap_first_recd`/`zap_last_recd`/`zap_first_sent`/
   `zap_last_sent` (unix), `nip05_verified`/`lud16_verified` (the
   identifier). No `#d` is `CLOSED restricted:`; more than `maxTargets` is
@@ -325,10 +336,70 @@ ncli relay verify npub1... --refresh --json
 - `maxTargets` is really capped by `nip11.limitation.max_message_length`: a
   `#d` pubkey costs ~67 bytes, so 256 KiB fits ~3,900. A larger value fails
   at startup (`invalid_input`).
-- `cache.profileStats.enabled` without `nip11.privkey` fails at startup
-  (`usage`); a bad duration or unknown `cache.scoring` key is
-  `invalid_input`. Top-level `verificationWorkers` still works but warns;
-  use `cache.verification.workers`.
+- `cache.profiles.stats.enabled` without `nip11.privkey` fails at startup
+  (`usage`); a bad duration or unknown `cache.profiles.scoring` key is
+  `invalid_input`.
+- Keys from before `cache` was grouped fail at startup with `usage` naming
+  the new one: `cache.topZapped` → `cache.zaps`, `cache.search` →
+  `cache.profiles.search` (its `host`/`key`/`index_name` under
+  `meilisearch`, `batch_size`/`max_ch_size` → `batchSize`/`queueSize`),
+  `cache.profileStats` → `cache.profiles.stats`, `cache.verification` →
+  `cache.profiles.checks`, `cache.scoring` → `cache.profiles.scoring`,
+  `verificationWorkers` → `cache.profiles.checks.workers`.
+
+### Zap ranking and the relay's own stats
+
+```yaml
+cache:
+  zaps:
+    enabled: true
+    # what a client may ask for; the first of each is the default
+    windows: [24h, 7d, 30d, all]
+    coins: [sats, loki]
+    limit: 50
+    maxLimit: 200
+    # how long a computed list is reused
+    refresh: 1m
+  relay:
+    stats:
+      enabled: true
+      interval: 1m
+```
+
+```sh
+# top 10 receivers of loki over the last week
+cat > ranking.yaml <<'EOF'
+kind: targets
+spec:
+  relays: [ws://127.0.0.1:5500]
+  filters:
+    - cache: ["zap-ranking", {window: 7d, coin: loki, limit: 10}]
+EOF
+ncli find -t ranking.yaml
+```
+
+- `zap-ranking` answers one signed kind 25521, then EOSE and CLOSED. Tags:
+  `window`, `coin`, `limit` (after the cap); `created_at` is when the list
+  was computed; content `[{"pubkey","total"}]` in whole sats or loki,
+  highest first. An unlisted window or coin, any other cache action
+  (including the old `top-zapped`), or bad options is `CLOSED invalid:`;
+  zaps off is `CLOSED restricted:`.
+- Every window and coin is computed in one pass on first use, reused for
+  `refresh`, served stale while one refresh runs, skipped when nothing was
+  written, and dropped after 10 idle `refresh` periods.
+- `cache.relay.stats` publishes a NIP-66 kind 30166 signed with
+  `nip11.privkey`, `d` = `nip11.url` (required): content is the NIP-11
+  document; tags `n`, `N`, `R`, `k` (only with NIP-86 kind rules),
+  `["count","events"|"authors",n]`, `["count","profiles",n]` with search or
+  stats on, and with zaps on `["count","zap-receipts",n]`,
+  `["total","zaps",<whole units>,<coin>]` per coin and
+  `["zap-ranking","windows"|"coins",...]`. It's rebuilt each `interval` only
+  if the store or NIP-11 changed and stored only if a tag differs, so a
+  subscriber gets each new version live. Zap totals come from the ranking's
+  cache, so they can lag by up to `cache.zaps.refresh`.
+- NIP-45 COUNT with only `kinds` (or nothing) is exact from the relay's
+  counters; any other filter that hits `max_limit` answers
+  `"approximate": true`.
 
 ### Prometheus and the dashboard
 
@@ -390,7 +461,7 @@ Full route, metric and config reference: `references/admin-plane-reference.md`.
   bypass via `log.Fatal`, which used to skip the `--json`/structured-error
   path entirely for the two failures below). Config-validation problems
   are caught before the server binds and classified specifically: missing
-  `nip11.pubkey`/`store`/`cache.topZapped.enabled`-without-`nip11.privkey`
+  `nip11.pubkey`/`store`/`cache.zaps.enabled`-without-`nip11.privkey`
   are `code: "usage"` (exit 2); a malformed `nip11.privkey` or a
   `nip11.pubkey`/derived-pubkey mismatch is `code: "invalid_input"` (exit
   3, the mismatch case echoing both pubkeys). Failures once the server is
@@ -398,16 +469,11 @@ Full route, metric and config reference: `references/admin-plane-reference.md`.
   `code: "internal"` (exit 1) -- classify these further yourself if you can
   tell from the message whether it's a permissions issue vs. the store
   already being held open by another running relay process.
-- `cache.topZapped.enabled: true` without `nip11.privkey` set fails with
-  `cache.topZapped.enabled requires nip11.privkey` — checked at
-  config-load time, before the server binds.
-- `cache.topZapped.window` uses ncli's own duration units
-  (`h`/`mo`/`m`/`s`/`d`/`w` — same set as filter `since`/`until`), not Go's
-  stdlib duration format used by `pingInterval`/`pongTimeout`/
-  `writeTimeout`/etc. An empty or unparseable `cache.topZapped.window` is
-  *not* a config-load-time error: it silently falls back to 24h with a
-  logged warning, so a typo here won't be caught until you notice
-  "top-zapped" queries covering the wrong range.
+- `cache.zaps.enabled: true` without `nip11.privkey` set fails with
+  `cache.zaps.enabled requires nip11.privkey` — checked at config-load
+  time, before the server binds. A bad window, coin, `limit` above
+  `maxLimit`, or duration under `cache` is `invalid_input` (exit 3) at the
+  same point; durations take `ms`/`s`/`m`/`h`/`d`/`w`/`mo`.
 - `membership.enabled: true` without `nip11.privkey` set fails the same
   way (`membership.enabled requires nip11.privkey`) — the relay signs its
   own role/membership-list/add-remove-user/invite-response events with it.

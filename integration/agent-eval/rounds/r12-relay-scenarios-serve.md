@@ -20,8 +20,8 @@ property, not something this round has time to observe directly.
 A real Meilisearch is already running on this machine at
 `http://localhost:7700` (master key `masterKey`) -- you did not start it,
 but it's there for this scenario specifically. Author a `public-search-relay`
-config pointing its `cache.search` block at that address, with
-`cache.topZapped` also enabled as the scenario describes. Start it.
+config pointing its `cache.profiles.search.meilisearch` block at that
+address, with `cache.zaps` also enabled as the scenario describes. Start it.
 
 1. Publish a kind:0 profile with a distinctive, unusual name (something
    you make up that couldn't coincidentally already exist).

@@ -12,7 +12,7 @@ of writing. Update by hand if the Go types change. -->
 | `store` | string | required | Path to the bbolt event store |
 | `logdir` | string | cwd if unset | Also read by `logs:` block's own default filename |
 | `logs` | object | see below | Optional custom rotation |
-| `cache` | object | all off | Cache-response, search and profile-stats features (`cache.topZapped.*`, `cache.search.*`, `cache.profileStats.*`, `cache.verification.*`, `cache.scoring`) |
+| `cache` | object | all off | Optional serving features: `cache.profiles.*` (search, stats, checks, scoring), `cache.zaps.*`, `cache.relay.stats.*` — see below |
 | `pow` | object | no requirement | NIP-13 proof-of-work gate (`pow.strict`, `pow.min`) — see below |
 | `membership` | object | disabled | NIP-43 relay membership (`membership.enabled`, invite/join/leave flow) |
 | `agent_auth` | object | disabled | NIP-AA agent authentication (`agent_auth.enabled`); requires `membership` above |
@@ -23,7 +23,6 @@ of writing. Update by hand if the Go types change. -->
 | `writeTimeout` | Go duration string | relay-client default | |
 | `outgoingBufferSize` | int | `1024` | Session engine tuning |
 | `maxConcurrentStoreTasks` | int | `2048` | Session engine tuning |
-| `verificationWorkers` | int | `50` | Deprecated (logs a warning): use `cache.verification.workers` |
 | `pprofAddr` | `host:port` | unset (off) | Serves `net/http/pprof`, e.g. `curl 127.0.0.1:6060/debug/pprof/goroutine?debug=2`. Unauthenticated: keep it on loopback |
 
 ## `nip11`
@@ -78,31 +77,45 @@ false, min: 0}` — fully backward compatible with configs that predate it.
 
 ## `cache`
 
-| Field | Type | Default | Notes |
-|---|---|---|---|
-| `topZapped` | object | all off | Signed "top zapped" cache response, see below |
-| `search` | object | disabled | Optional Meilisearch integration, see below |
-| `profileStats` | object | disabled | NIP-85 user assertions (kind 30382), see below |
-| `verification` | object | see below | NIP-05/lightning address checks; run when `search` or `profileStats` is enabled |
-| `scoring` | object | built-in weights | Overrides profile score weights by section: `scoring`, `verification`, `social`, with nmilat's `config.yaml` keys (e.g. `social: {followers_weight: 25}`). Unknown section or key is `invalid_input` |
-
-### `cache.topZapped`
+Durations take Go units (`250ms`, `1h`) or `d`/`w`/`mo` (`14d`); a bad one
+is `invalid_input`. A key from before this grouping (`cache.topZapped`,
+`cache.search`, `cache.profileStats`, `cache.verification`,
+`cache.scoring`, top-level `verificationWorkers`, `index_name`,
+`batch_size`, `max_ch_size`) fails startup with `usage` naming its new key.
 
 | Field | Type | Default | Notes |
 |---|---|---|---|
-| `enabled` | bool | `false` | Requires `nip11.privkey`; fatal at config load if `true` without it |
-| `window` | duration string | `24h` | Default window for "top-zapped" queries when a client's cache filter omits its own; units `h`/`mo`/`m`/`s`/`d`/`w` (same set as filter since/until). Empty or unparseable silently falls back to `24h` (logged as a warning) |
+| `profiles.search` | object | disabled | Profile search via Meilisearch, see below |
+| `profiles.stats` | object | disabled | NIP-85 user assertions (kind 30382), see below |
+| `profiles.checks` | object | see below | NIP-05/lightning address checks; run when search or stats is on |
+| `profiles.scoring` | object | built-in weights | Overrides profile score weights by section: `scoring`, `verification`, `social`, with nmilat's `config.yaml` keys (e.g. `social: {followers_weight: 25}`). Unknown section or key is `invalid_input` |
+| `zaps` | object | disabled | The signed `zap-ranking` cache action, see below |
+| `relay.stats` | object | disabled | The relay's own NIP-66 kind 30166, see below |
 
-### `cache.profileStats`
+### `cache.profiles.search`
+
+Indexes kind-0 profile fields only (name/about/nip05/lud16) — a client's
+`search` filter against this relay is a **people** search, matched authors
+then filtered by kind, never a full-text match over note content.
+
+| Field | Type | Notes |
+|---|---|---|
+| `enabled` | bool | Must be `true` for `ncli relay` to initialize search |
+| `readonly` | bool | Wraps the service in a read-only decorator |
+| `meilisearch.host` | string | Meilisearch URL |
+| `meilisearch.key` | string | Meilisearch API key |
+| `meilisearch.index` | string | Index name |
+| `batchSize` | int | Profiles per indexing request |
+| `queueSize` | int | Pending profiles buffered for indexing |
+
+### `cache.profiles.stats`
 
 | Field | Type | Default | Notes |
 |---|---|---|---|
-| `enabled` | bool | `false` | Requires `nip11.privkey` (signs the assertions); fatal at config load without it |
+| `enabled` | bool | `false` | Requires `nip11.privkey` (signs the assertions); `usage` at config load without it |
 | `maxTargets` | int | `500` | Most `#d` pubkeys per request; more is `CLOSED invalid:`. At most `max_message_length / 67` (~3,900 at 256 KiB), checked at startup |
 
-### `cache.verification`
-
-Durations take Go units (`250ms`, `1h`) or `d`/`w`/`mo` (`14d`); a bad one is `invalid_input`.
+### `cache.profiles.checks`
 
 | Field | Type | Default | Notes |
 |---|---|---|---|
@@ -112,6 +125,24 @@ Durations take Go units (`250ms`, `1h`) or `d`/`w`/`mo` (`14d`); a bad one is `i
 | `retry.initial` | duration | `1h` | Wait after a timeout/403/429/5xx, doubling per attempt; a longer `Retry-After` wins |
 | `retry.max` | duration | `24h` | Longest wait between retries |
 | `retry.maxAttempts` | int | `5` | Failures in a row before giving up until the next `ttl` |
+
+### `cache.zaps`
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `enabled` | bool | `false` | Requires `nip11.privkey` (signs the ranking); `usage` at config load without it |
+| `windows` | list | `[24h]` | Windows a client may ask for; the first is the default; `all` is all time. Empty or duplicate is `invalid_input` |
+| `coins` | list | `[sats, loki]` | Coins a client may ask for; the first is the default |
+| `limit` | int | `50` | List length when a request sets none; at most `maxLimit` |
+| `maxLimit` | int | `200` | Cap on a request's `limit` |
+| `refresh` | duration | `1m` | How long a computed list is reused |
+
+### `cache.relay.stats`
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `enabled` | bool | `false` | Publishes a NIP-66 kind 30166 about the relay. Requires `nip11.privkey` and a `ws(s)://` `nip11.url` (its `d` tag) |
+| `interval` | duration | `1m` | How often it checks for changes; it republishes only when a tag changed |
 
 ## `membership` (optional, NIP-43)
 
@@ -124,19 +155,3 @@ Omitting the whole `membership:` block is identical to `{enabled: false}`
 | `inviteTTL` | Go duration string | `24h` | How long an issued invite claim (kind 28935) stays valid; unset/unparseable falls back to the default |
 | `inviteMaxUses` | int | `0` (unlimited) | How many times a single invite claim may be consumed via a Join Request; must be `>= 0` |
 | `publishAddRemoveEvents` | bool | `false` | Also publish a signed kind:8000/8001 event on membership changes, in addition to the relay's own internal membership store |
-
-## `cache.search` (optional, Meilisearch)
-
-Indexes kind-0 profile fields only (name/about/nip05/lud16) — a client's
-`search` filter against this relay is a **people** search, matched authors
-then filtered by kind, never a full-text match over note content.
-
-| Field | Type | Notes |
-|---|---|---|
-| `enabled` | bool | Must be `true` for `ncli relay` to initialize search |
-| `readonly` | bool | Wraps the service in a read-only decorator |
-| `host` | string | Meilisearch URL |
-| `key` | string | Meilisearch API key |
-| `index_name` | string | |
-| `batch_size` | int | |
-| `max_ch_size` | int | |

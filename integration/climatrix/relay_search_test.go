@@ -69,9 +69,11 @@ func searchRelay(t *testing.T, host string) *Relay {
 	t.Helper()
 	return StartRelay(t, "", map[string]any{
 		"cache": map[string]any{
-			"search":       map[string]any{"enabled": true, "host": host, "index_name": "profiles"},
-			"topZapped":    map[string]any{"enabled": true},
-			"profileStats": map[string]any{"enabled": true},
+			"profiles": map[string]any{
+				"search": map[string]any{"enabled": true, "meilisearch": map[string]any{"host": host, "index": "profiles"}},
+				"stats":  map[string]any{"enabled": true},
+			},
+			"zaps": map[string]any{"enabled": true},
 		},
 	})
 }
@@ -148,9 +150,14 @@ func TestRelayCheck(t *testing.T) {
 	}
 
 	for name, c := range map[string]struct{ yaml, code string }{
-		"unknown scoring section": {"cache:\n  scoring:\n    nope:\n      x: 1\n", "invalid_input"},
-		"stats without privkey":   {"cache:\n  profileStats:\n    enabled: true\n", "usage"},
-		"maxTargets over limit":   {"cache:\n  profileStats:\n    enabled: true\n    maxTargets: 100000\n", "invalid_input"},
+		"unknown scoring section": {"cache:\n  profiles:\n    scoring:\n      nope:\n        x: 1\n", "invalid_input"},
+		"stats without privkey":   {"cache:\n  profiles:\n    stats:\n      enabled: true\n", "usage"},
+		"zaps without privkey":    {"cache:\n  zaps:\n    enabled: true\n", "usage"},
+		"maxTargets over limit":   {"cache:\n  profiles:\n    stats:\n      enabled: true\n      maxTargets: 100000\n", "invalid_input"},
+		"unlisted window unit":    {"cache:\n  zaps:\n    windows: [24h, 3x]\n", "invalid_input"},
+		"unknown coin":            {"cache:\n  zaps:\n    coins: [btc]\n", "invalid_input"},
+		"limit over maxLimit":     {"cache:\n  zaps:\n    limit: 300\n    maxLimit: 100\n", "invalid_input"},
+		"relay stats without url": {"cache:\n  relay:\n    stats:\n      enabled: true\n", "usage"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			body := "store: " + t.TempDir() + "/notes.db\nnip11:\n  privkey: " + priv + "\n" + c.yaml
@@ -160,4 +167,31 @@ func TestRelayCheck(t *testing.T) {
 			e.Run(t, "relay", "--config", e.WriteFile(strings.ReplaceAll(name, " ", "-")+".yaml", body), "--check", "--json").ExpectErr(t, c.code)
 		})
 	}
+
+	// Every key from before cache was grouped fails, naming its replacement.
+	for old, renamed := range map[string]string{
+		"cache:\n  topZapped:\n    enabled: true\n":               "cache.topZapped was renamed to cache.zaps",
+		"cache:\n  search:\n    enabled: true\n":                  "cache.search was renamed to cache.profiles.search",
+		"cache:\n  profileStats:\n    enabled: true\n":            "cache.profileStats was renamed to cache.profiles.stats",
+		"cache:\n  verification:\n    ttl: 7d\n":                  "cache.verification was renamed to cache.profiles.checks",
+		"cache:\n  scoring:\n    social: {}\n":                    "cache.scoring was renamed to cache.profiles.scoring",
+		"verificationWorkers: 4\n":                                "verificationWorkers was renamed to cache.profiles.checks.workers",
+		"cache:\n  profiles:\n    search:\n      index_name: x\n": "cache.profiles.search.index_name was renamed to cache.profiles.search.meilisearch.index",
+		"cache:\n  zaps:\n    window: 24h\n":                      "cache.zaps.window was renamed to cache.zaps.windows",
+	} {
+		body := "store: " + t.TempDir() + "/notes.db\nnip11:\n  privkey: " + priv + "\n" + old
+		er := e.Run(t, "relay", "--config", e.WriteFile("renamed.yaml", body), "--check", "--json").ExpectErr(t, "usage")
+		if !strings.Contains(er.Error, renamed) {
+			t.Errorf("%q: error %q, want %q", old, er.Error, renamed)
+		}
+	}
+
+	full := e.WriteFile("full-cache.yaml", "store: "+t.TempDir()+"/notes.db\nnip11:\n  privkey: "+priv+"\n  url: wss://relay.example.com\n"+`cache:
+  profiles:
+    stats: {enabled: true}
+    checks: {ttl: 14d}
+  zaps: {enabled: true, windows: [24h, 7d, all], coins: [sats, loki], limit: 20, maxLimit: 100, refresh: 1m}
+  relay: {stats: {enabled: true, interval: 1m}}
+`)
+	e.MustOK(t, "relay", "--config", full, "--check", "--json")
 }

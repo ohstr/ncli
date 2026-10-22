@@ -25,6 +25,7 @@ import (
 	"github.com/ohstr/nmilat/relay"
 	relayclient "github.com/ohstr/nmilat/relay/client"
 	"github.com/ohstr/nmilat/wire"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/require"
 )
 
@@ -73,6 +74,9 @@ func TestScenarioExamplesLoadThroughTheRealConfigLoader(t *testing.T) {
 			require.NotEmpty(t, cfg.RelayNotesDb, "%s: store did not bind", name)
 			require.True(t, cfg.Nip11.PubKey != "" || cfg.Nip11.PrivKey != "",
 				"%s: neither nip11.pubkey nor nip11.privkey bound", name)
+			// Renamed keys and bad cache values fail startup, not just here.
+			require.NoError(t, checkRenamedKeys(viper.GetViper()), name)
+			require.NoError(t, checkCacheConfig(&cfg), name)
 		})
 	}
 }

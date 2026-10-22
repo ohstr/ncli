@@ -40,6 +40,9 @@ type Options struct {
 	// placeholder page.
 	UI     fs.FS
 	Logger zerolog.Logger
+	// Nip05 returns a pubkey's verified NIP-05 address, or "", for the
+	// dashboard to name the signed-in admin. Optional.
+	Nip05 func(pubkey string) string
 }
 
 // Server is the admin listener.
@@ -309,7 +312,13 @@ func (s *Server) requireAdmin(next http.HandlerFunc) http.Handler {
 			return
 		}
 		c, err := r.Cookie(sessionCookie)
-		if err != nil || !s.opts.Settings.Dashboard {
+		if err != nil {
+			// No credentials is not a guess: a dashboard loading before
+			// sign-in asks this on every page load.
+			s.deny(w, "session", http.StatusUnauthorized)
+			return
+		}
+		if !s.opts.Settings.Dashboard {
 			s.failAuth(w, r, "session")
 			return
 		}
@@ -329,8 +338,20 @@ func (s *Server) requireAdmin(next http.HandlerFunc) http.Handler {
 
 type sessionJSON struct {
 	Pubkey    string `json:"pubkey"`
+	Nip05     string `json:"nip05,omitempty"`
 	ExpiresAt int64  `json:"expires_at"`
 	CSRF      string `json:"csrf"`
+}
+
+func (s *Server) session(pubkey string, expires time.Time, csrf string) sessionJSON {
+	out := sessionJSON{Pubkey: pubkey, CSRF: csrf}
+	if !expires.IsZero() {
+		out.ExpiresAt = expires.Unix()
+	}
+	if s.opts.Nip05 != nil && pubkey != "" {
+		out.Nip05 = s.opts.Nip05(pubkey)
+	}
+	return out
 }
 
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
@@ -341,13 +362,13 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	id, sess := s.sessions.create(pubkey, time.Now())
 	setSessionCookie(w, id, sess.expires)
 	s.opts.Logger.Info().Str("pubkey", pubkey).Str("remote", clientIP(r)).Msg("dashboard login")
-	writeJSON(w, http.StatusOK, sessionJSON{Pubkey: pubkey, ExpiresAt: sess.expires.Unix(), CSRF: sess.csrf})
+	writeJSON(w, http.StatusOK, s.session(pubkey, sess.expires, sess.csrf))
 }
 
 func (s *Server) sessionInfo(w http.ResponseWriter, r *http.Request) {
 	c, err := r.Cookie(sessionCookie)
 	if err != nil {
-		writeJSON(w, http.StatusOK, sessionJSON{Pubkey: Caller(r)})
+		writeJSON(w, http.StatusOK, s.session(Caller(r), time.Time{}, ""))
 		return
 	}
 	sess, ok := s.sessions.get(c.Value, s.admins(), time.Now())
@@ -355,7 +376,7 @@ func (s *Server) sessionInfo(w http.ResponseWriter, r *http.Request) {
 		s.failAuth(w, r, "session")
 		return
 	}
-	writeJSON(w, http.StatusOK, sessionJSON{Pubkey: sess.pubkey, ExpiresAt: sess.expires.Unix(), CSRF: sess.csrf})
+	writeJSON(w, http.StatusOK, s.session(sess.pubkey, sess.expires, sess.csrf))
 }
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {

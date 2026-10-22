@@ -130,7 +130,8 @@ try {
     check((await page.locator(".chart canvas").count()) === 18, "18 charts render");
     check((await page.locator(".kpi").count()) === 11, "11 KPI tiles render");
     check((await page.locator(".dot.live").count()) === 1, "live stream connected");
-    check(await page.getByText(key.pub_hex.slice(0, 8)).isVisible(), "header shows the signed-in admin");
+    check(await page.getByText(key.npub.slice(0, 10)).isVisible(), "header shows the signed-in admin as an npub");
+    check((await page.getByText(key.pub_hex.slice(0, 8)).count()) === 0, "header never shows the hex pubkey");
 
     // An index job from the page.
     const zaps = page.locator(".index", { hasText: "zaps" });
@@ -167,6 +168,7 @@ try {
     check((await page.getByRole("button", { name: "Kiosk" }).count()) === 0, "no kiosk button");
     await page.getByLabel("Time range").selectOption({ label: "Last 24h" });
     check((await search()).includes("from=now-24h"), "ranges reach 24h");
+    check(await page.locator(".history-since").isVisible(), "a relay up less than the range says where its history starts");
 
     const messages = page.locator('[data-panel="messages"]');
     await messages.hover();
@@ -194,6 +196,47 @@ try {
     await ctx.close();
   }
 
+  // 2b. A day of history: each range reaches further back. goroutines is
+  // 1000 + minutes ago, so a chart's Max shows how far its window goes.
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    await ctx.exposeFunction("__ncliSign", (ev) => {
+      const signed = JSON.parse(ncli(["id", "sign", "-e", "-", "-o", "-", "--identity", key.nsec, "-q"], JSON.stringify(ev)));
+      return Array.isArray(signed) ? signed[0] : signed;
+    });
+    await ctx.addInitScript(() => {
+      window.nostr = { getPublicKey: async () => "", signEvent: (ev) => window.__ncliSign(ev) };
+    });
+    await ctx.route("**/admin/api/history", (route) => {
+      const now = Date.now();
+      const t = [];
+      const goroutines = [];
+      for (let m = 1440; m >= 1; m--) {
+        t.push(now - m * 60000);
+        goroutines.push(1000 + m);
+      }
+      return route.fulfill({ json: { interval_ms: 2000, window_ms: 86400000, t, series: { goroutines } } });
+    });
+    const page = await ctx.newPage();
+    watch(page, "day-of-history");
+    await page.goto(`${admin}/admin/ui/`);
+    await page.getByRole("button", { name: /Sign in/ }).click();
+    await page.locator(".kpis").waitFor();
+    const max = async (label) => {
+      await page.getByLabel("Time range").selectOption({ label: `Last ${label}` });
+      await page.waitForTimeout(300);
+      return page.evaluate(() => {
+        const row = [...document.querySelectorAll('[data-panel="goroutines"] .legend tbody tr')].find((r) => r.cells[0]?.textContent === "goroutines");
+        return row ? row.cells[2].textContent : "";
+      });
+    };
+    const maxes = [];
+    for (const label of ["5m", "1h", "6h", "24h"]) maxes.push(await max(label));
+    check(new Set(maxes).size === 4, `each range shows a different window (max ${maxes.join(", ")})`);
+    check(!(await page.locator(".history-since").isVisible()), "no history note when history covers the range");
+    await ctx.close();
+  }
+
   // 3. Local mode: the CLI serves and signs; nothing to sign in to.
   {
     const dash = start(["relay", "dashboard", "--config", cfg, "--no-open", "--json", "--port", String(await freePort())]);
@@ -217,7 +260,7 @@ try {
 
   const signedIn = async (page, what) => {
     await page.locator(".kpis").waitFor({ timeout: 30000 });
-    check(await page.getByText(key.pub_hex.slice(0, 8)).isVisible(), `${what}: signed in as the admin`);
+    check(await page.getByText(key.npub.slice(0, 10)).isVisible(), `${what}: signed in as the admin`);
     const stored = await page.evaluate(() => JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage }));
     check(!stored.includes(key.nsec) && !stored.includes(key.priv_hex), `${what}: no key in browser storage`);
   };

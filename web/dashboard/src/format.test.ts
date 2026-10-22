@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ago, formatBytes, formatMs, formatUptime, formatValue } from "./format";
+import { ago, formatBytes, formatMs, formatUptime, formatValue, identityLabel } from "./format";
 
 describe("format", () => {
   it("bytes", () => {
@@ -30,5 +30,13 @@ describe("format", () => {
     expect(ago(undefined)).toBe("–");
     expect(ago(Date.now() / 1000 - 5)).toBe("just now");
     expect(ago(Date.now() / 1000 - 7200)).toBe("2h ago");
+  });
+
+  it("identity", () => {
+    const pk = "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d";
+    expect(identityLabel(pk)).toBe("npub180cvv…yjh6w6");
+    expect(identityLabel(pk, "bob@example.com")).toBe("bob@example.com");
+    expect(identityLabel(pk, "_@example.com")).toBe("example.com");
+    expect(identityLabel(pk)).not.toContain(pk.slice(0, 8));
   });
 });

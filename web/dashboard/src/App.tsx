@@ -2,13 +2,22 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useState, useSyncExter
 import { api, canRenew, onSession, renew, setCsrf, setRenewer, type IndexInfo, type Job, type Point, type Session } from "./api";
 import { Chart, type Line } from "./Chart";
 import { Panel } from "./Panel";
-import { ago, formatValue, type Unit } from "./format";
+import { npubEncode } from "nostr-tools/nip19";
+import { ago, formatValue, identityLabel, type Unit } from "./format";
+
+function npubOf(pubkey: string): string {
+  try {
+    return npubEncode(pubkey);
+  } catch {
+    return pubkey;
+  }
+}
 import { EOSE_P99, Kpis, OK_P99 } from "./Stats";
 import type { Thresholds } from "./stats";
 import { MetricsStore } from "./store";
 import mark from "./brand/ncli-mark.svg";
 import { applyTheme, savedTheme, type Theme } from "./theme";
-import { RANGES } from "./window";
+import { historyStart, RANGES } from "./window";
 import { load, save } from "./persist";
 import { parse, serialize } from "./urlstate";
 
@@ -333,6 +342,11 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
     return () => removeEventListener("keydown", onKey);
   }, []);
   const latest = useLatest(store);
+  // Metrics live in the relay's memory, so a restart starts them over.
+  const since = useSyncExternalStore(
+    (fn) => store.subscribe(fn),
+    () => historyStart(store.times, range, until),
+  );
 
   useEffect(() => {
     void store.start(setLive);
@@ -365,6 +379,11 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
               </option>
             ))}
           </select>
+          {since != null && (
+            <span className="muted history-since" title="The relay keeps metrics in memory; they start over when it restarts.">
+              history since {new Date(since * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+            </span>
+          )}
           <select
             aria-label="Refresh"
             value={until == null ? "live" : "paused"}
@@ -388,8 +407,8 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
             <option value="dark">Dark</option>
             <option value="light">Light</option>
           </select>
-          <span className="muted mono" title={session.pubkey}>
-            {session.pubkey.slice(0, 8)}…{session.pubkey.slice(-6)}
+          <span className={`muted${session.nip05 ? "" : " mono"}`} title={npubOf(session.pubkey)}>
+            {identityLabel(session.pubkey, session.nip05)}
           </span>
           {session.expires_at > 0 && (
             <button onClick={onLogout} className="ghost">

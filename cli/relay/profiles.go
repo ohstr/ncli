@@ -162,6 +162,16 @@ func newProfileReport(store *relay.EventStore, pubkey string) (*profileReport, e
 	}, nil
 }
 
+// verifiedNip05 is pubkey's NIP-05 address if this relay has checked it
+// out, else "".
+func verifiedNip05(store *relay.EventStore, pubkey string) string {
+	m, err := store.GetProfileMetrics(pubkey)
+	if err != nil || m == nil || m.Nip05.Status != relay.CheckOK {
+		return ""
+	}
+	return m.Nip05.Value
+}
+
 // profileRoutes serves GET /admin/api/profiles/{pubkey} (stored checks and
 // stats) and POST .../verify (check it now, fetching every field).
 func profileRoutes(r interface {

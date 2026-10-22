@@ -45,6 +45,8 @@ export interface IndexInfo {
 
 export interface Session {
   pubkey: string;
+  // nip05 is the admin's address when the relay has verified it.
+  nip05?: string;
   expires_at: number;
   csrf: string;
 }

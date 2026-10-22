@@ -348,6 +348,27 @@ func TestRepeatedFailuresAreLockedOut(t *testing.T) {
 	}
 }
 
+// Opening the dashboard before signing in asks for the session without
+// credentials; doing that often must not lock the address out.
+func TestNoCredentialsDoNotLockOut(t *testing.T) {
+	h := newHarness(t, nil)
+	for i := 0; i < failLimit*2; i++ {
+		if w := h.do("GET", "/admin/api/session", nil); w.Code != http.StatusUnauthorized {
+			t.Fatalf("no credentials = %d, want 401", w.Code)
+		}
+	}
+	if w := h.do("GET", "/admin/api/metrics", nil, nostrAuth(t, adminPriv, "GET", "/admin/api/metrics", nil)); w.Code != http.StatusOK {
+		t.Fatalf("admin after page loads = %d, want 200", w.Code)
+	}
+	bogus := withCookie(&http.Cookie{Name: sessionCookie, Value: "guess"})
+	for i := 0; i < failLimit; i++ {
+		h.do("GET", "/admin/api/session", nil, bogus)
+	}
+	if w := h.do("GET", "/admin/api/session", nil, bogus); w.Code != http.StatusTooManyRequests {
+		t.Errorf("guessed sessions = %d, want 429", w.Code)
+	}
+}
+
 func TestScrapeIsCached(t *testing.T) {
 	h := newHarness(t, nil)
 	auth := withHeader("Authorization", "Bearer "+h.token)
@@ -424,6 +445,29 @@ func TestForeignHostIsRefused(t *testing.T) {
 	}
 	if w := h.do("GET", "/admin/api/metrics", nil, withHeader("Authorization", "Bearer x")); w.Code == http.StatusMisdirectedRequest {
 		t.Error("the listener's own host was refused")
+	}
+}
+
+// The dashboard names the admin by a verified NIP-05 when the relay has one.
+func TestSessionCarriesNip05(t *testing.T) {
+	h := newHarness(t, nil)
+	h.srv.opts.Nip05 = func(pk string) string {
+		if pk == h.admins[0] {
+			return "admin@example.com"
+		}
+		return ""
+	}
+	cookie, _ := h.login()
+	w := h.do("GET", "/admin/api/session", nil, withCookie(cookie))
+	var info sessionJSON
+	if err := json.Unmarshal(w.Body.Bytes(), &info); err != nil || info.Nip05 != "admin@example.com" {
+		t.Fatalf("session = %d %s", w.Code, w.Body)
+	}
+
+	h.srv.opts.Nip05 = func(string) string { return "" }
+	w = h.do("GET", "/admin/api/session", nil, withCookie(cookie))
+	if strings.Contains(w.Body.String(), "nip05") {
+		t.Errorf("unverified admin still has a nip05: %s", w.Body)
 	}
 }
 

@@ -93,9 +93,9 @@
 "relay context use": {modes: [json, errors], tests: [TestRelayContext]}
 "relay dashboard": {modes: [errors], tests: [TestAttack_AdminHTTP], pending: "serving runs until interrupted; its proxy is unit-tested"}
 "relay index": {modes: [errors], tests: [TestBareGroupCommands]}
-"relay index drop": {modes: [json, errors], tests: [TestRelayAdmin]}
-"relay index list": {modes: [json, text], tests: [TestRelayAdmin, TestRelaySearchIndexesList, TestRelaySearchUnreachable]}
-"relay index rebuild": {modes: [json, errors], tests: [TestRelayAdmin]}
+"relay index drop": {modes: [json, errors], tests: [TestRelayAdmin, TestDerivedIndexLifecycle]}
+"relay index list": {modes: [json, text], tests: [TestRelayAdmin, TestRelaySearchIndexesList, TestRelaySearchUnreachable, TestDerivedIndexLifecycle]}
+"relay index rebuild": {modes: [json, errors], tests: [TestRelayAdmin, TestDerivedIndexLifecycle]}
 "relay invites": {modes: [errors], tests: [TestBareGroupCommands]}
 "relay invites create": {modes: [json, errors], tests: [TestRelayAdmin, TestAttack_NIP43Membership]}
 "relay invites list": {modes: [json], tests: [TestRelayAdmin]}

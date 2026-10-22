@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/netip"
 	"os"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -153,7 +154,27 @@ func (s *Server) Handle(pattern string, h http.HandlerFunc) {
 
 // Handler is the full handler chain, for tests and for Start.
 func (s *Server) Handler() http.Handler {
-	return s.gate(s.mux)
+	return s.gate(s.recoverPanics(s.mux))
+}
+
+// recoverPanics logs a handler panic and answers a JSON 500, rather than
+// net/http dropping the connection, which a client reads as the relay
+// being down.
+func (s *Server) recoverPanics(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			p := recover()
+			if p == nil {
+				return
+			}
+			if p == http.ErrAbortHandler {
+				panic(p)
+			}
+			s.opts.Logger.Error().Str("path", r.URL.Path).Interface("panic", p).Bytes("stack", debug.Stack()).Msg("admin handler panicked")
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("internal error: %v", p)})
+		}()
+		next.ServeHTTP(w, r)
+	})
 }
 
 // Start listens on the configured address and serves in the background.

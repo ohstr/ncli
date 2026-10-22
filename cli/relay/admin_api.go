@@ -228,8 +228,12 @@ func apiCall(cmd *cobra.Command, method, path string, body, out any) (int, error
 		return dErr
 	})
 	if err != nil {
+		hint := fmt.Sprintf("is the relay running, with its admin listener at %s?", base)
+		if droppedByServer(err) {
+			hint = fmt.Sprintf("the relay at %s closed the connection without answering; check its log for an error", base)
+		}
 		return 0, &common.CLIError{
-			Err:   fmt.Errorf("request failed (is the relay running, with its admin listener at %s?): %w", base, err),
+			Err:   fmt.Errorf("request failed (%s): %w", hint, err),
 			Code:  common.CodeNetwork,
 			Input: url,
 		}
@@ -259,8 +263,11 @@ func apiCall(cmd *cobra.Command, method, path string, body, out any) (int, error
 			code = common.CodeConflict
 		case resp.StatusCode == http.StatusNotImplemented:
 			code = common.CodeUsage
-		case resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500:
+		case resp.StatusCode == http.StatusTooManyRequests:
 			code = common.CodeNetwork
+		case resp.StatusCode >= 500:
+			code = common.CodeNetwork
+			msg = fmt.Sprintf("the relay failed to answer (HTTP %d): %s", resp.StatusCode, msg)
 		}
 		return resp.StatusCode, &common.CLIError{Err: fmt.Errorf("%s", msg), Code: code, Input: url}
 	}
@@ -276,9 +283,17 @@ func apiCall(cmd *cobra.Command, method, path string, body, out any) (int, error
 // status
 /////////////////////////////////////////////////////////////////////
 
+// droppedByServer reports a request the server accepted and then hung up
+// on, as opposed to one that never connected.
+func droppedByServer(err error) bool {
+	return errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, syscall.ECONNRESET)
+}
+
 type statusJSON struct {
 	Metrics metrics.Point    `json:"metrics"`
 	Indexes []jobs.IndexInfo `json:"indexes"`
+	// IndexesError says why indexes couldn't be listed; the metrics still render.
+	IndexesError string `json:"indexes_error,omitempty"`
 }
 
 func fetchStatus(cmd *cobra.Command) (statusJSON, error) {
@@ -288,7 +303,7 @@ func fetchStatus(cmd *cobra.Command) (statusJSON, error) {
 	}
 	var ix struct{ Indexes []jobs.IndexInfo }
 	if _, err := apiCall(cmd, http.MethodGet, "/admin/api/indexes", nil, &ix); err != nil {
-		return st, err
+		st.IndexesError = err.Error()
 	}
 	st.Indexes = ix.Indexes
 	if st.Indexes == nil {
@@ -371,7 +386,14 @@ func renderStatus(st statusJSON) {
 	}
 	row("Process", fmt.Sprintf("%.0f goroutines, %s RSS, %.2f CPU cores", val("goroutines"), formatBytes(val("rss_bytes")), val("cpu_seconds_total")))
 	for _, ix := range st.Indexes {
-		row("Index "+ix.Name, indexSummary(ix))
+		summary := indexSummary(ix)
+		if ix.Available && ix.Estimate < 0 {
+			summary = statusWaitStyle.Render("unreachable") + ", " + summary
+		}
+		row("Index "+ix.Name, summary)
+	}
+	if st.IndexesError != "" {
+		row("Indexes", "unavailable: "+st.IndexesError)
 	}
 	_ = tw.Flush()
 }

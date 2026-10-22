@@ -170,6 +170,57 @@ func TestJobProgress(t *testing.T) {
 	}
 }
 
+// A relay that's up but drops the request (a handler panic on an older
+// relay) must not be reported as not running.
+func TestAPICallDroppedConnectionIsNotRelayDown(t *testing.T) {
+	withViper(t, map[string]any{"nip11.privkey": testPrivKey})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, _, err := w.(http.Hijacker).Hijack()
+		if err == nil {
+			_ = conn.Close()
+		}
+	}))
+	defer srv.Close()
+	_, err := apiCall(adminCmd(t, srv.URL), http.MethodGet, "/admin/api/indexes", nil, nil)
+	if err == nil || strings.Contains(err.Error(), "is the relay running") || !strings.Contains(err.Error(), "closed the connection") {
+		t.Fatalf("err = %v, want a dropped-connection message", err)
+	}
+}
+
+func TestAPICallServerErrorSaysSo(t *testing.T) {
+	withViper(t, map[string]any{"nip11.privkey": testPrivKey})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"error":"internal error: boom"}`))
+	}))
+	defer srv.Close()
+	_, err := apiCall(adminCmd(t, srv.URL), http.MethodGet, "/admin/api/indexes", nil, nil)
+	if err == nil || !strings.Contains(err.Error(), "HTTP 500") || !strings.Contains(err.Error(), "boom") {
+		t.Fatalf("err = %v, want the relay's 500 and its message", err)
+	}
+}
+
+// One failing index listing used to fail all of relay status.
+func TestFetchStatusSurvivesIndexesFailure(t *testing.T) {
+	withViper(t, map[string]any{"nip11.privkey": testPrivKey})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/admin/api/indexes" {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(`{"error":"internal error: boom"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+	st, err := fetchStatus(adminCmd(t, srv.URL))
+	if err != nil || st.IndexesError == "" || st.Indexes == nil {
+		t.Fatalf("fetchStatus = %+v, %v; want metrics with indexes_error", st, err)
+	}
+	renderStatus(st)
+}
+
 func TestRenderStatusToleratesEmptyMetrics(t *testing.T) {
 	// A relay just started has no rates yet; rendering must not panic.
 	renderStatus(statusJSON{Indexes: []jobs.IndexInfo{{Name: "zaps", Available: true}}})

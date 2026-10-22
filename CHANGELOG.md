@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.8.0-rc.36]
+
+### Added
+
+- Adds `ncli relay --config <file> --check`, which validates the config the way startup does and exits without starting the relay. ([#185](https://github.com/ohstr/ncli/pull/185))
+
+### Changed
+
+- Rejects a `cache.profileStats.maxTargets` larger than `nip11.limitation.max_message_length` allows (~67 bytes per `#d` pubkey) at startup. ([#185](https://github.com/ohstr/ncli/pull/185))
+- Builds with nmilat v0.5.0-rc.35. ([#185](https://github.com/ohstr/ncli/pull/185))
+
+### Fixed
+
+- Fixes `ncli relay index list`, `relay status`, `relay index rebuild --dry-run` and the dashboard's index panel failing with EOF on a relay with `cache.search` enabled: listing indexes panicked on an uninitialized Meilisearch client. An unreachable Meilisearch now shows as `unreachable`. ([#185](https://github.com/ohstr/ncli/pull/185))
+- Fixes `ncli relay status` failing entirely when the index list fails; it shows the metrics and the index error. ([#185](https://github.com/ohstr/ncli/pull/185))
+- Fixes a panic in an admin API handler dropping the connection; the relay logs it and answers a JSON 500, and the CLI no longer asks whether the relay is running when it's up but failed or hung up. ([#185](https://github.com/ohstr/ncli/pull/185))
+- Fixes the relay's profile checks crashing it on a panic, and client mistakes (malformed `authors`, oversized messages, resets) and HTTP/2 client noise being logged at error or bypassing the relay log. ([#185](https://github.com/ohstr/ncli/pull/185))
+
 ## [0.8.0-rc.35]
 
 ### Added

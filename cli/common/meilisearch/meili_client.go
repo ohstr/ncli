@@ -28,6 +28,7 @@ type MeiliClient struct {
 
 func NewMeiliClient(host, apiKey, indexName string) *MeiliClient {
 	return &MeiliClient{
+		client:    meilisearch.New(host, meilisearch.WithAPIKey(apiKey)),
 		host:      host,
 		apiKey:    apiKey,
 		indexName: indexName,
@@ -35,8 +36,6 @@ func NewMeiliClient(host, apiKey, indexName string) *MeiliClient {
 }
 
 func (m *MeiliClient) Initialize(ctx context.Context) error {
-	m.client = meilisearch.New(m.host, meilisearch.WithAPIKey(m.apiKey))
-
 	_, err := m.client.GetIndex(m.indexName)
 	if err != nil {
 		_, err = m.client.CreateIndex(&meilisearch.IndexConfig{
@@ -161,9 +160,6 @@ func (m *MeiliClient) SwapWith(ctx context.Context, other string) error {
 // RemoveIndex deletes the index itself, settings included, and waits for
 // it. A missing index is not an error.
 func (m *MeiliClient) RemoveIndex(ctx context.Context) error {
-	if m.client == nil {
-		m.client = meilisearch.New(m.host, meilisearch.WithAPIKey(m.apiKey))
-	}
 	info, err := m.client.DeleteIndexWithContext(ctx, m.indexName)
 	if err != nil {
 		return err

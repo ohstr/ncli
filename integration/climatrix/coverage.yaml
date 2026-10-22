@@ -85,7 +85,7 @@
 "prefs relays remove": {modes: [json], tests: [TestPrefs]}
 "profile": {modes: [json, errors], tests: [TestQuery]}
 "publish": {modes: [json, errors], tests: [TestPublish, TestSignerPublish, TestRelayLogin_AuthRequired, TestRelayLogin_MembershipRequired]}
-"relay": {modes: [json, errors], tests: [TestRelayAdmin, TestRelayJSONLogs, TestHarness_RelaySeedsCorpus], pending: "-c context creation (phase 5)"}
+"relay": {modes: [json, errors], tests: [TestRelayAdmin, TestRelayJSONLogs, TestHarness_RelaySeedsCorpus, TestRelayCheck], pending: "-c context creation (phase 5)"}
 "relay context": {modes: [json], tests: [TestRelayContext]}
 "relay context add": {modes: [json, errors], tests: [TestRelayContext]}
 "relay context list": {modes: [json], tests: [TestRelayContext]}
@@ -94,7 +94,7 @@
 "relay dashboard": {modes: [errors], tests: [TestAttack_AdminHTTP], pending: "serving runs until interrupted; its proxy is unit-tested"}
 "relay index": {modes: [errors], tests: [TestBareGroupCommands]}
 "relay index drop": {modes: [json, errors], tests: [TestRelayAdmin]}
-"relay index list": {modes: [json], tests: [TestRelayAdmin], pending: "text table"}
+"relay index list": {modes: [json, text], tests: [TestRelayAdmin, TestRelaySearchIndexesList, TestRelaySearchUnreachable]}
 "relay index rebuild": {modes: [json, errors], tests: [TestRelayAdmin]}
 "relay invites": {modes: [errors], tests: [TestBareGroupCommands]}
 "relay invites create": {modes: [json, errors], tests: [TestRelayAdmin, TestAttack_NIP43Membership]}
@@ -117,7 +117,7 @@
 "relay roles": {modes: [errors], tests: [TestBareGroupCommands]}
 "relay roles create": {modes: [json], tests: [TestRelayAdmin]}
 "relay roles list": {modes: [json], tests: [TestRelayAdmin]}
-"relay status": {modes: [json, text, errors], tests: [TestRelayAdmin, TestAttack_AdminHTTP]}
+"relay status": {modes: [json, text, errors], tests: [TestRelayAdmin, TestAttack_AdminHTTP, TestRelaySearchIndexesList, TestRelaySearchUnreachable]}
 "relay verify": {modes: [json, errors], tests: [TestRelayAdmin], pending: "text output, --refresh on a stored profile (covered by unit tests)"}
 "signer": {modes: [errors], tests: [TestBareGroupCommands]}
 "signer check": {modes: [json, errors], tests: [TestSignerCLI]}

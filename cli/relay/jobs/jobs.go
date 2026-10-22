@@ -134,8 +134,7 @@ type IndexInfo struct {
 
 // Indexes lists every index with its running and last job.
 func (m *Manager) Indexes() []IndexInfo {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	// Estimates can wait on Meilisearch, so take them before locking.
 	out := make([]IndexInfo, 0, len(m.order))
 	for _, name := range m.order {
 		ix := m.indexes[name]
@@ -144,18 +143,23 @@ func (m *Manager) Indexes() []IndexInfo {
 		if why == "" {
 			info.Estimate, info.ScanEstimate = ix.Estimate(), ix.ScanEstimate()
 		}
+		out = append(out, info)
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i := range out {
+		info, name := &out[i], out[i].Name
 		if r, ok := m.running[name]; ok {
 			j := r.job
 			info.Running = &j
 		}
-		for i := range m.history {
-			if m.history[i].Index == name {
-				j := m.history[i]
+		for h := range m.history {
+			if m.history[h].Index == name {
+				j := m.history[h]
 				info.Last = &j
 				break
 			}
 		}
-		out = append(out, info)
 	}
 	return out
 }

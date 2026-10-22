@@ -426,3 +426,19 @@ func TestForeignHostIsRefused(t *testing.T) {
 		t.Error("the listener's own host was refused")
 	}
 }
+
+// A panicking handler used to drop the connection, which the CLI reported
+// as the relay being down.
+func TestHandlerPanicIsJSON500(t *testing.T) {
+	h := newHarness(t, nil)
+	h.srv.Handle("GET /admin/api/boom", func(http.ResponseWriter, *http.Request) { panic("boom") })
+
+	w := h.do("GET", "/admin/api/boom", nil, nostrAuth(t, adminPriv, "GET", "/admin/api/boom", nil))
+	if w.Code != http.StatusInternalServerError || w.Header().Get("Content-Type") != "application/json" {
+		t.Fatalf("panic = %d %q %s", w.Code, w.Header().Get("Content-Type"), w.Body)
+	}
+	var body struct{ Error string }
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil || body.Error == "" {
+		t.Errorf("body = %s", w.Body)
+	}
+}

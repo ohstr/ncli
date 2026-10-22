@@ -119,6 +119,13 @@ func (m *relayModeration) update(fn func(*moderationState)) error {
 	return nil
 }
 
+// kindRules returns the NIP-86 allowed and disallowed kinds.
+func (m *relayModeration) kindRules() (allowed, disallowed []int) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return slices.Clone(m.state.AllowedKinds), slices.Clone(m.state.DisallowedKinds)
+}
+
 func cloneState(s moderationState) moderationState {
 	c := s
 	c.BannedPubkeys = cloneMap(s.BannedPubkeys)

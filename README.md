@@ -174,35 +174,37 @@ pow:
   min: 0
 
 cache:
-  # also required for `relay index rebuild|drop zaps`
-  topZapped:
+  profiles:
+    search:
+      enabled: true
+      readonly: false
+      meilisearch: {host: http://localhost:7700, key: masterKey, index: ncli_events}
+      batchSize: 100
+      queueSize: 1000
+    # NIP-85 user assertions (kind 30382); needs nip11.privkey
+    stats:
+      enabled: false
+      maxTargets: 500
+    # when NIP-05/lightning addresses are re-checked; never on a rebuild
+    checks:
+      ttl: 14d
+      perHostInterval: 250ms
+      workers: 50
+      retry: {initial: 1h, max: 24h, maxAttempts: 5}
+    # profile score weights, overriding the built-in ones
+    scoring:
+      social:
+        followers_weight: 20
+  # signed zap ranking; also required for `relay index rebuild|drop zaps`
+  zaps:
     enabled: false
-    window: 24h
-  search:
-    enabled: true
-    readonly: false
-    host: http://localhost:7700
-    key: masterKey
-    index_name: ncli_events
-    batch_size: 100
-    max_ch_size: 1000
-  # NIP-85 user assertions (kind 30382); needs nip11.privkey
-  profileStats:
-    enabled: false
-    maxTargets: 500
-  # when NIP-05/lightning addresses are re-checked; never on a rebuild
-  verification:
-    ttl: 14d
-    perHostInterval: 250ms
-    workers: 50
-    retry:
-      initial: 1h
-      max: 24h
-      maxAttempts: 5
-  # profile score weights, overriding the built-in ones
-  scoring:
-    social:
-      followers_weight: 20
+    windows: [24h, 7d, 30d, all]
+    coins: [sats, loki]
+  # the relay's own NIP-66 kind 30166; needs nip11.privkey and nip11.url
+  relay:
+    stats:
+      enabled: false
+      interval: 1m
 
 membership:
   enabled: false

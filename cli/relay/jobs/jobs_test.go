@@ -274,8 +274,8 @@ func TestZapIndexRebuild(t *testing.T) {
 	if got.Scanned != 2 || got.Indexed != 1 {
 		t.Errorf("zap rebuild = %+v, want scanned 2 indexed 1", got)
 	}
-	top, err := store.GetTopZapped(context.Background(), 0, 1000, 10)
-	if err != nil || len(top) != 1 || top[0].Pubkey != receiver || top[0].TotalMLoki != 21000 {
+	top, err := store.TopZapped(context.Background(), 0, 1000, relay.CoinSats, 10)
+	if err != nil || len(top) != 1 || top[0].Pubkey != receiver || top[0].Total != 21000 {
 		t.Errorf("top zapped = %+v, %v", top, err)
 	}
 }

@@ -74,7 +74,7 @@ it in, dropping profiles no longer stored. Either way the relay keeps
 answering from the old index until the new one is ready.
 
 A search rebuild rescores every profile from what the relay already
-knows, with the current cache.scoring weights; it never re-fetches a
+knows, with the current cache.profiles.scoring weights; it never re-fetches a
 NIP-05 or lightning address (see ncli relay verify --refresh).`,
 		Example: `  ncli relay index rebuild zaps --follow
   ncli relay index rebuild search --fresh --follow
@@ -91,7 +91,7 @@ NIP-05 or lightning address (see ncli relay verify --refresh).`,
 	dropCmd := &cobra.Command{
 		Use:   "drop <search|zaps|stats>",
 		Short: "Empty an index (stored events are kept)",
-		Long: `Search and top-zapped answers stay empty until the index is rebuilt.
+		Long: `Search and zap-ranking answers stay empty until the index is rebuilt.
 Asks for confirmation; --yes skips it, and is required with --json or no
 terminal. To refresh an index without an empty window, use rebuild.`,
 		Example: `  ncli relay index drop search --yes`,

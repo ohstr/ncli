@@ -19,39 +19,34 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func profileStatsEnabled(cfg *RelayConfig) bool {
-	return cfg.Cache != nil && cfg.Cache.ProfileStats != nil && cfg.Cache.ProfileStats.Enabled
-}
-
-// checkVerificationConfig validates cache.verification and cache.scoring
-// up front, so a typo fails startup instead of being ignored.
+// checkVerificationConfig validates cache.profiles.checks and
+// cache.profiles.scoring up front, so a typo fails startup instead of
+// being ignored.
 func checkVerificationConfig(cfg *RelayConfig) error {
 	if _, err := verificationSettings(cfg); err != nil {
 		return err
 	}
-	if cfg.Cache != nil {
-		if _, err := scoringOverride(cfg.Cache.Scoring); err != nil {
-			return &common.CLIError{Err: fmt.Errorf("cache.scoring: %w", err), Code: common.CodeInvalidInput}
-		}
+	if _, err := scoringOverride(cfg.profiles().Scoring); err != nil {
+		return &common.CLIError{Err: fmt.Errorf("cache.profiles.scoring: %w", err), Code: common.CodeInvalidInput}
 	}
 	return nil
 }
 
-// verificationSettings turns cache.verification into nmilat's settings;
+// verificationSettings turns cache.profiles.checks into nmilat's settings;
 // unset fields keep nmilat's defaults.
 func verificationSettings(cfg *RelayConfig) (relay.VerificationConfig, error) {
 	out := relay.VerificationConfig{UserAgent: "ncli/" + common.ReadBuildInfo().Version}
-	if cfg.Cache == nil || cfg.Cache.Verification == nil {
+	v := cfg.profiles().Checks
+	if v == nil {
 		return out, nil
 	}
-	v := cfg.Cache.Verification
 	durations := []struct {
 		key string
 		raw string
 		dst *time.Duration
 	}{
-		{"cache.verification.ttl", v.TTL, &out.TTL},
-		{"cache.verification.perHostInterval", v.PerHostInterval, &out.PerHostInterval},
+		{"cache.profiles.checks.ttl", v.TTL, &out.TTL},
+		{"cache.profiles.checks.perHostInterval", v.PerHostInterval, &out.PerHostInterval},
 	}
 	if v.Retry != nil {
 		durations = append(durations,
@@ -59,12 +54,12 @@ func verificationSettings(cfg *RelayConfig) (relay.VerificationConfig, error) {
 				key string
 				raw string
 				dst *time.Duration
-			}{"cache.verification.retry.initial", v.Retry.Initial, &out.RetryInitial},
+			}{"cache.profiles.checks.retry.initial", v.Retry.Initial, &out.RetryInitial},
 			struct {
 				key string
 				raw string
 				dst *time.Duration
-			}{"cache.verification.retry.max", v.Retry.Max, &out.RetryMax},
+			}{"cache.profiles.checks.retry.max", v.Retry.Max, &out.RetryMax},
 		)
 		out.MaxAttempts = v.Retry.MaxAttempts
 	}
@@ -76,13 +71,9 @@ func verificationSettings(cfg *RelayConfig) (relay.VerificationConfig, error) {
 			*d.dst = 0
 			continue
 		}
-		// Go's units (ms, s, m, h), else ncli's (d, w, mo).
-		parsed, err := time.ParseDuration(d.raw)
+		parsed, err := parseConfigDuration(d.key, d.raw)
 		if err != nil {
-			parsed, err = client.ParseDuration(d.raw)
-		}
-		if err != nil {
-			return out, &common.CLIError{Err: fmt.Errorf("%s: %w", d.key, err), Code: common.CodeInvalidInput, Input: d.raw}
+			return out, err
 		}
 		*d.dst = parsed
 	}
@@ -93,7 +84,7 @@ func verificationSettings(cfg *RelayConfig) (relay.VerificationConfig, error) {
 	return out, nil
 }
 
-// scoringOverride decodes cache.scoring over the built-in weights. Only
+// scoringOverride decodes cache.profiles.scoring over the built-in weights. Only
 // known sections and keys are accepted.
 func scoringOverride(raw map[string]any) (*nmconfig.SearchConfig, error) {
 	if len(raw) == 0 {
@@ -119,17 +110,14 @@ func scoringOverride(raw map[string]any) (*nmconfig.SearchConfig, error) {
 	return &next, nil
 }
 
-// applyScoring installs cache.scoring before the relay serves anything.
+// applyScoring installs cache.profiles.scoring before the relay serves anything.
 func applyScoring(cfg *RelayConfig) {
-	if cfg.Cache == nil {
-		return
-	}
-	next, err := scoringOverride(cfg.Cache.Scoring)
+	next, err := scoringOverride(cfg.profiles().Scoring)
 	if err != nil || next == nil {
 		return
 	}
 	nmconfig.Configure(func(c *nmconfig.AppConfig) { c.Search = *next })
-	log.Info().Msg("profile score weights overridden by cache.scoring")
+	log.Info().Msg("profile score weights overridden by cache.profiles.scoring")
 }
 
 // profileReport is what the admin API answers about one profile.

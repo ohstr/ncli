@@ -36,7 +36,7 @@ ping relay.primal.net` needs no flag at all), and no filter flags at all
 
 ### Profile stats (NIP-85)
 
-A relay with `cache.profileStats` answers kind 30382 by `#d` with stats it
+A relay with `cache.profiles.stats` answers kind 30382 by `#d` with stats it
 signs: `rank`, `followers`, `following`, `zap_cnt_recd`/`zap_amt_recd`,
 `zap_cnt_sent`/`zap_amt_sent` (sats), first/last zap times, verified
 NIP-05/lightning address. `ncli profile` shows them on its card.

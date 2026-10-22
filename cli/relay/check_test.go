@@ -12,7 +12,7 @@ import (
 
 func TestCheckMaxStatsTargets(t *testing.T) {
 	cfg := func(maxTargets int, maxMessage int64) *RelayConfig {
-		c := &RelayConfig{Cache: &CacheConfig{ProfileStats: &ProfileStatsConfig{Enabled: true, MaxTargets: maxTargets}}}
+		c := &RelayConfig{Cache: &CacheConfig{Profiles: &ProfilesConfig{Stats: &ProfileStatsConfig{Enabled: true, MaxTargets: maxTargets}}}}
 		c.Nip11.Limitation.MaxMessageLength = maxMessage
 		return c
 	}

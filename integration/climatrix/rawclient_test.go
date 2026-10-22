@@ -41,7 +41,12 @@ type subState struct {
 	events chan *nip01.Event
 	eose   chan struct{}
 	closed chan string
-	count  chan int
+	count  chan countMsg
+}
+
+type countMsg struct {
+	n      int
+	approx bool
 }
 
 const rawWait = 5 * time.Second
@@ -135,11 +140,12 @@ func (r *Raw) read() {
 		case "COUNT":
 			if s := r.subs[str(1)]; s != nil && len(msg) > 2 {
 				var c struct {
-					Count int `json:"count"`
+					Count       int  `json:"count"`
+					Approximate bool `json:"approximate"`
 				}
 				_ = json.Unmarshal(msg[2], &c)
 				select {
-				case s.count <- c.Count:
+				case s.count <- countMsg{c.Count, c.Approximate}:
 				default:
 				}
 			}
@@ -234,7 +240,7 @@ func (r *Raw) waitOK(ch chan okMsg) (bool, string) {
 func (r *Raw) newSub() (string, *subState) {
 	id := fmt.Sprintf("s%d", r.nextSub.Add(1))
 	s := &subState{events: make(chan *nip01.Event, 1024), eose: make(chan struct{}, 1),
-		closed: make(chan string, 1), count: make(chan int, 1)}
+		closed: make(chan string, 1), count: make(chan countMsg, 1)}
 	r.mu.Lock()
 	r.subs[id] = s
 	r.mu.Unlock()
@@ -264,7 +270,15 @@ func (r *Raw) Req(filters ...F) (events []*nip01.Event, closed string) {
 				}
 			}
 		case msg := <-s.closed:
-			return events, msg
+			// Events sent just before the CLOSED may still be buffered.
+			for {
+				select {
+				case ev := <-s.events:
+					events = append(events, ev)
+				default:
+					return events, msg
+				}
+			}
 		case <-time.After(rawWait):
 			r.t.Fatalf("REQ %v: no EOSE/CLOSED", filters)
 		}
@@ -274,15 +288,22 @@ func (r *Raw) Req(filters ...F) (events []*nip01.Event, closed string) {
 // Count runs a NIP-45 COUNT; closed is the CLOSED reason if refused.
 func (r *Raw) Count(filters ...F) (n int, closed string) {
 	r.t.Helper()
+	n, _, closed = r.CountApprox(filters...)
+	return n, closed
+}
+
+// CountApprox is Count that also reports NIP-45's "approximate".
+func (r *Raw) CountApprox(filters ...F) (n int, approx bool, closed string) {
+	r.t.Helper()
 	id, s := r.newSub()
 	r.Send(append([]any{"COUNT", id}, toAny(filters)...))
 	select {
-	case n := <-s.count:
-		return n, ""
+	case c := <-s.count:
+		return c.n, c.approx, ""
 	case msg := <-s.closed:
-		return 0, msg
+		return 0, false, msg
 	case <-time.After(rawWait):
-		return -1, "timeout: no COUNT"
+		return -1, false, "timeout: no COUNT"
 	}
 }
 

@@ -7,10 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/ohstr/ncli/cli/common"
-	"github.com/ohstr/ncli/client"
 	"github.com/ohstr/nmilat/nip11"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
@@ -140,7 +138,7 @@ nip11:
 // via the real common.LoadViperConfig + viper.Unmarshal path (same as
 // initConfig), and returns the resulting RelayConfig. initConfig() itself
 // isn't called directly: its defaulting logic is exercised in isolated
-// pieces below (applyPortDefault, finalizeNip11, checkTopZappedRequiresPrivKey)
+// pieces below (applyPortDefault, finalizeNip11, checkCacheConfig)
 // so each subtest can check one concern without also having to satisfy
 // initConfig()'s other requirements (e.g. a valid pubkey) just to reach it.
 func loadRelayConfigFromYAML(t *testing.T, yamlContent string) RelayConfig {
@@ -170,37 +168,6 @@ func applyPortDefault(cfg *RelayConfig) {
 	if cfg.Port == 0 {
 		cfg.Port = defaultPort
 	}
-}
-
-// topZapped safely reads cfg.Cache.TopZapped.Enabled, which is nil/false
-// whenever the config file omits the `cache:`/`cache.topZapped:` block
-// entirely.
-func topZapped(cfg *RelayConfig) bool {
-	return cfg.Cache != nil && cfg.Cache.TopZapped != nil && cfg.Cache.TopZapped.Enabled
-}
-
-// checkTopZappedRequiresPrivKey mirrors the `config.Cache != nil &&
-// config.Cache.TopZapped != nil && config.Cache.TopZapped.Enabled &&
-// config.Nip11.PrivKey == ""` guard in initConfig (command.go).
-func checkTopZappedRequiresPrivKey(cfg *RelayConfig) error {
-	if topZapped(cfg) && cfg.Nip11.PrivKey == "" {
-		return errors.New("cache.topZapped.enabled requires nip11.privkey")
-	}
-	return nil
-}
-
-// resolveCacheWindow mirrors the cache.topZapped.window defaulting/parsing
-// logic in NewServer (service.go): empty or unparseable falls back to
-// defaultCacheWindow rather than propagating the zero value, since
-// WithSessionConfig replaces the SDK's own 24h default wholesale.
-func resolveCacheWindow(cfg *RelayConfig) time.Duration {
-	if cfg.Cache == nil || cfg.Cache.TopZapped == nil || cfg.Cache.TopZapped.Window == "" {
-		return defaultCacheWindow
-	}
-	if d, err := client.ParseDuration(cfg.Cache.TopZapped.Window); err == nil {
-		return d
-	}
-	return defaultCacheWindow
 }
 
 // checkPowMinNonNegative mirrors the `config.Pow != nil && config.Pow.Min <
@@ -312,130 +279,6 @@ pow:
 	})
 }
 
-func TestTopZappedRequiresPrivKey(t *testing.T) {
-	const validPubkey = "bb50e2d89a4ed70663d080659fe0ad4b9bc3e06c17a227433966cb59ceee020d"
-	const validPrivkey = "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
-
-	t.Run("omitted: defaults to false, no privkey needed", func(t *testing.T) {
-		cfg := loadRelayConfigFromYAML(t, `
-nip11:
-  pubkey: "`+validPubkey+`"
-store: "test.db"
-`)
-		assert.False(t, topZapped(&cfg))
-		assert.NoError(t, checkTopZappedRequiresPrivKey(&cfg))
-	})
-
-	t.Run("enabled without privkey fails", func(t *testing.T) {
-		cfg := loadRelayConfigFromYAML(t, `
-nip11:
-  pubkey: "`+validPubkey+`"
-store: "test.db"
-cache:
-  topZapped:
-    enabled: true
-`)
-		assert.True(t, topZapped(&cfg))
-		assert.Error(t, checkTopZappedRequiresPrivKey(&cfg))
-	})
-
-	t.Run("enabled with privkey passes", func(t *testing.T) {
-		cfg := loadRelayConfigFromYAML(t, `
-nip11:
-  pubkey: "`+validPubkey+`"
-  privkey: "`+validPrivkey+`"
-store: "test.db"
-cache:
-  topZapped:
-    enabled: true
-`)
-		assert.True(t, topZapped(&cfg))
-		assert.NoError(t, checkTopZappedRequiresPrivKey(&cfg))
-	})
-
-	t.Run("explicit false with no privkey passes", func(t *testing.T) {
-		cfg := loadRelayConfigFromYAML(t, `
-nip11:
-  pubkey: "`+validPubkey+`"
-store: "test.db"
-cache:
-  topZapped:
-    enabled: false
-`)
-		assert.False(t, topZapped(&cfg))
-		assert.NoError(t, checkTopZappedRequiresPrivKey(&cfg))
-	})
-}
-
-func TestCacheWindow(t *testing.T) {
-	const validPubkey = "bb50e2d89a4ed70663d080659fe0ad4b9bc3e06c17a227433966cb59ceee020d"
-
-	t.Run("omitted cache block: defaults to 24h", func(t *testing.T) {
-		cfg := loadRelayConfigFromYAML(t, `
-nip11:
-  pubkey: "`+validPubkey+`"
-store: "test.db"
-`)
-		assert.Nil(t, cfg.Cache)
-		assert.Equal(t, defaultCacheWindow, resolveCacheWindow(&cfg))
-	})
-
-	t.Run("empty window: defaults to 24h", func(t *testing.T) {
-		cfg := loadRelayConfigFromYAML(t, `
-nip11:
-  pubkey: "`+validPubkey+`"
-store: "test.db"
-cache:
-  topZapped:
-    enabled: true
-`)
-		require.NotNil(t, cfg.Cache)
-		require.NotNil(t, cfg.Cache.TopZapped)
-		assert.Equal(t, "", cfg.Cache.TopZapped.Window)
-		assert.Equal(t, defaultCacheWindow, resolveCacheWindow(&cfg))
-	})
-
-	t.Run("valid units parse to the expected duration", func(t *testing.T) {
-		tests := []struct {
-			window string
-			want   time.Duration
-		}{
-			{"24h", 24 * time.Hour},
-			{"7d", 7 * client.HoursPerDay * time.Hour},
-			{"2w", 2 * client.HoursPerWeek * time.Hour},
-			{"1mo", client.HoursPerMonth * time.Hour},
-			{"90m", 90 * time.Minute},
-		}
-		for _, tt := range tests {
-			t.Run(tt.window, func(t *testing.T) {
-				cfg := loadRelayConfigFromYAML(t, `
-nip11:
-  pubkey: "`+validPubkey+`"
-store: "test.db"
-cache:
-  topZapped:
-    window: "`+tt.window+`"
-`)
-				assert.Equal(t, tt.want, resolveCacheWindow(&cfg))
-			})
-		}
-	})
-
-	t.Run("unparseable window falls back to 24h rather than failing config load", func(t *testing.T) {
-		cfg := loadRelayConfigFromYAML(t, `
-nip11:
-  pubkey: "`+validPubkey+`"
-store: "test.db"
-cache:
-  topZapped:
-    window: "not-a-duration"
-`)
-		require.NotNil(t, cfg.Cache.TopZapped)
-		assert.Equal(t, "not-a-duration", cfg.Cache.TopZapped.Window)
-		assert.Equal(t, defaultCacheWindow, resolveCacheWindow(&cfg))
-	})
-}
-
 func TestAuthRequiresURL(t *testing.T) {
 	const validPubkey = "bb50e2d89a4ed70663d080659fe0ad4b9bc3e06c17a227433966cb59ceee020d"
 
@@ -527,30 +370,27 @@ logs:
 		assert.False(t, cfg.Logs.Compress)
 	})
 
-	t.Run("search block round-trips under cache", func(t *testing.T) {
+	t.Run("search block round-trips under cache.profiles", func(t *testing.T) {
 		cfg := loadRelayConfigFromYAML(t, `
 nip11:
   pubkey: "`+validPubkey+`"
 store: "test.db"
 cache:
-  search:
-    enabled: true
-    readonly: true
-    host: "http://localhost:7700"
-    key: "masterKey"
-    index_name: "ncli_events"
-    batch_size: 100
-    max_ch_size: 1000
+  profiles:
+    search:
+      enabled: true
+      readonly: true
+      meilisearch: {host: "http://localhost:7700", key: "masterKey", index: "ncli_events"}
+      batchSize: 100
+      queueSize: 1000
 `)
-		require.NotNil(t, cfg.Cache)
-		require.NotNil(t, cfg.Cache.Search)
-		assert.True(t, cfg.Cache.Search.Enabled)
-		assert.True(t, cfg.Cache.Search.Readonly)
-		assert.Equal(t, "http://localhost:7700", cfg.Cache.Search.Host)
-		assert.Equal(t, "masterKey", cfg.Cache.Search.Key)
-		assert.Equal(t, "ncli_events", cfg.Cache.Search.IndexName)
-		assert.Equal(t, 100, cfg.Cache.Search.BatchSize)
-		assert.Equal(t, 1000, cfg.Cache.Search.MaxChSize)
+		s := cfg.searchConfig()
+		require.NotNil(t, s)
+		assert.True(t, s.Enabled)
+		assert.True(t, s.Readonly)
+		assert.Equal(t, MeilisearchConfig{Host: "http://localhost:7700", Key: "masterKey", Index: "ncli_events"}, s.Meilisearch)
+		assert.Equal(t, 100, s.BatchSize)
+		assert.Equal(t, 1000, s.QueueSize)
 	})
 
 	t.Run("duration fields round-trip as raw strings", func(t *testing.T) {

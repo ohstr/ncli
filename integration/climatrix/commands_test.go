@@ -131,7 +131,8 @@ func TestRelayAdmin(t *testing.T) {
 			DryRun []map[string]any `json:"dry_run"`
 		}
 		e.MustOK(t, "relay", "index", "rebuild", "all", "--dry-run", "--config", cfg, "--json").JSON(t, &dry)
-		if len(dry.DryRun) != 2 || dry.DryRun[0]["index"] != "zaps" || dry.DryRun[1]["index"] != "stats" {
+		// stats is off here: no profile stats or search.
+		if len(dry.DryRun) != 1 || dry.DryRun[0]["index"] != "zaps" {
 			t.Errorf("dry run over available indexes: %+v", dry.DryRun)
 		}
 

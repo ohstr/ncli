@@ -298,7 +298,7 @@ function Indexes({ onRunning, paused, viewing, onView }: IndexesProps) {
   };
 
   return (
-    <Panel id="indexes" title="Indexes" desc="Search and zap indexes; rebuilds run as jobs." className="w-24 wide" viewing={viewing} onView={onView}>
+    <Panel id="indexes" title="Indexes" desc="Search, zap and stats indexes; rebuilds run as jobs." className="w-24 wide" viewing={viewing} onView={onView}>
       {error && <p className="error">{error}</p>}
       <div className="indexes">
         {indexes.map((ix) => (

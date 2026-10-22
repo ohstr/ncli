@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.8.0-rc.38]
+
+### Added
+
+- Adds the relay's own NIP-66 stats: with `cache.relay.stats.enabled` (needs `nip11.privkey` and `nip11.url`) the relay publishes a kind 30166 about itself with its NIP-11 document, supported NIPs, requirements, NIP-86 kind rules, and `count` tags (`events`, `authors`, plus `profiles` with search or stats on and `zap-receipts` with zaps on), per-coin `total` zap tags and the zap-ranking windows and coins. It republishes, at most every `interval`, only when something changed, so subscribers get each version live. ([#187](https://github.com/ohstr/ncli/pull/187))
+- Adds `cache.zaps`, the signed `zap-ranking` cache action: `windows` (first is the default, `all` allowed) and `coins` (`sats`, `loki`) a client may ask for, `limit`/`maxLimit`, and `refresh`. One coin per list, whole units, computed once per refresh for every window. ([#187](https://github.com/ohstr/ncli/pull/187))
+- Adds per-coin NIP-85 amounts: `zap_amt_recd_loki`/`zap_amt_sent_loki` beside the sats `zap_amt_recd`/`zap_amt_sent`. ([#187](https://github.com/ohstr/ncli/pull/187))
+
+### Changed
+
+- Changes the relay's `cache` block, grouped by what depends on what: `cache.profiles.search` (its Meilisearch settings under `meilisearch`, `batchSize`, `queueSize`), `cache.profiles.stats`, `cache.profiles.checks`, `cache.profiles.scoring`, `cache.zaps` and `cache.relay.stats`. The old keys (`cache.topZapped`, `cache.search`, `cache.profileStats`, `cache.verification`, `cache.scoring`, `verificationWorkers`, `index_name`, `batch_size`, `max_ch_size`) fail startup with `usage` naming the new key. ([#187](https://github.com/ohstr/ncli/pull/187))
+- Removes the `top-zapped` cache action; use `zap-ranking`. Any unknown cache action is refused with `CLOSED invalid:`. ([#187](https://github.com/ohstr/ncli/pull/187))
+- Changes the social score to count sats only. ([#187](https://github.com/ohstr/ncli/pull/187))
+- Changes NIP-45 COUNT to answer a kinds-only (or empty) filter exactly from the relay's counters, past `max_limit`, and to mark a count that hit `max_limit` `"approximate": true`. ([#187](https://github.com/ohstr/ncli/pull/187))
+- Changes the dashboard and `relay index list` to read index estimates from the relay's counters or a one-minute cache, instead of counting or calling Meilisearch on every poll. ([#187](https://github.com/ohstr/ncli/pull/187))
+- Builds with nmilat v0.5.0-rc.36. ([#187](https://github.com/ohstr/ncli/pull/187))
+
+### Fixed
+
+- Fixes the dashboard's `stats` index showing a count on a relay with profile stats off: like `search` and `zaps`, it's now unavailable unless `cache.profiles.search` or `cache.profiles.stats` is enabled, and says so. ([#187](https://github.com/ohstr/ncli/pull/187))
+- Fixes zap amounts in sats and loki being added together in the zap ranking, NIP-85 amounts and profile scores. ([#187](https://github.com/ohstr/ncli/pull/187))
+- Fixes a ranking `window` like `7d` from a client silently becoming 24h, and a bad configured window only logging a warning. ([#187](https://github.com/ohstr/ncli/pull/187))
+
 ## [0.8.0-rc.37]
 
 ### Changed

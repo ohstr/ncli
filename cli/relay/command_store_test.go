@@ -1,7 +1,6 @@
 package relay
 
 import (
-	"bytes"
 	"context"
 	"path/filepath"
 	"strings"
@@ -62,9 +61,9 @@ func TestOpenRelayStore_WarnsOnLeftoverData(t *testing.T) {
 	require.NoError(t, store.InsertEvents(context.Background(), zapAndFollow(t)))
 	store.Close()
 
-	var buf bytes.Buffer
+	buf := &syncBuffer{}
 	prev := log.Logger
-	log.Logger = zerolog.New(&buf)
+	log.Logger = zerolog.New(buf)
 	t.Cleanup(func() { log.Logger = prev })
 
 	store = openTestStore(t, RelayConfig{}, path)
@@ -72,10 +71,11 @@ func TestOpenRelayStore_WarnsOnLeftoverData(t *testing.T) {
 	require.Contains(t, buf.String(), "ncli relay index drop stats")
 	require.True(t, store.ZapIndexState().HasData, "turning a feature off keeps its data")
 
-	buf.Reset()
 	require.NoError(t, store.ClearZapIndex(context.Background()))
 	require.NoError(t, store.ClearSocialIndex(context.Background()))
 	store.Close()
+	buf = &syncBuffer{}
+	log.Logger = zerolog.New(buf)
 	openTestStore(t, RelayConfig{}, path)
 	require.NotContains(t, buf.String(), "relay index drop")
 }
@@ -83,8 +83,8 @@ func TestOpenRelayStore_WarnsOnLeftoverData(t *testing.T) {
 func TestNewServer_WarnsOnIndexMismatch(t *testing.T) {
 	prev, prevLog := config, log.Logger
 	t.Cleanup(func() { config, log.Logger = prev, prevLog })
-	var buf bytes.Buffer
-	log.Logger = zerolog.New(&buf)
+	buf := &syncBuffer{}
+	log.Logger = zerolog.New(buf)
 
 	store := openTestStore(t, RelayConfig{}, filepath.Join(t.TempDir(), "notes.db"))
 	config = cacheOn(false, false, false, true)

@@ -239,8 +239,12 @@ func adminRequestBody(cmd *cobra.Command, method, path string, body interface{})
 		return dErr
 	})
 	if err != nil {
+		hint := fmt.Sprintf("is the relay running on port %d?", port)
+		if droppedByServer(err) {
+			hint = fmt.Sprintf("the relay on port %d closed the connection without answering; check its log for an error", port)
+		}
 		return nil, &common.CLIError{
-			Err:   fmt.Errorf("request failed (is the relay running on port %d?): %w", port, err),
+			Err:   fmt.Errorf("request failed (%s): %w", hint, err),
 			Code:  common.CodeNetwork,
 			Input: url,
 		}

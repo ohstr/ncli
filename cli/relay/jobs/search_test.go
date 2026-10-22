@@ -96,6 +96,15 @@ func (f *fakeMeili) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			delete(f.indexes, name)
 			f.taskInfo(w, name)
 		}
+	case parts[0] == "indexes" && len(parts) == 3 && parts[2] == "stats":
+		docs, ok := f.indexes[parts[1]]
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = io.WriteString(w, `{"message":"not found","code":"index_not_found","type":"invalid_request","link":""}`)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"numberOfDocuments": len(docs), "isIndexing": false})
 	case parts[0] == "indexes" && len(parts) == 3 && parts[2] == "settings":
 		f.taskInfo(w, parts[1])
 	case parts[0] == "indexes" && len(parts) == 3 && parts[2] == "documents":
@@ -200,5 +209,34 @@ func TestSearchDropEmptiesLiveIndex(t *testing.T) {
 	}
 	if n := len(meili.docs("profiles")); n != 0 {
 		t.Errorf("after drop %d docs remain", n)
+	}
+}
+
+// Estimate used to call CountDocuments on a client Initialize never set
+// up, panicking every index listing on a relay with search enabled.
+func TestSearchEstimate(t *testing.T) {
+	meili, url := newFakeMeili(t)
+	meili.put("profiles", "a")
+	meili.put("profiles", "b")
+	ix := &SearchIndex{Host: url, IndexName: "profiles"}
+	if got := ix.Estimate(); got != 2 {
+		t.Errorf("live index = %d, want 2", got)
+	}
+
+	ix.Host = "http://127.0.0.1:1"
+	if got := ix.Estimate(); got != -1 {
+		t.Errorf("unreachable = %d, want -1", got)
+	}
+}
+
+func TestIndexesRouteWithSearchEnabled(t *testing.T) {
+	_, url := newFakeMeili(t)
+	ix, _ := searchIndexWithProfiles(t, url, 1)
+	_, h := newRoutes(t, ix)
+	if code, out := call(t, h, "GET", "/admin/api/indexes", ""); code != 200 || out["indexes"] == nil {
+		t.Fatalf("GET /admin/api/indexes = %d %v", code, out)
+	}
+	if code, out := call(t, h, "POST", "/admin/api/indexes/search/rebuild", `{"dry_run":true}`); code != 200 || out["estimate"] != float64(-1) {
+		t.Fatalf("dry run = %d %v, want 200 with estimate -1 (no index yet)", code, out)
 	}
 }

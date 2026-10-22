@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.8.0-rc.37]
+
+### Changed
+
+- Changes the dashboard header to name the signed-in admin by NIP-05 when the relay has verified one, else by npub, never by hex pubkey. ([#PR](https://github.com/ohstr/ncli/pull/PR))
+
+### Fixed
+
+- Fixes the dashboard's time range looking like it does nothing on a relay up less than the range: metrics live in memory and start over on restart, so the page now says "history since HH:MM" when the range reaches past them. ([#PR](https://github.com/ohstr/ncli/pull/PR))
+- Fixes the admin listener counting a request with no credentials (every dashboard load before sign-in) as a failed login, which locked an admin out with 429 after ten page loads in a minute. ([#PR](https://github.com/ohstr/ncli/pull/PR))
+
 ## [0.8.0-rc.36]
 
 ### Added

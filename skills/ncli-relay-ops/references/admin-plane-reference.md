@@ -34,8 +34,10 @@ missing or contradictory setting, `invalid_input` (exit 3) for a bad value.
 | `GET` | `/admin/api/metrics` | admin* | latest point: `{t, v: rates/gauges/quantiles, totals}` |
 | `GET` | `/admin/api/history` | admin* | last hour, columnar: `{interval_ms, t: [...], series: {key: [...]}}` |
 | `GET` | `/admin/api/stream` | admin* | SSE, one `event: point` per 2s (at most 8 viewers) |
-| `GET` | `/admin/api/indexes` | admin* | `{indexes: [{name, available, unavailable, estimate, running, last}]}` |
-| `POST` | `/admin/api/indexes/{name}/rebuild` | admin* | body `{fresh, reverify, dry_run}`; `202` new job, `200` the running one, `409` other job, `501` unavailable |
+| `GET` | `/admin/api/indexes` | admin* | `{indexes: [{name, available, unavailable, estimate, running, last}]}` for `search`, `zaps`, `stats`; `estimate` `-1` means unreachable |
+| `POST` | `/admin/api/indexes/{name}/rebuild` | admin* | body `{fresh, dry_run}` (`reverify` is refused with `400`); `202` new job, `200` the running one, `409` other job, `501` unavailable |
+| `GET` | `/admin/api/profiles/{pubkey}` | admin* | stored checks `{nip05, lud16, picture: {value, status, checked_at, next_check_at, attempts, last_error}}`, `score`/`base_score`/`check_score`/`social_score`, `lnurl_pubkey`, `stats` |
+| `POST` | `/admin/api/profiles/{pubkey}/verify` | admin* | checks the profile now (every field), then the same report; `404` without a stored kind 0 |
 | `POST` | `/admin/api/indexes/{name}/drop` | admin* | the finished job (`202` if still running after 30s) |
 | `GET` | `/admin/api/jobs`, `/admin/api/jobs/{id}` | admin* | jobs, newest first / one job |
 | `DELETE` | `/admin/api/jobs/{id}` | admin* | cancels and returns the job |
@@ -52,7 +54,7 @@ Ten failed credentials from one address within a minute are refused with
 
 ## Job object
 
-`{id, index, kind: rebuild|drop, options: {fresh, reverify}, state:
+`{id, index, kind: rebuild|drop, options: {fresh}, state:
 running|succeeded|failed|cancelled, scanned, indexed, total (estimate),
 started_at, finished_at, error}`.
 

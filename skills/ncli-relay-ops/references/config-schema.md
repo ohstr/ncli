@@ -12,7 +12,7 @@ of writing. Update by hand if the Go types change. -->
 | `store` | string | required | Path to the bbolt event store |
 | `logdir` | string | cwd if unset | Also read by `logs:` block's own default filename |
 | `logs` | object | see below | Optional custom rotation |
-| `cache` | object | all off | Cache-response and search features (`cache.topZapped.enabled`, `cache.topZapped.window`, `cache.search.*`) |
+| `cache` | object | all off | Cache-response, search and profile-stats features (`cache.topZapped.*`, `cache.search.*`, `cache.profileStats.*`, `cache.verification.*`, `cache.scoring`) |
 | `pow` | object | no requirement | NIP-13 proof-of-work gate (`pow.strict`, `pow.min`) — see below |
 | `membership` | object | disabled | NIP-43 relay membership (`membership.enabled`, invite/join/leave flow) |
 | `agent_auth` | object | disabled | NIP-AA agent authentication (`agent_auth.enabled`); requires `membership` above |
@@ -23,7 +23,7 @@ of writing. Update by hand if the Go types change. -->
 | `writeTimeout` | Go duration string | relay-client default | |
 | `outgoingBufferSize` | int | `1024` | Session engine tuning |
 | `maxConcurrentStoreTasks` | int | `2048` | Session engine tuning |
-| `verificationWorkers` | int | `50` | Session engine tuning |
+| `verificationWorkers` | int | `50` | Deprecated (logs a warning): use `cache.verification.workers` |
 | `pprofAddr` | `host:port` | unset (off) | Serves `net/http/pprof`, e.g. `curl 127.0.0.1:6060/debug/pprof/goroutine?debug=2`. Unauthenticated: keep it on loopback |
 
 ## `nip11`
@@ -82,6 +82,9 @@ false, min: 0}` — fully backward compatible with configs that predate it.
 |---|---|---|---|
 | `topZapped` | object | all off | Signed "top zapped" cache response, see below |
 | `search` | object | disabled | Optional Meilisearch integration, see below |
+| `profileStats` | object | disabled | NIP-85 user assertions (kind 30382), see below |
+| `verification` | object | see below | NIP-05/lightning address checks; run when `search` or `profileStats` is enabled |
+| `scoring` | object | built-in weights | Overrides profile score weights by section: `scoring`, `verification`, `social`, with nmilat's `config.yaml` keys (e.g. `social: {followers_weight: 25}`). Unknown section or key is `invalid_input` |
 
 ### `cache.topZapped`
 
@@ -89,6 +92,26 @@ false, min: 0}` — fully backward compatible with configs that predate it.
 |---|---|---|---|
 | `enabled` | bool | `false` | Requires `nip11.privkey`; fatal at config load if `true` without it |
 | `window` | duration string | `24h` | Default window for "top-zapped" queries when a client's cache filter omits its own; units `h`/`mo`/`m`/`s`/`d`/`w` (same set as filter since/until). Empty or unparseable silently falls back to `24h` (logged as a warning) |
+
+### `cache.profileStats`
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `enabled` | bool | `false` | Requires `nip11.privkey` (signs the assertions); fatal at config load without it |
+| `maxTargets` | int | `500` | Most `#d` pubkeys per request; more is `CLOSED invalid:` |
+
+### `cache.verification`
+
+Durations take Go units (`250ms`, `1h`) or `d`/`w`/`mo` (`14d`); a bad one is `invalid_input`.
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `ttl` | duration | `14d` | How long a result is kept before a background re-check; `"0"` never re-checks an unchanged identifier |
+| `perHostInterval` | duration | `250ms` | Spacing between requests to one host |
+| `workers` | int | `50` | Checks running at once |
+| `retry.initial` | duration | `1h` | Wait after a timeout/403/429/5xx, doubling per attempt; a longer `Retry-After` wins |
+| `retry.max` | duration | `24h` | Longest wait between retries |
+| `retry.maxAttempts` | int | `5` | Failures in a row before giving up until the next `ttl` |
 
 ## `membership` (optional, NIP-43)
 

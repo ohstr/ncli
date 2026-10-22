@@ -25,5 +25,5 @@ func TestSearchIndexUnavailableWithoutSearch(t *testing.T) {
 	t.Cleanup(func() { config = prev })
 
 	config = RelayConfig{}
-	require.Equal(t, "search is not enabled on this relay (cache.search.enabled)", searchIndex(nil, nil, nil).Available())
+	require.Equal(t, "search is not enabled on this relay (cache.search.enabled)", searchIndex(nil, nil).Available())
 }

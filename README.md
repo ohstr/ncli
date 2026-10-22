@@ -14,7 +14,7 @@ events.**
 - [`ncli relay`](#relay) — Run a fast, low-level Nostr relay server
 - [`ncli relay context`](#relay-context) — Save, switch, and run relays by name, auto-creating new ones
 - [`ncli relay members/invites/roles`](#relay-membersinvitesroles) — Manage a running relay's NIP-43 membership over NIP-98 HTTP
-- [`ncli relay status/index/jobs/dashboard`](#relay-monitoring) — Monitor a running relay (Prometheus, dashboard) and rebuild its indexes
+- [`ncli relay status/index/jobs/verify/dashboard`](#relay-monitoring) — Monitor a running relay (Prometheus, dashboard), rebuild its indexes and check profiles
 - [`ncli apply`](#apply) — Stream, sync, or inspect events, with a live TUI and hot-reloading config
 - [`ncli find`](#find) — Query events
 - [`ncli profile`](#profile) — Look up one identity as a readable card
@@ -186,6 +186,23 @@ cache:
     index_name: ncli_events
     batch_size: 100
     max_ch_size: 1000
+  # NIP-85 user assertions (kind 30382); needs nip11.privkey
+  profileStats:
+    enabled: false
+    maxTargets: 500
+  # when NIP-05/lightning addresses are re-checked; never on a rebuild
+  verification:
+    ttl: 14d
+    perHostInterval: 250ms
+    workers: 50
+    retry:
+      initial: 1h
+      max: 24h
+      maxAttempts: 5
+  # profile score weights, overriding the built-in ones
+  scoring:
+    social:
+      followers_weight: 20
 
 membership:
   enabled: false
@@ -205,7 +222,6 @@ writeTimeout: 60s
 
 outgoingBufferSize: 1024
 maxConcurrentStoreTasks: 2048
-verificationWorkers: 50
 
 logs:
   level: info
@@ -428,7 +444,7 @@ and the fully-documented one in
 
 <a id="relay-monitoring"></a>
 
-## `relay status`/`index`/`jobs`/`dashboard`
+## `relay status`/`index`/`jobs`/`verify`/`dashboard`
 
 Monitor and maintain a running relay through its admin listener
 (`127.0.0.1:<port+1>` by default), signed with `nip11.privkey`:
@@ -442,6 +458,9 @@ ncli relay index rebuild zaps --follow
 
 # list or cancel jobs
 ncli relay jobs list
+
+# a profile's NIP-05/lightning checks, score and stats; --refresh re-checks
+ncli relay verify npub1... --refresh
 
 # open the dashboard in your browser
 ncli relay dashboard

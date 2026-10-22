@@ -97,6 +97,41 @@ cache:
     batch_size: 100
     max_ch_size: 1000
 
+  # NIP-85 user assertions: a REQ for kind 30382 with #d pubkeys gets
+  # relay-signed stats (rank, followers, following, zaps received and sent).
+  # Requires nip11.privkey, like topZapped.
+  profileStats:
+    enabled: false
+    # Most #d pubkeys one request may ask for.
+    maxTargets: 500
+
+  # NIP-05/lightning address checks, which run when search or profileStats
+  # is on. A field is fetched only for a new or changed identifier, when its
+  # result expires, on a retry, or by `ncli relay verify --refresh` -- never
+  # by an index rebuild. Durations: ms, s, m, h, d, w, mo.
+  verification:
+    # How long a result is kept; "0" never re-checks an unchanged identifier.
+    ttl: 14d
+    # Spacing between requests to the same host.
+    perHostInterval: 250ms
+    # Checks running at once.
+    workers: 50
+    # After a timeout, 403/429 or 5xx the previous result is kept and the
+    # check retried, doubling from initial to max; a longer Retry-After wins.
+    retry:
+      initial: 1h
+      max: 24h
+      maxAttempts: 5
+
+  # Overrides for the built-in profile score weights, by section (scoring,
+  # verification, social) with nmilat's config.yaml keys. Unknown keys fail
+  # startup.
+  scoring:
+    social:
+      followers_weight: 20
+      zaps_weight: 20
+      per_sender_cap: 100000
+
 # NIP-43 relay membership (optional). Off by default: omitting this block
 # entirely, or leaving enabled false, means the relay behaves exactly as it
 # did before NIP-43 existed -- fully backward compatible with configs that
@@ -230,7 +265,6 @@ writeTimeout: 60s
 # shown here.
 outgoingBufferSize: 1024      # per-session outgoing message channel buffer size
 maxConcurrentStoreTasks: 2048 # cap on concurrent event-store operations
-verificationWorkers: 50       # number of signature-verification worker goroutines
 
 # Serve net/http/pprof here (optional, off when unset). Unauthenticated:
 # keep it on loopback.

@@ -118,6 +118,7 @@
 "relay roles create": {modes: [json], tests: [TestRelayAdmin]}
 "relay roles list": {modes: [json], tests: [TestRelayAdmin]}
 "relay status": {modes: [json, text, errors], tests: [TestRelayAdmin, TestAttack_AdminHTTP]}
+"relay verify": {modes: [json, errors], tests: [TestRelayAdmin], pending: "text output, --refresh on a stored profile (covered by unit tests)"}
 "signer": {modes: [errors], tests: [TestBareGroupCommands]}
 "signer check": {modes: [json, errors], tests: [TestSignerCLI]}
 "signer serve": {modes: [json, errors], tests: [TestSignerCLI, TestSignerPublish, TestSignerServeErrors, TestSignerServeVault]}

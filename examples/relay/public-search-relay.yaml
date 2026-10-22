@@ -9,8 +9,9 @@ nip11:
   description: "Public relay with profile search and zap-ranked trending"
   # Generated with `ncli id --json` for this example only -- never reuse a
   # privkey that's ever appeared in a public repo for anything real.
-  # Needed here because cache.topZapped.enabled requires it (the relay signs
-  # its own cached "top zapped" response), and it's also what unlocks
+  # Needed here because cache.topZapped.enabled and cache.profileStats.enabled
+  # require it (the relay signs its own cached "top zapped" response and its
+  # NIP-85 assertions), and it's also what unlocks
   # `ncli relay status`/`index`/`jobs` against this same relay later.
   privkey: "cf7b085cd0e28c3c2237e5899b76ec8cecbadb1f78e4ef13d122e25b538cca21"
   # pubkey is optional once privkey is set -- ncli derives and fills it in
@@ -47,3 +48,13 @@ cache:
     index_name: "ncli_public_search"
     batch_size: 1000
     max_ch_size: 10000
+
+  # NIP-85 stats per profile (followers, zaps received/sent, rank), so a
+  # client can show them without counting every contact list and zap itself:
+  # REQ {"kinds":[30382],"#d":["<pubkey>"]}.
+  profileStats:
+    enabled: true
+
+  # Re-check NIP-05/lightning addresses weekly instead of every two weeks.
+  verification:
+    ttl: 7d

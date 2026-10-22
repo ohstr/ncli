@@ -36,8 +36,11 @@ type Service struct {
 	history *metrics.History
 	admin   *adminplane.Server
 	jobs    *jobs.Manager
-	// stopSampling ends the metrics samplers.
+	// stopSampling ends the metrics samplers and the stats publisher.
 	stopSampling context.CancelFunc
+	// publisherDone closes when the NIP-66 stats publisher has stopped; nil
+	// when cache.relay.stats is off.
+	publisherDone chan struct{}
 }
 
 // The dashboard's built-in history: an hour of 2s samples, then a day of 1m
@@ -315,6 +318,22 @@ func newServer(store *relay.EventStore, searchService search.Service, m *metrics
 	history := metrics.NewHistory(m, historyInterval, historyWindow).WithRollup(rollupStep, rollupWindow)
 	go history.Run(sampleCtx)
 
+	var publisherDone chan struct{}
+	if config.relayStatsEnabled() {
+		publisher := newRelayStatsPublisher(store, func() (nip11.Metadata, []int, []int) {
+			md := nip11Metadata
+			moderation.applyNip11(&md)
+			md.SupportedNips = supportedNips.Slice()
+			allowed, disallowed := moderation.kindRules()
+			return md, allowed, disallowed
+		})
+		publisherDone = make(chan struct{})
+		go func() {
+			defer close(publisherDone)
+			publisher.run(sampleCtx)
+		}()
+	}
+
 	s := &Service{
 		store:              store,
 		verificationWorker: wsHandler.VerificationWorker,
@@ -323,6 +342,7 @@ func newServer(store *relay.EventStore, searchService search.Service, m *metrics
 		history:            history,
 		jobs:               jobManager,
 		stopSampling:       stopSampling,
+		publisherDone:      publisherDone,
 		server: &http.Server{
 			Handler: moderation.ipGate(mux),
 			Addr:    fmt.Sprintf(":%d", config.Port),
@@ -441,6 +461,12 @@ func (s *Service) Stop() {
 	}
 	if s.stopSampling != nil {
 		s.stopSampling()
+	}
+	if s.publisherDone != nil {
+		select {
+		case <-s.publisherDone:
+		case <-ctx.Done():
+		}
 	}
 	if s.jobs != nil {
 		s.jobs.Shutdown(ctx)

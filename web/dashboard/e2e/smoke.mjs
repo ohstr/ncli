@@ -81,8 +81,8 @@ try {
       `nip11: {name: e2e, privkey: ${key.priv_hex}}`,
       `store: ${join(dir, "notes.db")}`,
       `logdir: ${dir}`,
-      // The zaps index is only maintainable with top-zapped on.
-      `cache: {topZapped: {enabled: true}}`,
+      // The zaps index is only maintainable with the zap ranking on.
+      `cache: {zaps: {enabled: true}}`,
       `admin: {listen: "127.0.0.1:${adminPort}", dashboard: {enabled: true}}`,
     ].join("\n"),
   );
@@ -134,11 +134,17 @@ try {
     check((await page.getByText(key.pub_hex.slice(0, 8)).count()) === 0, "header never shows the hex pubkey");
 
     // An index job from the page.
-    const zaps = page.locator(".index", { hasText: "zaps" });
+    const indexRow = (name) => page.locator(".index").filter({ has: page.locator("strong", { hasText: new RegExp(`^${name}$`) }) });
+    const zaps = indexRow("zaps");
     await zaps.getByRole("button", { name: "Rebuild" }).click();
     await zaps.getByText(/last rebuild/).waitFor({ timeout: 15000 });
     check(await zaps.getByText("succeeded").isVisible(), "rebuild from the page succeeds and shows it");
-    check(await page.locator(".index", { hasText: "search" }).getByText("cache.search.enabled").isVisible(), "unavailable index says why");
+    check(await indexRow("search").getByText("cache.profiles.search.enabled").isVisible(), "unavailable index says why");
+    // Profile stats off: the stats index says so instead of showing a count.
+    const stats = indexRow("stats");
+    check(await stats.getByText("cache.profiles.stats.enabled", { exact: false }).isVisible(), "stats index is unavailable with profile stats off");
+    check((await stats.getByText(/entries/).count()) === 0, "no estimate for an unavailable index");
+    check((await stats.getByRole("button", { name: "Rebuild" }).count()) === 0, "no rebuild for an unavailable index");
 
     // Toolbar, rows, panels.
     const search = () => page.evaluate(() => location.search);

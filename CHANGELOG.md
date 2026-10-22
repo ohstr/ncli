@@ -12,6 +12,7 @@
 
 - Changes the search score to count followers and zaps received, weighted by who sent them; an index rebuild now rescores from stored results and never re-fetches NIP-05 or lightning addresses. `--reverify` is removed in favour of `ncli relay verify --refresh`. ([#184](https://github.com/ohstr/ncli/pull/184))
 - Deprecates the top-level `verificationWorkers` relay setting in favour of `cache.verification.workers`. ([#184](https://github.com/ohstr/ncli/pull/184))
+- Builds with nmilat v0.5.0-rc.34. ([#184](https://github.com/ohstr/ncli/pull/184))
 
 ### Fixed
 

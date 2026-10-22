@@ -436,16 +436,16 @@ func TestScenario_AppBackendRelay_MountsNIP86AndQueryBehindAuth(t *testing.T) {
 }
 
 /////////////////////////////////////////////////////////////////////
-// public-search-relay.yaml -- cache.topZapped is actually wired end-to-end
-// (same technique as TestNewServer_TopZappedWindowFromYAML). Real
+// public-search-relay.yaml -- cache.zaps is actually wired end-to-end
+// (same technique as TestNewServer_ZapRanking). Real
 // Meilisearch-backed search correctness is deliberately left to
 // cli/common/meilisearch's own tests and the agent-eval R12 round.
 /////////////////////////////////////////////////////////////////////
 
-func TestScenario_PublicSearchRelay_TopZappedIsWired(t *testing.T) {
+func TestScenario_PublicSearchRelay_ZapRankingIsWired(t *testing.T) {
 	ts := bootScenario(t, RelayConfig{
 		Nip11: nip11.Metadata{PubKey: testPubKey, PrivKey: testPrivKey},
-		Cache: &CacheConfig{TopZapped: &TopZappedConfig{Enabled: true, Window: "24h"}},
+		Cache: &CacheConfig{Zaps: &ZapsConfig{Enabled: true, Windows: []string{"24h", "7d"}}},
 	})
 
 	wsURL := "ws" + strings.TrimPrefix(ts.URL, "http") + "/"
@@ -454,14 +454,14 @@ func TestScenario_PublicSearchRelay_TopZappedIsWired(t *testing.T) {
 	defer func() { _ = conn.Close() }()
 
 	require.NoError(t, conn.WriteMessage(websocket.TextMessage,
-		[]byte(`["REQ","sub1",{"cache":["top-zapped",{}]}]`)))
+		[]byte(`["REQ","sub1",{"cache":["zap-ranking",{"window":"7d"}]}]`)))
 	require.NoError(t, conn.SetReadDeadline(time.Now().Add(5*time.Second)))
 
 	// The relay sends an AUTH challenge on every new connection
 	// unconditionally (not only when auth_required is set), so the first
 	// frame here is that challenge, not yet the cache response -- loop
 	// past anything that isn't the EVENT/CLOSED answer to our own REQ,
-	// same as TestNewServer_TopZappedWindowFromYAML's own loop does.
+	// same as TestNewServer_ZapRanking's own loop does.
 	var arr []json.RawMessage
 	var msgType string
 	for {
@@ -474,7 +474,7 @@ func TestScenario_PublicSearchRelay_TopZappedIsWired(t *testing.T) {
 			break
 		}
 	}
-	require.Equal(t, "EVENT", msgType, "a top-zapped cache REQ must be answered, not ignored or closed")
+	require.Equal(t, "EVENT", msgType, "a zap-ranking cache REQ must be answered, not ignored or closed")
 
 	var got nip01.Event
 	require.NoError(t, json.Unmarshal(arr[2], &got))

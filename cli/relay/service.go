@@ -14,7 +14,6 @@ import (
 	"github.com/ohstr/ncli/cli/relay/adminplane"
 	"github.com/ohstr/ncli/cli/relay/jobs"
 	"github.com/ohstr/ncli/cli/relay/metrics"
-	"github.com/ohstr/ncli/client"
 	"github.com/ohstr/ncli/web/dashboard"
 	"github.com/ohstr/nmilat/huddle/room"
 	"github.com/ohstr/nmilat/nip11"
@@ -94,28 +93,14 @@ func newServer(store *relay.EventStore, searchService search.Service, m *metrics
 
 	log.Info().Str("pubkey", config.Nip11.PubKey).Int("port", config.Port).Msg("server config check")
 	sessionConfig.PrivKey = config.Nip11.PrivKey
-	sessionConfig.EnableTopZapped = config.Cache != nil && config.Cache.TopZapped != nil && config.Cache.TopZapped.Enabled
-	sessionConfig.EnableProfileStats = profileStatsEnabled(&config)
+	sessionConfig.EnableProfileStats = config.profileStatsEnabled()
 	if sessionConfig.EnableProfileStats {
-		sessionConfig.MaxStatsTargets = config.Cache.ProfileStats.MaxTargets
+		sessionConfig.MaxStatsTargets = config.profiles().Stats.MaxTargets
 	}
-	// initConfig already validated it.
+	// initConfig already validated these.
 	sessionConfig.Verification, _ = verificationSettings(&config)
+	sessionConfig.Zaps, _ = zapRanking(&config)
 	applyScoring(&config)
-
-	// WithSessionConfig (below) replaces the SDK's defaultSessionConfig()
-	// wholesale rather than merging into it, so its built-in
-	// DefaultCacheWindow/DefaultCacheLimit (24h/50) never take effect here
-	// unless re-applied explicitly.
-	sessionConfig.DefaultCacheWindow = defaultCacheWindow
-	sessionConfig.DefaultCacheLimit = defaultTopZappedLimit
-	if config.Cache != nil && config.Cache.TopZapped != nil && config.Cache.TopZapped.Window != "" {
-		if d, err := client.ParseDuration(config.Cache.TopZapped.Window); err == nil {
-			sessionConfig.DefaultCacheWindow = d
-		} else {
-			log.Warn().Err(err).Str("window", config.Cache.TopZapped.Window).Msg("invalid cache.topZapped.window, using default")
-		}
-	}
 
 	if config.Membership != nil {
 		if d, err := time.ParseDuration(config.Membership.InviteTTL); err == nil {
@@ -314,7 +299,7 @@ func newServer(store *relay.EventStore, searchService search.Service, m *metrics
 	jobManager := jobs.New(config.RelayNotesDb+".jobs.json", log.Logger,
 		searchIndex(store, searchService),
 		zapIndex(store),
-		&jobs.StatsIndex{Store: store},
+		statsIndex(store),
 	)
 	jobManager.OnFinish = func(j jobs.Job) { m.JobFinished(j.Index, string(j.State)) }
 
@@ -388,27 +373,34 @@ func (s *Service) startAdmin() error {
 // can't be maintained on this relay.
 func searchIndex(store *relay.EventStore, svc search.Service) *jobs.SearchIndex {
 	ix := &jobs.SearchIndex{Store: store}
-	var cfg *SearchConfig
-	if config.Cache != nil {
-		cfg = config.Cache.Search
-	}
+	cfg := config.searchConfig()
 	switch {
 	case cfg == nil || !cfg.Enabled || svc == nil:
-		ix.Disabled = "search is not enabled on this relay (cache.search.enabled)"
+		ix.Disabled = "search is not enabled on this relay (cache.profiles.search.enabled)"
 	case cfg.Readonly:
-		ix.Disabled = "search is read-only on this relay (cache.search.readonly)"
+		ix.Disabled = "search is read-only on this relay (cache.profiles.search.readonly)"
 	default:
-		ix.Host, ix.Key, ix.IndexName = cfg.Host, cfg.Key, cfg.IndexName
+		ix.Host, ix.Key, ix.IndexName = cfg.Meilisearch.Host, cfg.Meilisearch.Key, cfg.Meilisearch.Index
 	}
 	return ix
 }
 
-// zapIndex describes the top-zapped index for maintenance jobs, or why it
-// can't be maintained on this relay.
+// zapIndex describes the zap index for maintenance jobs, or why it can't
+// be maintained on this relay.
 func zapIndex(store *relay.EventStore) *jobs.ZapIndex {
 	ix := &jobs.ZapIndex{Store: store}
-	if config.Cache == nil || config.Cache.TopZapped == nil || !config.Cache.TopZapped.Enabled {
-		ix.Disabled = "top-zapped is not enabled on this relay (cache.topZapped.enabled)"
+	if !config.zapsEnabled() {
+		ix.Disabled = "zap ranking is not enabled on this relay (cache.zaps.enabled)"
+	}
+	return ix
+}
+
+// statsIndex describes the follows and zaps index behind profile scores and
+// NIP-85 stats, which is in use only when search or stats is on.
+func statsIndex(store *relay.EventStore) *jobs.StatsIndex {
+	ix := &jobs.StatsIndex{Store: store}
+	if !config.searchEnabled() && !config.profileStatsEnabled() {
+		ix.Disabled = "stats are not enabled on this relay (cache.profiles.search.enabled or cache.profiles.stats.enabled)"
 	}
 	return ix
 }

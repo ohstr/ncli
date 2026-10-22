@@ -30,50 +30,40 @@ func eventSequence(store *relay.EventStore) int64 {
 	return int64(seq)
 }
 
-// storedCount counts stored events of some kinds, cached for a minute
-// since it reads an index.
-type storedCount struct {
+// cachedCount keeps a count that costs a walk or a request for a minute,
+// failures included, so the dashboard's polling doesn't redo it.
+type cachedCount struct {
 	mu sync.Mutex
 	n  int64
 	at time.Time
 }
 
-func (c *storedCount) get(store *relay.EventStore, kinds ...int) int64 {
+func (c *cachedCount) get(count func() int64) int64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if !c.at.IsZero() && time.Since(c.at) < time.Minute {
-		return c.n
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	f := nip01.NewSubscriptionFilterGroup()
-	f.Add(&nip01.SubscriptionFilter{Kinds: kinds})
-	if n, err := store.CountEvents(ctx, f); err == nil {
-		c.n, c.at = n, time.Now()
+	if c.at.IsZero() || time.Since(c.at) >= time.Minute {
+		c.n, c.at = count(), time.Now()
 	}
 	return c.n
 }
-
-// zapReceiptKinds are the events the zap index holds: NIP-57 zap receipts
-// and AltZap receipts, the kinds nmilat indexes.
-var zapReceiptKinds = []int{9735, 9521}
 
 // ZapIndex is the top-zapped index, kept in the event store. The store
 // indexes zap receipts on ingest even with top-zapped off; only queries
 // are gated on it.
 type ZapIndex struct {
 	Store *relay.EventStore
-	// Disabled explains why top-zapped can't be maintained ("" when it can).
+	// Disabled explains why the zap index can't be maintained ("" when it can).
 	Disabled string
-
-	count storedCount
 }
 
 func (z *ZapIndex) Name() string      { return "zaps" }
 func (z *ZapIndex) Available() string { return z.Disabled }
 
-// Estimate counts stored zap receipts.
-func (z *ZapIndex) Estimate() int64 { return z.count.get(z.Store, zapReceiptKinds...) }
+// Estimate counts stored zap receipts (NIP-57 and AltZap).
+func (z *ZapIndex) Estimate() int64 {
+	c := z.Store.Counts()
+	return int64(c.Kind(9735) + c.Kind(9521))
+}
 
 // ScanEstimate is every stored event: a rebuild reads them all.
 func (z *ZapIndex) ScanEstimate() int64 { return eventSequence(z.Store) }
@@ -95,13 +85,19 @@ func (z *ZapIndex) Drop(ctx context.Context) error { return z.Store.ClearZapInde
 // write; a rebuild only repairs it.
 type StatsIndex struct {
 	Store *relay.EventStore
+	// Disabled explains why the index isn't in use ("" when it is).
+	Disabled string
+
+	count cachedCount
 }
 
 func (x *StatsIndex) Name() string      { return "stats" }
-func (x *StatsIndex) Available() string { return "" }
+func (x *StatsIndex) Available() string { return x.Disabled }
 
-// Estimate is the profiles with at least one follower.
-func (x *StatsIndex) Estimate() int64 { return x.Store.CountSocialProfiles() }
+// Estimate is the pubkeys at least one stored contact list follows.
+func (x *StatsIndex) Estimate() int64 {
+	return x.count.get(x.Store.CountSocialProfiles)
+}
 
 // ScanEstimate is every stored event: a rebuild reads them all.
 func (x *StatsIndex) ScanEstimate() int64 { return eventSequence(x.Store) }
@@ -126,7 +122,7 @@ type SearchIndex struct {
 	// Disabled explains why search can't be maintained ("" when it can).
 	Disabled string
 
-	count storedCount
+	count cachedCount
 }
 
 // searchBatch is how many profiles go to Meilisearch per request.
@@ -141,17 +137,19 @@ func (s *SearchIndex) Estimate() int64 {
 	if s.Disabled != "" {
 		return 0
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	n, err := meilisearch.NewMeiliClient(s.Host, s.Key, s.IndexName).CountDocuments(ctx)
-	if err != nil {
-		return -1
-	}
-	return n
+	return s.count.get(func() int64 {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		n, err := meilisearch.NewMeiliClient(s.Host, s.Key, s.IndexName).CountDocuments(ctx)
+		if err != nil {
+			return -1
+		}
+		return n
+	})
 }
 
 // ScanEstimate is the stored profiles a rebuild reads.
-func (s *SearchIndex) ScanEstimate() int64 { return s.count.get(s.Store, 0) }
+func (s *SearchIndex) ScanEstimate() int64 { return int64(s.Store.Counts().Kind(0)) }
 
 func profilesPage(since, until uint64) *nip01.SubscriptionFilterGroup {
 	f := nip01.NewSubscriptionFilterGroup()

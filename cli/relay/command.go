@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/ohstr/ncli/cli/common"
 	"github.com/ohstr/ncli/cli/common/meilisearch"
@@ -60,15 +59,6 @@ const (
 	// advertise-the-real-enforced-value reason as defaultMaxMessageLength.
 	defaultMaxSubscriptions = 355
 	defaultMaxIndexableTags = 5
-
-	// defaultCacheWindow and defaultTopZappedLimit mirror nmilat's own
-	// relay.SessionConfig defaults (DefaultCacheWindow/DefaultCacheLimit in
-	// defaultSessionConfig). Session.go's WithSessionConfig replaces the SDK
-	// defaults wholesale rather than merging into them, so NewServer must
-	// re-apply these itself -- see cache.topZapped.window handling in
-	// service.go.
-	defaultCacheWindow    = 24 * time.Hour
-	defaultTopZappedLimit = 50
 
 	// Session engine tuning, applied only when not set in config (see
 	// initConfig and NewServer).
@@ -120,8 +110,8 @@ type RelayConfig struct {
 	// default* constants above and initConfig).
 	OutgoingBufferSize      int `mapstructure:"outgoingBufferSize"`
 	MaxConcurrentStoreTasks int `mapstructure:"maxConcurrentStoreTasks"`
-	// VerificationWorkers is the old spelling of cache.verification.workers.
-	VerificationWorkers int `mapstructure:"verificationWorkers"`
+	// VerificationWorkers is cache.profiles.checks.workers, resolved.
+	VerificationWorkers int `mapstructure:"-"`
 
 	// PprofAddr, when set (e.g. "127.0.0.1:6060"), serves net/http/pprof
 	// there. Unauthenticated: keep it on loopback.
@@ -164,92 +154,6 @@ type LogConfig struct {
 	MaxBackups int    `mapstructure:"maxBackups"`
 	MaxAge     int    `mapstructure:"maxAge"`
 	Compress   bool   `mapstructure:"compress"`
-}
-
-type SearchConfig struct {
-	Enabled   bool   `mapstructure:"enabled"`
-	Readonly  bool   `mapstructure:"readonly"`
-	Host      string `mapstructure:"host"`
-	Key       string `mapstructure:"key"`
-	IndexName string `mapstructure:"index_name"`
-	BatchSize int    `mapstructure:"batch_size"`
-	MaxChSize int    `mapstructure:"max_ch_size"`
-}
-
-// CacheConfig groups the relay's optional serving-layer features: the
-// signed "top zapped" cache response and Meilisearch-backed search both
-// live here rather than as more flat top-level relay config fields.
-type CacheConfig struct {
-	// TopZapped configures the signed "top zapped" cache response. Omitting
-	// this block entirely is identical to `{enabled: false}`.
-	TopZapped *TopZappedConfig `mapstructure:"topZapped"`
-
-	// Search enables Meilisearch-backed profile search (optional).
-	Search *SearchConfig `mapstructure:"search"`
-
-	// ProfileStats serves NIP-85 user assertions (kind 30382) signed with
-	// nip11.privkey.
-	ProfileStats *ProfileStatsConfig `mapstructure:"profileStats"`
-
-	// Verification tunes NIP-05/lightning address checks, which run when
-	// search or profileStats is enabled.
-	Verification *VerificationConfig `mapstructure:"verification"`
-
-	// Scoring overrides the built-in profile score weights, by section:
-	// scoring (completeness and penalties), verification (NIP-05/LUD-16
-	// points) and social (followers and zaps); keys as in nmilat's
-	// config.yaml, e.g. {social: {followers_weight: 25}}.
-	Scoring map[string]any `mapstructure:"scoring"`
-}
-
-// ProfileStatsConfig configures NIP-85 user assertions.
-type ProfileStatsConfig struct {
-	// Enabled requires nip11.privkey, which signs the assertions.
-	Enabled bool `mapstructure:"enabled"`
-	// MaxTargets caps the #d pubkeys per request (default 500).
-	MaxTargets int `mapstructure:"maxTargets"`
-}
-
-// VerificationConfig tunes profile checks. A check is fetched only for a
-// new or changed identifier, when its result expires (TTL), on a retry,
-// or by `ncli relay verify --refresh`; never by an index rebuild.
-type VerificationConfig struct {
-	// TTL keeps a result before it's checked again (default 14d); "0"
-	// never re-checks an unchanged identifier.
-	TTL string `mapstructure:"ttl"`
-	// Retry backs off after a timeout, block or 5xx, keeping the previous
-	// result meanwhile.
-	Retry *VerificationRetryConfig `mapstructure:"retry"`
-	// PerHostInterval spaces requests to one host (default 250ms).
-	PerHostInterval string `mapstructure:"perHostInterval"`
-	// Workers is how many checks run at once (default 50).
-	Workers int `mapstructure:"workers"`
-}
-
-type VerificationRetryConfig struct {
-	// Initial wait (default 1h), doubling up to Max (default 24h); a
-	// longer Retry-After from the server wins.
-	Initial string `mapstructure:"initial"`
-	Max     string `mapstructure:"max"`
-	// MaxAttempts failures in a row end the retries until the next TTL
-	// (default 5).
-	MaxAttempts int `mapstructure:"maxAttempts"`
-}
-
-// TopZappedConfig configures the relay's signed "top zapped" cache
-// response (see handler_cache.go in nmilat/relay).
-type TopZappedConfig struct {
-	// Enabled turns on the signed "top zapped" cache response. Off by
-	// default; when on, nip11.privkey becomes mandatory (see initConfig).
-	Enabled bool `mapstructure:"enabled"`
-
-	// Window bounds the default time range for "top-zapped" queries when a
-	// client's cache filter omits its own window (see the `cache` filter
-	// action in handler_cache.go), as a duration string using the same
-	// units as filter since/until values: h, mo, m, s, d, w (e.g. "24h",
-	// "7d", "2w", "1mo"). Empty or unparseable falls back to
-	// defaultCacheWindow (24h).
-	Window string `mapstructure:"window"`
 }
 
 // MembershipConfig configures NIP-43 relay membership: enforcement of
@@ -486,6 +390,9 @@ func initConfig() error {
 		return &common.CLIError{Err: errNoRelayConfig, Code: common.CodeUsage, Help: common.HelpAfterError}
 	}
 
+	if err := checkRenamedKeys(viper.GetViper()); err != nil {
+		return err
+	}
 	if err := viper.Unmarshal(&config); err != nil {
 		return &common.CLIError{Err: fmt.Errorf("unable to decode config: %w", err), Code: common.CodeInvalidInput}
 	}
@@ -517,13 +424,7 @@ func initConfig() error {
 		return &common.CLIError{Err: errors.New("store is required"), Code: common.CodeUsage}
 	}
 
-	if config.Cache != nil && config.Cache.TopZapped != nil && config.Cache.TopZapped.Enabled && config.Nip11.PrivKey == "" {
-		return &common.CLIError{Err: errors.New("cache.topZapped.enabled requires nip11.privkey"), Code: common.CodeUsage}
-	}
-	if profileStatsEnabled(&config) && config.Nip11.PrivKey == "" {
-		return &common.CLIError{Err: errors.New("cache.profileStats.enabled requires nip11.privkey"), Code: common.CodeUsage}
-	}
-	if err := checkVerificationConfig(&config); err != nil {
+	if err := checkCacheConfig(&config); err != nil {
 		return err
 	}
 
@@ -624,14 +525,9 @@ func initConfig() error {
 	if config.MaxConcurrentStoreTasks == 0 {
 		config.MaxConcurrentStoreTasks = defaultMaxConcurrentStoreTasks
 	}
-	if config.VerificationWorkers != 0 {
-		log.Warn().Msg("verificationWorkers is deprecated; use cache.verification.workers")
-	}
-	if config.Cache != nil && config.Cache.Verification != nil && config.Cache.Verification.Workers > 0 {
-		config.VerificationWorkers = config.Cache.Verification.Workers
-	}
-	if config.VerificationWorkers == 0 {
-		config.VerificationWorkers = defaultVerificationWorkers
+	config.VerificationWorkers = defaultVerificationWorkers
+	if c := config.profiles().Checks; c != nil && c.Workers > 0 {
+		config.VerificationWorkers = c.Workers
 	}
 
 	finalizeNip11(&config)
@@ -647,20 +543,21 @@ func initConfig() error {
 // 64 hex characters, quotes and a comma.
 const statsTargetBytes = 67
 
-// checkMaxStatsTargets rejects a cache.profileStats.maxTargets no client
+// checkMaxStatsTargets rejects a cache.profiles.stats.maxTargets no client
 // could reach: a REQ naming that many pubkeys would exceed
 // nip11.limitation.max_message_length.
 func checkMaxStatsTargets(cfg *RelayConfig) error {
-	if cfg.Cache == nil || cfg.Cache.ProfileStats == nil {
+	st := cfg.profiles().Stats
+	if st == nil {
 		return nil
 	}
-	n := cfg.Cache.ProfileStats.MaxTargets
+	n := st.MaxTargets
 	if n < 0 {
-		return &common.CLIError{Err: errors.New("cache.profileStats.maxTargets must be >= 0"), Code: common.CodeInvalidInput}
+		return &common.CLIError{Err: errors.New("cache.profiles.stats.maxTargets must be >= 0"), Code: common.CodeInvalidInput}
 	}
 	if ceiling := cfg.Nip11.Limitation.MaxMessageLength / statsTargetBytes; int64(n) > ceiling {
 		return &common.CLIError{
-			Err:  fmt.Errorf("cache.profileStats.maxTargets %d exceeds what nip11.limitation.max_message_length (%d bytes) allows: at most %d", n, cfg.Nip11.Limitation.MaxMessageLength, ceiling),
+			Err:  fmt.Errorf("cache.profiles.stats.maxTargets %d exceeds what nip11.limitation.max_message_length (%d bytes) allows: at most %d", n, cfg.Nip11.Limitation.MaxMessageLength, ceiling),
 			Code: common.CodeInvalidInput,
 		}
 	}
@@ -686,7 +583,7 @@ func finalizeNip11(cfg *RelayConfig) {
 
 	// Self mirrors PubKey, populated only when membership.enabled -- an
 	// explicit opt-in, not a side effect of nip11.privkey merely being set
-	// for some unrelated reason (e.g. cache.topZapped, which also requires
+	// for some unrelated reason (e.g. cache.zaps, which also requires
 	// it). Enabled already guarantees PrivKey != "" (validated above), and
 	// PubKey == the key derived from PrivKey (validated earlier still), so
 	// this is the same operational identity, not a second one.
@@ -776,20 +673,17 @@ func RunRelay(jsonMode bool) error {
 	}
 
 	var searchService search.Service
-	var searchCfg *SearchConfig
-	if config.Cache != nil {
-		searchCfg = config.Cache.Search
-	}
+	searchCfg := config.searchConfig()
 	if searchCfg != nil && searchCfg.Enabled {
 		searchClient := meilisearch.NewMeiliClient(
-			searchCfg.Host,
-			searchCfg.Key,
-			searchCfg.IndexName,
+			searchCfg.Meilisearch.Host,
+			searchCfg.Meilisearch.Key,
+			searchCfg.Meilisearch.Index,
 		)
 		svc := search.NewService(
 			searchClient,
 			searchCfg.BatchSize,
-			searchCfg.MaxChSize,
+			searchCfg.QueueSize,
 		)
 		if err := svc.Initialize(context.Background()); err != nil {
 			log.Warn().Err(err).Msg("failed to initialize search service (soft fail)")

@@ -19,6 +19,7 @@ type fakeMeili struct {
 	task      int64
 	failSwap  bool
 	swapCalls int
+	requests  int
 }
 
 func newFakeMeili(t *testing.T) (*fakeMeili, string) {
@@ -58,6 +59,7 @@ func (f *fakeMeili) taskInfo(w http.ResponseWriter, index string) {
 func (f *fakeMeili) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.requests++
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	switch {
 	case parts[0] == "tasks" && len(parts) == 2:
@@ -223,8 +225,24 @@ func TestSearchEstimate(t *testing.T) {
 		t.Errorf("live index = %d, want 2", got)
 	}
 
-	ix.Host = "http://127.0.0.1:1"
-	if got := ix.Estimate(); got != -1 {
+	// The dashboard polls every few seconds: one request a minute.
+	meili.mu.Lock()
+	before := meili.requests
+	meili.mu.Unlock()
+	meili.put("profiles", "c")
+	for i := 0; i < 5; i++ {
+		if got := ix.Estimate(); got != 2 {
+			t.Errorf("poll %d = %d, want the cached 2", i, got)
+		}
+	}
+	meili.mu.Lock()
+	if meili.requests != before {
+		t.Errorf("%d requests while cached, want none", meili.requests-before)
+	}
+	meili.mu.Unlock()
+
+	down := &SearchIndex{Host: "http://127.0.0.1:1", IndexName: "profiles"}
+	if got := down.Estimate(); got != -1 {
 		t.Errorf("unreachable = %d, want -1", got)
 	}
 }

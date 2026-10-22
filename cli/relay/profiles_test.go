@@ -34,14 +34,15 @@ nip11:
   pubkey: "`+profilesTestPub+`"
 store: "test.db"
 cache:
-  verification:
-    ttl: 7d
-    perHostInterval: 1s
-    workers: 8
-    retry:
-      initial: 30m
-      max: 6h
-      maxAttempts: 3
+  profiles:
+    checks:
+      ttl: 7d
+      perHostInterval: 1s
+      workers: 8
+      retry:
+        initial: 30m
+        max: 6h
+        maxAttempts: 3
 `)
 	got, err := verificationSettings(&cfg)
 	require.NoError(t, err)
@@ -52,17 +53,17 @@ cache:
 	assert.Equal(t, 3, got.MaxAttempts)
 	assert.True(t, strings.HasPrefix(got.UserAgent, "ncli/"))
 
-	cfg.Cache.Verification.PerHostInterval = "250ms"
+	cfg.Cache.Profiles.Checks.PerHostInterval = "250ms"
 	got, err = verificationSettings(&cfg)
 	require.NoError(t, err)
 	assert.Equal(t, 250*time.Millisecond, got.PerHostInterval, "Go units work too")
 
-	cfg.Cache.Verification.TTL = "0"
+	cfg.Cache.Profiles.Checks.TTL = "0"
 	got, err = verificationSettings(&cfg)
 	require.NoError(t, err)
 	assert.Negative(t, got.TTL, `"0" never re-checks`)
 
-	cfg.Cache.Verification.TTL = "soon"
+	cfg.Cache.Profiles.Checks.TTL = "soon"
 	_, err = verificationSettings(&cfg)
 	var ce *common.CLIError
 	require.True(t, errors.As(err, &ce))
@@ -81,13 +82,14 @@ nip11:
   pubkey: "`+profilesTestPub+`"
 store: "test.db"
 cache:
-  scoring:
-    social:
-      followers_weight: 25
-    verification:
-      nip05_score: 70
+  profiles:
+    scoring:
+      social:
+        followers_weight: 25
+      verification:
+        nip05_score: 70
 `)
-	next, err := scoringOverride(cfg.Cache.Scoring)
+	next, err := scoringOverride(cfg.Cache.Profiles.Scoring)
 	require.NoError(t, err)
 	assert.Equal(t, 25.0, next.Social.FollowersWeight)
 	assert.Equal(t, int64(70), next.Verification.Nip05Score)
@@ -123,13 +125,14 @@ nip11:
   pubkey: "`+profilesTestPub+`"
 store: "test.db"
 cache:
-  profileStats:
-    enabled: true
-    maxTargets: 50
+  profiles:
+    stats:
+      enabled: true
+      maxTargets: 50
 `)
-	assert.True(t, profileStatsEnabled(&cfg))
-	assert.Equal(t, 50, cfg.Cache.ProfileStats.MaxTargets)
-	assert.False(t, profileStatsEnabled(&RelayConfig{}))
+	assert.True(t, cfg.profileStatsEnabled())
+	assert.Equal(t, 50, cfg.Cache.Profiles.Stats.MaxTargets)
+	assert.False(t, (&RelayConfig{}).profileStatsEnabled())
 }
 
 // fakeWeb answers HTTPS requests per host without a network.
@@ -195,7 +198,7 @@ type muxRouter struct{ mux *http.ServeMux }
 
 func (m muxRouter) Handle(pattern string, h http.HandlerFunc) { m.mux.HandleFunc(pattern, h) }
 
-// TestNewServer_ProfileStats boots a real relay with cache.profileStats and
+// TestNewServer_ProfileStats boots a real relay with cache.profiles.stats and
 // asks it for NIP-85 assertions over a WebSocket.
 func TestNewServer_ProfileStats(t *testing.T) {
 	prevConfig := config
@@ -213,7 +216,7 @@ func TestNewServer_ProfileStats(t *testing.T) {
 
 	config = RelayConfig{
 		Nip11: nip11.Metadata{PubKey: profilesTestPub, PrivKey: profilesTestPriv},
-		Cache: &CacheConfig{ProfileStats: &ProfileStatsConfig{Enabled: true}},
+		Cache: &CacheConfig{Profiles: &ProfilesConfig{Stats: &ProfileStatsConfig{Enabled: true}}},
 	}
 	s := NewServer(store, nil)
 	t.Cleanup(s.Stop)

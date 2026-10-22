@@ -74,7 +74,7 @@ it in, dropping profiles no longer stored. Either way the relay keeps
 answering from the old index until the new one is ready.
 
 A search rebuild rescores every profile from what the relay already
-knows, with the current cache.scoring weights; it never re-fetches a
+knows, with the current cache.profiles.scoring weights; it never re-fetches a
 NIP-05 or lightning address (see ncli relay verify --refresh).`,
 		Example: `  ncli relay index rebuild zaps --follow
   ncli relay index rebuild search --fresh --follow

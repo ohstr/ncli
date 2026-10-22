@@ -98,7 +98,7 @@ false, min: 0}` — fully backward compatible with configs that predate it.
 | Field | Type | Default | Notes |
 |---|---|---|---|
 | `enabled` | bool | `false` | Requires `nip11.privkey` (signs the assertions); fatal at config load without it |
-| `maxTargets` | int | `500` | Most `#d` pubkeys per request; more is `CLOSED invalid:` |
+| `maxTargets` | int | `500` | Most `#d` pubkeys per request; more is `CLOSED invalid:`. At most `max_message_length / 67` (~3,900 at 256 KiB), checked at startup |
 
 ### `cache.verification`
 

@@ -71,6 +71,8 @@ Full field table: `references/config-schema.md`.
 
 ```sh
 ncli relay --config relay.yaml
+# validate only: exit 0, or the error the relay would fail to start with
+ncli relay --config relay.yaml --check
 ```
 
 Foreground process; stops cleanly on SIGINT/SIGTERM. Logs go to stderr and
@@ -320,6 +322,9 @@ ncli relay verify npub1... --refresh --json
   `zap_last_sent` (unix), `nip05_verified`/`lud16_verified` (the
   identifier). No `#d` is `CLOSED restricted:`; more than `maxTargets` is
   `CLOSED invalid:`. An unchanged profile keeps its event id. NIP-11 lists 85.
+- `maxTargets` is really capped by `nip11.limitation.max_message_length`: a
+  `#d` pubkey costs ~67 bytes, so 256 KiB fits ~3,900. A larger value fails
+  at startup (`invalid_input`).
 - `cache.profileStats.enabled` without `nip11.privkey` fails at startup
   (`usage`); a bad duration or unknown `cache.scoring` key is
   `invalid_input`. Top-level `verificationWorkers` still works but warns;

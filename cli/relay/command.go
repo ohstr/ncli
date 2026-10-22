@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	stdlog "log"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -436,6 +437,15 @@ func NewRelayCommand() *cobra.Command {
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			jsonMode, _ := cmd.Flags().GetBool("json")
+			if check, _ := cmd.Flags().GetBool("check"); check {
+				// initConfig, in PreRunE, already validated everything.
+				if jsonMode {
+					common.PrintJSON(map[string]any{"ok": true, "config": viper.ConfigFileUsed()})
+				} else {
+					fmt.Printf("%s is valid\n", viper.ConfigFileUsed())
+				}
+				return nil
+			}
 			if err := RunRelay(jsonMode); err != nil {
 				return common.RuntimeError(cmd, err)
 			}
@@ -445,6 +455,7 @@ func NewRelayCommand() *cobra.Command {
 
 	cmd.Flags().StringP("context", "c", "", `run directly against a named relay context, creating it (minimal config + new identity) if it doesn't exist yet -- mutually exclusive with --config`)
 	cmd.Flags().String("identity", "", `identity for a newly created context's relay key (vault label or nsec); a fresh one is generated and saved to the vault (labeled after the context) if omitted`)
+	cmd.Flags().Bool("check", false, "validate the config and exit without starting the relay")
 
 	addRemoteAdminCommands(cmd)
 	addMetricsCommands(cmd)
@@ -625,6 +636,34 @@ func initConfig() error {
 
 	finalizeNip11(&config)
 
+	if err := checkMaxStatsTargets(&config); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// statsTargetBytes is roughly what one #d pubkey costs in a REQ:
+// 64 hex characters, quotes and a comma.
+const statsTargetBytes = 67
+
+// checkMaxStatsTargets rejects a cache.profileStats.maxTargets no client
+// could reach: a REQ naming that many pubkeys would exceed
+// nip11.limitation.max_message_length.
+func checkMaxStatsTargets(cfg *RelayConfig) error {
+	if cfg.Cache == nil || cfg.Cache.ProfileStats == nil {
+		return nil
+	}
+	n := cfg.Cache.ProfileStats.MaxTargets
+	if n < 0 {
+		return &common.CLIError{Err: errors.New("cache.profileStats.maxTargets must be >= 0"), Code: common.CodeInvalidInput}
+	}
+	if ceiling := cfg.Nip11.Limitation.MaxMessageLength / statsTargetBytes; int64(n) > ceiling {
+		return &common.CLIError{
+			Err:  fmt.Errorf("cache.profileStats.maxTargets %d exceeds what nip11.limitation.max_message_length (%d bytes) allows: at most %d", n, cfg.Nip11.Limitation.MaxMessageLength, ceiling),
+			Code: common.CodeInvalidInput,
+		}
+	}
 	return nil
 }
 
@@ -706,6 +745,7 @@ func RunRelay(jsonMode bool) error {
 		opts = append(opts, common.WithFileWriter(logWriter), common.WithJSONFile())
 	}
 	common.ConfigureLogging(opts...)
+	redirectStdLog(log.Logger)
 	if logWriter != nil {
 		log.Info().
 			Str("log_level", level.String()).
@@ -773,6 +813,21 @@ func RunRelay(jsonMode bool) error {
 	<-stopCh
 	s.Stop()
 	return nil
+}
+
+// redirectStdLog sends the standard library's log package to l at debug.
+// net/http's HTTP/2 client logs protocol noise from the profile checks there
+// (e.g. "protocol error: received DATA on a HEAD request").
+func redirectStdLog(l zerolog.Logger) {
+	stdlog.SetFlags(0)
+	stdlog.SetOutput(stdLogWriter{l})
+}
+
+type stdLogWriter struct{ l zerolog.Logger }
+
+func (w stdLogWriter) Write(p []byte) (int, error) {
+	w.l.Debug().Str("source", "stdlib").Msg(strings.TrimSpace(string(p)))
+	return len(p), nil
 }
 
 // newLogWriter builds the rotating log file. Rotation settings apply only

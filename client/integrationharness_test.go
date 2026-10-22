@@ -51,6 +51,9 @@ func runCompose(t *testing.T, composeFile string, args ...string) {
 // Error-returning core, safe to call from any goroutine.
 func newIntegrationEventOfKindUnchecked(kind int, privKey, marker string, tags ...[]string) *nip01.Event {
 	ev := nip01.NewEvent(kind, fmt.Sprintf("ncli itest %s", marker), tags...)
+	if ev.Tags == nil {
+		ev.Tags = [][]string{} // strfry rejects "tags": null
+	}
 	if err := ev.Sign(privKey); err != nil {
 		panic(fmt.Sprintf("failed to sign synthetic test event: %v", err))
 	}
@@ -129,14 +132,23 @@ const publishManyEventsConcurrency = 16
 // call from any goroutine.
 func publishManyEventsErr(relayURL string, n int, markerPrefix string) ([]string, error) {
 	ids := make([]string, n)
-	errs := make(chan error, n)
+	events := make([]*nip01.Event, n)
+	for i := range events {
+		events[i] = newIntegrationEventUnchecked(fmt.Sprintf("%s-%d", markerPrefix, i))
+		ids[i] = events[i].ID
+	}
+	if err := publishEventsErr(relayURL, events); err != nil {
+		return nil, fmt.Errorf("publishManyEvents(%q, n=%d, %q): %w", relayURL, n, markerPrefix, err)
+	}
+	return ids, nil
+}
 
+// publishEventsErr publishes events to relayURL concurrently.
+func publishEventsErr(relayURL string, events []*nip01.Event) error {
+	errs := make(chan error, len(events))
 	sem := make(chan struct{}, publishManyEventsConcurrency)
 	var wg sync.WaitGroup
-	for i := 0; i < n; i++ {
-		ev := newIntegrationEventUnchecked(fmt.Sprintf("%s-%d", markerPrefix, i))
-		ids[i] = ev.ID
-
+	for _, ev := range events {
 		wg.Add(1)
 		sem <- struct{}{}
 		go func(ev *nip01.Event) {
@@ -150,10 +162,18 @@ func publishManyEventsErr(relayURL string, n int, markerPrefix string) ([]string
 
 	for err := range errs {
 		if err != nil {
-			return nil, fmt.Errorf("publishManyEvents(%q, n=%d, %q): %w", relayURL, n, markerPrefix, err)
+			return err
 		}
 	}
-	return ids, nil
+	return nil
+}
+
+// publishEvents publishes already-signed events to relayURL.
+func publishEvents(t *testing.T, relayURL string, events []*nip01.Event) {
+	t.Helper()
+	if err := publishEventsErr(relayURL, events); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // publishManyEvents signs and publishes n distinct kind:1 events to

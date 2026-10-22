@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.8.0-rc.39]
+
+### Fixed
+
+- Fixes `apply` sync skipping events when `pullBatchSize` is above the relay's `max_limit`: what a batch didn't return is asked for again, and events the relay never serves are counted in a warning.
+
 ## [0.8.0-rc.38]
 
 ### Added

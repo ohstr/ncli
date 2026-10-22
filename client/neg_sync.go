@@ -314,14 +314,15 @@ func (s *SyncModule) pullEvents(ctx context.Context, conn *relayclient.Connectio
 	// never second-guessed regardless of --strict-pow.
 	enforcePow := s.strictPow && !s.spec.GetRemote().Trusted
 
-	// Batch requests
-	for i := 0; i < len(needIDs); i += s.spec.PullBatchSize {
-		end := i + s.spec.PullBatchSize
-		if end > len(needIDs) {
-			end = len(needIDs)
-		}
-		batch := needIDs[i:end]
-		s.logger.Trace(fmt.Sprintf("Pulling batch %d IDs (%d-%d)", len(batch), i, end), syncAttr)
+	// Batch requests. A relay may return fewer than asked (its max_limit),
+	// so what a batch skipped is asked for again while batches still return
+	// something.
+	pending := needIDs
+	unserved := 0
+	for len(pending) > 0 {
+		batch := pending[:min(s.spec.PullBatchSize, len(pending))]
+		pending = pending[len(batch):]
+		s.logger.Trace(fmt.Sprintf("Pulling batch %d IDs (%d left)", len(batch), len(pending)), syncAttr)
 
 		fg := nip01.NewSubscriptionFilterGroup()
 		fg.Add(&nip01.SubscriptionFilter{IDs: batch})
@@ -331,6 +332,7 @@ func (s *SyncModule) pullEvents(ctx context.Context, conn *relayclient.Connectio
 		conn.SubscribeWithID(reqSubID, fg)
 
 		var batchEvents []*nip01.Event
+		returned := make(map[string]bool, len(batch))
 
 	batchLoop:
 		for {
@@ -339,6 +341,7 @@ func (s *SyncModule) pullEvents(ctx context.Context, conn *relayclient.Connectio
 				switch r := resp.(type) {
 				case *wire.EventSubscriptionResponse:
 					if r.Event != nil {
+						returned[r.Event.ID] = true
 						if enforcePow && !hasValidPow(r.Event) {
 							s.logger.Warn(fmt.Sprintf("dropping pulled event %s: pow check failed", r.Event.ID), syncAttr)
 							continue
@@ -358,6 +361,18 @@ func (s *SyncModule) pullEvents(ctx context.Context, conn *relayclient.Connectio
 
 		conn.CloseSubscription(reqSubID)
 
+		var missing []string
+		for _, id := range batch {
+			if !returned[id] {
+				missing = append(missing, id)
+			}
+		}
+		if len(returned) > 0 {
+			pending = append(missing, pending...)
+		} else {
+			unserved += len(missing)
+		}
+
 		if len(batchEvents) > 0 {
 			s.logger.Trace(fmt.Sprintf("Inserting %d events into local store", len(batchEvents)), syncAttr)
 			if err := store.InsertEvents(ctx, batchEvents); err != nil {
@@ -374,6 +389,9 @@ func (s *SyncModule) pullEvents(ctx context.Context, conn *relayclient.Connectio
 		}
 	}
 
+	if unserved > 0 {
+		s.logger.Warn(fmt.Sprintf("%d events were not served by the relay", unserved), syncAttr)
+	}
 	s.logger.Success(fmt.Sprintf("Pulled %d events", pulled), syncAttr)
 }
 

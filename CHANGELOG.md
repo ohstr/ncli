@@ -4,11 +4,11 @@
 
 ### Changed
 
-- Changes `maxReconcileRounds`' default for `apply` sync from 20 to 1000, since a large diff now takes many small rounds. Hitting the cap says the sync is partial.
+- Changes `maxReconcileRounds`' default for `apply` sync from 20 to 1000, since a large diff now takes many small rounds. Hitting the cap says the sync is partial. ([#189](https://github.com/ohstr/ncli/pull/189))
 
 ### Fixed
 
-- Fixes `apply` sync skipping events when `pullBatchSize` is above the relay's `max_limit`: what a batch didn't return is asked for again, and events the relay never serves are counted in a warning.
+- Fixes `apply` sync skipping events when `pullBatchSize` is above the relay's `max_limit`: what a batch didn't return is asked for again, and events the relay never serves are counted in a warning. ([#189](https://github.com/ohstr/ncli/pull/189))
 
 ## [0.8.0-rc.38]
 

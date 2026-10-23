@@ -85,8 +85,6 @@ cache:
         host: http://localhost:7700
         key: masterKey
         index: ncli_events
-      batchSize: 100
-      queueSize: 1000
 
     # NIP-85 stats: a REQ for kind 30382 with #d pubkeys gets relay-signed
     # rank, followers, following and zaps. Requires nip11.privkey.

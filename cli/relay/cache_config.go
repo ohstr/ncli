@@ -38,8 +38,6 @@ type SearchConfig struct {
 	Enabled     bool              `mapstructure:"enabled"`
 	Readonly    bool              `mapstructure:"readonly"`
 	Meilisearch MeilisearchConfig `mapstructure:"meilisearch"`
-	BatchSize   int               `mapstructure:"batchSize"`
-	QueueSize   int               `mapstructure:"queueSize"`
 }
 
 type MeilisearchConfig struct {
@@ -167,9 +165,16 @@ var renamedKeys = []struct{ old, new string }{
 	{"cache.profiles.search.host", "cache.profiles.search.meilisearch.host"},
 	{"cache.profiles.search.key", "cache.profiles.search.meilisearch.key"},
 	{"cache.profiles.search.index_name", "cache.profiles.search.meilisearch.index"},
-	{"cache.profiles.search.batch_size", "cache.profiles.search.batchSize"},
-	{"cache.profiles.search.max_ch_size", "cache.profiles.search.queueSize"},
 	{"cache.zaps.window", "cache.zaps.windows"},
+}
+
+// removedKeys are config keys with nothing left to set; each fails startup
+// saying why.
+var removedKeys = []struct{ key, why string }{
+	{"cache.profiles.search.batchSize", "search takes profiles from the store in batches of its own"},
+	{"cache.profiles.search.queueSize", "profiles reach search from the store; nothing is queued in memory"},
+	{"cache.profiles.search.batch_size", "search takes profiles from the store in batches of its own"},
+	{"cache.profiles.search.max_ch_size", "profiles reach search from the store; nothing is queued in memory"},
 }
 
 // checkRenamedKeys refuses a config (file or NCLI_* env) still using a
@@ -178,6 +183,11 @@ func checkRenamedKeys(v *viper.Viper) error {
 	for _, k := range renamedKeys {
 		if v.IsSet(k.old) {
 			return &common.CLIError{Err: fmt.Errorf("%s was renamed to %s", k.old, k.new), Code: common.CodeUsage, Input: k.old}
+		}
+	}
+	for _, k := range removedKeys {
+		if v.IsSet(k.key) {
+			return &common.CLIError{Err: fmt.Errorf("%s was removed: %s", k.key, k.why), Code: common.CodeUsage, Input: k.key}
 		}
 	}
 	return nil

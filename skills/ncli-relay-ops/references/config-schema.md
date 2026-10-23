@@ -80,8 +80,9 @@ false, min: 0}` — fully backward compatible with configs that predate it.
 Durations take Go units (`250ms`, `1h`) or `d`/`w`/`mo` (`14d`); a bad one
 is `invalid_input`. A key from before this grouping (`cache.topZapped`,
 `cache.search`, `cache.profileStats`, `cache.verification`,
-`cache.scoring`, top-level `verificationWorkers`, `index_name`,
-`batch_size`, `max_ch_size`) fails startup with `usage` naming its new key.
+`cache.scoring`, top-level `verificationWorkers`, `index_name`) fails
+startup with `usage` naming its new key; search's removed `batchSize`,
+`queueSize`, `batch_size` and `max_ch_size` fail with `usage` too.
 
 | Field | Type | Default | Notes |
 |---|---|---|---|
@@ -105,8 +106,6 @@ then filtered by kind, never a full-text match over note content.
 | `meilisearch.host` | string | Meilisearch URL |
 | `meilisearch.key` | string | Meilisearch API key |
 | `meilisearch.index` | string | Index name |
-| `batchSize` | int | Profiles per indexing request |
-| `queueSize` | int | Pending profiles buffered for indexing |
 
 ### `cache.profiles.stats`
 

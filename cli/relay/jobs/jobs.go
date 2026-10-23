@@ -475,6 +475,26 @@ func (m *Manager) LastJob(index string) *Job {
 	return nil
 }
 
+// LastShown is the last finished job worth showing on index: freeing old
+// data is housekeeping, shown only when nothing else ran.
+func (m *Manager) LastShown(index string) *Job {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var reap *Job
+	for _, j := range m.history {
+		if j.Index != index {
+			continue
+		}
+		if j.Kind != KindReap {
+			return &j
+		}
+		if reap == nil {
+			reap = &j
+		}
+	}
+	return reap
+}
+
 // Running returns how many jobs are running.
 func (m *Manager) Running() int {
 	m.mu.Lock()

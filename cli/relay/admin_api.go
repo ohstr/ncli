@@ -101,8 +101,18 @@ type apiError struct {
 }
 
 // apiCall sends a signed request to the admin listener and decodes a 2xx
-// JSON answer into out.
+// JSON answer into out, with a spinner while it waits.
 func apiCall(cmd *cobra.Command, method, path string, body, out any) (int, error) {
+	return apiRequest(cmd, method, path, body, out, true)
+}
+
+// apiPoll is apiCall without the spinner, for a caller drawing its own
+// progress.
+func apiPoll(cmd *cobra.Command, method, path string, body, out any) (int, error) {
+	return apiRequest(cmd, method, path, body, out, false)
+}
+
+func apiRequest(cmd *cobra.Command, method, path string, body, out any, spin bool) (int, error) {
 	privKey, _, _, err := getAdminConfig()
 	if err != nil {
 		return 0, &common.CLIError{Err: err, Code: common.CodeUsage, Help: common.HelpAfterError}
@@ -132,13 +142,19 @@ func apiCall(cmd *cobra.Command, method, path string, body, out any) (int, error
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	client := &http.Client{Timeout: 45 * time.Second, Transport: &http.Transport{TLSClientConfig: tlsCfg}}
+	// One request per client: nothing left idle when a caller polls.
+	client := &http.Client{Timeout: 45 * time.Second, Transport: &http.Transport{TLSClientConfig: tlsCfg, DisableKeepAlives: true}}
 	var resp *http.Response
-	err = common.WithSpinner(cmd, "contacting the relay's admin listener", func() error {
+	do := func() error {
 		var dErr error
 		resp, dErr = client.Do(req)
 		return dErr
-	})
+	}
+	if spin {
+		err = common.WithSpinner(cmd, "contacting the relay's admin listener", do)
+	} else {
+		err = do()
+	}
 	if err != nil {
 		hint := fmt.Sprintf("is the relay running, with its admin listener at %s?", base)
 		if droppedByServer(err) {

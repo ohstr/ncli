@@ -100,6 +100,18 @@ func (x *StoreIndex) Status() Status {
 }
 
 func (x *StoreIndex) Run(ctx context.Context, kind Kind, progress func(Progress)) (Result, error) {
+	res, err := x.run(ctx, kind, progress)
+	if err != nil || kind != KindRebuild {
+		return res, err
+	}
+	// The generation the rebuild replaced is freed as part of it.
+	if _, err := x.run(ctx, KindReap, progress); err != nil && !errors.Is(err, ErrNothingToDo) {
+		return res, err
+	}
+	return res, nil
+}
+
+func (x *StoreIndex) run(ctx context.Context, kind Kind, progress func(Progress)) (Result, error) {
 	action := map[Kind]string{KindCatchUp: relay.ActionCatchUp, KindRebuild: relay.ActionRebuild, KindRescore: relay.ActionRescore, KindReap: relay.ActionReap}[kind]
 	res, err := x.Store.RunIndexAction(ctx, x.store, action, func(p relay.IndexProgress) {
 		if progress != nil {

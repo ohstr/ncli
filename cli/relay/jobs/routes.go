@@ -44,7 +44,7 @@ type Plan struct {
 func (m *Manager) Indexes(r *Reconciler) []IndexInfo {
 	out := make([]IndexInfo, 0, len(m.order))
 	for _, name := range m.order {
-		info := IndexInfo{Status: m.indexes[name].Status(), Running: m.RunningJob(name), Last: m.LastJob(name)}
+		info := IndexInfo{Status: m.indexes[name].Status(), Running: m.RunningJob(name), Last: m.LastShown(name)}
 		if j := info.Running; j != nil {
 			switch j.Kind {
 			case KindRebuild:

@@ -333,7 +333,18 @@ func TestSearch_BigBacklogShowsAsACatchUp(t *testing.T) {
 
 	j, err := s.m.Start("search", KindCatchUp, TriggerReconcile, st.Reason)
 	require.NoError(t, err)
-	go s.drain()
+	// The live indexer works while the job watches it.
+	indexed := make(chan error, 1)
+	go func() {
+		for {
+			more, err := s.ix.Indexer.Step(context.Background())
+			if err != nil || !more {
+				indexed <- err
+				return
+			}
+		}
+	}()
+	require.NoError(t, <-indexed)
 	done := waitEnded(t, s.m, j.ID)
 	assert.Equal(t, StateSucceeded, done.State, done.Error)
 	assert.Equal(t, int64(3), done.EntriesAfter)

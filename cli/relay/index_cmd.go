@@ -12,8 +12,8 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
-	"text/tabwriter"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ohstr/ncli/cli/common"
 	"github.com/ohstr/ncli/cli/relay/jobs"
@@ -176,8 +176,7 @@ func runIndexList(cmd *cobra.Command, args []string) error {
 // renderIndexes prints the index table, then a line for each index that
 // isn't simply ready: what is happening, or what to do.
 func renderIndexes(w io.Writer, list []jobs.IndexInfo, now time.Time) {
-	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
-	_, _ = fmt.Fprintln(tw, "INDEX\tSTATE\tENTRIES\tBEHIND\tLAST JOB")
+	rows := make([][]cell, 0, len(list))
 	for _, ix := range list {
 		entries, behind := jobs.Count(ix.Entries), "-"
 		if !ix.Enabled && !ix.HasData {
@@ -186,9 +185,13 @@ func renderIndexes(w io.Writer, list []jobs.IndexInfo, now time.Time) {
 		if ix.Enabled && ix.State != jobs.StateUnreachable {
 			behind = jobs.Count(ix.Behind)
 		}
-		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", ix.Name, stateLabel(ix.State), entries, behind, lastJob(ix.Last, now))
+		last := cell{text: "-"}
+		if j := ix.Last; j != nil {
+			last = cell{text: fmt.Sprintf("%s %s %s", describeKind(j.Kind), j.State, relativeTimeAt(j.FinishedAt, now)), style: jobStyle(j.State)}
+		}
+		rows = append(rows, []cell{{text: ix.Name}, {text: strings.ReplaceAll(ix.State, "_", " "), style: indexStyle(ix.State)}, {text: entries}, {text: behind}, last})
 	}
-	_ = tw.Flush()
+	writeTable(w, []string{"INDEX", "STATE", "ENTRIES", "BEHIND", "LAST JOB"}, rows)
 	for _, ix := range list {
 		if note := indexNote(ix, now); note != "" {
 			_, _ = fmt.Fprintf(w, "  → %s: %s\n", ix.Name, note)
@@ -196,24 +199,76 @@ func renderIndexes(w io.Writer, list []jobs.IndexInfo, now time.Time) {
 	}
 }
 
-func stateLabel(s string) string {
-	label := strings.ReplaceAll(s, "_", " ")
-	switch s {
-	case jobs.StateReady:
-		return statusOkStyle.Render(label)
-	case jobs.StateDisabled, jobs.StateEmpty:
-		return label
-	case jobs.StateUnreachable, jobs.StateNeedsRebuild:
-		return statusErrStyle.Render(label)
-	}
-	return statusWaitStyle.Render(label)
+// cell is a table cell: its text, and the style it is shown in.
+type cell struct {
+	text  string
+	style func(...string) string
 }
 
-func lastJob(j *jobs.Job, now time.Time) string {
-	if j == nil {
-		return "-"
+// writeTable lines columns up by their plain text, then styles each cell,
+// so colors never shift a column.
+func writeTable(w io.Writer, header []string, rows [][]cell) {
+	widths := make([]int, len(header))
+	for i, h := range header {
+		widths[i] = utf8.RuneCountInString(h)
 	}
-	return fmt.Sprintf("%s %s %s", describeKind(j.Kind), stateText(j.State), relativeTimeAt(j.FinishedAt, now))
+	for _, r := range rows {
+		for i, c := range r {
+			widths[i] = max(widths[i], utf8.RuneCountInString(c.text))
+		}
+	}
+	line := func(cells []cell) {
+		var b strings.Builder
+		for i, c := range cells {
+			text := c.text
+			if c.style != nil {
+				text = c.style(text)
+			}
+			b.WriteString(text)
+			if i < len(cells)-1 {
+				b.WriteString(strings.Repeat(" ", widths[i]-utf8.RuneCountInString(c.text)+2))
+			}
+		}
+		_, _ = fmt.Fprintln(w, b.String())
+	}
+	head := make([]cell, len(header))
+	for i, h := range header {
+		head[i] = cell{text: h}
+	}
+	line(head)
+	for _, r := range rows {
+		line(r)
+	}
+}
+
+func indexStyle(s string) func(...string) string {
+	switch s {
+	case jobs.StateReady:
+		return statusOkStyle.Render
+	case jobs.StateDisabled, jobs.StateEmpty:
+		return nil
+	case jobs.StateUnreachable, jobs.StateNeedsRebuild:
+		return statusErrStyle.Render
+	}
+	return statusWaitStyle.Render
+}
+
+func stateLabel(s string) string {
+	label := strings.ReplaceAll(s, "_", " ")
+	if style := indexStyle(s); style != nil {
+		return style(label)
+	}
+	return label
+}
+
+func jobStyle(s jobs.State) func(...string) string {
+	switch s {
+	case jobs.StateSucceeded:
+		return statusOkStyle.Render
+	case jobs.StateFailed, jobs.StateInterrupted:
+		return statusErrStyle.Render
+	}
+	return statusWaitStyle.Render
 }
 
 func describeKind(k jobs.Kind) string {
@@ -249,6 +304,8 @@ func indexNote(ix jobs.IndexInfo, now time.Time) string {
 		return fmt.Sprintf("%s needed (%s); the relay starts it on its own", describeKind(ix.Action), ix.Reason)
 	case ix.Hint != "":
 		return ix.Hint
+	case !ix.Enabled:
+		return ix.Unavailable
 	}
 	return ""
 }
@@ -645,7 +702,7 @@ func followJobs(cmd *cobra.Command, list []jobs.Job) ([]jobs.Job, error) {
 				continue
 			}
 			var j jobs.Job
-			if _, err := apiCall(cmd, http.MethodGet, "/admin/api/jobs/"+list[i].ID, nil, &j); err != nil {
+			if _, err := apiPoll(cmd, http.MethodGet, "/admin/api/jobs/"+list[i].ID, nil, &j); err != nil {
 				return list, common.RuntimeError(cmd, err)
 			}
 			list[i] = j
@@ -678,15 +735,7 @@ func stateIcon(s jobs.State) string {
 	return statusErrStyle.Render("✘")
 }
 
-func stateText(s jobs.State) string {
-	switch s {
-	case jobs.StateSucceeded:
-		return statusOkStyle.Render(string(s))
-	case jobs.StateFailed, jobs.StateInterrupted:
-		return statusErrStyle.Render(string(s))
-	}
-	return statusWaitStyle.Render(string(s))
-}
+func stateText(s jobs.State) string { return jobStyle(s)(string(s)) }
 
 /////////////////////////////////////////////////////////////////////
 // jobs
@@ -721,8 +770,7 @@ func renderJobs(w io.Writer, list []jobs.Job, now time.Time) {
 		_, _ = fmt.Fprintln(w, " (no jobs)")
 		return
 	}
-	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
-	_, _ = fmt.Fprintln(tw, "ID\tINDEX\tKIND\tBY\tSTATE\tSTARTED\tTOOK\tSUMMARY")
+	rows := make([][]cell, 0, len(list))
 	for _, j := range list {
 		took, summary := "-", j.Summary
 		if j.Ended() {
@@ -730,9 +778,10 @@ func renderJobs(w io.Writer, list []jobs.Job, now time.Time) {
 		} else {
 			summary = progressText(j, now)
 		}
-		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", j.ID, j.Index, describeKind(j.Kind), j.Trigger, stateText(j.State), relativeTimeAt(j.StartedAt, now), took, summary)
+		rows = append(rows, []cell{{text: j.ID}, {text: j.Index}, {text: describeKind(j.Kind)}, {text: string(j.Trigger)},
+			{text: string(j.State), style: jobStyle(j.State)}, {text: relativeTimeAt(j.StartedAt, now)}, {text: took}, {text: summary}})
 	}
-	_ = tw.Flush()
+	writeTable(w, []string{"ID", "INDEX", "KIND", "BY", "STATE", "STARTED", "TOOK", "SUMMARY"}, rows)
 }
 
 func tookText(j jobs.Job) string {

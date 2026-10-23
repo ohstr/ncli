@@ -29,31 +29,32 @@ type Metrics struct {
 	Registry *prometheus.Registry
 	started  time.Time
 
-	sessionsTotal prometheus.Counter
-	messages      [relayMessageTypes]prometheus.Counter
-	events        [relayEventResults]prometheus.Counter
-	rejected      [relayRejectReasons]prometheus.Counter
-	byClass       [relayKindClasses]prometheus.Counter
-	eventOK       prometheus.Observer
-	reqEOSE       prometheus.Observer
-	reqEvents     prometheus.Observer
-	readRefused   [relayRejectReasons]prometheus.Counter
-	countSeconds  prometheus.Observer
-	subscriptions prometheus.Gauge
-	subLimitHits  prometheus.Counter
-	authAccepted  prometheus.Counter
-	authRejected  [relayRejectReasons]prometheus.Counter
-	sendSeconds   prometheus.Observer
-	sendErrors    prometheus.Counter
-	slowSends     prometheus.Counter
-	batchSeconds  prometheus.Observer
-	batchSize     prometheus.Observer
-	batchErrors   prometheus.Counter
-	scanBusy      prometheus.Counter
-	httpRequests  *prometheus.CounterVec
-	httpSeconds   *prometheus.HistogramVec
-	adminDenied   *prometheus.CounterVec
-	jobRuns       *prometheus.CounterVec
+	sessionsTotal  prometheus.Counter
+	messages       [relayMessageTypes]prometheus.Counter
+	events         [relayEventResults]prometheus.Counter
+	rejected       [relayRejectReasons]prometheus.Counter
+	byClass        [relayKindClasses]prometheus.Counter
+	eventOK        prometheus.Observer
+	reqEOSE        prometheus.Observer
+	reqEvents      prometheus.Observer
+	readRefused    [relayRejectReasons]prometheus.Counter
+	countSeconds   prometheus.Observer
+	subscriptions  prometheus.Gauge
+	subLimitHits   prometheus.Counter
+	authAccepted   prometheus.Counter
+	authRejected   [relayRejectReasons]prometheus.Counter
+	sendSeconds    prometheus.Observer
+	sendErrors     prometheus.Counter
+	slowSends      prometheus.Counter
+	batchSeconds   prometheus.Observer
+	batchSize      prometheus.Observer
+	batchErrors    prometheus.Counter
+	scanBusy       prometheus.Counter
+	httpRequests   *prometheus.CounterVec
+	httpSeconds    *prometheus.HistogramVec
+	adminDenied    *prometheus.CounterVec
+	indexTxSeconds *prometheus.HistogramVec
+	jobRuns        *prometheus.CounterVec
 }
 
 const (
@@ -127,7 +128,11 @@ func New(version string) *Metrics {
 	for _, r := range []string{"host", "cidr", "token", "nip98", "session", "csrf", "replay"} {
 		m.adminDenied.WithLabelValues(r)
 	}
-	m.jobRuns = f.counterVec("job_runs_total", "Index jobs finished, by index and outcome.", "index", "result")
+	m.jobRuns = f.counterVec("job_runs_total", "Index jobs finished, by index, kind, trigger and outcome.", "index", "kind", "trigger", "result")
+	m.indexTxSeconds = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: Namespace, Name: "index_txn_seconds", Help: "Time an index job held the store writer, per transaction.", Buckets: latencyBuckets,
+	}, []string{"index"})
+	reg.MustRegister(m.indexTxSeconds)
 	return m
 }
 
@@ -216,12 +221,19 @@ func (m *Metrics) BatchCommitted(n int, d time.Duration, failed bool) {
 // ScanBusy implements relay.StoreObserver.
 func (m *Metrics) ScanBusy() { m.scanBusy.Inc() }
 
+// IndexBatchCommitted implements relay.StoreObserver.
+func (m *Metrics) IndexBatchCommitted(index string, d time.Duration) {
+	m.indexTxSeconds.WithLabelValues(index).Observe(d.Seconds())
+}
+
 // AdminDenied counts one admin listener refusal. reason is one of a fixed
 // set: host, cidr, token, nip98, session, csrf, replay.
 func (m *Metrics) AdminDenied(reason string) { m.adminDenied.WithLabelValues(reason).Inc() }
 
 // JobFinished counts one finished index job.
-func (m *Metrics) JobFinished(index, result string) { m.jobRuns.WithLabelValues(index, result).Inc() }
+func (m *Metrics) JobFinished(index, kind, trigger, result string) {
+	m.jobRuns.WithLabelValues(index, kind, trigger, result).Inc()
+}
 
 // HTTP wraps h to count requests to route by status class and time them.
 // The series are resolved here, once per route.

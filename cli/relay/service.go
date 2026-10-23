@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ohstr/ncli/cli/common"
+	"github.com/ohstr/ncli/cli/common/meilisearch"
 	"github.com/ohstr/ncli/cli/relay/adminplane"
 	"github.com/ohstr/ncli/cli/relay/jobs"
 	"github.com/ohstr/ncli/cli/relay/metrics"
@@ -36,6 +37,8 @@ type Service struct {
 	history *metrics.History
 	admin   *adminplane.Server
 	jobs    *jobs.Manager
+	// reconciler starts the jobs the indexes need.
+	reconciler *jobs.Reconciler
 	// stopSampling ends the metrics samplers and the stats publisher.
 	stopSampling context.CancelFunc
 	// publisherDone closes when the NIP-66 stats publisher has stopped; nil
@@ -52,18 +55,26 @@ const (
 	rollupWindow    = 24 * time.Hour
 )
 
-func NewServer(store *relay.EventStore, searchService search.Service) *Service {
-	return newServer(store, searchService, metrics.New(common.ReadBuildInfo().Version))
+// NewServer serves store; meili is the search engine when search is on
+// (nil otherwise).
+func NewServer(store *relay.EventStore, meili *meilisearch.MeiliClient) *Service {
+	return newServer(store, meili, metrics.New(common.ReadBuildInfo().Version))
 }
 
-func newServer(store *relay.EventStore, searchService search.Service, m *metrics.Metrics) *Service {
+func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metrics.Metrics) *Service {
 	// Handlers below keep pointers into the config for the server's whole
 	// lifetime, including WebSocket sessions that outlive Close; a copy keeps
 	// them off the package global so swapping it (tests do) can't race them.
 	cfg := config
-	if want := cfg.derivedIndexes(); store != nil &&
-		(store.ZapIndexState().Enabled != want.Zaps || store.SocialIndexState().Enabled != want.Social) {
+
+	if want := cfg.derivedIndexes(); store != nil && !storeHasIndexes(store, want) {
 		log.Warn().Msg("the store was opened with other indexes than the cache block needs; open it with openRelayStore")
+	}
+
+	// A nil *MeiliClient must not become a non-nil interface.
+	var searcher search.Searcher
+	if meili != nil {
+		searcher = meili
 	}
 
 	// nmilat fills zero sizes into the shared SessionConfig on every
@@ -137,7 +148,7 @@ func newServer(store *relay.EventStore, searchService search.Service, m *metrics
 	wsHandler := relay.NewSessionHandler(
 		store,
 		&cfg.Nip11,
-		searchService,
+		searcher,
 		relay.WithSessionConfig(sessionConfig),
 	)
 
@@ -306,21 +317,34 @@ func newServer(store *relay.EventStore, searchService search.Service, m *metrics
 	}
 	nip86Handler = handler
 
+	sampleCtx, stopSampling := context.WithCancel(context.Background())
+	searchIx := searchIndex(store, meili)
+	if searchIx.Indexer != nil {
+		go searchIx.Indexer.Run(sampleCtx)
+	}
 	jobManager := jobs.New(config.RelayNotesDb+".jobs.json", log.Logger,
-		searchIndex(store, searchService),
+		searchIx,
 		zapIndex(store),
 		statsIndex(store),
 	)
-	jobManager.OnFinish = func(j jobs.Job) { m.JobFinished(j.Index, string(j.State)) }
+	jobManager.OnFinish = func(j jobs.Job) {
+		m.JobFinished(j.Index, string(j.Kind), string(j.Trigger), string(j.State))
+	}
+	reconciler := jobManager.Reconcile(sampleCtx)
 
-	sampleCtx, stopSampling := context.WithCancel(context.Background())
 	m.Attach(sampleCtx, metrics.Sources{
 		Handler:   wsHandler,
 		Store:     store,
 		StorePath: config.RelayNotesDb,
-		Search:    searchService,
 		Rooms:     huddleRooms,
 		Jobs:      jobManager.Running,
+		Indexes: func() []metrics.IndexSample {
+			var out []metrics.IndexSample
+			for _, ix := range jobManager.Indexes(reconciler) {
+				out = append(out, metrics.IndexSample{Name: ix.Name, State: ix.State, Entries: ix.Entries, Behind: ix.Behind, Queued: ix.Queued})
+			}
+			return out
+		},
 	})
 	history := metrics.NewHistory(m, historyInterval, historyWindow).WithRollup(rollupStep, rollupWindow)
 	go history.Run(sampleCtx)
@@ -348,6 +372,7 @@ func newServer(store *relay.EventStore, searchService search.Service, m *metrics
 		metrics:            m,
 		history:            history,
 		jobs:               jobManager,
+		reconciler:         reconciler,
 		stopSampling:       stopSampling,
 		publisherDone:      publisherDone,
 		server: &http.Server{
@@ -383,7 +408,7 @@ func (s *Service) startAdmin() error {
 	if err != nil {
 		return err
 	}
-	s.jobs.Routes(admin)
+	s.jobs.Routes(admin, s.reconciler)
 	profileRoutes(admin, s.store, s.verificationWorker)
 	if err := admin.Start(); err != nil {
 		if adminSettings.Defaulted && !adminSettings.Dashboard && !adminSettings.Metrics {
@@ -396,40 +421,58 @@ func (s *Service) startAdmin() error {
 	return nil
 }
 
-// searchIndex describes the search index for maintenance jobs, or why it
-// can't be maintained on this relay.
-func searchIndex(store *relay.EventStore, svc search.Service) *jobs.SearchIndex {
+// searchIndex is the search index and, while search is on and writable,
+// the indexer that keeps it in step with the store. A disabled one names
+// its Meilisearch index only when search is off, so dropping it never
+// touches an index another relay writes.
+func searchIndex(store *relay.EventStore, meili *meilisearch.MeiliClient) *jobs.SearchIndex {
 	ix := &jobs.SearchIndex{Store: store}
 	cfg := config.searchConfig()
 	switch {
-	case cfg == nil || !cfg.Enabled || svc == nil:
+	case cfg == nil || !cfg.Enabled || meili == nil:
 		ix.Disabled = "search is not enabled on this relay (cache.profiles.search.enabled)"
+		if cfg != nil && cfg.Meilisearch.Host != "" {
+			ix.Host, ix.Key, ix.IndexName = cfg.Meilisearch.Host, cfg.Meilisearch.Key, cfg.Meilisearch.Index
+		}
 	case cfg.Readonly:
 		ix.Disabled = "search is read-only on this relay (cache.profiles.search.readonly)"
 	default:
 		ix.Host, ix.Key, ix.IndexName = cfg.Meilisearch.Host, cfg.Meilisearch.Key, cfg.Meilisearch.Index
+		indexer, err := relay.NewSearchIndexer(store, meili)
+		if err != nil {
+			log.Error().Err(err).Msg("failed to start search indexing")
+			ix.Disabled = "search indexing failed to start: " + err.Error()
+			return ix
+		}
+		ix.Indexer = indexer
 	}
 	return ix
 }
 
-// zapIndex describes the zap index for maintenance jobs, or why it can't
-// be maintained on this relay.
-func zapIndex(store *relay.EventStore) *jobs.ZapIndex {
-	ix := &jobs.ZapIndex{Store: store}
+// storeHasIndexes reports whether store keeps exactly the indexes want.
+func storeHasIndexes(store *relay.EventStore, want relay.DerivedIndexes) bool {
+	z, zerr := store.IndexStatus(relay.IndexZaps)
+	s, serr := store.IndexStatus(relay.IndexSocial)
+	return zerr == nil && serr == nil && z.Enabled == want.Zaps && s.Enabled == want.Social
+}
+
+// zapIndex is the zap ranking index.
+func zapIndex(store *relay.EventStore) *jobs.StoreIndex {
+	why := ""
 	if !config.zapsEnabled() {
-		ix.Disabled = "zap ranking is not enabled on this relay (cache.zaps.enabled)"
+		why = "zap ranking is not enabled on this relay (cache.zaps.enabled)"
 	}
-	return ix
+	return jobs.NewZapIndex(store, why)
 }
 
-// statsIndex describes the follows and zaps index behind profile scores and
-// NIP-85 stats, which is in use only when search or stats is on.
-func statsIndex(store *relay.EventStore) *jobs.StatsIndex {
-	ix := &jobs.StatsIndex{Store: store}
+// statsIndex is the follows and zaps index behind profile scores and
+// NIP-85 stats, in use only when search or stats is on.
+func statsIndex(store *relay.EventStore) *jobs.StoreIndex {
+	why := ""
 	if !config.statsInUse() {
-		ix.Disabled = "stats are not enabled on this relay (cache.profiles.search.enabled or cache.profiles.stats.enabled)"
+		why = "stats are not enabled on this relay (cache.profiles.search.enabled or cache.profiles.stats.enabled)"
 	}
-	return ix
+	return jobs.NewStatsIndex(store, why)
 }
 
 func (s *Service) serve() {

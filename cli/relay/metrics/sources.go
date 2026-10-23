@@ -8,7 +8,7 @@ import (
 
 	"github.com/ohstr/nmilat/huddle/room"
 	"github.com/ohstr/nmilat/relay"
-	"github.com/ohstr/nmilat/search"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // Sources are the running relay's parts read at scrape time. Any may be nil.
@@ -16,10 +16,64 @@ type Sources struct {
 	Handler   *relay.SessionHandler
 	Store     *relay.EventStore
 	StorePath string
-	Search    search.Service
 	Rooms     *room.Manager
 	// Jobs reports how many index jobs are running.
 	Jobs func() int
+	// Indexes reports each index's state at scrape time.
+	Indexes func() []IndexSample
+}
+
+// IndexSample is one index's state, as exported.
+type IndexSample struct {
+	Name    string
+	State   string
+	Entries int64
+	Behind  int64
+	Queued  int64
+}
+
+// IndexStates are the states index_state reports, each 0 or 1.
+var IndexStates = []string{"disabled", "empty", "ready", "behind", "needs_rebuild", "unreachable", "building", "catching_up", "rescoring", "dropping"}
+
+// indexCollector reads every index once per scrape.
+type indexCollector struct {
+	read                           func() []IndexSample
+	state, entries, behind, queued *prometheus.Desc
+}
+
+func newIndexCollector(read func() []IndexSample) *indexCollector {
+	d := func(name, help string, labels ...string) *prometheus.Desc {
+		return prometheus.NewDesc(prometheus.BuildFQName(Namespace, "", name), help, labels, nil)
+	}
+	return &indexCollector{
+		read:    read,
+		state:   d("index_state", "Each index's state: 1 for the one it is in.", "index", "state"),
+		entries: d("index_entries", "Entries an index holds.", "index"),
+		behind:  d("index_behind", "Events stored since an index was last current.", "index"),
+		queued:  d("index_queued", "Profiles waiting to be looked at again by an index.", "index"),
+	}
+}
+
+func (c *indexCollector) Describe(ch chan<- *prometheus.Desc) {
+	ch <- c.state
+	ch <- c.entries
+	ch <- c.behind
+	ch <- c.queued
+}
+
+func (c *indexCollector) Collect(ch chan<- prometheus.Metric) {
+	for _, ix := range c.read() {
+		for _, st := range IndexStates {
+			v := 0.0
+			if st == ix.State {
+				v = 1
+			}
+			ch <- prometheus.MustNewConstMetric(c.state, prometheus.GaugeValue, v, ix.Name, st)
+		}
+		ch <- prometheus.MustNewConstMetric(c.entries, prometheus.GaugeValue, float64(ix.Entries), ix.Name)
+		ch <- prometheus.MustNewConstMetric(c.behind, prometheus.GaugeValue, float64(ix.Behind), ix.Name)
+		ch <- prometheus.MustNewConstMetric(c.queued, prometheus.GaugeValue, float64(ix.Queued), ix.Name)
+	}
 }
 
 // slowSampleInterval paces reads that touch the disk.
@@ -39,7 +93,6 @@ func (m *Metrics) Attach(ctx context.Context, src Sources) {
 			f.gaugeFunc("verify_queue_depth", "Profile verification jobs waiting.", func() float64 { return float64(w.QueueDepth()) })
 			f.counterFunc("verify_processed_total", "Profile verification jobs done.", func() float64 { return float64(w.TotalProcessed.Load()) })
 			f.counterFunc("verify_errors_total", "Profile verification jobs that failed.", func() float64 { return float64(w.TotalErrors.Load()) })
-			f.counterFunc("verify_dropped_total", "Profile verification jobs dropped on a full queue.", func() float64 { return float64(w.TotalDropped.Load()) })
 		}
 	}
 
@@ -51,12 +104,8 @@ func (m *Metrics) Attach(ctx context.Context, src Sources) {
 		f.gaugeFunc("store_read_txs_open", "Open bbolt read transactions.", func() float64 { return float64(s.Db().Stats().OpenTxN) })
 	}
 
-	if q, ok := src.Search.(interface {
-		QueueDepth() int
-		Dropped() uint64
-	}); ok {
-		f.gaugeFunc("search_index_queue_depth", "Profile updates waiting to be indexed.", func() float64 { return float64(q.QueueDepth()) })
-		f.counterFunc("search_index_dropped_total", "Profile updates dropped on a full queue.", func() float64 { return float64(q.Dropped()) })
+	if src.Indexes != nil {
+		m.Registry.MustRegister(newIndexCollector(src.Indexes))
 	}
 
 	if r := src.Rooms; r != nil {

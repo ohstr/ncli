@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ohstr/ncli/cli/common"
 	"github.com/ohstr/ncli/cli/relay/metrics"
 	"github.com/ohstr/nmilat/nip98"
 	"github.com/prometheus/common/expfmt"
@@ -341,10 +342,18 @@ type sessionJSON struct {
 	Nip05     string `json:"nip05,omitempty"`
 	ExpiresAt int64  `json:"expires_at"`
 	CSRF      string `json:"csrf"`
+	// Version is the relay's build: ncli and its nmilat.
+	Version versionJSON `json:"version"`
+}
+
+type versionJSON struct {
+	Ncli   string `json:"ncli"`
+	Nmilat string `json:"nmilat"`
 }
 
 func (s *Server) session(pubkey string, expires time.Time, csrf string) sessionJSON {
-	out := sessionJSON{Pubkey: pubkey, CSRF: csrf}
+	bi := common.ReadBuildInfo()
+	out := sessionJSON{Pubkey: pubkey, CSRF: csrf, Version: versionJSON{Ncli: bi.Version, Nmilat: bi.NmilatVersion}}
 	if !expires.IsZero() {
 		out.ExpiresAt = expires.Unix()
 	}

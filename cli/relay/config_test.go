@@ -381,16 +381,12 @@ cache:
       enabled: true
       readonly: true
       meilisearch: {host: "http://localhost:7700", key: "masterKey", index: "ncli_events"}
-      batchSize: 100
-      queueSize: 1000
 `)
 		s := cfg.searchConfig()
 		require.NotNil(t, s)
 		assert.True(t, s.Enabled)
 		assert.True(t, s.Readonly)
 		assert.Equal(t, MeilisearchConfig{Host: "http://localhost:7700", Key: "masterKey", Index: "ncli_events"}, s.Meilisearch)
-		assert.Equal(t, 100, s.BatchSize)
-		assert.Equal(t, 1000, s.QueueSize)
 	})
 
 	t.Run("duration fields round-trip as raw strings", func(t *testing.T) {

@@ -4,7 +4,7 @@
 //
 //   NCLI_BIN=../../bin/ncli npm run e2e
 import { spawn, spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -86,7 +86,7 @@ try {
       `admin: {listen: "127.0.0.1:${adminPort}", dashboard: {enabled: true}}`,
     ].join("\n"),
   );
-  start(["relay", "--config", cfg]);
+  let relay = start(["relay", "--config", cfg]);
   const admin = `http://127.0.0.1:${adminPort}`;
   await waitFor(`${admin}/admin/ui/`);
   // Some traffic for the charts.
@@ -133,19 +133,30 @@ try {
     check(await page.getByText(key.npub.slice(0, 10)).isVisible(), "header shows the signed-in admin as an npub");
     check((await page.getByText(key.pub_hex.slice(0, 8)).count()) === 0, "header never shows the hex pubkey");
 
-    // An index job from the page.
+    // Indexes: each says its state, and a rebuild shows its plan, its
+    // progress and what it did.
     const indexRow = (name) => page.locator(".index").filter({ has: page.locator("strong", { hasText: new RegExp(`^${name}$`) }) });
+    check(await page.locator(".version").getByText(/^ncli .+ · nmilat .+$/).isVisible(), "header names the relay's ncli and nmilat versions");
     const zaps = indexRow("zaps");
+    await zaps.locator(".badge", { hasText: "ready" }).waitFor({ timeout: 15000 });
+    check(true, "zaps is ready");
+    check((await zaps.getByRole("button", { name: "Drop" }).count()) === 0, "an index in use offers no drop");
     await zaps.getByRole("button", { name: "Rebuild" }).click();
-    await zaps.getByText(/last rebuild/).waitFor({ timeout: 15000 });
-    check(await zaps.getByText("succeeded").isVisible(), "rebuild from the page succeeds and shows it");
-    check(await indexRow("search").getByText("cache.profiles.search.enabled").isVisible(), "unavailable index says why");
-    // Profile stats off: the stats index says so instead of showing a count.
+    const dialog = page.getByRole("dialog");
+    await dialog.waitFor();
+    check(await dialog.getByText(/^Rebuild zaps from .+ stored events/).isVisible(), "a rebuild shows its plan first");
+    await dialog.getByRole("button", { name: "Rebuild" }).click();
+    await page.locator(".toast", { hasText: /zaps: rebuilt in/ }).waitFor({ timeout: 15000 });
+    check(true, "a notice says the rebuild finished and what it did");
+    check(await zaps.locator(".last .state.succeeded").isVisible(), "the card keeps the outcome");
+    await zaps.getByRole("button", { name: "History" }).click();
+    await zaps.locator("ul.history li", { hasText: /rebuilt/ }).first().waitFor();
+    check(true, "history lists the job");
+    check(await indexRow("search").getByText("cache.profiles.search.enabled", { exact: false }).isVisible(), "a disabled index says why");
     const stats = indexRow("stats");
-    check(await stats.getByText("cache.profiles.stats.enabled", { exact: false }).isVisible(), "stats index is unavailable with profile stats off");
-    check((await stats.getByText(/entries/).count()) === 0, "no estimate for an unavailable index");
-    check((await stats.getByRole("button", { name: "Rebuild" }).count()) === 0, "no rebuild for an unavailable index");
-    check((await stats.getByRole("button", { name: "Drop" }).count()) === 0, "no drop for an unavailable index without data");
+    check(await stats.locator(".badge", { hasText: "disabled" }).isVisible(), "stats is off with profile stats off");
+    check((await stats.getByRole("button", { name: "Rebuild" }).count()) === 0, "no rebuild for a disabled index");
+    check((await stats.getByRole("button", { name: "Drop" }).count()) === 0, "no drop for a disabled index without data");
 
     // Toolbar, rows, panels.
     const search = () => page.evaluate(() => location.search);
@@ -260,6 +271,8 @@ try {
     await page.waitForTimeout(3000);
     check((await page.locator(".chart canvas").count()) === 18, "local mode renders every chart");
     check((await page.getByRole("button", { name: "Sign out" }).count()) === 0, "local mode has no sign-out");
+    check(await page.locator(".version").isVisible(), "local mode names the relay's versions");
+    check((await page.locator(".badge.warn", { hasText: "this CLI" }).count()) === 0, "the same build: no version warning");
     const reuse = await (await fetch(link, { redirect: "manual" })).status;
     check(reuse === 401, `the one-time link works once (${reuse})`);
     await ctx.close();
@@ -420,6 +433,53 @@ try {
     await ctx.close();
   }
   ncli(["bunker", "stop", "--json", "-q"]);
+
+  // 8. An index whose feature was turned off keeps its data until dropped,
+  // and dropping asks for its name.
+  {
+    const restart = async (cache) => {
+      relay.kill("SIGINT");
+      await new Promise((r) => relay.once("exit", r));
+      writeFileSync(cfg, readFileSync(cfg, "utf8").replace(/^cache: .*$/m, `cache: ${cache}`));
+      relay = start(["relay", "--config", cfg]);
+      await waitFor(`${admin}/admin/ui/`);
+    };
+    await restart("{zaps: {enabled: true}, profiles: {stats: {enabled: true}}}");
+    const follows = ncli(["event", "new", "--kind", "3", "--tag", `p=${"a".repeat(64)}`, "-q"]);
+    const signed = ncli(["id", "sign", "-e", "-", "-o", "-", "--identity", key.nsec, "-q"], follows);
+    ncli(["publish", "-e", "-", "-s", `ws://127.0.0.1:${port}`, "-q"], signed);
+    for (let i = 0; i < 50; i++) {
+      const list = JSON.parse(ncli(["relay", "index", "list", "--config", cfg, "--json", "-q"])).indexes;
+      if (list.find((x) => x.name === "stats")?.entries > 0) break;
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    await restart("{zaps: {enabled: true}}");
+
+    const dash = start(["relay", "dashboard", "--config", cfg, "--no-open", "--json", "--port", String(await freePort())]);
+    const link = await new Promise((resolve, reject) => {
+      dash.stdout.once("data", (d) => resolve(JSON.parse(String(d).split("\n")[0]).url));
+      setTimeout(() => reject(new Error("no dashboard link")), 15000);
+    });
+    const ctx = await browser.newContext();
+    const page = await ctx.newPage();
+    watch(page, "drop");
+    await page.addInitScript(cspProbe);
+    await page.goto(link);
+    const stats = page.locator(".index").filter({ has: page.locator("strong", { hasText: /^stats$/ }) });
+    await stats.getByRole("button", { name: "Drop" }).waitFor({ timeout: 15000 });
+    check(await stats.getByText(/still holds data you can drop/).isVisible(), "a disabled index with data says it can be dropped");
+    await stats.getByRole("button", { name: "Drop" }).click();
+    const dialog = page.getByRole("dialog");
+    const confirm = dialog.getByRole("button", { name: /^Drop 1 entries$/ });
+    check(await confirm.isDisabled(), "drop waits for the index name to be typed");
+    await dialog.getByLabel("index name").fill("stats");
+    await confirm.click();
+    await page.locator(".toast", { hasText: /stats: dropped 1 entries/ }).waitFor({ timeout: 15000 });
+    check(true, "the drop says what it removed");
+    await stats.getByRole("button", { name: "Drop" }).waitFor({ state: "detached" });
+    check(true, "nothing left to drop");
+    await ctx.close();
+  }
 
   await browser.close();
   check(problems.length === 0, "no console errors or CSP violations");

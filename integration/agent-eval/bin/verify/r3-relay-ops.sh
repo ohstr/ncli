@@ -14,8 +14,8 @@ self_report_exists "${RUN_DIR}" "${ROUND}" \
   || add_check "self_report_written" false "missing"
 
 STATUS="$(agent_exec 'ncli relay status --config /relay/relay.yaml --json' 2>/dev/null)"
-if jq -e '.metrics.v.uptime_seconds >= 0 and (.indexes | length) == 2' >/dev/null 2>&1 <<<"${STATUS}"; then
-  add_check "shared_relay_admin_reachable" true "ncli relay status reports metrics and both indexes"
+if jq -e '.metrics.v.uptime_seconds >= 0 and (.indexes | length) == 3' >/dev/null 2>&1 <<<"${STATUS}"; then
+  add_check "shared_relay_admin_reachable" true "ncli relay status reports metrics and the three indexes"
 else
   add_check "shared_relay_admin_reachable" false "ncli relay status: ${STATUS}"
 fi

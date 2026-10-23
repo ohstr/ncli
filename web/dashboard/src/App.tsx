@@ -1,9 +1,10 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { api, canRenew, indexActions, onSession, renew, setCsrf, setRenewer, type IndexInfo, type Job, type Point, type Session } from "./api";
+import { lazy, Suspense, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { api, canRenew, onSession, renew, setCsrf, setRenewer, type Point, type Session } from "./api";
+import { Indexes } from "./Indexes";
+import { versionLabel } from "./indexes";
 import { Chart, type Line } from "./Chart";
-import { Panel } from "./Panel";
 import { npubEncode } from "nostr-tools/nip19";
-import { ago, formatValue, identityLabel, type Unit } from "./format";
+import { identityLabel, type Unit } from "./format";
 
 function npubOf(pubkey: string): string {
   try {
@@ -80,13 +81,14 @@ const CHARTS = {
   ]),
   backpressure: fixed([
     { key: "scan_busy_total", label: "scan busy" },
-    { key: "verify_dropped_total", label: "verify dropped" },
-    { key: "search_index_dropped_total", label: "search dropped" },
     { key: "store_batch_errors_total", label: "write errors" },
   ]),
   workers: fixed([
-    { key: "verify_queue_depth", label: "verify queue" },
-    { key: "search_index_queue_depth", label: "search queue" },
+    { key: "verify_queue_depth", label: "profile checks" },
+    { key: "index_behind:search", label: "search behind" },
+    { key: "index_queued:search", label: "search queued" },
+    { key: "index_behind:zaps", label: "zaps behind" },
+    { key: "index_behind:stats", label: "stats behind" },
   ]),
   refusedReads: seen("reads_refused_total:"),
   auth: (s: MetricsStore) => [
@@ -151,8 +153,8 @@ const ROWS: { id: string; title: string; w: Width; panels: PanelSpec[] }[] = [
       { id: "connections", title: "Sessions and subscriptions", unit: "count" },
       { id: "churn", title: "Connects and send problems", unit: "rate" },
       { id: "storeQueues", title: "Store queues", unit: "count" },
-      { id: "workers", title: "Workers", unit: "count" },
-      { id: "backpressure", title: "Backpressure", unit: "rate", desc: "Work dropped or refused because a queue was full." },
+      { id: "workers", title: "Workers and indexes", unit: "count", desc: "Profile checks queued, and events each index has yet to take in." },
+      { id: "backpressure", title: "Backpressure", unit: "rate", desc: "Reads refused and writes that failed." },
       { id: "http", title: "HTTP bridges", unit: "rate" },
     ],
   },
@@ -183,141 +185,6 @@ function useLatest(store: MetricsStore): Point | null {
   return useSyncExternalStore(
     (fn) => store.subscribe(fn),
     () => store.latest,
-  );
-}
-
-// ---- indexes and jobs
-
-function progress(j: Job): number {
-  if (!j.total) return 0;
-  return Math.min(100, (j.scanned / j.total) * 100);
-}
-
-function IndexRow({ ix, onAction, busy }: { ix: IndexInfo; onAction: (fn: () => Promise<unknown>) => void; busy: boolean }) {
-  const running = ix.running;
-  const last = ix.last;
-  const actions = indexActions(ix);
-  return (
-    <div className="index">
-      <div className="index-head">
-        <strong>{ix.name}</strong>
-        {(ix.available || ix.has_data) && (
-          <span className="muted">{ix.estimate < 0 ? "index unreachable" : `~${formatValue(ix.estimate, "count")} entries`}</span>
-        )}
-      </div>
-      {running ? (
-        <>
-          <div className="bar" role="progressbar" aria-valuenow={Math.round(progress(running))} aria-valuemin={0} aria-valuemax={100}>
-            <span style={{ width: `${progress(running)}%` }} />
-          </div>
-          <p className="muted">
-            {running.kind} · scanned {formatValue(running.scanned, "count")} · indexed {formatValue(running.indexed, "count")} · started {ago(running.started_at)}
-          </p>
-          <div className="actions">
-            <button disabled={busy} onClick={() => onAction(() => api.cancel(running.id))}>
-              Cancel
-            </button>
-          </div>
-        </>
-      ) : !actions.rebuild && !actions.drop ? (
-        <p className="muted">{ix.unavailable}</p>
-      ) : (
-        <>
-          {!ix.available && <p className="muted">{ix.unavailable}; it still holds data.</p>}
-          {ix.state === "stale" && <p className="muted">Stale: rebuilt on the relay's next start.</p>}
-          <p className="muted">
-            {last ? (
-              <>
-                last {last.kind} <span className={`state ${last.state}`}>{last.state}</span> {ago(last.finished_at)}
-                {last.error ? ` — ${last.error}` : ""}
-              </>
-            ) : (
-              "no jobs yet"
-            )}
-          </p>
-          <div className="actions">
-            {actions.rebuild && (
-              <button disabled={busy} onClick={() => onAction(() => api.rebuild(ix.name, ix.name !== "search"))}>
-                Rebuild
-              </button>
-            )}
-            {actions.rebuild && ix.name === "search" && (
-              <button disabled={busy} onClick={() => onAction(() => api.rebuild(ix.name, true))} title="Build a new index and swap it in">
-                Rebuild fresh
-              </button>
-            )}
-            <button
-              className="danger"
-              disabled={busy}
-              onClick={() => {
-                const effect = !ix.available
-                  ? "Its feature is off, so this only frees the space."
-                  : ix.name === "search"
-                    ? "Its answers stay empty until a rebuild."
-                    : "Its answers stay empty until a rebuild or the relay's next start.";
-                if (confirm(`Empty the ${ix.name} index? ${effect}`)) onAction(() => api.drop(ix.name));
-              }}
-            >
-              Drop
-            </button>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-interface IndexesProps {
-  onRunning: (n: number) => void;
-  paused: boolean;
-  viewing: boolean;
-  onView: (id: string | null) => void;
-}
-
-function Indexes({ onRunning, paused, viewing, onView }: IndexesProps) {
-  const [indexes, setIndexes] = useState<IndexInfo[]>([]);
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  const refresh = useCallback(async () => {
-    try {
-      const list = await api.indexes();
-      setIndexes(list);
-      onRunning(list.filter((i) => i.running).length);
-      setError("");
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }, [onRunning]);
-
-  useEffect(() => {
-    void refresh();
-    if (paused) return;
-    const timer = setInterval(() => !document.hidden && void refresh(), 3000);
-    return () => clearInterval(timer);
-  }, [refresh, paused]);
-
-  const act = async (fn: () => Promise<unknown>) => {
-    setBusy(true);
-    try {
-      await fn();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-      void refresh();
-    }
-  };
-
-  return (
-    <Panel id="indexes" title="Indexes" desc="Search, zap and stats indexes; rebuilds run as jobs." className="w-24 wide" viewing={viewing} onView={onView}>
-      {error && <p className="error">{error}</p>}
-      <div className="indexes">
-        {indexes.map((ix) => (
-          <IndexRow key={ix.name} ix={ix} onAction={act} busy={busy} />
-        ))}
-      </div>
-    </Panel>
   );
 }
 
@@ -354,6 +221,7 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
     return () => removeEventListener("keydown", onKey);
   }, []);
   const latest = useLatest(store);
+  const version = versionLabel(session);
   // Metrics live in the relay's memory, so a restart starts them over.
   const since = useSyncExternalStore(
     (fn) => store.subscribe(fn),
@@ -419,6 +287,16 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
             <option value="dark">Dark</option>
             <option value="light">Light</option>
           </select>
+          {version.label && (
+            <span className="muted version" title="The relay's build">
+              {version.label}
+            </span>
+          )}
+          {version.mismatch && (
+            <span className="badge warn" title="Commands and the page may not match the relay">
+              {version.mismatch}
+            </span>
+          )}
           <span className={`muted${session.nip05 ? "" : " mono"}`} title={npubOf(session.pubkey)}>
             {identityLabel(session.pubkey, session.nip05)}
           </span>
@@ -431,6 +309,8 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
       </header>
 
       <Kpis p={latest} jobs={jobs} store={store} {...tv} />
+
+      <Indexes onRunning={setJobs} viewing={view === "indexes"} onView={setView} />
 
       {ROWS.map((row) => {
         const shut = collapsed.includes(row.id);
@@ -453,8 +333,6 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
           </div>
         );
       })}
-
-      <Indexes onRunning={setJobs} paused={until != null} viewing={view === "indexes"} onView={setView} />
     </div>
   );
 }

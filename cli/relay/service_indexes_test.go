@@ -3,14 +3,10 @@ package relay
 import (
 	"testing"
 
-	"github.com/ohstr/ncli/cli/relay/jobs"
+	"github.com/ohstr/ncli/cli/common/meilisearch"
 	"github.com/ohstr/nmilat/relay"
-	"github.com/ohstr/nmilat/search"
 	"github.com/stretchr/testify/require"
 )
-
-// fakeSearch is a search service searchIndex only checks for nil.
-type fakeSearch struct{ search.Service }
 
 // cacheOn builds a cache block with each feature on or off.
 func cacheOn(search, readonly, stats, zaps bool) RelayConfig {
@@ -45,23 +41,20 @@ func TestIndexAvailabilityFollowsTheCacheBlock(t *testing.T) {
 		{"everything on", cacheOn(true, false, true, true), noSearch, "", ""},
 	} {
 		config = c.cfg
-		require.Equal(t, c.search, searchIndex(nil, nil).Available(jobs.KindRebuild), c.name)
-		require.Equal(t, c.zaps, zapIndex(nil).Available(jobs.KindRebuild), c.name)
-		require.Equal(t, c.stat, statsIndex(nil).Available(jobs.KindRebuild), c.name)
+		require.Equal(t, c.search, searchIndex(nil, nil).Disabled, c.name)
+		require.Equal(t, c.zaps, zapIndex(nil).Disabled, c.name)
+		require.Equal(t, c.stat, statsIndex(nil).Disabled, c.name)
 
 		// The store keeps exactly the indexes that can be rebuilt.
 		ix := config.derivedIndexes()
 		require.Equal(t, c.zaps == "", ix.Zaps, c.name)
 		require.Equal(t, c.stat == "", ix.Social, c.name)
-
-		// Leftover data can be dropped whatever the feature; search can't.
-		require.Empty(t, zapIndex(nil).Available(jobs.KindDrop), c.name)
-		require.Empty(t, statsIndex(nil).Available(jobs.KindDrop), c.name)
-		require.Equal(t, c.search, searchIndex(nil, nil).Available(jobs.KindDrop), c.name)
 	}
 
 	config = RelayConfig{Cache: &CacheConfig{Profiles: &ProfilesConfig{Search: &SearchConfig{Enabled: true, Readonly: true}}}}
-	require.Equal(t, "search is read-only on this relay (cache.profiles.search.readonly)", searchIndex(nil, fakeSearch{}).Available(jobs.KindRebuild))
+	ro := searchIndex(nil, meilisearch.NewMeiliClient("http://127.0.0.1:1", "", "profiles"))
+	require.Equal(t, "search is read-only on this relay (cache.profiles.search.readonly)", ro.Disabled)
+	require.Empty(t, ro.Host, "a read-only relay never touches the index another relay writes")
 }
 
 func TestDerivedIndexesFollowTheCacheBlock(t *testing.T) {

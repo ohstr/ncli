@@ -1,7 +1,6 @@
 package relay
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"crypto/tls"
@@ -14,7 +13,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -45,97 +43,7 @@ func addAdminAPICommands(cmd *cobra.Command) {
 	statusCmd.Flags().Bool("watch", false, "refresh every 2s until interrupted (NDJSON with --json)")
 	cmd.AddCommand(statusCmd)
 
-	indexCmd := &cobra.Command{
-		Use:   "index",
-		Short: "Rebuild or drop a running relay's search, zap and stats indexes",
-		Long: `The search index (Meilisearch profiles), the zap index (zap ranking) and
-the stats index (each profile's zaps and follows, for scores and NIP-85)
-are derived from stored events and can be rebuilt from them at any time.
-The relay keeps the zap and stats indexes only while their feature is on;
-turning one off keeps its data until dropped.`,
-		Example: `  ncli relay index list
-  ncli relay index rebuild zaps --follow`,
-		RunE: common.RequireSubcommand,
-	}
-	indexCmd.AddCommand(&cobra.Command{
-		Use:     "list",
-		Short:   "List indexes with their running and last job",
-		Example: `  ncli relay index list`,
-		Args:    common.NoArgs,
-		RunE:    runIndexList,
-	})
-	rebuildCmd := &cobra.Command{
-		Use:   "rebuild <search|zaps|stats|all>",
-		Short: "Rebuild an index from stored events",
-		Long: `Starts a job and returns its id; --follow waits for it with progress.
-Rebuilding an index that is already rebuilding returns the running job.
-
-zaps and stats always build a new index beside the live one and swap it
-in. search upserts into the live index; --fresh builds a new one and swaps
-it in, dropping profiles no longer stored. Either way the relay keeps
-answering from the old index until the new one is ready.
-
-A search rebuild rescores every profile from what the relay already
-knows, with the current cache.profiles.scoring weights; it never re-fetches a
-NIP-05 or lightning address (see ncli relay verify --refresh).`,
-		Example: `  ncli relay index rebuild zaps --follow
-  ncli relay index rebuild search --fresh --follow
-  ncli relay index rebuild search --dry-run`,
-		Args: common.ExactArgs(1),
-		RunE: runIndexRebuild,
-	}
-	rebuildCmd.Flags().Bool("fresh", false, "build a new index and swap it in (search)")
-	rebuildCmd.Flags().Bool("reverify", false, "removed: use ncli relay verify <pubkey> --refresh")
-	_ = rebuildCmd.Flags().MarkHidden("reverify")
-	rebuildCmd.Flags().Bool("follow", false, "wait for the job, showing progress, and exit with its outcome")
-	rebuildCmd.Flags().Bool("dry-run", false, "only report how many items a rebuild would scan")
-	indexCmd.AddCommand(rebuildCmd)
-	dropCmd := &cobra.Command{
-		Use:   "drop <search|zaps|stats>",
-		Short: "Empty an index (stored events are kept)",
-		Long: `Its answers stay empty until the index is rebuilt; the zaps and stats
-indexes are rebuilt on the relay's next start. With its feature off, drop
-removes the data a zaps or stats index still holds. Asks for confirmation;
---yes skips it, and is required with --json or no terminal. To refresh an
-index without an empty window, use rebuild.`,
-		Example: `  ncli relay index drop search --yes`,
-		Args:    common.ExactArgs(1),
-		RunE:    runIndexDrop,
-	}
-	dropCmd.Flags().Bool("yes", false, "skip the confirmation prompt")
-	indexCmd.AddCommand(dropCmd)
-	cmd.AddCommand(indexCmd)
-
-	jobsCmd := &cobra.Command{
-		Use:     "jobs",
-		Short:   "List, inspect or cancel a running relay's index jobs",
-		Example: `  ncli relay jobs list`,
-		RunE:    common.RequireSubcommand,
-	}
-	jobsCmd.AddCommand(&cobra.Command{
-		Use:     "list",
-		Short:   "List running and recent jobs",
-		Example: `  ncli relay jobs list`,
-		Args:    common.NoArgs,
-		RunE:    runJobsList,
-	})
-	showCmd := &cobra.Command{
-		Use:     "show <id>",
-		Short:   "Show one job",
-		Example: `  ncli relay jobs show 3f9a1c2b7d4e --follow`,
-		Args:    common.ExactArgs(1),
-		RunE:    runJobsShow,
-	}
-	showCmd.Flags().Bool("follow", false, "wait for the job, showing progress")
-	jobsCmd.AddCommand(showCmd)
-	jobsCmd.AddCommand(&cobra.Command{
-		Use:     "cancel <id>",
-		Short:   "Cancel a running job",
-		Example: `  ncli relay jobs cancel 3f9a1c2b7d4e`,
-		Args:    common.ExactArgs(1),
-		RunE:    runJobsCancel,
-	})
-	cmd.AddCommand(jobsCmd)
+	addIndexCommands(cmd)
 
 	addVerifyCommand(cmd)
 }
@@ -193,8 +101,18 @@ type apiError struct {
 }
 
 // apiCall sends a signed request to the admin listener and decodes a 2xx
-// JSON answer into out.
+// JSON answer into out, with a spinner while it waits.
 func apiCall(cmd *cobra.Command, method, path string, body, out any) (int, error) {
+	return apiRequest(cmd, method, path, body, out, true)
+}
+
+// apiPoll is apiCall without the spinner, for a caller drawing its own
+// progress.
+func apiPoll(cmd *cobra.Command, method, path string, body, out any) (int, error) {
+	return apiRequest(cmd, method, path, body, out, false)
+}
+
+func apiRequest(cmd *cobra.Command, method, path string, body, out any, spin bool) (int, error) {
 	privKey, _, _, err := getAdminConfig()
 	if err != nil {
 		return 0, &common.CLIError{Err: err, Code: common.CodeUsage, Help: common.HelpAfterError}
@@ -224,13 +142,19 @@ func apiCall(cmd *cobra.Command, method, path string, body, out any) (int, error
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	client := &http.Client{Timeout: 45 * time.Second, Transport: &http.Transport{TLSClientConfig: tlsCfg}}
+	// One request per client: nothing left idle when a caller polls.
+	client := &http.Client{Timeout: 45 * time.Second, Transport: &http.Transport{TLSClientConfig: tlsCfg, DisableKeepAlives: true}}
 	var resp *http.Response
-	err = common.WithSpinner(cmd, "contacting the relay's admin listener", func() error {
+	do := func() error {
 		var dErr error
 		resp, dErr = client.Do(req)
 		return dErr
-	})
+	}
+	if spin {
+		err = common.WithSpinner(cmd, "contacting the relay's admin listener", do)
+	} else {
+		err = do()
+	}
 	if err != nil {
 		hint := fmt.Sprintf("is the relay running, with its admin listener at %s?", base)
 		if droppedByServer(err) {
@@ -267,6 +191,8 @@ func apiCall(cmd *cobra.Command, method, path string, body, out any) (int, error
 			code = common.CodeConflict
 		case resp.StatusCode == http.StatusNotImplemented:
 			code = common.CodeUsage
+		case resp.StatusCode == http.StatusUnprocessableEntity:
+			code = common.CodeUnsupported
 		case resp.StatusCode == http.StatusTooManyRequests:
 			code = common.CodeNetwork
 		case resp.StatusCode >= 500:
@@ -381,18 +307,21 @@ func renderStatus(st statusJSON) {
 	row("Latency p99", fmt.Sprintf("EVENT→OK %s  REQ→EOSE %s  store write %s", ms(v, "event_ok_seconds.p99"), ms(v, "req_eose_seconds.p99"), ms(v, "store_batch_seconds.p99")))
 	row("Store", fmt.Sprintf("%s  write queue %.0f/%.0f  scans %.0f/%s", formatBytes(val("store_size_bytes")),
 		val("store_task_queue_depth"), val("store_task_queue_capacity"), val("scans_inflight"), slots(val("scan_slots"))))
-	row("Queues", fmt.Sprintf("verify %.0f (dropped %.0f)  search %.0f (dropped %.0f)",
-		val("verify_queue_depth"), tot["verify_dropped_total"], val("search_index_queue_depth"), tot["search_index_dropped_total"]))
+	row("Queues", fmt.Sprintf("profile checks %.0f", val("verify_queue_depth")))
 	row("Security", fmt.Sprintf("AUTH rejected %.0f  admin denied %.0f  scan-busy refusals %.0f",
 		sumPrefix(tot, "nip42_auth_rejected_total:"), sumPrefix(tot, "admin_denied_total:"), tot["scan_busy_total"]))
 	if val("members") > 0 || val("groups") > 0 || val("huddle_rooms") > 0 {
 		row("Community", fmt.Sprintf("%.0f members, %.0f groups, %.0f huddle rooms (%.0f peers)", val("members"), val("groups"), val("huddle_rooms"), val("huddle_peers")))
 	}
 	row("Process", fmt.Sprintf("%.0f goroutines, %s RSS, %.2f CPU cores", val("goroutines"), formatBytes(val("rss_bytes")), val("cpu_seconds_total")))
+	now := time.Now()
 	for _, ix := range st.Indexes {
-		summary := indexSummary(ix)
-		if ix.Available && ix.Estimate < 0 {
-			summary = statusWaitStyle.Render("unreachable") + ", " + summary
+		summary := fmt.Sprintf("%s, %s entries", stateLabel(ix.State), jobs.Count(ix.Entries))
+		if ix.Behind > 0 && ix.Enabled {
+			summary += fmt.Sprintf(", %s behind", jobs.Count(ix.Behind))
+		}
+		if note := indexNote(ix, now); note != "" {
+			summary += " — " + note
 		}
 		row("Index "+ix.Name, summary)
 	}
@@ -451,368 +380,4 @@ func formatBytes(b float64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %ciB", n, "KMGTP"[exp])
-}
-
-/////////////////////////////////////////////////////////////////////
-// index
-/////////////////////////////////////////////////////////////////////
-
-func indexSummary(ix jobs.IndexInfo) string {
-	if j := ix.Running; j != nil {
-		return statusOkStyle.Render(string(j.Kind)+" running") + " " + jobProgress(*j)
-	}
-	if !ix.Available {
-		s := statusWaitStyle.Render("unavailable") + ": " + ix.Unavailable
-		if ix.HasData {
-			s += "; it still holds data, remove it with ncli relay index drop " + ix.Name
-		}
-		return s
-	}
-	s := "idle"
-	switch ix.State {
-	case jobs.IndexStale:
-		s = statusWaitStyle.Render("stale") + ", rebuilt on the next start"
-	case jobs.IndexBuilding:
-		s = statusOkStyle.Render("building")
-	}
-	if j := ix.Last; j != nil {
-		s += fmt.Sprintf(", last %s %s %s", j.Kind, stateText(j.State), relativeTime(j.FinishedAt))
-	}
-	return s
-}
-
-func stateText(s jobs.State) string {
-	switch s {
-	case jobs.StateSucceeded:
-		return statusOkStyle.Render(string(s))
-	case jobs.StateFailed:
-		return statusErrStyle.Render(string(s))
-	}
-	return statusWaitStyle.Render(string(s))
-}
-
-func jobProgress(j jobs.Job) string {
-	if j.Kind != jobs.KindRebuild {
-		return ""
-	}
-	s := fmt.Sprintf("scanned %d", j.Scanned)
-	if j.Total > 0 {
-		pct := float64(j.Scanned) / float64(j.Total) * 100
-		s = fmt.Sprintf("%.0f%% (%d/~%d)", min(pct, 100), j.Scanned, j.Total)
-		if j.State == jobs.StateRunning && j.Scanned > 0 {
-			elapsed := time.Since(time.Unix(j.StartedAt, 0))
-			left := time.Duration(float64(elapsed) * float64(j.Total-j.Scanned) / float64(j.Scanned))
-			if left > 0 {
-				s += ", ~" + left.Round(time.Second).String() + " left"
-			}
-		}
-	}
-	return fmt.Sprintf("%s, indexed %d", s, j.Indexed)
-}
-
-func runIndexList(cmd *cobra.Command, args []string) error {
-	jsonMode, _ := cmd.Flags().GetBool("json")
-	var out struct {
-		Indexes []jobs.IndexInfo `json:"indexes"`
-	}
-	if _, err := apiCall(cmd, http.MethodGet, "/admin/api/indexes", nil, &out); err != nil {
-		return common.RuntimeError(cmd, err)
-	}
-	if out.Indexes == nil {
-		out.Indexes = []jobs.IndexInfo{}
-	}
-	if jsonMode {
-		common.PrintJSON(out)
-		return nil
-	}
-	tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	_, _ = fmt.Fprintln(tw, "INDEX\tENTRIES\tSTATE")
-	for _, ix := range out.Indexes {
-		estimate := "-"
-		switch {
-		case ix.Available && ix.Estimate < 0:
-			estimate = "unreachable"
-		case ix.Available || ix.HasData:
-			estimate = fmt.Sprintf("~%d", ix.Estimate)
-		}
-		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\n", ix.Name, estimate, indexSummary(ix))
-	}
-	return tw.Flush()
-}
-
-func indexNames(cmd *cobra.Command, arg string) ([]string, error) {
-	if arg != "all" {
-		return []string{arg}, nil
-	}
-	var out struct{ Indexes []jobs.IndexInfo }
-	if _, err := apiCall(cmd, http.MethodGet, "/admin/api/indexes", nil, &out); err != nil {
-		return nil, err
-	}
-	var names []string
-	for _, ix := range out.Indexes {
-		if ix.Available {
-			names = append(names, ix.Name)
-		}
-	}
-	return names, nil
-}
-
-func runIndexRebuild(cmd *cobra.Command, args []string) error {
-	jsonMode, _ := cmd.Flags().GetBool("json")
-	follow, _ := cmd.Flags().GetBool("follow")
-	dryRun, _ := cmd.Flags().GetBool("dry-run")
-	req := jobs.RebuildRequest{DryRun: dryRun}
-	req.Fresh, _ = cmd.Flags().GetBool("fresh")
-	if reverify, _ := cmd.Flags().GetBool("reverify"); reverify {
-		return &common.CLIError{
-			Err:  errors.New("--reverify was removed: a rebuild never re-fetches NIP-05 or lightning addresses; use ncli relay verify <pubkey> --refresh"),
-			Code: common.CodeUsage,
-		}
-	}
-
-	names, err := indexNames(cmd, args[0])
-	if err != nil {
-		return common.RuntimeError(cmd, err)
-	}
-
-	if dryRun {
-		var results []map[string]any
-		for _, name := range names {
-			var out map[string]any
-			if _, err := apiCall(cmd, http.MethodPost, "/admin/api/indexes/"+name+"/rebuild", req, &out); err != nil {
-				return common.RuntimeError(cmd, err)
-			}
-			results = append(results, out)
-		}
-		if jsonMode {
-			common.PrintJSON(map[string]any{"dry_run": results})
-			return nil
-		}
-		for _, r := range results {
-			fmt.Printf("%v: would scan ~%v items (~%v entries now)\n", r["index"], r["scan_estimate"], r["estimate"])
-		}
-		return nil
-	}
-
-	var started []jobs.Job
-	for _, name := range names {
-		var job jobs.Job
-		status, err := apiCall(cmd, http.MethodPost, "/admin/api/indexes/"+name+"/rebuild", req, &job)
-		if err != nil {
-			return common.RuntimeError(cmd, err)
-		}
-		if !jsonMode && !follow {
-			verb := "started"
-			if status == http.StatusOK {
-				verb = "already running"
-			}
-			fmt.Printf("%s %s rebuild: job %s\n", statusOkStyle.Render("✔"), name, job.ID)
-			fmt.Fprintf(os.Stderr, "%s. Follow it with `ncli relay jobs show %s --follow`.\n", verb, job.ID)
-		}
-		started = append(started, job)
-	}
-	if !follow {
-		if jsonMode {
-			common.PrintJSON(map[string]any{"jobs": started})
-		}
-		return nil
-	}
-	return followJobs(cmd, started)
-}
-
-func runIndexDrop(cmd *cobra.Command, args []string) error {
-	jsonMode, _ := cmd.Flags().GetBool("json")
-	yes, _ := cmd.Flags().GetBool("yes")
-	name := args[0]
-	if !yes {
-		if jsonMode || !term.IsTerminal(int(os.Stdin.Fd())) {
-			return common.UsageError(cmd, fmt.Errorf("refusing to drop the %s index without --yes in a non-interactive session", name))
-		}
-		prompt := fmt.Sprintf("Empty the %s index? Its answers stay empty until a rebuild. [y/N] ", name)
-		if name != "search" {
-			prompt = fmt.Sprintf("Empty the %s index? If its feature is on, its answers stay empty until a rebuild or the next start. [y/N] ", name)
-		}
-		if !common.PromptYesNo(bufio.NewReader(os.Stdin), prompt) {
-			return common.RuntimeError(cmd, errors.New("aborted"))
-		}
-	}
-	var job jobs.Job
-	if _, err := apiCall(cmd, http.MethodPost, "/admin/api/indexes/"+name+"/drop", nil, &job); err != nil {
-		return common.RuntimeError(cmd, err)
-	}
-	if job.State == jobs.StateFailed {
-		return common.RuntimeError(cmd, fmt.Errorf("drop failed: %s", job.Error))
-	}
-	if jsonMode {
-		common.PrintJSON(job)
-		return nil
-	}
-	fmt.Printf("%s %s index dropped (job %s)\n", statusOkStyle.Render("✔"), name, job.ID)
-	return nil
-}
-
-/////////////////////////////////////////////////////////////////////
-// jobs
-/////////////////////////////////////////////////////////////////////
-
-func runJobsList(cmd *cobra.Command, args []string) error {
-	jsonMode, _ := cmd.Flags().GetBool("json")
-	var out struct {
-		Jobs []jobs.Job `json:"jobs"`
-	}
-	if _, err := apiCall(cmd, http.MethodGet, "/admin/api/jobs", nil, &out); err != nil {
-		return common.RuntimeError(cmd, err)
-	}
-	if out.Jobs == nil {
-		out.Jobs = []jobs.Job{}
-	}
-	if jsonMode {
-		common.PrintJSON(out)
-		return nil
-	}
-	if len(out.Jobs) == 0 {
-		fmt.Println(" (no jobs)")
-		return nil
-	}
-	sort.SliceStable(out.Jobs, func(i, j int) bool { return out.Jobs[i].StartedAt > out.Jobs[j].StartedAt })
-	tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	_, _ = fmt.Fprintln(tw, "ID\tINDEX\tKIND\tSTATE\tSTARTED\tDETAIL")
-	for _, j := range out.Jobs {
-		detail := jobProgress(j)
-		if j.Error != "" {
-			detail = j.Error
-		}
-		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", j.ID, j.Index, j.Kind, stateText(j.State), relativeTime(j.StartedAt), detail)
-	}
-	return tw.Flush()
-}
-
-func runJobsShow(cmd *cobra.Command, args []string) error {
-	jsonMode, _ := cmd.Flags().GetBool("json")
-	follow, _ := cmd.Flags().GetBool("follow")
-	var job jobs.Job
-	if _, err := apiCall(cmd, http.MethodGet, "/admin/api/jobs/"+args[0], nil, &job); err != nil {
-		return common.RuntimeError(cmd, err)
-	}
-	if follow {
-		return followJobs(cmd, []jobs.Job{job})
-	}
-	if jsonMode {
-		common.PrintJSON(job)
-		return nil
-	}
-	printJob(job)
-	return nil
-}
-
-func runJobsCancel(cmd *cobra.Command, args []string) error {
-	jsonMode, _ := cmd.Flags().GetBool("json")
-	var job jobs.Job
-	if _, err := apiCall(cmd, http.MethodDelete, "/admin/api/jobs/"+args[0], nil, &job); err != nil {
-		return common.RuntimeError(cmd, err)
-	}
-	if jsonMode {
-		common.PrintJSON(job)
-		return nil
-	}
-	printJob(job)
-	return nil
-}
-
-func printJob(j jobs.Job) {
-	fmt.Printf(" Job:      %s\n", j.ID)
-	fmt.Printf(" Index:    %s (%s)\n", j.Index, j.Kind)
-	fmt.Printf(" State:    %s\n", stateText(j.State))
-	if j.Kind == jobs.KindRebuild {
-		fmt.Printf(" Progress: %s\n", jobProgress(j))
-	}
-	fmt.Printf(" Started:  %s\n", formatUnix(j.StartedAt))
-	if j.FinishedAt > 0 {
-		fmt.Printf(" Took:     %s\n", (time.Duration(j.FinishedAt-j.StartedAt) * time.Second).String())
-	}
-	if j.Error != "" {
-		fmt.Printf(" Error:    %s\n", statusErrStyle.Render(j.Error))
-	}
-}
-
-// followInterval paces job polling.
-const followInterval = time.Second
-
-// followJobs polls jobs until each finishes, drawing progress on stderr (or
-// one JSON line per poll with --json), and fails unless all succeeded.
-func followJobs(cmd *cobra.Command, list []jobs.Job) error {
-	jsonMode, _ := cmd.Flags().GetBool("json")
-	quiet, _ := cmd.Flags().GetBool("quiet")
-	live := !jsonMode && !quiet && term.IsTerminal(int(os.Stderr.Fd()))
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-
-	for {
-		running := 0
-		for i := range list {
-			if list[i].State == jobs.StateRunning {
-				running++
-			}
-		}
-		if jsonMode {
-			for _, j := range list {
-				common.PrintJSONLine(j)
-			}
-		} else if live && running > 0 {
-			var parts []string
-			for _, j := range list {
-				parts = append(parts, fmt.Sprintf("%s: %s", j.Index, jobProgress(j)))
-			}
-			fmt.Fprintf(os.Stderr, "\r\033[K%s", strings.Join(parts, " | "))
-		}
-		if running == 0 {
-			break
-		}
-		select {
-		case <-ctx.Done():
-			if live {
-				fmt.Fprintln(os.Stderr)
-			}
-			return common.RuntimeError(cmd, errors.New("stopped following; the job keeps running (ncli relay jobs cancel <id> stops it)"))
-		case <-time.After(followInterval):
-		}
-		for i := range list {
-			if list[i].State != jobs.StateRunning {
-				continue
-			}
-			var j jobs.Job
-			if _, err := apiCall(cmd, http.MethodGet, "/admin/api/jobs/"+list[i].ID, nil, &j); err != nil {
-				return common.RuntimeError(cmd, err)
-			}
-			list[i] = j
-		}
-	}
-	if live {
-		fmt.Fprintln(os.Stderr)
-	}
-
-	var failed []string
-	for _, j := range list {
-		if !jsonMode {
-			fmt.Printf("%s %s %s: %s, %s\n", stateIcon(j.State), j.Index, j.Kind, stateText(j.State), jobProgress(j))
-		}
-		if j.State != jobs.StateSucceeded {
-			msg := fmt.Sprintf("%s %s", j.Index, j.State)
-			if j.Error != "" {
-				msg += ": " + j.Error
-			}
-			failed = append(failed, msg)
-		}
-	}
-	if len(failed) > 0 {
-		return common.RuntimeError(cmd, errors.New(strings.Join(failed, "; ")))
-	}
-	return nil
-}
-
-func stateIcon(s jobs.State) string {
-	if s == jobs.StateSucceeded {
-		return statusOkStyle.Render("✔")
-	}
-	return statusErrStyle.Render("✘")
 }

@@ -46,11 +46,10 @@ func TestMeiliClient_FindProfiles_SortedByScore(t *testing.T) {
 		},
 	}
 
-	err = client.BulkIndex(docs)
-	if err != nil {
+	// Upsert returns once Meilisearch applied it: no wait needed.
+	if err := client.Upsert(ctx, docs); err != nil {
 		t.Fatalf("Failed to index: %v", err)
 	}
-	time.Sleep(2 * time.Second) // wait for indexing to finish
 
 	results, err := client.FindProfiles(ctx, "loki", 10)
 	if err != nil {

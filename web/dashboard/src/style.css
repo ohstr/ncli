@@ -648,9 +648,138 @@ button.danger {
   color: var(--bad);
 }
 
-.history-since {
+.history-since,
+.version {
   font-size: 12px;
   white-space: nowrap;
+}
+
+.badge {
+  font-size: 12px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  border: 1px solid currentColor;
+  white-space: nowrap;
+}
+
+.badge.ok {
+  color: var(--ok);
+}
+
+.badge.warn {
+  color: var(--warn);
+}
+
+.badge.bad {
+  color: var(--bad);
+}
+
+.badge.muted {
+  color: var(--muted);
+}
+
+.state.superseded,
+.state.running {
+  color: var(--warn);
+}
+
+.state.interrupted {
+  color: var(--bad);
+}
+
+.feedback {
+  font-size: 13px;
+}
+
+.bar.indeterminate span {
+  opacity: 0.5;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.15;
+  }
+}
+
+ul.history {
+  margin: 8px 0 0;
+  padding-left: 16px;
+  font-size: 13px;
+}
+
+ul.history li {
+  margin: 3px 0;
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+  display: grid;
+  place-items: center;
+  z-index: 20;
+  padding: 16px;
+}
+
+.dialog {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px 18px;
+  max-width: 480px;
+  width: 100%;
+  box-shadow: 0 8px 30px #0003;
+}
+
+.dialog h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.dialog label {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0;
+  font-size: 13px;
+}
+
+.dialog input {
+  font: inherit;
+  padding: 5px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.dialog .actions {
+  justify-content: flex-end;
+}
+
+.toasts {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  display: grid;
+  gap: 8px;
+  z-index: 30;
+  max-width: min(420px, calc(100vw - 32px));
+}
+
+.toast {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--ok);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 13px;
+  box-shadow: 0 4px 16px #0002;
+}
+
+.toast.bad {
+  border-left-color: var(--bad);
 }
 
 @media (max-width: 480px) {

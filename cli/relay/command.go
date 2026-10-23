@@ -32,7 +32,6 @@ import (
 	_ "github.com/ohstr/nmilat/nipB0/relayreg"
 	_ "github.com/ohstr/nmilat/nipB7/relayreg"
 	"github.com/ohstr/nmilat/relay"
-	"github.com/ohstr/nmilat/search"
 	"github.com/ohstr/nmilat/utils"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -303,8 +302,8 @@ type EventsConfig struct {
 // to start a relay.
 var removedRelayCommands = map[string]string{
 	"stats":   "ncli relay status",
-	"reindex": "ncli relay index rebuild <search|zaps>",
-	"clear":   "ncli relay index drop <search|zaps>",
+	"reindex": "ncli relay index rebuild <search|zaps|stats>",
+	"clear":   "ncli relay index drop <search|zaps|stats>",
 }
 
 // relayArgs rejects positional arguments: `relay` itself takes none, so one
@@ -672,30 +671,18 @@ func RunRelay(jsonMode bool) error {
 		return fmt.Errorf("failed to connect to event store: %w", err)
 	}
 
-	var searchService search.Service
-	searchCfg := config.searchConfig()
-	if searchCfg != nil && searchCfg.Enabled {
-		searchClient := meilisearch.NewMeiliClient(
-			searchCfg.Meilisearch.Host,
-			searchCfg.Meilisearch.Key,
-			searchCfg.Meilisearch.Index,
-		)
-		svc := search.NewService(
-			searchClient,
-			searchCfg.BatchSize,
-			searchCfg.QueueSize,
-		)
-		if err := svc.Initialize(context.Background()); err != nil {
-			log.Warn().Err(err).Msg("failed to initialize search service (soft fail)")
-		}
-		searchService = svc
-
-		if searchCfg.Readonly {
-			searchService = search.NewReadOnlyService(svc)
+	var meili *meilisearch.MeiliClient
+	if searchCfg := config.searchConfig(); searchCfg != nil && searchCfg.Enabled {
+		meili = meilisearch.NewMeiliClient(searchCfg.Meilisearch.Host, searchCfg.Meilisearch.Key, searchCfg.Meilisearch.Index)
+		if !searchCfg.Readonly {
+			// Settings only; a missing or unreachable engine is caught up later.
+			if err := meili.Initialize(context.Background()); err != nil {
+				log.Warn().Err(err).Msg("Meilisearch not ready; profiles wait in the store until it is")
+			}
 		}
 	}
 
-	s := newServer(store, searchService, m)
+	s := newServer(store, meili, m)
 	if err := s.startAdmin(); err != nil {
 		s.Stop()
 		return err
@@ -765,23 +752,14 @@ func parseLogLevel(s string) (zerolog.Level, error) {
 }
 
 // openRelayStore opens the relay's store with the indexes its cache
-// features read, and warns about data left in one whose feature is off.
+// features read. The relay runs the indexes' work itself, as jobs.
 func openRelayStore(cfg *RelayConfig, opts ...relay.EventStoreOption) (*relay.EventStore, error) {
+	// Scores the store keeps are checked against these weights on open.
+	applyScoring(cfg)
 	opts = append([]relay.EventStoreOption{
 		relay.WithEventStoreIndexes(cfg.derivedIndexes()),
+		relay.WithEventStoreIndexMaintenance(relay.MaintenanceManual),
 		relay.WithEventStoreLogger(log.Logger),
 	}, opts...)
-	store, err := relay.NewEventStore(cfg.RelayNotesDb, &cfg.Nip11.Limitation, opts...)
-	if err != nil {
-		return nil, err
-	}
-	for _, ix := range []struct {
-		name  string
-		state relay.IndexState
-	}{{"zaps", store.ZapIndexState()}, {"stats", store.SocialIndexState()}} {
-		if !ix.state.Enabled && ix.state.HasData {
-			log.Warn().Str("index", ix.name).Msgf("the %s index is off but still holds data; remove it with ncli relay index drop %s", ix.name, ix.name)
-		}
-	}
-	return store, nil
+	return relay.NewEventStore(cfg.RelayNotesDb, &cfg.Nip11.Limitation, opts...)
 }

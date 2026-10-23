@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -26,6 +27,12 @@ import (
 	"github.com/ohstr/ncli/web/dashboard"
 	"github.com/spf13/cobra"
 )
+
+// buildVersion is an ncli build, as the admin session names it.
+type buildVersion struct {
+	Ncli   string `json:"ncli"`
+	Nmilat string `json:"nmilat"`
+}
 
 func addDashboardCommand(cmd *cobra.Command) {
 	dashCmd := &cobra.Command{
@@ -66,6 +73,8 @@ type dashboardProxy struct {
 	session string
 	csrf    string
 	ui      http.Handler
+	// version is the relay's build, from its session answer.
+	version buildVersion
 
 	mu   sync.Mutex
 	used bool
@@ -86,7 +95,10 @@ func runDashboard(cmd *cobra.Command, args []string) error {
 	}
 	// Fail now, not in the browser, if the relay is down or the key isn't
 	// an admin.
-	var who struct{ Pubkey string }
+	var who struct {
+		Pubkey  string       `json:"pubkey"`
+		Version buildVersion `json:"version"`
+	}
 	if _, err := apiCall(cmd, http.MethodGet, "/admin/api/session", nil, &who); err != nil {
 		return common.RuntimeError(cmd, err)
 	}
@@ -96,7 +108,7 @@ func runDashboard(cmd *cobra.Command, args []string) error {
 		return common.RuntimeError(cmd, &common.CLIError{Err: err, Code: common.CodeConflict, Input: strconv.Itoa(port)})
 	}
 	p := &dashboardProxy{
-		cmd: cmd, privKey: privKey, base: base, pubkey: who.Pubkey,
+		cmd: cmd, privKey: privKey, base: base, pubkey: who.Pubkey, version: who.Version,
 		client: &http.Client{Transport: &http.Transport{TLSClientConfig: tlsCfg}},
 		addr:   ln.Addr().String(), token: randomString(), session: randomString(), csrf: randomString(),
 		ui: http.StripPrefix("/admin/ui", adminplane.UIHandler(dashboard.FS())),
@@ -178,9 +190,14 @@ func (p *dashboardProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case strings.HasPrefix(r.URL.Path, "/admin/ui/"):
 		p.ui.ServeHTTP(w, r)
 	case r.URL.Path == "/admin/api/session":
-		// No expiry: the session lasts as long as this command.
+		// No expiry: the session lasts as long as this command. Client is
+		// this CLI's build, so the page can tell it apart from the relay's.
+		bi := common.ReadBuildInfo()
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = fmt.Fprintf(w, `{"pubkey":%q,"expires_at":0,"csrf":%q}`, p.pubkey, p.csrf)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"pubkey": p.pubkey, "expires_at": 0, "csrf": p.csrf,
+			"version": p.version, "client": buildVersion{Ncli: bi.Version, Nmilat: bi.NmilatVersion},
+		})
 	case r.URL.Path == "/admin/api/login" || r.URL.Path == "/admin/api/logout":
 		http.NotFound(w, r)
 	case strings.HasPrefix(r.URL.Path, "/admin/api/"):

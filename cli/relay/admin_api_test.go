@@ -2,7 +2,6 @@ package relay
 
 import (
 	"errors"
-	"github.com/stretchr/testify/assert"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -91,6 +90,7 @@ func TestAPICallMapsStatusToCode(t *testing.T) {
 		http.StatusNotFound:            common.CodeNotFound,
 		http.StatusConflict:            common.CodeConflict,
 		http.StatusNotImplemented:      common.CodeUsage,
+		http.StatusUnprocessableEntity: common.CodeUnsupported,
 		http.StatusTooManyRequests:     common.CodeNetwork,
 		http.StatusInternalServerError: common.CodeNetwork,
 		http.StatusTeapot:              common.CodeInternal,
@@ -156,21 +156,6 @@ func TestFormatters(t *testing.T) {
 	}
 }
 
-func TestJobProgress(t *testing.T) {
-	now := time.Now().Unix()
-	running := jobs.Job{Kind: jobs.KindRebuild, State: jobs.StateRunning, Scanned: 50, Indexed: 5, Total: 100, StartedAt: now - 10}
-	got := jobProgress(running)
-	if !strings.Contains(got, "50%") || !strings.Contains(got, "indexed 5") || !strings.Contains(got, "left") {
-		t.Errorf("running progress = %q", got)
-	}
-	if got := jobProgress(jobs.Job{Kind: jobs.KindRebuild, Scanned: 300, Total: 100}); !strings.Contains(got, "100%") {
-		t.Errorf("over-estimate should cap at 100%%: %q", got)
-	}
-	if got := jobProgress(jobs.Job{Kind: jobs.KindDrop}); got != "" {
-		t.Errorf("drop progress = %q, want empty", got)
-	}
-}
-
 // A relay that's up but drops the request (a handler panic on an older
 // relay) must not be reported as not running.
 func TestAPICallDroppedConnectionIsNotRelayDown(t *testing.T) {
@@ -224,16 +209,5 @@ func TestFetchStatusSurvivesIndexesFailure(t *testing.T) {
 
 func TestRenderStatusToleratesEmptyMetrics(t *testing.T) {
 	// A relay just started has no rates yet; rendering must not panic.
-	renderStatus(statusJSON{Indexes: []jobs.IndexInfo{{Name: "zaps", Available: true}}})
-}
-
-func TestIndexSummaryStates(t *testing.T) {
-	disabled := indexSummary(jobs.IndexInfo{Name: "zaps", Unavailable: "zap ranking is off", State: jobs.IndexDisabled, HasData: true})
-	assert.Contains(t, disabled, "unavailable")
-	assert.Contains(t, disabled, "ncli relay index drop zaps")
-	assert.NotContains(t, indexSummary(jobs.IndexInfo{Name: "zaps", Unavailable: "off", State: jobs.IndexDisabled}), "drop")
-	assert.Contains(t, indexSummary(jobs.IndexInfo{Name: "stats", Available: true, State: jobs.IndexStale}), "rebuilt on the next start")
-	assert.Equal(t, "idle", indexSummary(jobs.IndexInfo{Name: "stats", Available: true, State: jobs.IndexReady}))
-	running := jobs.Job{Kind: jobs.KindDrop, State: jobs.StateRunning}
-	assert.Contains(t, indexSummary(jobs.IndexInfo{Name: "zaps", Unavailable: "off", Running: &running}), "drop running")
+	renderStatus(statusJSON{Indexes: []jobs.IndexInfo{{Status: jobs.Status{Name: "zaps", Enabled: true, State: jobs.StateReady}}}})
 }

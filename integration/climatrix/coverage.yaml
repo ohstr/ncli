@@ -93,16 +93,16 @@
 "relay context use": {modes: [json, errors], tests: [TestRelayContext]}
 "relay dashboard": {modes: [errors], tests: [TestAttack_AdminHTTP], pending: "serving runs until interrupted; its proxy is unit-tested"}
 "relay index": {modes: [errors], tests: [TestBareGroupCommands]}
-"relay index drop": {modes: [json, errors], tests: [TestRelayAdmin, TestDerivedIndexLifecycle]}
-"relay index list": {modes: [json, text], tests: [TestRelayAdmin, TestRelaySearchIndexesList, TestRelaySearchUnreachable, TestDerivedIndexLifecycle]}
-"relay index rebuild": {modes: [json, errors], tests: [TestRelayAdmin, TestDerivedIndexLifecycle]}
+"relay index drop": {modes: [json, text, errors], tests: [TestRelayAdmin, TestDerivedIndexLifecycle, TestIndexLifecycle_CatchUpAfterTheFeaturesWereOff]}
+"relay index list": {modes: [json, text], tests: [TestRelayAdmin, TestRelayAdminTextOutput, TestRelaySearchIndexesList, TestRelaySearchUnreachable, TestDerivedIndexLifecycle, TestIndexLifecycle_SearchFollowsTheStore, TestIndexLifecycle_RebuildInATerminal]}
+"relay index rebuild": {modes: [json, text, errors], tests: [TestRelayAdmin, TestRelayAdminTextOutput, TestDerivedIndexLifecycle, TestIndexLifecycle_KilledMidRebuildResumes, TestIndexLifecycle_RebuildInATerminal]}
 "relay invites": {modes: [errors], tests: [TestBareGroupCommands]}
 "relay invites create": {modes: [json, errors], tests: [TestRelayAdmin, TestAttack_NIP43Membership]}
 "relay invites list": {modes: [json], tests: [TestRelayAdmin]}
 "relay invites revoke": {modes: [json, errors], tests: [TestRelayAdmin, TestAttack_NIP43Membership]}
 "relay jobs": {modes: [errors], tests: [TestBareGroupCommands]}
-"relay jobs cancel": {modes: [json], tests: [TestRelayAdmin], pending: "cancelling a running job (covered by unit tests)"}
-"relay jobs list": {modes: [json], tests: [TestRelayAdmin]}
+"relay jobs cancel": {modes: [json], tests: [TestRelayAdmin], pending: "cancelling a running job (covered by unit tests: cli/relay/jobs, cli/relay)"}
+"relay jobs list": {modes: [json, text], tests: [TestRelayAdmin, TestRelayAdminTextOutput, TestIndexLifecycle_CatchUpAfterTheFeaturesWereOff, TestIndexLifecycle_KilledMidRebuildResumes, TestIndexLifecycle_ForeignWriteMeansRebuild, TestIndexLifecycle_ScoringChangeRescores]}
 "relay jobs show": {modes: [json, errors], tests: [TestRelayAdmin]}
 "relay members": {modes: [errors], tests: [TestBareGroupCommands]}
 "relay metrics": {modes: [errors], tests: [TestBareGroupCommands]}

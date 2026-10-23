@@ -57,12 +57,24 @@ func TestRenamedKeysFailNamingTheNewOne(t *testing.T) {
 		requireCode(t, checkRenamedKeys(v), common.CodeUsage, "cache.topZapped was renamed to cache.zaps")
 	})
 
+	t.Run("removed search queue keys say why", func(t *testing.T) {
+		for key, why := range map[string]string{
+			"queueSize":   "nothing is queued in memory",
+			"batchSize":   "batches of its own",
+			"max_ch_size": "nothing is queued in memory",
+		} {
+			loadRelayConfigFromYAML(t, "store: x.db\ncache:\n  profiles:\n    search: {enabled: true, "+key+": 5}\n")
+			requireCode(t, checkRenamedKeys(viper.GetViper()), common.CodeUsage, "cache.profiles.search."+key+" was removed: ")
+			requireCode(t, checkRenamedKeys(viper.GetViper()), common.CodeUsage, why)
+		}
+	})
+
 	t.Run("the new layout passes", func(t *testing.T) {
 		loadRelayConfigFromYAML(t, `
 store: x.db
 cache:
   profiles:
-    search: {enabled: true, meilisearch: {host: h, key: k, index: i}, batchSize: 1, queueSize: 2}
+    search: {enabled: true, meilisearch: {host: h, key: k, index: i}}
     stats: {enabled: true}
     checks: {ttl: 7d, workers: 3}
     scoring: {social: {followers_weight: 2}}

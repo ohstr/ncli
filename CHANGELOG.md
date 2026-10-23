@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.8.0-rc.41]
+
+### Added
+
+- Adds the relay's own index upkeep: each index is caught up after its feature was off, rebuilt when it can't be trusted, rescored when scoring changes and freed of old data, as jobs with a trigger, progress and a one-line summary kept across restarts. Readers keep the previous data meanwhile, and no index job holds writes up for more than 25 ms. ([#193](https://github.com/ohstr/ncli/pull/193))
+- Adds the `index_state`, `index_entries`, `index_behind`, `index_queued` and `index_txn_seconds` metrics, and `kind` and `trigger` labels on `job_runs_total`. ([#193](https://github.com/ohstr/ncli/pull/193))
+- Adds the relay's ncli and nmilat versions to the dashboard header; through `ncli relay dashboard` it warns when the CLI is another build. ([#193](https://github.com/ohstr/ncli/pull/193))
+
+### Changed
+
+- Changes `relay index rebuild` and `drop` to print the plan, live progress and what changed; `--json` returns the job at once, `--wait` or `--follow` watch it, and `--detach` returns in text mode. A job that ends unsuccessfully fails the command, and a no-op says so. ([#193](https://github.com/ohstr/ncli/pull/193))
+- Changes `relay index list` to show each index's state, exact entries, how far behind it is and what happens next, and `relay jobs` to show who started a job, why, and what it did. ([#193](https://github.com/ohstr/ncli/pull/193))
+- Changes the dashboard's Indexes panel to show state badges, live progress for the relay's own jobs, and outcomes that stay on screen; a rebuild shows its plan first and a drop asks for the index name. ([#193](https://github.com/ohstr/ncli/pull/193))
+- Changes search to follow the store, so profiles stored while search was off, dropped from a full queue or deleted reach Meilisearch, each write counting once Meilisearch applied it. A replaced Meilisearch index or new scoring settings rebuild it on their own. ([#193](https://github.com/ohstr/ncli/pull/193))
+- Changes `relay index drop` to take only an index whose feature is off; an index in use is rebuilt instead. ([#193](https://github.com/ohstr/ncli/pull/193))
+- Removes `relay index rebuild --fresh`, since every rebuild builds a new index and swaps it in, and search's `batchSize` and `queueSize`, which now fail startup. Also removes the `verify_dropped_total`, `search_index_queue_depth` and `search_index_dropped_total` metrics. ([#193](https://github.com/ohstr/ncli/pull/193))
+- Builds with nmilat v0.5.0-rc.39. ([#193](https://github.com/ohstr/ncli/pull/193))
+
+### Fixed
+
+- Fixes `relay index drop` reporting success while the drop still ran, and index counts that didn't change after a rebuild or drop. ([#193](https://github.com/ohstr/ncli/pull/193))
+- Fixes a rebuild putting back a zap or follow deleted while it ran, and a contact list losing the follows it shares with an older one. ([#193](https://github.com/ohstr/ncli/pull/193))
+- Fixes a profile the relay rejected as older still reaching search. ([#193](https://github.com/ohstr/ncli/pull/193))
+
 ## [0.8.0-rc.40]
 
 ### Changed

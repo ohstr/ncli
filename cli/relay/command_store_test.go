@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ohstr/ncli/cli/relay/internal/zaptest"
+	"github.com/ohstr/ncli/cli/relay/jobs"
 	"github.com/ohstr/nmilat/nip01"
 	"github.com/ohstr/nmilat/relay"
 	"github.com/rs/zerolog"
@@ -47,7 +48,10 @@ func TestOpenRelayStore_IndexesFollowConfig(t *testing.T) {
 	} {
 		store := openTestStore(t, c.cfg, filepath.Join(t.TempDir(), "notes.db"))
 		require.NoError(t, store.InsertEvents(context.Background(), zapAndFollow(t)))
-		z, s := store.ZapIndexState(), store.SocialIndexState()
+		z, err := store.IndexStatus(relay.IndexZaps)
+		require.NoError(t, err)
+		s, err := store.IndexStatus(relay.IndexSocial)
+		require.NoError(t, err)
 		require.Equal(t, c.zaps, z.Enabled, c.name)
 		require.Equal(t, c.zaps, z.HasData, c.name)
 		require.Equal(t, c.stats, s.Enabled, c.name)
@@ -55,29 +59,23 @@ func TestOpenRelayStore_IndexesFollowConfig(t *testing.T) {
 	}
 }
 
-func TestOpenRelayStore_WarnsOnLeftoverData(t *testing.T) {
+func TestOpenRelayStore_LeftoverDataIsShownWithItsDrop(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "notes.db")
 	store := openTestStore(t, cacheOn(false, false, true, true), path)
 	require.NoError(t, store.InsertEvents(context.Background(), zapAndFollow(t)))
 	store.Close()
 
-	buf := &syncBuffer{}
-	prev := log.Logger
-	log.Logger = zerolog.New(buf)
-	t.Cleanup(func() { log.Logger = prev })
-
 	store = openTestStore(t, RelayConfig{}, path)
-	require.Contains(t, buf.String(), "ncli relay index drop zaps")
-	require.Contains(t, buf.String(), "ncli relay index drop stats")
-	require.True(t, store.ZapIndexState().HasData, "turning a feature off keeps its data")
-
-	require.NoError(t, store.ClearZapIndex(context.Background()))
-	require.NoError(t, store.ClearSocialIndex(context.Background()))
-	store.Close()
-	buf = &syncBuffer{}
-	log.Logger = zerolog.New(buf)
-	openTestStore(t, RelayConfig{}, path)
-	require.NotContains(t, buf.String(), "relay index drop")
+	for _, ix := range []*jobs.StoreIndex{jobs.NewZapIndex(store, "off"), jobs.NewStatsIndex(store, "off")} {
+		st := ix.Status()
+		require.True(t, st.HasData, "turning a feature off keeps its data")
+		require.Contains(t, st.Hint, "ncli relay index drop "+ix.Name())
+		_, err := ix.Drop(context.Background(), nil)
+		require.NoError(t, err)
+		st = ix.Status()
+		require.False(t, st.HasData)
+		require.Empty(t, st.Hint)
+	}
 }
 
 func TestNewServer_WarnsOnIndexMismatch(t *testing.T) {

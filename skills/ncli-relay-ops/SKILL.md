@@ -222,60 +222,77 @@ where they connect.
 ```sh
 # health and live metrics (--watch: every 2s; NDJSON with --json)
 ncli relay status
-# indexes (search, zaps, stats) with their running/last job and entry count
+# each index: state, exact entries, events behind, last job, and a → line
+# for anything that isn't simply ready (why, and what happens next)
 ncli relay index list
-# rebuild zaps beside the live index and swap it in; wait with progress
-ncli relay index rebuild zaps --follow
-# search: rescore every profile from stored results, upserting in place;
-# --fresh builds a new index and swaps it in
-ncli relay index rebuild search --fresh --follow
-# items a rebuild would scan, and entries now; nothing runs
+# rebuild: prints the plan, live progress, then what changed
+ncli relay index rebuild zaps
+# for a script: the job at once, or the final job once it ends
+ncli relay index rebuild zaps --json
+ncli relay index rebuild zaps --json --wait --timeout 10m
+# what a rebuild would do; nothing runs
 ncli relay index rebuild all --dry-run
-# empty an index (prompts; --yes required with --json or no terminal)
-ncli relay index drop search --yes
-# jobs: running first, then the last 20 (kept in <store>.jobs.json)
-ncli relay jobs list
+# remove what an index whose feature is off still holds
+ncli relay index drop stats --yes
+# the relay's own jobs and yours, newest first (20 kept per index)
+ncli relay jobs list --index zaps
 ncli relay jobs show <id> --follow
 ncli relay jobs cancel <id>
 ```
 
-- A rebuild is a job with an id. Starting the same rebuild while it runs
-  returns that job (no duplicate); any other job on that index is
-  `conflict` (exit 5, retryable). `--follow` exits non-zero unless the job
-  succeeds; Ctrl-C stops following, not the job.
-- No rebuild leaves an empty window: zaps and stats build a new generation
-  and swap it atomically; `search --fresh` builds `<index>__next`,
-  swaps, then catches up on profiles stored meanwhile.
-- A search rebuild covers every stored profile, past `max_limit`. It
-  rescores from stored check results, zaps and follows with the current
-  `cache.profiles.scoring` weights and **never re-fetches** a NIP-05 or lightning
-  address. `--reverify` was removed (it fails with `usage`); use
-  `ncli relay verify <pubkey> --refresh`.
-- An index can't be rebuilt (`usage`, exit 2; the dashboard says why)
-  when its feature is off: `search` without `cache.profiles.search.enabled`
-  or with `readonly`, `zaps` without `cache.zaps.enabled`, `stats` without
-  a writable `cache.profiles.search` or `cache.profiles.stats.enabled`.
-  `drop` still works on a disabled `zaps` or `stats` index, to remove the
-  data it holds. An unknown index or job id is `not_found` (exit 4); a key
-  that isn't admin is `auth` (exit 7); a stopped relay is `network`.
-- `state` is `disabled`, `stale` (in use but missing events until the next
-  start rebuilds it), `building` or `ready`; `has_data` says whether a
-  disabled index still holds data.
-- `estimate` is what the index holds: Meilisearch's document count for
-  search (`unreachable` when Meilisearch doesn't answer), stored zap
-  receipts for zaps (index entries while disabled), pubkeys some stored
-  contact list follows for stats.
-  `scan_estimate` is what a rebuild reads (stored profiles for search,
-  every stored event for zaps/stats). Counts are kept as events are
-  written, or cached for a minute, so polling them is cheap.
-- The store keeps the zaps and stats indexes only while their feature is
-  on. Turning a feature on builds its index once in the background on the
-  next start (answers fill in when it is `ready`). Turning it off keeps the
-  data, unused and no longer updated, with a startup warning until
-  `ncli relay index drop zaps|stats --yes` removes it; reading the store
-  with `dump`/`inspect` while the relay is stopped changes nothing.
+The relay keeps each index current **on its own**, as jobs (`trigger:
+reconcile`): it checks on start, when a job ends, and every few seconds.
+Readers keep the previous data until new data is ready, and an index job
+holds the store writer at most 25 ms at a time, so writes never wait on it.
+
+| What happened | What the relay does |
+|---|---|
+| Feature off while events were stored, then on again | `catch_up` from where the index stopped: deletes first, then the new events. No rebuild |
+| Too many deletes while off (100k), layout change, store written by an older ncli, or never built | `rebuild` (state `needs_rebuild`, `reason` says which) |
+| Relay stopped or crashed mid-rebuild | The job reads `interrupted`; the rebuild resumes where it stopped |
+| Scoring settings changed | stats `rescore`; search `rebuild` |
+| Meilisearch down | search `unreachable`; profiles wait in the store and go in once it answers |
+| Meilisearch index deleted or recreated | search `rebuild` |
+| A job failed | Retried after 1, 5, then 15 minutes (`retry_at`) |
+| Feature turned off | Data kept, unused; `hint` names the `drop` that removes it |
+
+- `zaps` is on with `cache.zaps.enabled`; `stats` with
+  `cache.profiles.stats.enabled` or writable search (search scores use it);
+  `search` with `cache.profiles.search.enabled`, not `readonly`.
+- States: `ready`, `behind`, `needs_rebuild`, `unreachable`, `empty`,
+  `disabled`, and while a job runs `building`, `catching_up`, `rescoring`,
+  `dropping`. `action` is the job the relay starts next; `reason` why.
+- `entries` is exact: zap receipts, followed profiles, Meilisearch
+  documents. `behind` is events stored since the index was last current;
+  search also has `queued` (profiles to look at again).
+- A job has `kind` (`catch_up`, `rebuild`, `rescore`, `reap` frees old
+  data, `drop`), `trigger`, `phase`, `done`/`total`, `applied`,
+  `entries_before`/`entries_after`, `duration_ms` and a one-line `summary`.
+  The same JSON comes from the API, `--json`, and each `--follow` line.
+- `rebuild` of an index already rebuilding returns that job with `noop:
+  true`; an admin rebuild or drop takes over a relay-started job (it ends
+  `superseded`). Any other job in the way is `conflict` (exit 5,
+  retryable), naming it.
+- Every rebuild builds a new index and swaps it in (`--fresh` was
+  removed, `usage`). A search rebuild never re-fetches a NIP-05 or
+  lightning address (`--reverify` was removed; use `ncli relay verify
+  <pubkey> --refresh`).
+- `drop` only takes an index whose feature is off: one in use is
+  `invalid_input` ("rebuild it instead"). Nothing to drop answers `noop`.
+  For search it removes the Meilisearch index too, never on a read-only
+  relay.
+- Exit codes: a job ending `failed`/`cancelled`/`interrupted`/`superseded`
+  under `--wait`/text mode is `internal` (exit 1, `input` = job id);
+  `--timeout` passing is `conflict` (job keeps running); a disabled index
+  is `usage` (exit 2); cancelling live search catching up is `unsupported`
+  (exit 8); unknown index or job `not_found`; non-admin key `auth`;
+  stopped relay `network`.
+- Text mode watches by default (Ctrl-C stops watching, not the job;
+  `--detach` returns at once); without a terminal it prints a line every
+  5 s. `--json` returns at once unless `--wait` or `--follow`.
 - `ncli relay stats`/`reindex`/`clear` no longer exist; they fail with
-  `usage` naming the replacement.
+  `usage` naming the replacement. Reading the store with `dump`/`inspect`
+  while the relay is stopped changes nothing.
 
 ### Profile checks, scores and NIP-85 stats
 
@@ -349,10 +366,12 @@ ncli relay verify npub1... --refresh --json
 - Keys from before `cache` was grouped fail at startup with `usage` naming
   the new one: `cache.topZapped` → `cache.zaps`, `cache.search` →
   `cache.profiles.search` (its `host`/`key`/`index_name` under
-  `meilisearch`, `batch_size`/`max_ch_size` → `batchSize`/`queueSize`),
-  `cache.profileStats` → `cache.profiles.stats`, `cache.verification` →
-  `cache.profiles.checks`, `cache.scoring` → `cache.profiles.scoring`,
-  `verificationWorkers` → `cache.profiles.checks.workers`.
+  `meilisearch`), `cache.profileStats` → `cache.profiles.stats`,
+  `cache.verification` → `cache.profiles.checks`, `cache.scoring` →
+  `cache.profiles.scoring`, `verificationWorkers` →
+  `cache.profiles.checks.workers`. Search's `batchSize`/`queueSize` (and
+  `batch_size`/`max_ch_size`) were removed and fail at startup too:
+  profiles reach search from the store, nothing is queued in memory.
 
 ### Zap ranking and the relay's own stats
 

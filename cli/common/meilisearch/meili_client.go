@@ -130,11 +130,6 @@ func (m *MeiliClient) Initialize(ctx context.Context) error {
 	return nil
 }
 
-func (m *MeiliClient) DeleteIndex(ctx context.Context) error {
-	_, err := m.client.Index(m.indexName).DeleteAllDocuments(&meilisearch.DocumentOptions{})
-	return err
-}
-
 // CountDocuments returns how many documents the index holds.
 func (m *MeiliClient) CountDocuments(ctx context.Context) (int64, error) {
 	stats, err := m.client.Index(m.indexName).GetStatsWithContext(ctx)
@@ -182,30 +177,44 @@ func (m *MeiliClient) wait(ctx context.Context, taskUID int64) error {
 	return nil
 }
 
-func (m *MeiliClient) Shutdown(ctx context.Context) error {
-	// Meilisearch client doesn't need explicit shutdown, but we implement it for the interface
-	return nil
-}
-
-func (m *MeiliClient) IndexProfileWithMetrics(ctx context.Context, doc *search.ProfileDocument, getMetricsFunc func(pubkey string) (int64, error)) error {
-	if getMetricsFunc != nil {
-		if extraMetrics, err := getMetricsFunc(doc.ID); err == nil {
-			doc.Score += extraMetrics
-		}
-	}
-	return m.IndexProfile(ctx, doc)
-}
-
-func (m *MeiliClient) IndexProfile(ctx context.Context, doc *search.ProfileDocument) error {
-	return m.BulkIndex([]*search.ProfileDocument{doc})
-}
-
-func (m *MeiliClient) BulkIndex(docs []*search.ProfileDocument) error {
+// Upsert adds or replaces documents and returns once Meilisearch applied
+// them (search.Writer).
+func (m *MeiliClient) Upsert(ctx context.Context, docs []*search.ProfileDocument) error {
 	if len(docs) == 0 {
 		return nil
 	}
-	_, err := m.client.Index(m.indexName).AddDocuments(docs, nil)
-	return err
+	info, err := m.client.Index(m.indexName).AddDocumentsWithContext(ctx, docs, nil)
+	if err != nil {
+		return err
+	}
+	return m.wait(ctx, info.TaskUID)
+}
+
+// Delete removes documents by pubkey and returns once Meilisearch applied
+// it (search.Writer).
+func (m *MeiliClient) Delete(ctx context.Context, pubkeys []string) error {
+	if len(pubkeys) == 0 {
+		return nil
+	}
+	info, err := m.client.Index(m.indexName).DeleteDocumentsWithContext(ctx, pubkeys, nil)
+	if err != nil {
+		return err
+	}
+	return m.wait(ctx, info.TaskUID)
+}
+
+// Identity names this incarnation of the index: its uid and when it was
+// created, so a relay notices it was deleted or recreated behind its back.
+// It is "" when the index doesn't exist.
+func (m *MeiliClient) Identity(ctx context.Context) (string, error) {
+	idx, err := m.client.GetIndexWithContext(ctx, m.indexName)
+	if err != nil {
+		if strings.Contains(err.Error(), "index_not_found") {
+			return "", nil
+		}
+		return "", err
+	}
+	return idx.UID + "@" + idx.CreatedAt.UTC().Format(time.RFC3339Nano), nil
 }
 
 func (m *MeiliClient) FindProfiles(ctx context.Context, query string, limit int) ([]string, error) {
@@ -268,18 +277,4 @@ func (m *MeiliClient) FindProfiles(ctx context.Context, query string, limit int)
 		}
 	}
 	return pubkeys, nil
-}
-
-func (mc *MeiliClient) DeleteProfile(ctx context.Context, pubkey string) error {
-	_, err := mc.client.Index(mc.indexName).DeleteDocument(pubkey, nil)
-	return err
-}
-
-func (m *MeiliClient) UpdateScore(ctx context.Context, pubkey string, score int64) error {
-	updateDoc := map[string]interface{}{
-		"id":    pubkey,
-		"score": score,
-	}
-	_, err := m.client.Index(m.indexName).UpdateDocuments([]map[string]interface{}{updateDoc}, nil)
-	return err
 }

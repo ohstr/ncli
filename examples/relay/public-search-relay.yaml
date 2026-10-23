@@ -40,8 +40,6 @@ cache:
         host: "http://127.0.0.1:7700"
         key: "masterKey"
         index: "ncli_public_search"
-      batchSize: 1000
-      queueSize: 10000
 
     # NIP-85 stats per profile (followers, zaps, rank), so a client can show
     # them without counting every contact list and zap itself:

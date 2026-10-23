@@ -162,7 +162,7 @@ func TestProfileRoutes(t *testing.T) {
 	web := fakeWeb{"example.com": func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"names": map[string]string{"alice": alice.Pub}})
 	}}
-	worker := relay.NewProfileVerificationWorker(store, nil, relay.VerificationConfig{HTTPClient: &http.Client{Transport: web}})
+	worker := relay.NewProfileVerificationWorker(store, relay.VerificationConfig{HTTPClient: &http.Client{Transport: web}})
 
 	profile := &nip01.Event{PubKey: alice.Pub, CreatedAt: 100, Kind: 0, Content: `{"name":"alice","nip05":"alice@example.com"}`}
 	require.NoError(t, profile.Sign(alice.Priv))
@@ -199,7 +199,7 @@ func TestProfileRoutes_StatsOff(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(store.Close)
 	mux := http.NewServeMux()
-	profileRoutes(muxRouter{mux}, store, relay.NewProfileVerificationWorker(store, nil, relay.VerificationConfig{}))
+	profileRoutes(muxRouter{mux}, store, relay.NewProfileVerificationWorker(store, relay.VerificationConfig{}))
 
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/admin/api/profiles/"+zaptest.NewKey(t, 10).Pub, nil))

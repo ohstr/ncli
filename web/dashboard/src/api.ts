@@ -17,41 +17,81 @@ export interface Columns {
   series: Record<string, (number | null)[]>;
 }
 
-export type JobState = "running" | "succeeded" | "failed" | "cancelled";
+export type JobState = "running" | "succeeded" | "failed" | "cancelled" | "superseded" | "interrupted";
+export type JobKind = "catch_up" | "rebuild" | "rescore" | "reap" | "drop";
 
+// Job is one run of index work, started by the relay ("reconcile") or an
+// admin.
 export interface Job {
-  id: string;
+  id?: string;
   index: string;
-  kind: "rebuild" | "drop";
-  options: { fresh: boolean };
+  kind: JobKind;
+  trigger: "reconcile" | "admin";
+  reason?: string;
   state: JobState;
-  scanned: number;
-  indexed: number;
-  total?: number;
+  phase?: string;
+  done: number;
+  total: number;
+  applied: number;
+  entries_before: number;
+  entries_after: number;
   started_at: number;
   finished_at?: number;
+  duration_ms: number;
   error?: string;
+  summary: string;
+  noop?: boolean;
 }
+
+export type IndexState =
+  | "disabled"
+  | "empty"
+  | "ready"
+  | "behind"
+  | "needs_rebuild"
+  | "unreachable"
+  | "building"
+  | "catching_up"
+  | "rescoring"
+  | "dropping";
 
 export interface IndexInfo {
   name: string;
-  // available: it can be rebuilt; unavailable says why not.
-  available: boolean;
+  enabled: boolean;
   unavailable?: string;
-  // state is disabled, stale, building or ready (absent from older relays).
-  state?: string;
-  // has_data: it holds entries, even while disabled.
-  has_data?: boolean;
-  estimate: number;
-  scan_estimate: number;
+  state: IndexState;
+  // action is the job the relay runs next on its own; reason says why.
+  action?: JobKind;
+  reason?: string;
+  // hint is what an admin may want to do when the relay won't.
+  hint?: string;
+  has_data: boolean;
+  entries: number;
+  behind: number;
+  queued?: number;
+  head: number;
+  built_at?: number;
+  retired?: number;
+  error?: string;
   running?: Job;
   last?: Job;
+  retry_at?: number;
 }
 
-// indexActions is what an idle index offers: a rebuild needs its feature,
-// a drop also removes what a disabled index still holds.
-export function indexActions(ix: IndexInfo): { rebuild: boolean; drop: boolean } {
-  return { rebuild: ix.available, drop: ix.available || ix.has_data === true };
+// Plan is what a rebuild or drop would do (a dry run).
+export interface Plan {
+  index: string;
+  kind: JobKind;
+  state: IndexState;
+  reason?: string;
+  entries: number;
+  scan: number;
+  effect: string;
+}
+
+export interface Version {
+  ncli: string;
+  nmilat: string;
 }
 
 export interface Session {
@@ -60,12 +100,18 @@ export interface Session {
   nip05?: string;
   expires_at: number;
   csrf: string;
+  // version is the relay's build; client, the CLI serving this page through
+  // `ncli relay dashboard`.
+  version?: Version;
+  client?: Version;
 }
 
 export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    // job is the one in the way, on a 409.
+    public job?: Job,
   ) {
     super(message);
   }
@@ -147,12 +193,15 @@ async function call<T>(method: string, path: string, body?: unknown, headers: Re
   const text = await res.text();
   if (!res.ok) {
     let msg = text.trim() || res.statusText;
+    let job: Job | undefined;
     try {
-      msg = JSON.parse(text).error ?? msg;
+      const body = JSON.parse(text);
+      msg = body.error ?? msg;
+      job = body.job;
     } catch {
       /* plain-text error */
     }
-    throw new ApiError(res.status, msg);
+    throw new ApiError(res.status, msg, job);
   }
   return (text ? JSON.parse(text) : undefined) as T;
 }
@@ -163,10 +212,12 @@ export const api = {
   latest: () => call<Point>("GET", "/admin/api/metrics"),
   history: () => call<Columns>("GET", "/admin/api/history"),
   indexes: () => call<{ indexes: IndexInfo[] }>("GET", "/admin/api/indexes").then((r) => r.indexes ?? []),
-  rebuild: (index: string, fresh: boolean) =>
-    call<Job>("POST", `/admin/api/indexes/${encodeURIComponent(index)}/rebuild`, { fresh }),
-  drop: (index: string) => call<Job>("POST", `/admin/api/indexes/${encodeURIComponent(index)}/drop`),
+  plan: (index: string, kind: "rebuild" | "drop") =>
+    call<Plan>("POST", `/admin/api/indexes/${encodeURIComponent(index)}/${kind}`, { dry_run: true }),
+  start: (index: string, kind: "rebuild" | "drop") => call<Job>("POST", `/admin/api/indexes/${encodeURIComponent(index)}/${kind}`),
   cancel: (id: string) => call<Job>("DELETE", `/admin/api/jobs/${encodeURIComponent(id)}`),
+  jobs: (index: string) =>
+    call<{ jobs: Job[] }>("GET", `/admin/api/jobs?index=${encodeURIComponent(index)}`).then((r) => r.jobs ?? []),
 };
 
 // NIP-07 browser signer.

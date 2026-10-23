@@ -1,19 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { api, ApiError, indexActions, login, setCsrf } from "./api";
-
-describe("indexActions", () => {
-  const base = { name: "zaps", estimate: 0, scan_estimate: 0 };
-  it("offers rebuild and drop on an available index", () => {
-    expect(indexActions({ ...base, available: true, state: "ready", has_data: true })).toEqual({ rebuild: true, drop: true });
-  });
-  it("offers only drop on a disabled index that still holds data", () => {
-    expect(indexActions({ ...base, available: false, state: "disabled", has_data: true })).toEqual({ rebuild: false, drop: true });
-  });
-  it("offers nothing on a disabled index without data", () => {
-    expect(indexActions({ ...base, available: false, state: "disabled", has_data: false })).toEqual({ rebuild: false, drop: false });
-    expect(indexActions({ ...base, available: false })).toEqual({ rebuild: false, drop: false });
-  });
-});
+import { api, ApiError, login, setCsrf } from "./api";
 
 type Call = { url: string; init: RequestInit };
 
@@ -70,26 +56,36 @@ describe("api", () => {
   it("sends the CSRF token on writes, not reads", async () => {
     setCsrf("token-1");
     const calls = stubFetch(200, { id: "j" });
-    await api.rebuild("search", true);
+    await api.plan("search", "rebuild");
     await api.latest();
     const w = calls[0].init.headers as Record<string, string>;
     expect(w["X-CSRF-Token"]).toBe("token-1");
-    expect(JSON.parse(calls[0].init.body as string)).toEqual({ fresh: true });
+    expect(calls[0].url).toBe("/admin/api/indexes/search/rebuild");
+    expect(JSON.parse(calls[0].init.body as string)).toEqual({ dry_run: true });
     expect((calls[1].init.headers as Record<string, string>)["X-CSRF-Token"]).toBeUndefined();
     expect(calls[0].init.credentials).toBe("same-origin");
   });
 
   it("surfaces the server's error message with its status", async () => {
-    stubFetch(409, { error: "another job is running on this index" });
-    const err = await api.drop("zaps").catch((e) => e);
+    stubFetch(409, { error: "another job is running on this index", job: { id: "ab12", kind: "catch_up" } });
+    const err = (await api.start("zaps", "drop").catch((e: ApiError) => e)) as ApiError;
     expect(err).toBeInstanceOf(ApiError);
     expect(err.status).toBe(409);
     expect(err.message).toBe("another job is running on this index");
+    expect(err.job?.id).toBe("ab12");
   });
 
   it("escapes index names in paths", async () => {
     const calls = stubFetch(200, {});
     await api.cancel("../x");
     expect(calls[0].url).toBe("/admin/api/jobs/..%2Fx");
+  });
+});
+
+describe("api.jobs", () => {
+  it("lists one index's jobs, never null", async () => {
+    const calls = stubFetch(200, { jobs: null });
+    expect(await api.jobs("a b")).toEqual([]);
+    expect(calls[0].url).toBe("/admin/api/jobs?index=a%20b");
   });
 });

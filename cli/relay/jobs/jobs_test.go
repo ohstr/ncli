@@ -420,9 +420,9 @@ func crashWith(t *testing.T, path string) {
 	ix.action = KindRebuild
 	m := New(path, zerolog.Nop(), ix)
 	require.Empty(t, m.Parked("zaps"), "not parked before the job runs")
-	_, err := m.Start("zaps", KindRebuild, TriggerReconcile, "never built")
+	j, err := m.Start("zaps", KindRebuild, TriggerReconcile, "never built")
 	require.NoError(t, err)
-	t.Cleanup(func() { ix.release <- nil })
+	t.Cleanup(func() { ix.release <- nil; waitEnded(t, m, j.ID) })
 }
 
 func TestCrashLoopIsParked(t *testing.T) {
@@ -434,9 +434,10 @@ func TestCrashLoopIsParked(t *testing.T) {
 	ix.action = KindRebuild
 	m := New(path, zerolog.Nop(), ix)
 	assert.Empty(t, m.Parked("zaps"), "two deaths in a row still resume")
-	_, err := m.Start("zaps", KindRebuild, TriggerReconcile, "never built")
+	j, err := m.Start("zaps", KindRebuild, TriggerReconcile, "never built")
 	require.NoError(t, err)
-	t.Cleanup(func() { ix.release <- nil })
+	prev, prevIx, prevID := m, ix, j.ID
+	t.Cleanup(func() { prevIx.release <- nil; waitEnded(t, prev, prevID) })
 
 	ix = newFake("zaps")
 	ix.action = KindRebuild
@@ -461,7 +462,7 @@ func TestCrashLoopIsParked(t *testing.T) {
 	assert.NotEmpty(t, again.Parked("zaps"), "still parked after another restart")
 
 	// An admin starts it over.
-	j, err := m.Start("zaps", KindRebuild, TriggerAdmin, "")
+	j, err = m.Start("zaps", KindRebuild, TriggerAdmin, "")
 	require.NoError(t, err)
 	ix.release <- nil
 	waitEnded(t, m, j.ID)

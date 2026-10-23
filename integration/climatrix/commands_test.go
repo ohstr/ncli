@@ -117,38 +117,53 @@ func TestRelayAdmin(t *testing.T) {
 			t.Errorf("jobs show: %+v", shown)
 		}
 		// Cancelling a finished job reports it unchanged.
-		var cancelled struct{ ID, State string }
+		var cancelled struct {
+			ID, State string
+			Noop      bool
+		}
 		e.MustOK(t, "relay", "jobs", "cancel", last.ID, "--config", cfg, "--json").JSON(t, &cancelled)
-		if cancelled.State != "succeeded" {
+		if cancelled.State != "succeeded" || !cancelled.Noop {
 			t.Errorf("cancel of a finished job: %+v", cancelled)
 		}
 		var list struct{ Jobs []struct{ ID string } }
-		e.MustOK(t, "relay", "jobs", "list", "--config", cfg, "--json").JSON(t, &list)
-		if len(list.Jobs) == 0 || list.Jobs[0].ID != last.ID {
-			t.Errorf("jobs list: %+v", list.Jobs)
+		e.MustOK(t, "relay", "jobs", "list", "--index", "zaps", "--config", cfg, "--json").JSON(t, &list)
+		found := false
+		for _, j := range list.Jobs {
+			found = found || j.ID == last.ID
+		}
+		if !found {
+			t.Errorf("jobs list lacks %s: %+v", last.ID, list.Jobs)
 		}
 		var dry struct {
-			DryRun []map[string]any `json:"dry_run"`
+			Plans   []map[string]any `json:"plans"`
+			Skipped []map[string]any `json:"skipped"`
 		}
 		e.MustOK(t, "relay", "index", "rebuild", "all", "--dry-run", "--config", cfg, "--json").JSON(t, &dry)
-		// stats is off here: no profile stats or search.
-		if len(dry.DryRun) != 1 || dry.DryRun[0]["index"] != "zaps" {
-			t.Errorf("dry run over available indexes: %+v", dry.DryRun)
+		// stats and search are off here, and said to be skipped.
+		if len(dry.Plans) != 1 || dry.Plans[0]["index"] != "zaps" || len(dry.Skipped) != 2 {
+			t.Errorf("dry run over every index: %+v", dry)
 		}
 
-		e.Run(t, "relay", "index", "drop", "zaps", "--config", cfg, "--json").ExpectErr(t, "usage")
-		var dropped struct{ State string }
-		e.MustOK(t, "relay", "index", "drop", "zaps", "--yes", "--config", cfg, "--json").JSON(t, &dropped)
-		if dropped.State != "succeeded" {
-			t.Errorf("drop zaps: %q", dropped.State)
+		// An index in use is kept current: rebuild it, don't drop it.
+		rep := e.Run(t, "relay", "index", "drop", "zaps", "--yes", "--config", cfg, "--json").ExpectErr(t, "invalid_input")
+		if !strings.Contains(rep.Error, "rebuild it instead") {
+			t.Errorf("drop of an index in use: %q", rep.Error)
 		}
 
 		// Search isn't configured on this relay: a feature that's off is
 		// usage, not a "started" that silently fails in the background.
 		e.Run(t, "relay", "index", "rebuild", "search", "--config", cfg, "--json").ExpectErr(t, "usage")
-		e.Run(t, "relay", "index", "drop", "search", "--yes", "--config", cfg, "--json").ExpectErr(t, "usage")
+		var noop struct {
+			Noop    bool
+			Summary string
+		}
+		e.MustOK(t, "relay", "index", "drop", "search", "--yes", "--config", cfg, "--json").JSON(t, &noop)
+		if !noop.Noop || noop.Summary != "search: nothing to drop" {
+			t.Errorf("drop of an empty index: %+v", noop)
+		}
+		e.Run(t, "relay", "index", "rebuild", "search", "--fresh", "--config", cfg, "--json").ExpectErr(t, "usage")
 		e.Run(t, "relay", "index", "rebuild", "nope", "--config", cfg, "--json").ExpectErr(t, "not_found")
-		rep := e.Run(t, "relay", "index", "rebuild", "search", "--reverify", "--config", cfg, "--json").ExpectErr(t, "usage")
+		rep = e.Run(t, "relay", "index", "rebuild", "search", "--reverify", "--config", cfg, "--json").ExpectErr(t, "usage")
 		if !strings.Contains(rep.Error, "relay verify") {
 			t.Errorf("--reverify: %q lacks the replacement", rep.Error)
 		}

@@ -170,11 +170,18 @@ func TestZapRankingOff(t *testing.T) {
 }
 
 type indexState struct {
-	Name      string `json:"name"`
-	Available bool   `json:"available"`
-	State     string `json:"state"`
-	HasData   bool   `json:"has_data"`
-	Estimate  int64  `json:"estimate"`
+	Name    string `json:"name"`
+	Enabled bool   `json:"enabled"`
+	State   string `json:"state"`
+	Action  string `json:"action"`
+	Reason  string `json:"reason"`
+	Hint    string `json:"hint"`
+	HasData bool   `json:"has_data"`
+	Entries int64  `json:"entries"`
+	Behind  int64  `json:"behind"`
+	Running *struct {
+		ID, Kind, Trigger string
+	} `json:"running"`
 }
 
 func indexStates(t *testing.T, e *Env, r *Relay) map[string]indexState {
@@ -228,17 +235,14 @@ func TestDerivedIndexLifecycle(t *testing.T) {
 	r.Reconfigure(t, off)
 	r.Restart(t)
 	newZapper(t, r).zap(alice, "sats", 5, time.Hour) // missed by both indexes
-	if ix := indexStates(t, e, r)["zaps"]; ix.Estimate != 1 {
-		t.Errorf("disabled zap index estimate = %d, want the 1 entry it holds", ix.Estimate)
+	if ix := indexStates(t, e, r)["zaps"]; ix.Entries != 1 {
+		t.Errorf("disabled zap index entries = %d, want the 1 it holds", ix.Entries)
 	}
 	for _, name := range []string{"zaps", "stats"} {
 		ix := indexStates(t, e, r)[name]
-		if ix.Available || ix.State != "disabled" || !ix.HasData {
-			t.Errorf("%s with its feature off = %+v, want disabled with its data", name, ix)
+		if ix.Enabled || ix.State != "disabled" || !ix.HasData || !strings.Contains(ix.Hint, "ncli relay index drop "+name) {
+			t.Errorf("%s with its feature off = %+v, want disabled with its data and the drop that removes it", name, ix)
 		}
-	}
-	if !strings.Contains(r.Log(), "ncli relay index drop zaps") {
-		t.Errorf("no warning about the leftover zap index:\n%s", r.Log())
 	}
 	e.Run(t, "relay", "index", "rebuild", "zaps", "--config", r.ConfigPath, "--json").ExpectErr(t, "usage")
 	e.MustOK(t, "relay", "index", "drop", "zaps", "--yes", "--config", r.ConfigPath, "--json")
@@ -441,14 +445,14 @@ func TestStatsIndexUnavailableWithProfileStatsOff(t *testing.T) {
 	var list struct {
 		Indexes []struct {
 			Name        string `json:"name"`
-			Available   bool   `json:"available"`
+			Enabled     bool   `json:"enabled"`
 			Unavailable string `json:"unavailable"`
 		} `json:"indexes"`
 	}
 	e.MustOK(t, "relay", "index", "list", "--config", r.ConfigPath, "--json").JSON(t, &list)
 	seen := map[string]bool{}
 	for _, ix := range list.Indexes {
-		seen[ix.Name] = ix.Available
+		seen[ix.Name] = ix.Enabled
 		if ix.Name == "stats" && !strings.Contains(ix.Unavailable, "cache.profiles.stats.enabled") {
 			t.Errorf("stats reason = %q", ix.Unavailable)
 		}

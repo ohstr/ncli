@@ -45,20 +45,21 @@ func StartMeili(t *testing.T) string {
 
 type indexList struct {
 	Indexes []struct {
-		Name      string `json:"name"`
-		Available bool   `json:"available"`
-		Estimate  int64  `json:"estimate"`
+		Name    string `json:"name"`
+		Enabled bool   `json:"enabled"`
+		State   string `json:"state"`
+		Entries int64  `json:"entries"`
 	} `json:"indexes"`
 }
 
-func (l indexList) estimate(t *testing.T, name string) int64 {
+func (l indexList) entries(t *testing.T, name string) int64 {
 	t.Helper()
 	for _, ix := range l.Indexes {
 		if ix.Name == name {
-			if !ix.Available {
-				t.Fatalf("index %s unavailable", name)
+			if !ix.Enabled {
+				t.Fatalf("index %s is off", name)
 			}
-			return ix.Estimate
+			return ix.Entries
 		}
 	}
 	t.Fatalf("no %s index in %+v", name, l)
@@ -92,13 +93,13 @@ func TestRelaySearchIndexesList(t *testing.T) {
 	for {
 		list = indexList{}
 		e.MustOK(t, "relay", "index", "list", "--config", r.ConfigPath, "--json").JSON(t, &list)
-		if list.estimate(t, "search") > 0 || time.Now().After(deadline) {
+		if list.entries(t, "search") > 0 || time.Now().After(deadline) {
 			break
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
-	if n := list.estimate(t, "search"); n <= 0 {
-		t.Fatalf("search estimate = %d after seeding, want Meilisearch's document count", n)
+	if n := list.entries(t, "search"); n <= 0 {
+		t.Fatalf("search entries = %d after seeding, want Meilisearch's document count", n)
 	}
 
 	var st struct {
@@ -124,8 +125,10 @@ func TestRelaySearchUnreachable(t *testing.T) {
 
 	var list indexList
 	e.MustOK(t, "relay", "index", "list", "--config", r.ConfigPath, "--json").JSON(t, &list)
-	if n := list.estimate(t, "search"); n != -1 {
-		t.Errorf("unreachable search estimate = %d, want -1", n)
+	for _, ix := range list.Indexes {
+		if ix.Name == "search" && ix.State != "unreachable" {
+			t.Errorf("search state = %q, want unreachable", ix.State)
+		}
 	}
 	if out := e.MustOK(t, "relay", "index", "list", "--config", r.ConfigPath).Stdout; !strings.Contains(out, "unreachable") {
 		t.Errorf("index list should say unreachable:\n%s", out)

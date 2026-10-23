@@ -403,16 +403,18 @@ func TestRelayAdminTextOutput(t *testing.T) {
 		}
 	}
 	list := e.MustOK(t, "relay", "index", "list", "--config", cfg).Stdout
-	if !strings.Contains(list, "INDEX") || !strings.Contains(list, "zaps") || !strings.Contains(list, "unavailable") {
-		t.Errorf("index list:\n%s", list)
+	for _, want := range []string{"INDEX", "STATE", "ENTRIES", "BEHIND", "zaps", "ready", "disabled", "→ search: search is not enabled"} {
+		if !strings.Contains(list, want) {
+			t.Errorf("index list lacks %q:\n%s", want, list)
+		}
 	}
-	follow := e.MustOK(t, "relay", "index", "rebuild", "zaps", "--follow", "--config", cfg).Stdout
-	if !strings.Contains(follow, "zaps rebuild: succeeded") {
-		t.Errorf("rebuild --follow:\n%s", follow)
+	rebuilt := e.MustOK(t, "relay", "index", "rebuild", "zaps", "--config", cfg)
+	if !strings.Contains(rebuilt.Stderr, "zaps: rebuild — reads") || !strings.Contains(rebuilt.Stdout, "✔ zaps: rebuilt in") {
+		t.Errorf("rebuild should say its plan, then what it did:\n%s", rebuilt)
 	}
-	start := e.MustOK(t, "relay", "index", "rebuild", "zaps", "--config", cfg)
-	if !strings.Contains(start.Stdout, "zaps rebuild: job ") || !strings.Contains(start.Stderr, "jobs show") {
-		t.Errorf("rebuild without --follow should name the job and how to follow it:\n%s", start)
+	start := e.MustOK(t, "relay", "index", "rebuild", "zaps", "--detach", "--config", cfg)
+	if !strings.Contains(start.Stdout, "zaps: rebuild started") || !strings.Contains(start.Stderr, "jobs show") {
+		t.Errorf("rebuild --detach should name the job and how to watch it:\n%s", start)
 	}
 	jobs := e.MustOK(t, "relay", "jobs", "list", "--config", cfg).Stdout
 	if !strings.Contains(jobs, "ID") || !strings.Contains(jobs, "rebuild") || !strings.Contains(jobs, "succeeded") {

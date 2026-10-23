@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.8.0-rc.42]
+
+### Changed
+
+- Changes a panic in an index job to fail that job, retried with the usual backoff, instead of stopping the relay. ([#195](https://github.com/ohstr/ncli/pull/195))
+- Changes the relay to park an index job that it died during 3 times in a row within an hour, instead of resuming it on every start; `relay index list` and the dashboard say so, and `relay index rebuild` (or `drop`) starts it over. ([#195](https://github.com/ohstr/ncli/pull/195))
+- Changes search's own rebuild and rescore to wait while the zaps or stats index is rebuilt or caught up, since search scores read them. ([#195](https://github.com/ohstr/ncli/pull/195))
+- Builds with nmilat v0.5.0-rc.40, which fixes an index rebuild panicking (index out of range [-1]) and freeing old index data making no progress on a busy store. ([#195](https://github.com/ohstr/ncli/pull/195))
+
 ## [0.8.0-rc.41]
 
 ### Added

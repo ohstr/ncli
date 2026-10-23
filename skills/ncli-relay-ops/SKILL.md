@@ -250,10 +250,12 @@ holds the store writer at most 25 ms at a time, so writes never wait on it.
 | Feature off while events were stored, then on again | `catch_up` from where the index stopped: deletes first, then the new events. No rebuild |
 | Too many deletes while off (100k), layout change, store written by an older ncli, or never built | `rebuild` (state `needs_rebuild`, `reason` says which) |
 | Relay stopped or crashed mid-rebuild | The job reads `interrupted`; the rebuild resumes where it stopped |
+| Relay died during the same index's job 3 times in a row within an hour | That job is `failed` with `parked: true` and not started again until `relay index rebuild` (or `drop`) |
 | Scoring settings changed | stats `rescore`; search `rebuild` |
 | Meilisearch down | search `unreachable`; profiles wait in the store and go in once it answers |
 | Meilisearch index deleted or recreated | search `rebuild` |
-| A job failed | Retried after 1, 5, then 15 minutes (`retry_at`) |
+| A job failed, or panicked | Retried after 1, 5, then 15 minutes (`retry_at`); a panic fails the job, not the relay |
+| zaps or stats being rebuilt or caught up | search's rebuild or rescore waits for it, since search scores read them |
 | Feature turned off | Data kept, unused; `hint` names the `drop` that removes it |
 
 - `zaps` is on with `cache.zaps.enabled`; `stats` with

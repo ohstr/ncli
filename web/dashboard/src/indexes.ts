@@ -85,6 +85,7 @@ export function meta(ix: IndexInfo, now: number): string {
 // note says why an idle index isn't simply ready, and what happens next.
 export function note(ix: IndexInfo, now: number): string {
   if (ix.state === "unreachable") return `${ix.reason ?? "unreachable"}${ix.error ? ` (${ix.error})` : ""}`;
+  if (ix.action && ix.parked) return `${kindLabel(ix.action)} needed (${ix.reason}); parked: ${ix.parked}`;
   if (ix.action && ix.retry_at) return `${kindLabel(ix.action)} needed (${ix.reason}); the last try failed, retrying ${ago(ix.retry_at, now)}`;
   if (ix.action) return `${kindLabel(ix.action)} needed (${ix.reason}); the relay starts it on its own`;
   if (!ix.enabled) return ix.has_data ? `${ix.unavailable}. It still holds data you can drop.` : (ix.unavailable ?? "");

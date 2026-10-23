@@ -31,6 +31,7 @@ func TestRenderIndexes(t *testing.T) {
 		{Status: jobs.Status{Name: "zaps", Enabled: true, State: jobs.StateCatchingUp, Entries: 18402, Behind: 1234}, Running: running},
 		{Status: jobs.Status{Name: "stats", State: jobs.StateDisabled, HasData: true, Entries: 12033, Hint: "it still holds 12 033 entries; remove them with ncli relay index drop stats"}},
 		{Status: jobs.Status{Name: "extra", Enabled: true, State: jobs.StateNeedsRebuild, Action: jobs.KindRebuild, Reason: "never built"}, RetryAt: renderNow.Unix() + 300},
+		{Status: jobs.Status{Name: "parked", Enabled: true, State: jobs.StateNeedsRebuild, Action: jobs.KindRebuild, Reason: "never built"}, Parked: "the relay stopped 3 times in a row"},
 	}
 	var buf bytes.Buffer
 	renderIndexes(&buf, list, renderNow)
@@ -44,6 +45,7 @@ func TestRenderIndexes(t *testing.T) {
 		"→ zaps: catch-up 50%, ~10s left, 7 applied (job ab12, started by the relay: 1 234 event(s) stored since it was last current)",
 		"→ stats: it still holds 12 033 entries; remove them with ncli relay index drop stats",
 		"→ extra: rebuild needed (never built); the last try failed, retrying in 5m",
+		"→ parked: rebuild needed (never built); parked: the relay stopped 3 times in a row",
 	} {
 		assert.Contains(t, out, want)
 	}

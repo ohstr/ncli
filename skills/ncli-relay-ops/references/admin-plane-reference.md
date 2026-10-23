@@ -34,7 +34,7 @@ missing or contradictory setting, `invalid_input` (exit 3) for a bad value.
 | `GET` | `/admin/api/metrics` | admin* | latest point: `{t, v: rates/gauges/quantiles, totals}` |
 | `GET` | `/admin/api/history` | admin* | last hour, columnar: `{interval_ms, t: [...], series: {key: [...]}}` |
 | `GET` | `/admin/api/stream` | admin* | SSE, one `event: point` per 2s (at most 8 viewers) |
-| `GET` | `/admin/api/indexes` | admin* | `{indexes: [{name, enabled, unavailable, state, action, reason, hint, has_data, entries, behind, queued, head, built_at, retired, error, running, last, retry_at}]}` for `search`, `zaps`, `stats` |
+| `GET` | `/admin/api/indexes` | admin* | `{indexes: [{name, enabled, unavailable, state, action, reason, hint, has_data, entries, behind, queued, head, built_at, retired, error, running, last, retry_at, parked}]}` for `search`, `zaps`, `stats` |
 | `POST` | `/admin/api/indexes/{name}/rebuild` | admin* | `202` + job; `200` + the running rebuild (`noop`); `{"dry_run": true}` returns the plan `{index, kind, state, reason, entries, scan, effect}`; `409` + the job in the way, `501` feature off, `400` for `fresh` or `reverify` |
 | `GET` | `/admin/api/profiles/{pubkey}` | admin* | stored checks `{nip05, lud16, picture: {value, status, checked_at, next_check_at, attempts, last_error}}`, `score`/`base_score`/`check_score`/`social_score`, `lnurl_pubkey`, `stats` |
 | `POST` | `/admin/api/profiles/{pubkey}/verify` | admin* | checks the profile now (every field), then the same report; `404` without a stored kind 0 |
@@ -58,7 +58,9 @@ Ten failed credentials from one address within a minute are refused with
 reconcile|admin, reason, state:
 running|succeeded|failed|cancelled|superseded|interrupted, phase, done,
 total, applied, entries_before, entries_after, started_at, finished_at,
-duration_ms, error, summary, noop}`.
+duration_ms, error, summary, noop, parked}`. `parked` marks a failed job
+the relay no longer restarts on its own (it died with the relay 3 times in a
+row); an admin rebuild or drop clears it.
 
 ## Metric families (`ncli_relay_*`)
 

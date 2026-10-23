@@ -298,6 +298,8 @@ func indexNote(ix jobs.IndexInfo, now time.Time) string {
 		return s + ")"
 	case ix.State == jobs.StateUnreachable:
 		return ix.Reason + " (" + ix.Error + ")"
+	case ix.Action != "" && ix.Parked != "":
+		return fmt.Sprintf("%s needed (%s); parked: %s", describeKind(ix.Action), ix.Reason, ix.Parked)
 	case ix.Action != "" && ix.RetryAt > 0:
 		return fmt.Sprintf("%s needed (%s); the last try failed, retrying %s", describeKind(ix.Action), ix.Reason, relativeTimeAt(ix.RetryAt, now))
 	case ix.Action != "":

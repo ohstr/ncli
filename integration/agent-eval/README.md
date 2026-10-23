@@ -23,13 +23,13 @@ docs drifting from what's actually shipped.
   since ncli's admin commands hard-target `localhost` with no `--url`
   override.
 
-Sixteen rounds (`rounds/r0-bootstrap.md` .. `r15-relay-login.md`)
+Seventeen rounds (`rounds/r0-bootstrap.md` .. `r16-index-lifecycle.md`)
 cover install, identity, relay queries, relay admin, publish/apply,
 PoW mining, NIP-46 bunker signing (started and driven with no TTY),
 a local policy signer on a unix socket (R14: policy, socket signing,
 a denial, a maintainer approval and its replay), NIP-42 login through
 that signer (R15: publish and read on login-only relays, and the three
-structured login failures),
+structured login failures), a relay's index across restarts read from its JSON alone (R16),
 Blossom, the documented error-code contract, NIP-29 groups, NIP-53
 spaces (a headless call plus chat), and (R11-R13) whether an agent working
 only from the `ncli-relay-ops` skill's scenario table can stand up each of

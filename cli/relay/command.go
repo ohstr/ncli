@@ -302,8 +302,8 @@ type EventsConfig struct {
 // to start a relay.
 var removedRelayCommands = map[string]string{
 	"stats":   "ncli relay status",
-	"reindex": "ncli relay index rebuild <search|zaps>",
-	"clear":   "ncli relay index drop <search|zaps>",
+	"reindex": "ncli relay index rebuild <search|zaps|stats>",
+	"clear":   "ncli relay index drop <search|zaps|stats>",
 }
 
 // relayArgs rejects positional arguments: `relay` itself takes none, so one

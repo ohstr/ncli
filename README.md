@@ -179,8 +179,6 @@ cache:
       enabled: true
       readonly: false
       meilisearch: {host: http://localhost:7700, key: masterKey, index: ncli_events}
-      batchSize: 100
-      queueSize: 1000
     # NIP-85 user assertions (kind 30382); needs nip11.privkey
     stats:
       enabled: false
@@ -455,10 +453,13 @@ Monitor and maintain a running relay through its admin listener
 # health and live metrics
 ncli relay status --watch
 
-# rebuild an index and wait for it
-ncli relay index rebuild zaps --follow
+# each index: state, entries, how far behind, and what the relay is doing
+ncli relay index list
 
-# list or cancel jobs
+# rebuild one: shows the plan, progress, then what changed
+ncli relay index rebuild zaps
+
+# the relay's own catch-ups and rebuilds, and yours
 ncli relay jobs list
 
 # a profile's NIP-05/lightning checks, score and stats; --refresh re-checks

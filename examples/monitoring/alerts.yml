@@ -54,14 +54,24 @@ groups:
         annotations:
           summary: "Reads refused for lack of a scan slot"
 
-      - alert: NcliRelayDroppedWork
-        expr: increase(ncli_relay_verify_dropped_total[15m]) + increase(ncli_relay_search_index_dropped_total[15m]) > 0
+      - alert: NcliRelayIndexBehind
+        # An index the relay can't bring current: it catches up on its own
+        # otherwise, so this stays quiet through a normal catch-up.
+        expr: ncli_relay_index_behind > 10000
+        for: 30m
         labels: {severity: warning}
         annotations:
-          summary: "Profile verification or search indexing dropped work on a full queue"
+          summary: "The {{ $labels.index }} index is {{ $value }} events behind: see `ncli relay index list`"
+
+      - alert: NcliRelayIndexUnreachable
+        expr: ncli_relay_index_state{state="unreachable"} == 1
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "The {{ $labels.index }} index can't be reached (Meilisearch down?); profiles wait in the store"
 
       - alert: NcliRelayIndexJobFailed
         expr: increase(ncli_relay_job_runs_total{result="failed"}[1h]) > 0
         labels: {severity: warning}
         annotations:
-          summary: "An index job failed on {{ $labels.index }}: see `ncli relay jobs list`"
+          summary: "A {{ $labels.kind }} job failed on {{ $labels.index }}: see `ncli relay jobs list --index {{ $labels.index }}`"

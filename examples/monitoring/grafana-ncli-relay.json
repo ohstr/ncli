@@ -782,8 +782,8 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "ncli_relay_search_index_queue_depth",
-          "legendFormat": "search",
+          "expr": "ncli_relay_index_behind",
+          "legendFormat": "{{index}} behind",
           "refId": "D"
         }
       ]
@@ -833,24 +833,6 @@
           "expr": "rate(ncli_relay_scan_busy_total[$__rate_interval])",
           "legendFormat": "scan busy",
           "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "rate(ncli_relay_verify_dropped_total[$__rate_interval])",
-          "legendFormat": "verify dropped",
-          "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "rate(ncli_relay_search_index_dropped_total[$__rate_interval])",
-          "legendFormat": "search dropped",
-          "refId": "C"
         },
         {
           "datasource": {

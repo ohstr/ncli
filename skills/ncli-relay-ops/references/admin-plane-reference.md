@@ -69,9 +69,10 @@ started_at, finished_at, error}`.
 | Reads | `req_eose_seconds`, `req_events_returned`, `count_seconds`, `reads_refused_total{reason}`, `scan_busy_total`, `scans_inflight`, `scan_slots` |
 | Store | `store_batch_seconds`, `store_batch_size`, `store_batch_errors_total`, `store_task_queue_depth`, `store_task_queue_capacity`, `store_read_txs_open`, `store_size_bytes` (sampled every 30s) |
 | Access | `nip42_auth_accepted_total`, `nip42_auth_rejected_total{reason}`, `admin_denied_total{reason}` |
-| Workers | `verify_queue_depth`, `verify_processed_total`, `verify_errors_total`, `verify_dropped_total`, `search_index_queue_depth`, `search_index_dropped_total` |
+| Workers | `verify_queue_depth`, `verify_processed_total`, `verify_errors_total` |
+| Indexes | `index_state{index,state}` (1 for the state it is in), `index_entries{index}`, `index_behind{index}`, `index_queued{index}`, `index_txn_seconds{index}` (how long an index job held the store writer, per transaction) |
 | Features | `members`, `groups`, `huddle_rooms`, `huddle_peers`, `http_requests_total{route,code}`, `http_request_seconds{route}` |
-| Jobs | `jobs_running`, `job_runs_total{index,result}` |
+| Jobs | `jobs_running`, `job_runs_total{index,kind,trigger,result}` |
 
 `reason` is the NIP-01 prefix (`invalid`, `pow`, `auth-required`,
 `restricted`, `blocked`, `rate-limited`, `mute`, `error`, `busy`, `other`);

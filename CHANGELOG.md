@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.0-rc.42]
+
+### Changed
+
+- Changes a panic in an index job to fail that job, retried with the usual backoff, instead of stopping the relay.
+- Changes the relay to park an index job that it died during 3 times in a row within an hour, instead of resuming it on every start; `relay index list` and the dashboard say so, and `relay index rebuild` (or `drop`) starts it over.
+- Changes search's own rebuild and rescore to wait while the zaps or stats index is rebuilt or caught up, since search scores read them.
+
 ## [0.8.0-rc.41]
 
 ### Added

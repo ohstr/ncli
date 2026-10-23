@@ -64,6 +64,7 @@ type fakeIndex struct {
 	action  Kind
 	entries int64
 	release chan error
+	panics  any
 	mu      sync.Mutex
 	ran     []Kind
 	aborted []Kind
@@ -89,6 +90,9 @@ func (f *fakeIndex) Run(ctx context.Context, kind Kind, progress func(Progress))
 	f.ran = append(f.ran, kind)
 	f.mu.Unlock()
 	progress(Progress{Phase: "scan", Done: 7, Total: 42, Applied: 3})
+	if f.panics != nil {
+		panic(f.panics)
+	}
 	select {
 	case err := <-f.release:
 		f.mu.Lock()
@@ -291,7 +295,7 @@ func TestShutdownInterruptsAndARestartSaysSo(t *testing.T) {
 	last := reloaded.LastJob("zaps")
 	require.NotNil(t, last)
 	assert.Equal(t, StateInterrupted, last.State)
-	assert.Equal(t, "zaps: rebuild interrupted by a relay stop; it resumes on its own", last.Summary)
+	assert.Equal(t, "zaps: rebuild ended with the relay process; it resumes on its own", last.Summary)
 
 	// A clean stop records it the same way.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -379,4 +383,123 @@ func TestReconciler_BacksOffAfterAFailure(t *testing.T) {
 	require.NoError(t, err)
 	ix.release <- nil
 	waitEnded(t, m, j.ID)
+}
+
+func TestPanickingJobFailsInsteadOfTheRelay(t *testing.T) {
+	prev := reconcileBackoff
+	reconcileBackoff = []time.Duration{time.Hour}
+	t.Cleanup(func() { reconcileBackoff = prev })
+
+	ix := newFake("zaps")
+	ix.action, ix.panics = KindRebuild, "runtime error: index out of range [-1]"
+	m := New("", zerolog.Nop(), ix)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	r := m.Reconcile(ctx)
+	require.Eventually(t, func() bool { return !r.RetryAt("zaps").IsZero() }, time.Second, time.Millisecond)
+	last := m.LastJob("zaps")
+	require.NotNil(t, last)
+	assert.Equal(t, StateFailed, last.State)
+	assert.Equal(t, "panic: runtime error: index out of range [-1]", last.Error)
+	assert.Nil(t, m.RunningJob("zaps"), "retried after the backoff, not at once")
+
+	// The writer was handed back: another store job runs.
+	ix.mu.Lock()
+	ix.panics = nil
+	ix.mu.Unlock()
+	j, err := m.Start("zaps", KindRebuild, TriggerAdmin, "")
+	require.NoError(t, err)
+	ix.release <- nil
+	assert.Equal(t, StateSucceeded, waitEnded(t, m, j.ID).State)
+}
+
+// crashWith starts a reconcile job on a fresh manager over path and leaves
+// it running, as a relay that dies mid-job leaves its file.
+func crashWith(t *testing.T, path string) {
+	ix := newFake("zaps")
+	ix.action = KindRebuild
+	m := New(path, zerolog.Nop(), ix)
+	require.Empty(t, m.Parked("zaps"), "not parked before the job runs")
+	_, err := m.Start("zaps", KindRebuild, TriggerReconcile, "never built")
+	require.NoError(t, err)
+	t.Cleanup(func() { ix.release <- nil })
+}
+
+func TestCrashLoopIsParked(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "jobs.json")
+	for range crashLoopRuns - 1 {
+		crashWith(t, path)
+	}
+	ix := newFake("zaps")
+	ix.action = KindRebuild
+	m := New(path, zerolog.Nop(), ix)
+	assert.Empty(t, m.Parked("zaps"), "two deaths in a row still resume")
+	_, err := m.Start("zaps", KindRebuild, TriggerReconcile, "never built")
+	require.NoError(t, err)
+	t.Cleanup(func() { ix.release <- nil })
+
+	ix = newFake("zaps")
+	ix.action = KindRebuild
+	m = New(path, zerolog.Nop(), ix)
+	last := m.LastJob("zaps")
+	require.NotNil(t, last)
+	assert.Equal(t, StateFailed, last.State)
+	assert.True(t, last.Parked)
+	assert.Contains(t, m.Parked("zaps"), "the relay stopped 3 times in a row during rebuild")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	r := m.Reconcile(ctx)
+	r.Nudge()
+	time.Sleep(20 * time.Millisecond)
+	assert.Nil(t, m.RunningJob("zaps"), "a parked index isn't started on its own")
+	info := m.Indexes(r)
+	assert.NotEmpty(t, info[0].Parked)
+	assert.Zero(t, info[0].RetryAt)
+
+	again := New(path, zerolog.Nop(), newFake("zaps"))
+	assert.NotEmpty(t, again.Parked("zaps"), "still parked after another restart")
+
+	// An admin starts it over.
+	j, err := m.Start("zaps", KindRebuild, TriggerAdmin, "")
+	require.NoError(t, err)
+	ix.release <- nil
+	waitEnded(t, m, j.ID)
+	assert.Empty(t, m.Parked("zaps"))
+}
+
+func TestCrashLoopNeedsDeathsInARow(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "jobs.json")
+	crashWith(t, path)
+	crashWith(t, path)
+
+	// A clean stop breaks the run.
+	ix := newFake("zaps")
+	m := New(path, zerolog.Nop(), ix)
+	_, err := m.Start("zaps", KindRebuild, TriggerReconcile, "")
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	m.Shutdown(ctx)
+
+	crashWith(t, path)
+	assert.Empty(t, New(path, zerolog.Nop(), newFake("zaps")).Parked("zaps"))
+}
+
+func TestReconciler_SearchWaitsForTheStoreIndexes(t *testing.T) {
+	zaps, search := newFake("zaps"), newFake("search")
+	search.writes = false
+	zaps.action, search.action = KindRebuild, KindRebuild
+	m := New("", zerolog.Nop(), search, zaps)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	r := m.Reconcile(ctx)
+
+	require.Eventually(t, func() bool { return m.RunningJob("zaps") != nil }, time.Second, time.Millisecond)
+	r.Nudge()
+	time.Sleep(20 * time.Millisecond)
+	assert.Nil(t, m.RunningJob("search"), "search scores with zaps, so it waits")
+	zaps.release <- nil
+	require.Eventually(t, func() bool { return m.RunningJob("search") != nil }, time.Second, time.Millisecond)
+	search.release <- nil
 }

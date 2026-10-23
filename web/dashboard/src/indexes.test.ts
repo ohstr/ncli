@@ -84,6 +84,9 @@ describe("what an index says", () => {
     expect(note(index({ state: "needs_rebuild", action: "rebuild", reason: "never built", retry_at: T + 300 }), T)).toBe(
       "rebuild needed (never built); the last try failed, retrying in 5m",
     );
+    expect(note(index({ state: "needs_rebuild", action: "rebuild", reason: "never built", retry_at: T + 300, parked: "the relay stopped 3 times in a row" }), T)).toBe(
+      "rebuild needed (never built); parked: the relay stopped 3 times in a row",
+    );
     expect(note(index({ state: "unreachable", reason: "Meilisearch can't be reached", error: "refused" }), T)).toBe("Meilisearch can't be reached (refused)");
     expect(note(index({ enabled: false, state: "disabled", unavailable: "zap ranking is off" }), T)).toBe("zap ranking is off. It still holds data you can drop.");
   });

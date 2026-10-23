@@ -16,7 +16,7 @@ var (
 
 // Reconciler starts, for each index, the job its status asks for: on
 // start, when a job ends, when Nudge is called, and on a slow tick. A job
-// that failed is retried with backoff.
+// that failed is retried with backoff; a parked one waits for an admin.
 type Reconciler struct {
 	m *Manager
 
@@ -63,14 +63,27 @@ func (r *Reconciler) run(ctx context.Context) {
 	}
 }
 
-// pass starts what each idle index needs.
+// pass starts what each idle index needs. Search scores with the store's
+// indexes, so its rebuild and rescore wait while one of those is brought
+// current.
 func (r *Reconciler) pass() {
+	type due struct {
+		name string
+		ix   Index
+		st   Status
+	}
+	var todo []due
+	storeBusy := false
 	for _, name := range r.m.Names() {
 		r.note(name)
-		if r.m.RunningJob(name) != nil {
+		ix, _ := r.m.Lookup(name)
+		if j := r.m.RunningJob(name); j != nil {
+			storeBusy = storeBusy || (ix.WritesStore() && j.Kind != KindReap)
 			continue
 		}
-		ix, _ := r.m.Lookup(name)
+		if r.m.Parked(name) != "" {
+			continue
+		}
 		st := ix.Status()
 		if st.Action == "" {
 			r.mu.Lock()
@@ -84,8 +97,15 @@ func (r *Reconciler) pass() {
 		if wait {
 			continue
 		}
-		if _, err := r.m.Start(name, st.Action, TriggerReconcile, st.Reason); err != nil && !errors.Is(err, ErrBusy) {
-			r.m.logger.Warn().Err(err).Str("index", name).Str("action", string(st.Action)).Msg("index job not started")
+		storeBusy = storeBusy || (ix.WritesStore() && st.Action != KindReap)
+		todo = append(todo, due{name, ix, st})
+	}
+	for _, d := range todo {
+		if storeBusy && !d.ix.WritesStore() && (d.st.Action == KindRebuild || d.st.Action == KindRescore) {
+			continue
+		}
+		if _, err := r.m.Start(d.name, d.st.Action, TriggerReconcile, d.st.Reason); err != nil && !errors.Is(err, ErrBusy) {
+			r.m.logger.Warn().Err(err).Str("index", d.name).Str("action", string(d.st.Action)).Msg("index job not started")
 		}
 	}
 }
@@ -95,7 +115,7 @@ func (r *Reconciler) note(name string) {
 	last := r.m.LastJob(name)
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if last == nil || last.Trigger != TriggerReconcile || last.State != StateFailed || r.failed[name] == last.ID {
+	if last == nil || last.Trigger != TriggerReconcile || last.State != StateFailed || last.Parked || r.failed[name] == last.ID {
 		return
 	}
 	r.failed[name] = last.ID

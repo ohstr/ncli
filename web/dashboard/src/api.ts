@@ -41,6 +41,7 @@ export interface Job {
   error?: string;
   summary: string;
   noop?: boolean;
+  parked?: boolean;
 }
 
 export type IndexState =
@@ -76,6 +77,8 @@ export interface IndexInfo {
   running?: Job;
   last?: Job;
   retry_at?: number;
+  // parked says why the relay no longer starts this index's job itself.
+  parked?: string;
 }
 
 // Plan is what a rebuild or drop would do (a dry run).

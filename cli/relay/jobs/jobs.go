@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"runtime/debug"
 	"sort"
 	"sync"
 	"time"
@@ -81,6 +82,9 @@ type Job struct {
 	// Noop is set on an answer that started nothing: the job named is the
 	// one already doing it, or none was needed (Summary says which).
 	Noop bool `json:"noop,omitempty"`
+	// Parked is set on a failed job the relay won't start again on its own,
+	// because the relay kept stopping while it ran; an admin job clears it.
+	Parked bool `json:"parked,omitempty"`
 }
 
 // Ended reports whether the job ended.
@@ -138,6 +142,17 @@ var (
 
 // keptJobs bounds each index's finished-job history.
 const keptJobs = 20
+
+// errDied is the error of a job found running on start: the relay process
+// ended without stopping it.
+const errDied = "the relay process ended while it ran"
+
+// A job that dies with the relay crashLoopRuns times in a row within
+// crashLoopWindow is parked instead of resumed on every start.
+var (
+	crashLoopRuns   = 3
+	crashLoopWindow = time.Hour
+)
 
 // Manager runs jobs and remembers recent ones.
 type Manager struct {
@@ -301,11 +316,7 @@ func (m *Manager) execute(ctx context.Context, ix Index, r *run, j Job) {
 				m.mu.Unlock()
 			}
 		}
-		if j.Kind == KindDrop {
-			res, err = ix.Drop(ctx, progress)
-		} else {
-			res, err = ix.Run(ctx, j.Kind, progress)
-		}
+		res, err = m.perform(ctx, ix, j, progress)
 	}
 	cause := context.Cause(ctx)
 	if errors.Is(cause, errCancelled) {
@@ -365,6 +376,22 @@ func (m *Manager) execute(ctx context.Context, ix Index, r *run, j Job) {
 	}
 }
 
+// perform runs the job's operation; a panic fails the job instead of the
+// relay.
+func (m *Manager) perform(ctx context.Context, ix Index, j Job, progress func(Progress)) (res Result, err error) {
+	defer func() {
+		if p := recover(); p != nil {
+			m.logger.Error().Str("job", j.ID).Str("index", j.Index).Str("kind", string(j.Kind)).
+				Str("stack", string(debug.Stack())).Msgf("index job panicked: %v", p)
+			err = fmt.Errorf("panic: %v", p)
+		}
+	}()
+	if j.Kind == KindDrop {
+		return ix.Drop(ctx, progress)
+	}
+	return ix.Run(ctx, j.Kind, progress)
+}
+
 func (m *Manager) update(r *run, fn func(*Job)) {
 	m.mu.Lock()
 	fn(&r.job)
@@ -382,6 +409,9 @@ func summarize(j Job) string {
 	case StateSuperseded:
 		return fmt.Sprintf("%s: %s stopped for a rebuild", j.Index, describe(j.Kind))
 	case StateInterrupted:
+		if j.Error == errDied {
+			return fmt.Sprintf("%s: %s ended with the relay process; it resumes on its own", j.Index, describe(j.Kind))
+		}
 		return fmt.Sprintf("%s: %s interrupted by a relay stop; it resumes on its own", j.Index, describe(j.Kind))
 	}
 	change := fmt.Sprintf("%s → %s entries", Count(j.EntriesBefore), Count(j.EntriesAfter))
@@ -478,6 +508,15 @@ func (m *Manager) LastJob(index string) *Job {
 		}
 	}
 	return nil
+}
+
+// Parked says why the relay won't start jobs on index on its own, "" when
+// it will.
+func (m *Manager) Parked(index string) string {
+	if j := m.LastJob(index); j != nil && j.Parked {
+		return j.Error
+	}
+	return ""
 }
 
 // LastShown is the last finished job worth showing on index: freeing old
@@ -612,7 +651,7 @@ func (m *Manager) load() {
 	for i := range jobs {
 		// A job recorded as running died with the previous process.
 		if jobs[i].State == StateRunning {
-			jobs[i].State, jobs[i].Phase = StateInterrupted, ""
+			jobs[i].State, jobs[i].Phase, jobs[i].Error = StateInterrupted, "", errDied
 			if jobs[i].FinishedAt == 0 {
 				jobs[i].FinishedAt = jobs[i].StartedAt
 			}
@@ -622,6 +661,34 @@ func (m *Manager) load() {
 	sort.SliceStable(jobs, func(a, b int) bool { return jobs[a].StartedAt > jobs[b].StartedAt })
 	m.history = jobs
 	m.trimLocked()
+	for _, name := range m.order {
+		m.parkLocked(name)
+	}
+}
+
+// parkLocked parks index's newest job when it is the last of crashLoopRuns
+// in a row, within crashLoopWindow, that died with the relay.
+func (m *Manager) parkLocked(index string) {
+	var died []*Job
+	for i := range m.history {
+		j := &m.history[i]
+		if j.Index != index {
+			continue
+		}
+		if j.State != StateInterrupted || j.Error != errDied || len(died) == crashLoopRuns {
+			break
+		}
+		died = append(died, j)
+	}
+	if len(died) < crashLoopRuns || died[0].StartedAt-died[len(died)-1].StartedAt > int64(crashLoopWindow/time.Second) {
+		return
+	}
+	j := died[0]
+	j.State, j.Parked = StateFailed, true
+	j.Error = fmt.Sprintf("the relay stopped %d times in a row during %s, so the relay no longer starts it; ncli relay index rebuild (or drop) %s starts over", crashLoopRuns, describe(j.Kind), index)
+	j.Summary = summarize(*j)
+	m.logger.Error().Str("job", j.ID).Str("index", index).Str("kind", string(j.Kind)).Msg(j.Summary)
+	m.saveLocked()
 }
 
 // saveLocked writes running and finished jobs, so a crash leaves a record

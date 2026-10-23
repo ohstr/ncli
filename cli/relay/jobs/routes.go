@@ -23,6 +23,8 @@ type IndexInfo struct {
 	Last    *Job `json:"last,omitempty"`
 	// RetryAt is when a failed job is retried (unix), 0 when none waits.
 	RetryAt int64 `json:"retry_at,omitempty"`
+	// Parked says why the relay no longer starts this index's job itself.
+	Parked string `json:"parked,omitempty"`
 }
 
 // Plan is what a rebuild or drop would do, for a dry run.
@@ -57,7 +59,8 @@ func (m *Manager) Indexes(r *Reconciler) []IndexInfo {
 				info.State = StateDropping
 			}
 		}
-		if r != nil {
+		info.Parked = m.Parked(name)
+		if r != nil && info.Parked == "" {
 			if t := r.RetryAt(name); !t.IsZero() {
 				info.RetryAt = t.Unix()
 			}

@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.8.0-rc.40]
+
+### Changed
+
+- Changes the relay to keep its zap and stats indexes only while their feature is on (`cache.zaps`; writable `cache.profiles.search` or `cache.profiles.stats`), saving their write and rebuild work otherwise; `sync`, `stream` and `inspect` stores keep neither. Turning a feature on builds its index once in the background on the next start; turning it off keeps the data, with a startup warning, until `ncli relay index drop zaps|stats` removes it. ([#191](https://github.com/ohstr/ncli/pull/191))
+- Changes `relay index list`, `relay status` and the dashboard to show each index's `state` (`disabled`, `stale`, `building`, `ready`) and `has_data`, and lets `relay index drop` remove what a disabled zaps or stats index still holds. ([#191](https://github.com/ohstr/ncli/pull/191))
+- Changes `relay verify` to report `stats: null` when profile stats and search are off, instead of zeros. ([#191](https://github.com/ohstr/ncli/pull/191))
+- Builds with nmilat v0.5.0-rc.38. ([#191](https://github.com/ohstr/ncli/pull/191))
+
+### Fixed
+
+- Fixes follower counts in profile stats doubling when a contact list and its replacement arrived together. ([#191](https://github.com/ohstr/ncli/pull/191))
+
 ## [0.8.0-rc.39]
 
 ### Changed

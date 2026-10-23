@@ -165,7 +165,8 @@ func TestRelayAdmin(t *testing.T) {
 			}
 		}
 		e.MustOK(t, "relay", "verify", bob.PubHex, "--config", cfg, "--json").JSON(t, &out)
-		if len(out.Profiles) != 1 || out.Profiles[0].Pubkey != bob.PubHex || out.Profiles[0].Stats == nil {
+		// Profile stats are off here, so there are none to report.
+		if len(out.Profiles) != 1 || out.Profiles[0].Pubkey != bob.PubHex || out.Profiles[0].Stats != nil {
 			t.Errorf("verify: %+v", out)
 		}
 		// No stored kind 0 to check.

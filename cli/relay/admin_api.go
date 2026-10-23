@@ -48,9 +48,11 @@ func addAdminAPICommands(cmd *cobra.Command) {
 	indexCmd := &cobra.Command{
 		Use:   "index",
 		Short: "Rebuild or drop a running relay's search, zap and stats indexes",
-		Long: `The search index (Meilisearch profiles), the zap index (top zapped) and
+		Long: `The search index (Meilisearch profiles), the zap index (zap ranking) and
 the stats index (each profile's zaps and follows, for scores and NIP-85)
-are derived from stored events and can be rebuilt from them at any time.`,
+are derived from stored events and can be rebuilt from them at any time.
+The relay keeps the zap and stats indexes only while their feature is on;
+turning one off keeps its data until dropped.`,
 		Example: `  ncli relay index list
   ncli relay index rebuild zaps --follow`,
 		RunE: common.RequireSubcommand,
@@ -91,9 +93,11 @@ NIP-05 or lightning address (see ncli relay verify --refresh).`,
 	dropCmd := &cobra.Command{
 		Use:   "drop <search|zaps|stats>",
 		Short: "Empty an index (stored events are kept)",
-		Long: `Search and zap-ranking answers stay empty until the index is rebuilt.
-Asks for confirmation; --yes skips it, and is required with --json or no
-terminal. To refresh an index without an empty window, use rebuild.`,
+		Long: `Its answers stay empty until the index is rebuilt; the zaps and stats
+indexes are rebuilt on the relay's next start. With its feature off, drop
+removes the data a zaps or stats index still holds. Asks for confirmation;
+--yes skips it, and is required with --json or no terminal. To refresh an
+index without an empty window, use rebuild.`,
 		Example: `  ncli relay index drop search --yes`,
 		Args:    common.ExactArgs(1),
 		RunE:    runIndexDrop,
@@ -454,16 +458,27 @@ func formatBytes(b float64) string {
 /////////////////////////////////////////////////////////////////////
 
 func indexSummary(ix jobs.IndexInfo) string {
-	if !ix.Available {
-		return statusWaitStyle.Render("unavailable") + ": " + ix.Unavailable
-	}
 	if j := ix.Running; j != nil {
 		return statusOkStyle.Render(string(j.Kind)+" running") + " " + jobProgress(*j)
 	}
-	if j := ix.Last; j != nil {
-		return fmt.Sprintf("idle, last %s %s %s", j.Kind, stateText(j.State), relativeTime(j.FinishedAt))
+	if !ix.Available {
+		s := statusWaitStyle.Render("unavailable") + ": " + ix.Unavailable
+		if ix.HasData {
+			s += "; it still holds data, remove it with ncli relay index drop " + ix.Name
+		}
+		return s
 	}
-	return "idle"
+	s := "idle"
+	switch ix.State {
+	case jobs.IndexStale:
+		s = statusWaitStyle.Render("stale") + ", rebuilt on the next start"
+	case jobs.IndexBuilding:
+		s = statusOkStyle.Render("building")
+	}
+	if j := ix.Last; j != nil {
+		s += fmt.Sprintf(", last %s %s %s", j.Kind, stateText(j.State), relativeTime(j.FinishedAt))
+	}
+	return s
 }
 
 func stateText(s jobs.State) string {
@@ -517,7 +532,7 @@ func runIndexList(cmd *cobra.Command, args []string) error {
 		switch {
 		case ix.Available && ix.Estimate < 0:
 			estimate = "unreachable"
-		case ix.Available:
+		case ix.Available || ix.HasData:
 			estimate = fmt.Sprintf("~%d", ix.Estimate)
 		}
 		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\n", ix.Name, estimate, indexSummary(ix))
@@ -614,6 +629,9 @@ func runIndexDrop(cmd *cobra.Command, args []string) error {
 			return common.UsageError(cmd, fmt.Errorf("refusing to drop the %s index without --yes in a non-interactive session", name))
 		}
 		prompt := fmt.Sprintf("Empty the %s index? Its answers stay empty until a rebuild. [y/N] ", name)
+		if name != "search" {
+			prompt = fmt.Sprintf("Empty the %s index? If its feature is on, its answers stay empty until a rebuild or the next start. [y/N] ", name)
+		}
 		if !common.PromptYesNo(bufio.NewReader(os.Stdin), prompt) {
 			return common.RuntimeError(cmd, errors.New("aborted"))
 		}

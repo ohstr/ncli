@@ -34,11 +34,11 @@ missing or contradictory setting, `invalid_input` (exit 3) for a bad value.
 | `GET` | `/admin/api/metrics` | admin* | latest point: `{t, v: rates/gauges/quantiles, totals}` |
 | `GET` | `/admin/api/history` | admin* | last hour, columnar: `{interval_ms, t: [...], series: {key: [...]}}` |
 | `GET` | `/admin/api/stream` | admin* | SSE, one `event: point` per 2s (at most 8 viewers) |
-| `GET` | `/admin/api/indexes` | admin* | `{indexes: [{name, available, unavailable, estimate, running, last}]}` for `search`, `zaps`, `stats`; `estimate` `-1` means unreachable |
+| `GET` | `/admin/api/indexes` | admin* | `{indexes: [{name, available, unavailable, state, has_data, estimate, scan_estimate, running, last}]}` for `search`, `zaps`, `stats`; `available` means it can be rebuilt; `state` is `disabled`/`stale`/`building`/`ready`; `estimate` `-1` means unreachable |
 | `POST` | `/admin/api/indexes/{name}/rebuild` | admin* | body `{fresh, dry_run}` (`reverify` is refused with `400`); `202` new job, `200` the running one, `409` other job, `501` unavailable |
 | `GET` | `/admin/api/profiles/{pubkey}` | admin* | stored checks `{nip05, lud16, picture: {value, status, checked_at, next_check_at, attempts, last_error}}`, `score`/`base_score`/`check_score`/`social_score`, `lnurl_pubkey`, `stats` |
 | `POST` | `/admin/api/profiles/{pubkey}/verify` | admin* | checks the profile now (every field), then the same report; `404` without a stored kind 0 |
-| `POST` | `/admin/api/indexes/{name}/drop` | admin* | the finished job (`202` if still running after 30s) |
+| `POST` | `/admin/api/indexes/{name}/drop` | admin* | the finished job (`202` if still running after 30s); allowed on a disabled `zaps`/`stats` index, `501` on a disabled `search` |
 | `GET` | `/admin/api/jobs`, `/admin/api/jobs/{id}` | admin* | jobs, newest first / one job |
 | `DELETE` | `/admin/api/jobs/{id}` | admin* | cancels and returns the job |
 | `GET` | `/admin/ui/` | none (page only) | the embedded dashboard |

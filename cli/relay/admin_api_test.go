@@ -2,6 +2,7 @@ package relay
 
 import (
 	"errors"
+	"github.com/stretchr/testify/assert"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -224,4 +225,15 @@ func TestFetchStatusSurvivesIndexesFailure(t *testing.T) {
 func TestRenderStatusToleratesEmptyMetrics(t *testing.T) {
 	// A relay just started has no rates yet; rendering must not panic.
 	renderStatus(statusJSON{Indexes: []jobs.IndexInfo{{Name: "zaps", Available: true}}})
+}
+
+func TestIndexSummaryStates(t *testing.T) {
+	disabled := indexSummary(jobs.IndexInfo{Name: "zaps", Unavailable: "zap ranking is off", State: jobs.IndexDisabled, HasData: true})
+	assert.Contains(t, disabled, "unavailable")
+	assert.Contains(t, disabled, "ncli relay index drop zaps")
+	assert.NotContains(t, indexSummary(jobs.IndexInfo{Name: "zaps", Unavailable: "off", State: jobs.IndexDisabled}), "drop")
+	assert.Contains(t, indexSummary(jobs.IndexInfo{Name: "stats", Available: true, State: jobs.IndexStale}), "rebuilt on the next start")
+	assert.Equal(t, "idle", indexSummary(jobs.IndexInfo{Name: "stats", Available: true, State: jobs.IndexReady}))
+	running := jobs.Job{Kind: jobs.KindDrop, State: jobs.StateRunning}
+	assert.Contains(t, indexSummary(jobs.IndexInfo{Name: "zaps", Unavailable: "off", Running: &running}), "drop running")
 }

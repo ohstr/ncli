@@ -44,6 +44,8 @@ func TestServiceStop_StopsVerificationWorkers(t *testing.T) {
 	config = RelayConfig{
 		Nip11:               nip11.Metadata{PubKey: strings.Repeat("a", 64), PrivKey: strings.Repeat("1", 64)},
 		VerificationWorkers: workerCount,
+		// The workers serve profile checks, so only run with stats or search.
+		Cache: &CacheConfig{Profiles: &ProfilesConfig{Stats: &ProfileStatsConfig{Enabled: true}}},
 	}
 
 	s := NewServer(store, nil)
@@ -69,4 +71,25 @@ func TestServiceStop_StopsVerificationWorkers(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
+}
+
+func TestNewServer_NoVerificationWorkersWithoutProfiles(t *testing.T) {
+	prevConfig := config
+	t.Cleanup(func() { config = prevConfig })
+
+	store, err := relay.NewEventStore(filepath.Join(t.TempDir(), "test.db"), &nip11.Limitation{MaxLimit: 1000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	config = RelayConfig{
+		Nip11:               nip11.Metadata{PubKey: strings.Repeat("a", 64), PrivKey: strings.Repeat("1", 64)},
+		VerificationWorkers: 5,
+		Cache:               &CacheConfig{Zaps: &ZapsConfig{Enabled: true}},
+	}
+	s := NewServer(store, nil)
+	time.Sleep(50 * time.Millisecond)
+	if got := countVerificationWorkerGoroutines(); got != 0 {
+		t.Fatalf("verification worker goroutines without search or stats = %d, want 0", got)
+	}
+	s.Stop() // an unstarted worker stops cleanly
 }

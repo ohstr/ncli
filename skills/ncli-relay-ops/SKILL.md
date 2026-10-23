@@ -251,22 +251,29 @@ ncli relay jobs cancel <id>
   `cache.profiles.scoring` weights and **never re-fetches** a NIP-05 or lightning
   address. `--reverify` was removed (it fails with `usage`); use
   `ncli relay verify <pubkey> --refresh`.
-- An index is unavailable (`usage`, exit 2; the dashboard says why) when
-  its feature is off: `search` without `cache.profiles.search.enabled` or
-  with `readonly`, `zaps` without `cache.zaps.enabled`, `stats` without
-  `cache.profiles.search.enabled` or `cache.profiles.stats.enabled`. An
-  unknown index or job id is `not_found` (exit 4); a key that isn't admin
-  is `auth` (exit 7); a stopped relay is `network`.
+- An index can't be rebuilt (`usage`, exit 2; the dashboard says why)
+  when its feature is off: `search` without `cache.profiles.search.enabled`
+  or with `readonly`, `zaps` without `cache.zaps.enabled`, `stats` without
+  a writable `cache.profiles.search` or `cache.profiles.stats.enabled`.
+  `drop` still works on a disabled `zaps` or `stats` index, to remove the
+  data it holds. An unknown index or job id is `not_found` (exit 4); a key
+  that isn't admin is `auth` (exit 7); a stopped relay is `network`.
+- `state` is `disabled`, `stale` (in use but missing events until the next
+  start rebuilds it), `building` or `ready`; `has_data` says whether a
+  disabled index still holds data.
 - `estimate` is what the index holds: Meilisearch's document count for
   search (`unreachable` when Meilisearch doesn't answer), stored zap
-  receipts for zaps, pubkeys some stored contact list follows for stats.
+  receipts for zaps (index entries while disabled), pubkeys some stored
+  contact list follows for stats.
   `scan_estimate` is what a rebuild reads (stored profiles for search,
   every stored event for zaps/stats). Counts are kept as events are
   written, or cached for a minute, so polling them is cheap.
-- The store indexes zaps and follows on ingest even with those features
-  off, so turning them on needs no rebuild. A store from an older version
-  rebuilds the zap and stats indexes once in the background on start, to
-  record each zap's coin.
+- The store keeps the zaps and stats indexes only while their feature is
+  on. Turning a feature on builds its index once in the background on the
+  next start (answers fill in when it is `ready`). Turning it off keeps the
+  data, unused and no longer updated, with a startup warning until
+  `ncli relay index drop zaps|stats --yes` removes it; reading the store
+  with `dump`/`inspect` while the relay is stopped changes nothing.
 - `ncli relay stats`/`reindex`/`clear` no longer exist; they fail with
   `usage` naming the replacement.
 

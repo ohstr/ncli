@@ -489,6 +489,28 @@ func (r *Relay) Restart(t *testing.T) {
 	r.start(t)
 }
 
+// Reconfigure merges overrides into the relay's config file; it takes
+// effect on the next Restart.
+func (r *Relay) Reconfigure(t *testing.T, overrides map[string]any) {
+	t.Helper()
+	raw, err := os.ReadFile(r.ConfigPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := map[string]any{}
+	if err := yaml.Unmarshal(raw, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	deepMerge(cfg, overrides)
+	b, err := yaml.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(r.ConfigPath, b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // Log returns the relay's combined stdout/stderr so far.
 func (r *Relay) Log() string {
 	b, _ := os.ReadFile(r.LogPath)

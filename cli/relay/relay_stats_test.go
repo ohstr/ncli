@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -203,4 +204,24 @@ func TestNewServer_RelayStatsReachLiveSubscribers(t *testing.T) {
 			break
 		}
 	}
+}
+
+// With zap ranking off the store keeps no zap index, so the publisher must
+// not ask it for totals.
+func TestRelayStatsPublisher_ZapsOffNeedsNoZapIndex(t *testing.T) {
+	withStatsConfig(t, &CacheConfig{Relay: &RelayCacheConfig{Stats: &RelayStatsConfig{Enabled: true}}})
+	store, err := openRelayStore(&RelayConfig{RelayNotesDb: filepath.Join(t.TempDir(), "notes.db")})
+	require.NoError(t, err)
+	t.Cleanup(store.Close)
+	sender, provider, receiver := zaptest.NewKey(t, 1), zaptest.NewKey(t, 2), zaptest.NewKey(t, 3)
+	require.NoError(t, store.InsertEvents(context.Background(), []*nip01.Event{
+		zaptest.Receipt(t, sender, provider, receiver.Pub, 21_000, uint64(time.Now().Unix())),
+	}))
+
+	p := newRelayStatsPublisher(store, staticInfo([]int{1}, nil))
+	_, err = p.tick(context.Background())
+	require.NoError(t, err)
+	ev := statsEvents(t, store)[0]
+	assert.Empty(t, countTag(ev, "zap-receipts"))
+	assert.Empty(t, tagsOf(ev, "total"))
 }

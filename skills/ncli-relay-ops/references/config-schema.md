@@ -86,10 +86,10 @@ is `invalid_input`. A key from before this grouping (`cache.topZapped`,
 | Field | Type | Default | Notes |
 |---|---|---|---|
 | `profiles.search` | object | disabled | Profile search via Meilisearch, see below |
-| `profiles.stats` | object | disabled | NIP-85 user assertions (kind 30382), see below |
+| `profiles.stats` | object | disabled | NIP-85 user assertions (kind 30382), see below. The store keeps the stats (follows and zaps) index only while it or writable search is on |
 | `profiles.checks` | object | see below | NIP-05/lightning address checks; run when search or stats is on |
 | `profiles.scoring` | object | built-in weights | Overrides profile score weights by section: `scoring`, `verification`, `social`, with nmilat's `config.yaml` keys (e.g. `social: {followers_weight: 25}`). Unknown section or key is `invalid_input` |
-| `zaps` | object | disabled | The signed `zap-ranking` cache action, see below |
+| `zaps` | object | disabled | The signed `zap-ranking` cache action, see below. The store keeps a zap index only while it's on |
 | `relay.stats` | object | disabled | The relay's own NIP-66 kind 30166, see below |
 
 ### `cache.profiles.search`

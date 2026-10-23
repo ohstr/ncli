@@ -1,5 +1,19 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { api, ApiError, login, setCsrf } from "./api";
+import { api, ApiError, indexActions, login, setCsrf } from "./api";
+
+describe("indexActions", () => {
+  const base = { name: "zaps", estimate: 0, scan_estimate: 0 };
+  it("offers rebuild and drop on an available index", () => {
+    expect(indexActions({ ...base, available: true, state: "ready", has_data: true })).toEqual({ rebuild: true, drop: true });
+  });
+  it("offers only drop on a disabled index that still holds data", () => {
+    expect(indexActions({ ...base, available: false, state: "disabled", has_data: true })).toEqual({ rebuild: false, drop: true });
+  });
+  it("offers nothing on a disabled index without data", () => {
+    expect(indexActions({ ...base, available: false, state: "disabled", has_data: false })).toEqual({ rebuild: false, drop: false });
+    expect(indexActions({ ...base, available: false })).toEqual({ rebuild: false, drop: false });
+  });
+});
 
 type Call = { url: string; init: RequestInit };
 

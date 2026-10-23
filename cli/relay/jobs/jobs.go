@@ -60,11 +60,26 @@ type Job struct {
 // Progress reports a running job's position.
 type Progress func(scanned, indexed int)
 
+// Index states, as listed.
+const (
+	// IndexDisabled: its feature is off; data it still holds is stale.
+	IndexDisabled = "disabled"
+	// IndexStale: in use but missing events until rebuilt.
+	IndexStale = "stale"
+	// IndexBuilding: a rebuild is running.
+	IndexBuilding = "building"
+	// IndexReady: in use and current.
+	IndexReady = "ready"
+)
+
 // Index is one maintainable index.
 type Index interface {
 	Name() string
-	// Available returns "" when the index can be maintained, or why not.
-	Available() string
+	// Available returns "" when a job of kind can run on the index, or why
+	// not.
+	Available(kind Kind) string
+	// State returns the index's state and whether it holds data.
+	State() (state string, hasData bool)
 	// Estimate returns the approximate number of entries in the index.
 	Estimate() int64
 	// ScanEstimate returns the approximate number of items a rebuild scans.
@@ -121,9 +136,14 @@ func New(path string, logger zerolog.Logger, indexes ...Index) *Manager {
 
 // IndexInfo describes an index for listing.
 type IndexInfo struct {
-	Name        string `json:"name"`
+	Name string `json:"name"`
+	// Available reports whether it can be rebuilt; Unavailable says why not.
 	Available   bool   `json:"available"`
 	Unavailable string `json:"unavailable,omitempty"`
+	// State is disabled, stale, building or ready.
+	State string `json:"state"`
+	// HasData reports whether it holds entries, even while disabled.
+	HasData bool `json:"has_data"`
 	// Estimate is the approximate number of entries in the index.
 	Estimate int64 `json:"estimate"`
 	// ScanEstimate is the approximate number of items a rebuild scans.
@@ -138,10 +158,13 @@ func (m *Manager) Indexes() []IndexInfo {
 	out := make([]IndexInfo, 0, len(m.order))
 	for _, name := range m.order {
 		ix := m.indexes[name]
-		why := ix.Available()
+		why := ix.Available(KindRebuild)
 		info := IndexInfo{Name: name, Available: why == "", Unavailable: why}
+		info.State, info.HasData = ix.State()
 		if why == "" {
 			info.Estimate, info.ScanEstimate = ix.Estimate(), ix.ScanEstimate()
+		} else if info.HasData {
+			info.Estimate = ix.Estimate()
 		}
 		out = append(out, info)
 	}
@@ -152,6 +175,9 @@ func (m *Manager) Indexes() []IndexInfo {
 		if r, ok := m.running[name]; ok {
 			j := r.job
 			info.Running = &j
+			if j.Kind == KindRebuild {
+				info.State = IndexBuilding
+			}
 		}
 		for h := range m.history {
 			if m.history[h].Index == name {
@@ -166,19 +192,19 @@ func (m *Manager) Indexes() []IndexInfo {
 
 // Estimate returns an index's entry and scan estimates, for a dry run.
 func (m *Manager) Estimate(index string) (entries, scan int64, err error) {
-	ix, err := m.lookup(index)
+	ix, err := m.lookup(index, KindRebuild)
 	if err != nil {
 		return 0, 0, err
 	}
 	return ix.Estimate(), ix.ScanEstimate(), nil
 }
 
-func (m *Manager) lookup(index string) (Index, error) {
+func (m *Manager) lookup(index string, kind Kind) (Index, error) {
 	ix, ok := m.indexes[index]
 	if !ok {
 		return nil, ErrUnknownIndex
 	}
-	if why := ix.Available(); why != "" {
+	if why := ix.Available(kind); why != "" {
 		return nil, errors.Join(ErrUnavailable, errors.New(why))
 	}
 	return ix, nil
@@ -188,7 +214,7 @@ func (m *Manager) lookup(index string) (Index, error) {
 // (with the same options) it returns that job and started=false; any other
 // job on the index is ErrBusy.
 func (m *Manager) Start(index string, kind Kind, opts Options) (job Job, started bool, err error) {
-	ix, err := m.lookup(index)
+	ix, err := m.lookup(index, kind)
 	if err != nil {
 		return Job{}, false, err
 	}

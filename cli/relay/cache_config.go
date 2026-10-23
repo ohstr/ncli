@@ -122,9 +122,28 @@ func (c *RelayConfig) searchEnabled() bool {
 	return s != nil && s.Enabled
 }
 
+// searchWritable reports search on and not read-only: only then are
+// profile scores sent to it.
+func (c *RelayConfig) searchWritable() bool {
+	s := c.searchConfig()
+	return s != nil && s.Enabled && !s.Readonly
+}
+
 func (c *RelayConfig) profileStatsEnabled() bool {
 	s := c.profiles().Stats
 	return s != nil && s.Enabled
+}
+
+// statsInUse reports whether the stats (social) index is read: by search
+// scores or by NIP-85 stats.
+func (c *RelayConfig) statsInUse() bool {
+	return c.searchWritable() || c.profileStatsEnabled()
+}
+
+// derivedIndexes are the store indexes the cache features read, so the
+// store keeps no other.
+func (c *RelayConfig) derivedIndexes() relay.DerivedIndexes {
+	return relay.DerivedIndexes{Zaps: c.zapsEnabled(), Social: c.statsInUse()}
 }
 
 // zapsEnabled reports cache.zaps.enabled.

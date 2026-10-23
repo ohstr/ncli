@@ -195,7 +195,7 @@ cache:
     scoring:
       social:
         followers_weight: 20
-  # signed zap ranking; also required for `relay index rebuild|drop zaps`
+  # signed zap ranking; the store keeps a zap index only while it's on
   zaps:
     enabled: false
     windows: [24h, 7d, 30d, all]

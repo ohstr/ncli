@@ -3,6 +3,7 @@ package climatrix
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -159,8 +160,124 @@ spec:
 func TestZapRankingOff(t *testing.T) {
 	needsRelay(t)
 	r := StartRelay(t, "", nil)
+	newZapper(t, r).zap(A(t, "alice").PubHex, "sats", 21, time.Hour)
 	if _, _, closed := ranking(t, Dial(t, r.URL), nil); closed != "restricted: zap ranking is not enabled on this relay" {
 		t.Errorf("CLOSED %q", closed)
+	}
+	if ix := indexStates(t, NewEnv(t), r)["zaps"]; ix.State != "disabled" || ix.HasData {
+		t.Errorf("zap index with zap ranking off = %+v, want disabled and empty", ix)
+	}
+}
+
+type indexState struct {
+	Name      string `json:"name"`
+	Available bool   `json:"available"`
+	State     string `json:"state"`
+	HasData   bool   `json:"has_data"`
+	Estimate  int64  `json:"estimate"`
+}
+
+func indexStates(t *testing.T, e *Env, r *Relay) map[string]indexState {
+	t.Helper()
+	var list struct{ Indexes []indexState }
+	e.MustOK(t, "relay", "index", "list", "--config", r.ConfigPath, "--json").JSON(t, &list)
+	out := map[string]indexState{}
+	for _, ix := range list.Indexes {
+		out[ix.Name] = ix
+	}
+	return out
+}
+
+// waitIndex polls until index matches want.
+func waitIndex(t *testing.T, e *Env, r *Relay, index string, want func(indexState) bool) indexState {
+	t.Helper()
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		ix := indexStates(t, e, r)[index]
+		if want(ix) {
+			return ix
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%s index stuck at %+v", index, ix)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+}
+
+// TestDerivedIndexLifecycle turns zap ranking and profile stats off and on
+// again on one store: off keeps the indexes' data until dropped, on
+// rebuilds them from the stored events.
+func TestDerivedIndexLifecycle(t *testing.T) {
+	needsRelay(t)
+	on := map[string]any{"cache": map[string]any{
+		"zaps":     map[string]any{"enabled": true},
+		"profiles": map[string]any{"stats": map[string]any{"enabled": true}},
+	}}
+	off := map[string]any{"cache": map[string]any{
+		"zaps":     map[string]any{"enabled": false},
+		"profiles": map[string]any{"stats": map[string]any{"enabled": false}},
+	}}
+	r := StartRelay(t, "", on)
+	e := NewEnv(t)
+	alice := A(t, "alice").PubHex
+	newZapper(t, r).zap(alice, "sats", 21, time.Hour)
+	for _, name := range []string{"zaps", "stats"} {
+		waitIndex(t, e, r, name, func(ix indexState) bool { return ix.State == "ready" && ix.HasData })
+	}
+
+	r.Reconfigure(t, off)
+	r.Restart(t)
+	newZapper(t, r).zap(alice, "sats", 5, time.Hour) // missed by both indexes
+	if ix := indexStates(t, e, r)["zaps"]; ix.Estimate != 1 {
+		t.Errorf("disabled zap index estimate = %d, want the 1 entry it holds", ix.Estimate)
+	}
+	for _, name := range []string{"zaps", "stats"} {
+		ix := indexStates(t, e, r)[name]
+		if ix.Available || ix.State != "disabled" || !ix.HasData {
+			t.Errorf("%s with its feature off = %+v, want disabled with its data", name, ix)
+		}
+	}
+	if !strings.Contains(r.Log(), "ncli relay index drop zaps") {
+		t.Errorf("no warning about the leftover zap index:\n%s", r.Log())
+	}
+	e.Run(t, "relay", "index", "rebuild", "zaps", "--config", r.ConfigPath, "--json").ExpectErr(t, "usage")
+	e.MustOK(t, "relay", "index", "drop", "zaps", "--yes", "--config", r.ConfigPath, "--json")
+	waitIndex(t, e, r, "zaps", func(ix indexState) bool { return !ix.HasData })
+
+	r.Reconfigure(t, on)
+	r.Restart(t)
+	for _, name := range []string{"zaps", "stats"} {
+		waitIndex(t, e, r, name, func(ix indexState) bool { return ix.State == "ready" })
+	}
+	_, totals, closed := ranking(t, Dial(t, r.URL), nil)
+	if closed != "" || len(totals) != 1 || totals[0].Pubkey != alice || totals[0].Total != 26 {
+		t.Errorf("ranking after re-enabling = %+v %q, want both zaps", totals, closed)
+	}
+	evs, _ := Dial(t, r.URL).Req(F{"kinds": []int{30382}, "#d": []string{alice}})
+	if len(evs) != 1 || !containsTag(evs[0], []string{"zap_cnt_recd", "2"}) {
+		t.Errorf("NIP-85 after re-enabling = %+v, want both zaps counted", evs)
+	}
+}
+
+// TestDumpOfStoppedRelayStoreNeedsNoRebuild reads a stopped relay's store
+// with dump, which opens it with no indexes: that changes nothing, so the
+// relay starts with its indexes still current.
+func TestDumpOfStoppedRelayStoreNeedsNoRebuild(t *testing.T) {
+	needsRelay(t)
+	r := StartRelay(t, "", map[string]any{"cache": map[string]any{"zaps": map[string]any{"enabled": true}}})
+	e := NewEnv(t)
+	newZapper(t, r).zap(A(t, "alice").PubHex, "sats", 21, time.Hour)
+	waitIndex(t, e, r, "zaps", func(ix indexState) bool { return ix.State == "ready" && ix.HasData })
+
+	r.Stop()
+	out := filepath.Join(t.TempDir(), "dump.json")
+	e.MustOK(t, "dump", "-s", filepath.Join(r.Dir, "db", "notes.db"), "-o", out)
+	r.Restart(t)
+	if ix := indexStates(t, e, r)["zaps"]; ix.State != "ready" {
+		t.Errorf("zap index after a dump of the stopped store = %+v, want ready", ix)
+	}
+	if strings.Contains(r.Log(), "building the index") {
+		t.Errorf("relay rebuilt an index after a read-only dump:\n%s", r.Log())
 	}
 }
 

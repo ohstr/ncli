@@ -145,6 +145,7 @@ try {
     check(await stats.getByText("cache.profiles.stats.enabled", { exact: false }).isVisible(), "stats index is unavailable with profile stats off");
     check((await stats.getByText(/entries/).count()) === 0, "no estimate for an unavailable index");
     check((await stats.getByRole("button", { name: "Rebuild" }).count()) === 0, "no rebuild for an unavailable index");
+    check((await stats.getByRole("button", { name: "Drop" }).count()) === 0, "no drop for an unavailable index without data");
 
     // Toolbar, rows, panels.
     const search = () => page.evaluate(() => location.search);

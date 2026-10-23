@@ -320,6 +320,11 @@ func (m *Manager) execute(ctx context.Context, ix Index, r *run, j Job) {
 		j.EntriesBefore, j.EntriesAfter = res.EntriesBefore, res.EntriesAfter
 	}
 	j.Applied = max(j.Applied, res.Applied)
+	// A phase without a known total counts up alone; an ended job reads whole.
+	if j.State == StateRunning && err == nil {
+		j.Total = max(j.Total, j.Done)
+		j.Done = j.Total
+	}
 	j.Phase = ""
 	switch {
 	case err == nil, errors.Is(err, ErrNothingToDo):

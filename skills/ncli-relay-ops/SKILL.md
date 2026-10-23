@@ -256,6 +256,9 @@ holds the store writer at most 25 ms at a time, so writes never wait on it.
 | A job failed | Retried after 1, 5, then 15 minutes (`retry_at`) |
 | Feature turned off | Data kept, unused; `hint` names the `drop` that removes it |
 
+- `zaps` is on with `cache.zaps.enabled`; `stats` with
+  `cache.profiles.stats.enabled` or writable search (search scores use it);
+  `search` with `cache.profiles.search.enabled`, not `readonly`.
 - States: `ready`, `behind`, `needs_rebuild`, `unreachable`, `empty`,
   `disabled`, and while a job runs `building`, `catching_up`, `rescoring`,
   `dropping`. `action` is the job the relay starts next; `reason` why.

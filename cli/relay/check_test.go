@@ -47,3 +47,35 @@ func TestStdLogGoesToDebug(t *testing.T) {
 		t.Errorf("debug line = %s", buf.String())
 	}
 }
+
+func TestCheckSearchBatching(t *testing.T) {
+	cfg := func(batch, inFlight int) *RelayConfig {
+		return &RelayConfig{Cache: &CacheConfig{Profiles: &ProfilesConfig{Search: &SearchConfig{Enabled: true, BatchSize: batch, MaxInFlight: inFlight}}}}
+	}
+	for _, ok := range [][2]int{{0, 0}, {1, 1}, {10_000, 4}, {maxSearchBatch, maxSearchInFlight}} {
+		if err := checkSearchBatching(cfg(ok[0], ok[1])); err != nil {
+			t.Errorf("batchSize %d maxInFlight %d: %v", ok[0], ok[1], err)
+		}
+	}
+	for _, bad := range [][2]int{{-1, 0}, {maxSearchBatch + 1, 0}, {0, -1}, {0, maxSearchInFlight + 1}} {
+		if err := checkSearchBatching(cfg(bad[0], bad[1])); err == nil {
+			t.Errorf("batchSize %d maxInFlight %d passed", bad[0], bad[1])
+		}
+	}
+	if err := checkSearchBatching(&RelayConfig{}); err != nil {
+		t.Errorf("no search: %v", err)
+	}
+}
+
+func TestSearchConfig_MeiliOptions(t *testing.T) {
+	off := false
+	on := true
+	if n := len((&SearchConfig{SearchAbout: &off}).meiliOptions()); n != 1 {
+		t.Errorf("searchAbout false: %d options, want 1", n)
+	}
+	for _, s := range []*SearchConfig{nil, {}, {SearchAbout: &on}} {
+		if n := len(s.meiliOptions()); n != 0 {
+			t.Errorf("%+v: %d options, want 0", s, n)
+		}
+	}
+}

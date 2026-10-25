@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/ohstr/ncli/cli/common/meilisearch"
 	"github.com/ohstr/nmilat/relay"
 )
 
@@ -47,6 +48,12 @@ type Status struct {
 	Retired int   `json:"retired,omitempty"`
 	// Error is the last failure reaching the index's backend.
 	Error string `json:"error,omitempty"`
+	// Warning is a problem that needs no action yet (search: the queue
+	// outgrowing what is applied).
+	Warning string `json:"warning,omitempty"`
+	// LastTask is search's last Meilisearch document task: how long its
+	// batch took and its slowest step.
+	LastTask *meilisearch.TaskStat `json:"last_task,omitempty"`
 }
 
 // StoreIndex is a derived index kept in the event store (nmilat's zap or

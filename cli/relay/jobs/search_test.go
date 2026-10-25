@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/ohstr/ncli/cli/common/meilisearch"
+	"github.com/ohstr/nmilat/nip01"
 	"github.com/ohstr/nmilat/relay"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
@@ -34,6 +35,8 @@ type fakeMeili struct {
 	clock     int
 	failTasks bool
 	down      bool
+	// maxOpen is the most tasks waiting to run when a write was enqueued.
+	maxOpen int
 }
 
 type fakeIx struct {
@@ -80,6 +83,7 @@ func (f *fakeMeili) recreate(name string) {
 func (f *fakeMeili) enqueue(w http.ResponseWriter, index string, op func() error) {
 	f.nextTask++
 	f.tasks[f.nextTask] = op
+	f.maxOpen = max(f.maxOpen, len(f.tasks))
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
 	_ = json.NewEncoder(w).Encode(map[string]any{"taskUid": f.nextTask, "indexUid": index, "status": "enqueued"})
@@ -290,7 +294,13 @@ func TestSearch_UnreachableLosesNothing(t *testing.T) {
 	s.meili.failTasks = true
 	s.meili.mu.Unlock()
 	insert(t, s.store, signed(t, 2, 0, 101))
-	_, err := s.ix.Indexer.Step(context.Background())
+	// The batch is enqueued first; its failure shows when it is waited for.
+	var err error
+	for range 5 {
+		if _, err = s.ix.Indexer.Step(context.Background()); err != nil {
+			break
+		}
+	}
 	require.Error(t, err)
 	st := s.status()
 	assert.Equal(t, StateUnreachable, st.State)
@@ -370,4 +380,128 @@ func TestSearch_DropWhenOff(t *testing.T) {
 	assert.False(t, off.Status().HasData)
 	_, err := s.store.FeedStatus(relay.SearchFeed.Name)
 	assert.ErrorIs(t, err, relay.ErrUnknownFeed)
+}
+
+func TestSearch_RebuildReportsProfilesNotEvents(t *testing.T) {
+	s := newSearchFixture(t)
+	s.ix.BatchSize = 1
+	var events []*nip01.Event
+	for i := range 8 {
+		events = append(events, signed(t, 1, 1, uint64(100+i)))
+	}
+	events = append(events, signed(t, 2, 0, 200), signed(t, 3, 0, 201))
+	insert(t, s.store, events...)
+
+	var seen []string
+	_, err := s.ix.Run(context.Background(), KindRebuild, func(p Progress) {
+		if p.Phase == "build" {
+			seen = append(seen, fmt.Sprintf("%d/%d", p.Done, p.Total))
+		}
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"0/2", "1/2", "2/2"}, seen)
+}
+
+func TestSearch_RebuildKeepsAtMostMaxInFlight(t *testing.T) {
+	s := newSearchFixture(t)
+	s.ix.BatchSize, s.ix.MaxInFlight = 1, 3
+	for i := range 10 {
+		insert(t, s.store, signed(t, 10+i, 0, uint64(100+i)))
+	}
+	done := runToEnd(t, s.m, "search", KindRebuild)
+	require.Equal(t, StateSucceeded, done.State, done.Error)
+	assert.Len(t, s.meili.docs("profiles"), 10)
+	s.meili.mu.Lock()
+	defer s.meili.mu.Unlock()
+	assert.Equal(t, 3, s.meili.maxOpen, "three requests enqueued before waiting for the oldest")
+}
+
+func TestSearch_RebuildFailsOnAFailedTask(t *testing.T) {
+	s := newSearchFixture(t)
+	insert(t, s.store, signed(t, 1, 0, 100))
+	runToEnd(t, s.m, "search", KindRebuild)
+	insert(t, s.store, signed(t, 2, 0, 101))
+	s.meili.mu.Lock()
+	s.meili.failTasks = true
+	s.meili.mu.Unlock()
+	_, err := s.ix.Run(context.Background(), KindRebuild, nil)
+	require.Error(t, err)
+	s.meili.mu.Lock()
+	s.meili.failTasks = false
+	s.meili.mu.Unlock()
+	assert.Len(t, s.meili.docs("profiles"), 1, "the live index is untouched")
+}
+
+func TestSearch_SettingsChangeRebuilds(t *testing.T) {
+	s := newSearchFixture(t)
+	insert(t, s.store, signed(t, 1, 0, 100))
+	runToEnd(t, s.m, "search", KindRebuild)
+	require.Equal(t, StateReady, s.status().State)
+
+	s.ix.Client = meilisearch.NewMeiliClient(s.ix.Host, "", "profiles", meilisearch.WithoutAbout())
+	st := s.status()
+	assert.Equal(t, KindRebuild, st.Action)
+	assert.Equal(t, "the index settings changed", st.Reason)
+	runToEnd(t, s.m, "search", KindRebuild)
+	assert.Equal(t, StateReady, s.status().State)
+}
+
+func TestSearch_UpgradedRelayRebuildsOnce(t *testing.T) {
+	s := newSearchFixture(t)
+	insert(t, s.store, signed(t, 1, 0, 100))
+	runToEnd(t, s.m, "search", KindRebuild)
+	// A relay from before the settings were remembered.
+	require.NoError(t, s.store.Db().Update(func(tx *bolt.Tx) error {
+		return tx.Bucket(searchState).Delete(keySettings)
+	}))
+	st := s.status()
+	assert.Equal(t, "the index settings changed", st.Reason)
+	runToEnd(t, s.m, "search", KindRebuild)
+	assert.Equal(t, StateReady, s.status().State)
+}
+
+func TestQueueWatch(t *testing.T) {
+	t0 := time.Unix(1_700_000_000, 0)
+	series := func(queued, applied func(min int) int64) *queueWatch {
+		w := &queueWatch{}
+		for m := 0; m <= 40; m++ {
+			w.add(queueSample{at: t0.Add(time.Duration(m) * time.Minute), queued: queued(m), applied: applied(m)})
+		}
+		return w
+	}
+	applied := func(m int) int64 { return int64(m) * 180 } // 10,800/h
+
+	// 14,000/h join while 10,800/h are applied: the queue grows.
+	growing := series(func(m int) int64 { return 1000 + int64(m)*(233-180) }, applied)
+	assert.Contains(t, growing.warning(), "search is falling behind")
+
+	// As many join as are applied: the queue stays put.
+	assert.Empty(t, series(func(int) int64 { return 1000 }, applied).warning())
+	// Shrinking.
+	assert.Empty(t, series(func(m int) int64 { return 10000 - int64(m)*10 }, applied).warning())
+	// Grew, but dipped below where the window began.
+	assert.Empty(t, series(func(m int) int64 {
+		if m == 30 {
+			return 0
+		}
+		return 1000 + int64(m)
+	}, applied).warning())
+
+	// Less than the window seen yet.
+	w := &queueWatch{}
+	for m := 0; m < 20; m++ {
+		w.add(queueSample{at: t0.Add(time.Duration(m) * time.Minute), queued: int64(m * 100), applied: 0})
+	}
+	assert.Empty(t, w.warning())
+
+	// Samples closer than a minute are skipped; a restart starts over.
+	w = &queueWatch{}
+	w.add(queueSample{at: t0, applied: 10})
+	w.add(queueSample{at: t0.Add(10 * time.Second), applied: 11})
+	assert.Len(t, w.samples, 1)
+	w.add(queueSample{at: t0.Add(2 * time.Minute), applied: 1})
+	assert.Len(t, w.samples, 1)
+	assert.Equal(t, int64(1), w.samples[0].applied)
+	// The window stays bounded.
+	assert.LessOrEqual(t, len(growing.samples), 32)
 }

@@ -531,6 +531,9 @@ func initConfig() error {
 
 	finalizeNip11(&config)
 
+	if err := checkSearchBatching(&config); err != nil {
+		return err
+	}
 	if err := checkMaxStatsTargets(&config); err != nil {
 		return err
 	}
@@ -673,9 +676,10 @@ func RunRelay(jsonMode bool) error {
 
 	var meili *meilisearch.MeiliClient
 	if searchCfg := config.searchConfig(); searchCfg != nil && searchCfg.Enabled {
-		meili = meilisearch.NewMeiliClient(searchCfg.Meilisearch.Host, searchCfg.Meilisearch.Key, searchCfg.Meilisearch.Index)
+		meili = meilisearch.NewMeiliClient(searchCfg.Meilisearch.Host, searchCfg.Meilisearch.Key, searchCfg.Meilisearch.Index, searchCfg.meiliOptions()...)
 		if !searchCfg.Readonly {
-			// Settings only; a missing or unreachable engine is caught up later.
+			// Creates a missing index; an existing one keeps its settings
+			// until a rebuild. An unreachable engine is caught up later.
 			if err := meili.Initialize(context.Background()); err != nil {
 				log.Warn().Err(err).Msg("Meilisearch not ready; profiles wait in the store until it is")
 			}

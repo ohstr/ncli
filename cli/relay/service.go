@@ -438,7 +438,8 @@ func searchIndex(store *relay.EventStore, meili *meilisearch.MeiliClient) *jobs.
 		ix.Disabled = "search is read-only on this relay (cache.profiles.search.readonly)"
 	default:
 		ix.Host, ix.Key, ix.IndexName = cfg.Meilisearch.Host, cfg.Meilisearch.Key, cfg.Meilisearch.Index
-		indexer, err := relay.NewSearchIndexer(store, meili)
+		ix.Client, ix.BatchSize, ix.MaxInFlight = meili, cfg.BatchSize, cfg.MaxInFlight
+		indexer, err := relay.NewSearchIndexer(store, meili, relay.WithSearchBatch(cfg.BatchSize), relay.WithSearchInFlight(cfg.MaxInFlight))
 		if err != nil {
 			log.Error().Err(err).Msg("failed to start search indexing")
 			ix.Disabled = "search indexing failed to start: " + err.Error()

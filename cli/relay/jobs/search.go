@@ -3,7 +3,6 @@ package jobs
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -25,15 +24,12 @@ var (
 	searchState    = []byte("ncli/search")
 	keyIdentity    = []byte("identity")
 	keyFingerprint = []byte("fingerprint")
-	eventsBucket   = []byte{1}
+	keySettings    = []byte("settings")
 )
 
 // searchBacklog is how far behind the live indexer may fall before the
 // relay shows its catching up as a job.
 var searchBacklog int64 = 1000
-
-// searchBatch is how many profiles a rebuild sends per request.
-const searchBatch = 500
 
 // SearchIndex is the Meilisearch profile index. While search is on, a
 // relay.SearchIndexer keeps it in step with the store; a rebuild builds a
@@ -44,12 +40,22 @@ type SearchIndex struct {
 	Host      string
 	Key       string
 	IndexName string
+	// Client, when set, is the client the indexer writes with; indexes the
+	// rebuild makes share its options and last task.
+	Client *meilisearch.MeiliClient
+	// BatchSize is the profiles a rebuild sends per request
+	// (relay.DefaultSearchBatch when 0), and MaxInFlight how many requests
+	// it keeps enqueued before waiting for the oldest
+	// (relay.DefaultSearchInFlight when 0).
+	BatchSize   int
+	MaxInFlight int
 	// Disabled explains why search is off or read-only ("" when on).
 	Disabled string
 
 	mu      sync.Mutex
 	checked time.Time
 	cached  searchCheck
+	queue   queueWatch
 }
 
 type searchCheck struct {
@@ -62,7 +68,21 @@ func (s *SearchIndex) Name() string      { return "search" }
 func (s *SearchIndex) WritesStore() bool { return false }
 
 func (s *SearchIndex) client(name string) *meilisearch.MeiliClient {
+	if s.Client != nil {
+		return s.Client.ForIndex(name)
+	}
 	return meilisearch.NewMeiliClient(s.Host, s.Key, name)
+}
+
+func (s *SearchIndex) batching() (batch, inFlight int) {
+	batch, inFlight = s.BatchSize, s.MaxInFlight
+	if batch <= 0 {
+		batch = relay.DefaultSearchBatch
+	}
+	if inFlight <= 0 {
+		inFlight = relay.DefaultSearchInFlight
+	}
+	return batch, inFlight
 }
 
 // check asks Meilisearch for the live index's size and identity, at most
@@ -105,6 +125,9 @@ func (s *SearchIndex) remember(identity string) error {
 		if err := b.Put(keyIdentity, []byte(identity)); err != nil {
 			return err
 		}
+		if err := b.Put(keySettings, []byte(s.client(s.IndexName).SettingsFingerprint())); err != nil {
+			return err
+		}
 		return b.Put(keyFingerprint, []byte(scoringFingerprint()))
 	})
 }
@@ -130,6 +153,13 @@ func (s *SearchIndex) Status() Status {
 	}
 	st := s.Indexer.Status()
 	out.Behind, out.Queued = int64(st.Behind), st.Queued
+	s.mu.Lock()
+	s.queue.add(queueSample{at: time.Now(), queued: st.Queued, applied: st.Upserted + st.Deleted})
+	out.Warning = s.queue.warning()
+	s.mu.Unlock()
+	if s.Client != nil {
+		out.LastTask = s.Client.LastTask()
+	}
 	chk := s.check(false)
 	out.Entries, out.HasData = chk.docs, chk.docs > 0
 	switch {
@@ -150,11 +180,13 @@ func (s *SearchIndex) Status() Status {
 		out.State, out.Action, out.Reason = StateNeedsRebuild, KindRebuild, "not built by this relay yet"
 	case known != chk.identity:
 		out.State, out.Action, out.Reason = StateNeedsRebuild, KindRebuild, "the Meilisearch index was replaced"
+	case s.stored(keySettings) != s.client(s.IndexName).SettingsFingerprint():
+		out.State, out.Action, out.Reason = StateNeedsRebuild, KindRebuild, "the index settings changed"
 	case s.stored(keyFingerprint) != scoringFingerprint():
 		out.State, out.Action, out.Reason = StateNeedsRebuild, KindRebuild, "the scoring settings changed"
 	case out.Behind >= searchBacklog || out.Queued >= searchBacklog:
 		out.State, out.Action = StateBehind, KindCatchUp
-		out.Reason = fmt.Sprintf("%s events and %s profiles to index", Count(out.Behind), Count(out.Queued))
+		out.Reason = fmt.Sprintf("%s events (any kind) to look through and %s profiles to index", Count(out.Behind), Count(out.Queued))
 	default:
 		out.State = StateReady
 	}
@@ -219,7 +251,7 @@ func (s *SearchIndex) rebuild(ctx context.Context, progress func(Progress)) (Res
 		if err := next.Initialize(ctx); err != nil {
 			return err
 		}
-		n, err := s.buildInto(ctx, next, from, progress)
+		n, err := s.buildInto(ctx, next, progress)
 		if err != nil {
 			_ = next.RemoveIndex(context.Background())
 			return err
@@ -251,92 +283,71 @@ func (s *SearchIndex) rebuild(ctx context.Context, progress func(Progress)) (Res
 	return res, nil
 }
 
-// buildInto writes every stored profile to target, reporting progress over
-// the events up to head.
-func (s *SearchIndex) buildInto(ctx context.Context, target search.Writer, head uint64, progress func(Progress)) (int64, error) {
-	var sent int64
+// buildInto writes every stored profile to target, keeping up to
+// MaxInFlight requests of BatchSize profiles enqueued so Meilisearch merges
+// them, and reports progress as profiles applied out of the stored kind 0
+// count.
+func (s *SearchIndex) buildInto(ctx context.Context, target search.Enqueuer, progress func(Progress)) (int64, error) {
+	size, inFlight := s.batching()
+	total := int64(s.Store.Counts().Kind(0))
+	type sent struct {
+		pending    search.Pending
+		read, docs int64
+	}
+	var queue []sent
 	var batch []*search.ProfileDocument
-	flush := func() error {
-		if len(batch) == 0 {
-			return nil
+	var read, done, applied int64
+	report := func(phase string) {
+		if progress != nil {
+			progress(Progress{Phase: phase, Done: done, Total: max(total, done), Applied: applied})
 		}
-		if err := target.Upsert(ctx, batch); err != nil {
+	}
+	settle := func() error {
+		oldest := queue[0]
+		if err := oldest.pending.Wait(ctx); err != nil {
 			return err
 		}
-		sent += int64(len(batch))
-		batch = batch[:0]
+		queue = queue[1:]
+		done, applied = done+oldest.read, applied+oldest.docs
+		report("build")
 		return nil
 	}
-	err := scanProfiles(ctx, s.Store, func(ev *nip01.Event, pos uint64) error {
+	send := func() error {
+		if read == 0 {
+			return nil
+		}
+		for len(queue) >= inFlight {
+			if err := settle(); err != nil {
+				return err
+			}
+		}
+		p, err := target.EnqueueUpsert(ctx, batch)
+		if err != nil {
+			return err
+		}
+		queue = append(queue, sent{pending: p, read: read, docs: int64(len(batch))})
+		batch, read = make([]*search.ProfileDocument, 0, size), 0
+		return nil
+	}
+	report("build")
+	err := s.Store.EachProfile(ctx, func(ev *nip01.Event) error {
+		read++
 		if doc := relay.SearchDocument(s.Store, ev); doc != nil {
 			batch = append(batch, doc)
 		}
-		if len(batch) >= searchBatch {
-			if err := flush(); err != nil {
-				return err
-			}
-			if progress != nil {
-				progress(Progress{Phase: "build", Done: int64(pos), Total: int64(max(head, pos)), Applied: sent})
-			}
+		if len(batch) >= size {
+			return send()
 		}
 		return nil
 	})
 	if err == nil {
-		err = flush()
+		err = send()
 	}
-	if progress != nil {
-		progress(Progress{Phase: "swap", Done: int64(head), Total: int64(head), Applied: sent})
+	for err == nil && len(queue) > 0 {
+		err = settle()
 	}
-	return sent, err
-}
-
-// scanProfiles walks every stored event in read transactions of a thousand,
-// calling fn outside them for each profile.
-func scanProfiles(ctx context.Context, store *relay.EventStore, fn func(*nip01.Event, uint64) error) error {
-	const batch = 1000
-	var after uint64
-	for {
-		if err := ctx.Err(); err != nil {
-			return context.Cause(ctx)
-		}
-		var found []*nip01.Event
-		var at []uint64
-		n := 0
-		err := store.Db().View(func(tx *bolt.Tx) error {
-			b := tx.Bucket(eventsBucket)
-			if b == nil {
-				return nil
-			}
-			c := b.Cursor()
-			for k, v := c.Seek(binary.BigEndian.AppendUint64(nil, after+1)); k != nil && n < batch; k, v = c.Next() {
-				n++
-				after = binary.BigEndian.Uint64(k)
-				var head struct {
-					Kind int `json:"kind"`
-				}
-				if json.Unmarshal(v, &head) != nil || head.Kind != 0 {
-					continue
-				}
-				var ev nip01.Event
-				if json.Unmarshal(v, &ev) == nil {
-					found = append(found, &ev)
-					at = append(at, after)
-				}
-			}
-			return nil
-		})
-		if err != nil {
-			return err
-		}
-		for i, ev := range found {
-			if err := fn(ev, at[i]); err != nil {
-				return err
-			}
-		}
-		if n < batch {
-			return nil
-		}
-	}
+	report("swap")
+	return applied, err
 }
 
 // Drop forgets search on a relay where it is off: the profiles queued for

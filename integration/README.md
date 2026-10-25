@@ -22,6 +22,10 @@ and sync's `timeouts:` block being silently a no-op (see
    Docker; runs in CI as its own `integrations` job, separate from `check`.
    `just test-integration-<feature>` runs one locally, `just
    test-integrations` runs them all.
+   Search against a real Meilisearch (`cli/relay/jobs/search_meili_test.go`,
+   `go test ./cli/relay/jobs -run TestMeili`) runs in the same job; it is
+   skipped with `-short` or without Docker, and `NCLI_TEST_MEILI_IMAGE`
+   tests another Meilisearch version.
 3. **Black-box process-level tests** (`cli/blossom/blackbox_test.go`,
    `cli/ncli/miner_test.go`) -- build the real binary, shell out, assert on
    exit codes/stdout against an in-process fake server. Tests CLI-surface

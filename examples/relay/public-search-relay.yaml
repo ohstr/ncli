@@ -40,6 +40,10 @@ cache:
         host: "http://127.0.0.1:7700"
         key: "masterKey"
         index: "ncli_public_search"
+      # A large relay: profiles per Meilisearch request, and requests
+      # enqueued at once so Meilisearch indexes them in one pass.
+      batchSize: 10000
+      maxInFlight: 4
 
     # NIP-85 stats per profile (followers, zaps, rank), so a client can show
     # them without counting every contact list and zap itself:

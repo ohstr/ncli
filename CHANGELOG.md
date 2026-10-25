@@ -16,6 +16,7 @@
 - Changes the dashboard to show a search rebuild as profiles applied out of the total, estimate time left from the recent pace, and label search's backlog as events of any kind. ([#197](https://github.com/ohstr/ncli/pull/197))
 - Moves the relay's ncli and nmilat versions from the dashboard's top bar to its footer. ([#197](https://github.com/ohstr/ncli/pull/197))
 - Recommends Meilisearch 1.55 or later, and documents upgrading its database with `--upgrade-db`. ([#197](https://github.com/ohstr/ncli/pull/197))
+- Builds with nmilat v0.5.0-rc.42, which keeps several search batches in flight and reads profiles through the kind index. ([#197](https://github.com/ohstr/ncli/pull/197))
 
 ## [0.8.0-rc.42]
 

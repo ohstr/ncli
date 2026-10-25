@@ -10,7 +10,7 @@
 
 ### Changed
 
-- Changes the search index so `id` and `npub` are no longer searchable, filters are equality-only and facet search is off, which makes each write much cheaper on a large index. A hex, npub or nprofile query now fetches that profile directly. The index is rebuilt once after upgrading. ([#197](https://github.com/ohstr/ncli/pull/197))
+- Changes the search index so `id` and `npub` are no longer searchable, filters are equality-only and facet search is off, and a hex, npub or nprofile query fetches that profile directly. Each write is much cheaper on a large index, which is rebuilt once after upgrading. ([#197](https://github.com/ohstr/ncli/pull/197))
 - Changes the relay to rebuild search into a new index when its Meilisearch settings change, instead of changing the live index's settings at startup. ([#197](https://github.com/ohstr/ncli/pull/197))
 - Changes a search rebuild to read only profiles, through the store's kind index, and to report progress as profiles applied out of all stored profiles. ([#197](https://github.com/ohstr/ncli/pull/197))
 - Changes the dashboard to show a search rebuild as profiles applied out of the total, estimate time left from the recent pace, and label search's backlog as events of any kind. ([#197](https://github.com/ohstr/ncli/pull/197))

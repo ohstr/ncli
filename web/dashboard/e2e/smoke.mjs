@@ -136,7 +136,8 @@ try {
     // Indexes: each says its state, and a rebuild shows its plan, its
     // progress and what it did.
     const indexRow = (name) => page.locator(".index").filter({ has: page.locator("strong", { hasText: new RegExp(`^${name}$`) }) });
-    check(await page.locator(".version").getByText(/^ncli .+ · nmilat .+$/).isVisible(), "header names the relay's ncli and nmilat versions");
+    check(await page.locator("footer .version").getByText(/^ncli .+ · nmilat .+$/).isVisible(), "the footer names the relay's ncli and nmilat versions");
+    check((await page.locator(".topbar .version").count()) === 0, "the top bar doesn't carry the version");
     const zaps = indexRow("zaps");
     await zaps.locator(".badge", { hasText: "ready" }).waitFor({ timeout: 15000 });
     check(true, "zaps is ready");
@@ -271,7 +272,7 @@ try {
     await page.waitForTimeout(3000);
     check((await page.locator(".chart canvas").count()) === 18, "local mode renders every chart");
     check((await page.getByRole("button", { name: "Sign out" }).count()) === 0, "local mode has no sign-out");
-    check(await page.locator(".version").isVisible(), "local mode names the relay's versions");
+    check(await page.locator("footer .version").isVisible(), "local mode names the relay's versions in the footer");
     check((await page.locator(".badge.warn", { hasText: "this CLI" }).count()) === 0, "the same build: no version warning");
     const reuse = await (await fetch(link, { redirect: "manual" })).status;
     check(reuse === 401, `the one-time link works once (${reuse})`);

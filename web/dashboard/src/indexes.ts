@@ -43,11 +43,31 @@ export function percent(j: Job): number | null {
   return Math.min(100, (j.done / j.total) * 100);
 }
 
-// eta is the seconds a running job has left, estimated from its pace.
-export function eta(j: Job, now: number): number | null {
+// Pace is a running job's progress samples, oldest first.
+export type Pace = { t: number; done: number }[];
+
+// paceWindow is how far back the recent pace looks (seconds).
+const paceWindow = 600;
+
+// track adds a sample to pace and keeps the last paceWindow of it.
+export function track(pace: Pace, now: number, done: number): Pace {
+  const out = pace.filter((s) => now - s.t <= paceWindow && s.done <= done);
+  if (!out.length || out[out.length - 1].done !== done) out.push({ t: now, done });
+  return out;
+}
+
+// eta is the seconds a running job has left, estimated from its recent
+// pace (the last ten minutes of samples spanning at least 30s), else its
+// pace since it started.
+export function eta(j: Job, now: number, pace?: Pace): number | null {
   if (j.done <= 0 || j.total <= j.done) return null;
-  const elapsed = now - j.started_at;
-  const left = (elapsed * (j.total - j.done)) / j.done;
+  let rate = j.done / Math.max(1, now - j.started_at);
+  const first = pace?.[0];
+  const last = pace?.[pace.length - 1];
+  if (first && last && last.t - first.t >= 30 && last.done > first.done) {
+    rate = (last.done - first.done) / (now - first.t);
+  }
+  const left = (j.total - j.done) / rate;
   return left >= 1 ? Math.round(left) : null;
 }
 
@@ -58,7 +78,7 @@ export function duration(sec: number): string {
 }
 
 // progressText says where a running job is.
-export function progressText(j: Job, now: number): string {
+export function progressText(j: Job, now: number, pace?: Pace): string {
   if (j.phase === "waiting") return "waiting for another index job to finish";
   if (j.phase === "cancelling") return "cancelling…";
   if (j.phase?.startsWith("waiting for")) return j.phase;
@@ -66,9 +86,12 @@ export function progressText(j: Job, now: number): string {
   if (j.phase && j.phase !== "scan") parts.push(j.phase);
   const pct = percent(j);
   if (pct != null) parts.push(`${Math.round(pct)}%`);
-  const left = eta(j, now);
+  // A search rebuild counts profiles, not events.
+  const profiles = j.index === "search" && j.kind === "rebuild" && j.total > 0;
+  if (profiles) parts.push(`${count(j.done)} / ${count(j.total)} profiles`);
+  const left = eta(j, now, pace);
   if (left != null) parts.push(`~${duration(left)} left`);
-  if (j.applied > 0) parts.push(`${count(j.applied)} applied`);
+  if (j.applied > 0 && !profiles) parts.push(`${count(j.applied)} applied`);
   return parts.length ? parts.join(" · ") : "starting";
 }
 
@@ -76,10 +99,26 @@ export function progressText(j: Job, now: number): string {
 export function meta(ix: IndexInfo, now: number): string {
   const parts: string[] = [];
   if (ix.enabled || ix.has_data) parts.push(`${count(ix.entries)} entries`);
-  if (ix.enabled && ix.behind > 0) parts.push(`${count(ix.behind)} events behind`);
+  // Search follows profiles, but how far behind it is counts events of
+  // every kind.
+  if (ix.enabled && ix.behind > 0) parts.push(`${count(ix.behind)} ${ix.name === "search" ? "events of any kind" : "events"} behind`);
   if (ix.queued) parts.push(`${count(ix.queued)} profiles queued`);
   if (ix.built_at) parts.push(`built ${ago(ix.built_at, now)}`);
   return parts.join(" · ");
+}
+
+// lastTaskText is search's last Meilisearch batch in a line.
+export function lastTaskText(ix: IndexInfo): string {
+  const lt = ix.last_task;
+  if (!lt) return "";
+  const docs = Math.max(lt.batch_documents, lt.documents);
+  let s = `last Meilisearch batch: ${seconds(lt.duration_ms)} for ${count(docs)} documents`;
+  if (lt.slowest_step) s += ` · slowest step: ${lt.slowest_step.split(" > ").pop()} (${seconds(lt.slowest_ms ?? 0)})`;
+  return s;
+}
+
+function seconds(ms: number): string {
+  return ms < 10_000 ? `${(ms / 1000).toFixed(1)}s` : duration(ms / 1000);
 }
 
 // note says why an idle index isn't simply ready, and what happens next.

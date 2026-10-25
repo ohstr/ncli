@@ -6,12 +6,15 @@
 
 - Adds `cache.profiles.search.batchSize` (default 10000, with each request capped at about 50 MB) and `maxInFlight` (default 4). A rebuild and the live queue keep several requests enqueued so Meilisearch indexes them in one pass, and a large relay's search keeps up.
 - Adds `cache.profiles.search.searchAbout` (default true), which leaves profiles' about text out of search when false.
+- Adds the last Meilisearch batch's duration and slowest step to the dashboard's search card, plus a warning when search's queue has grown faster than profiles were applied for 30 minutes.
 
 ### Changed
 
 - Changes the search index so `id` and `npub` are no longer searchable, filters are equality-only and facet search is off, which makes each write much cheaper on a large index. A hex, npub or nprofile query now fetches that profile directly. The index is rebuilt once after upgrading.
 - Changes the relay to rebuild search into a new index when its Meilisearch settings change, instead of changing the live index's settings at startup.
 - Changes a search rebuild to read only profiles, through the store's kind index, and to report progress as profiles applied out of all stored profiles.
+- Changes the dashboard to show a search rebuild as profiles applied out of the total, estimate time left from the recent pace, and label search's backlog as events of any kind.
+- Moves the relay's ncli and nmilat versions from the dashboard's top bar to its footer.
 
 ## [0.8.0-rc.42]
 

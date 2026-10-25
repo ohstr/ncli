@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { IndexInfo, Job } from "./api";
-import { actions, ago, cancellable, count, ended, eta, meta, note, planText, progressText, tone, versionLabel } from "./indexes";
+import { actions, ago, cancellable, count, ended, eta, lastTaskText, meta, note, planText, progressText, tone, track, versionLabel } from "./indexes";
 
 const T = 1_800_000_000;
 
@@ -135,5 +135,42 @@ describe("versionLabel", () => {
     expect(versionLabel({ version: { ncli: "0.8.0", nmilat: "v0.5.0" }, client: { ncli: "0.7.9", nmilat: "v0.4.0" } }).mismatch).toBe(
       "this CLI is ncli 0.7.9, the relay runs 0.8.0",
     );
+  });
+});
+
+describe("search progress", () => {
+  it("counts profiles for a search rebuild", () => {
+    const j = job({ index: "search", kind: "rebuild", phase: "build", done: 1, total: 2, applied: 1, started_at: T - 10 });
+    expect(progressText(j, T)).toBe("build · 50% · 1 / 2 profiles · ~10s left");
+    expect(progressText(job({ index: "zaps", kind: "rebuild", done: 1, total: 2, applied: 1, started_at: T - 10 }), T)).toContain("1 applied");
+  });
+  it("estimates from the recent pace", () => {
+    // Fast at first, 1 a second over the last minute.
+    let pace = track([], T - 60, 900);
+    pace = track(pace, T, 960);
+    const j = job({ done: 960, total: 1960, started_at: T - 100 });
+    expect(eta(j, T, pace)).toBe(1000);
+    expect(eta(j, T)).toBe(104); // from the start: 9.6 a second
+    // Too short a span to trust: the pace since the start.
+    expect(eta(j, T, track([], T - 5, 955).concat({ t: T, done: 960 }))).toBe(104);
+  });
+  it("keeps ten minutes of samples", () => {
+    let pace = track([], T - 1000, 1);
+    pace = track(pace, T - 100, 2);
+    pace = track(pace, T, 3);
+    expect(pace.map((s) => s.done)).toEqual([2, 3]);
+    expect(track(pace, T, 3)).toHaveLength(2);
+    expect(track(pace, T + 1, 0)).toEqual([{ t: T + 1, done: 0 }]);
+  });
+  it("labels search's backlog as events of any kind", () => {
+    const ix = { name: "search", enabled: true, state: "behind", has_data: true, entries: 5, behind: 12, queued: 3, head: 20 } as IndexInfo;
+    expect(meta(ix, T)).toContain("12 events of any kind behind");
+    expect(meta({ ...ix, name: "zaps" }, T)).toContain("12 events behind");
+  });
+  it("describes the last Meilisearch batch", () => {
+    const ix = { name: "search", last_task: { at: "", task: 9, documents: 10000, batch: 3, batch_documents: 40000, duration_ms: 12300, slowest_step: "processing tasks > post processing words > word fst", slowest_ms: 8100 } } as IndexInfo;
+    expect(lastTaskText(ix)).toBe(`last Meilisearch batch: 12s for ${count(40000)} documents · slowest step: word fst (8.1s)`);
+    expect(lastTaskText({ ...ix, last_task: { ...ix.last_task!, duration_ms: 2500, slowest_step: undefined } })).toBe(`last Meilisearch batch: 2.5s for ${count(40000)} documents`);
+    expect(lastTaskText({ name: "zaps" } as IndexInfo)).toBe("");
   });
 });

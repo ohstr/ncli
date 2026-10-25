@@ -287,16 +287,6 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
             <option value="dark">Dark</option>
             <option value="light">Light</option>
           </select>
-          {version.label && (
-            <span className="muted version" title="The relay's build">
-              {version.label}
-            </span>
-          )}
-          {version.mismatch && (
-            <span className="badge warn" title="Commands and the page may not match the relay">
-              {version.mismatch}
-            </span>
-          )}
           <span className={`muted${session.nip05 ? "" : " mono"}`} title={npubOf(session.pubkey)}>
             {identityLabel(session.pubkey, session.nip05)}
           </span>
@@ -333,6 +323,21 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
           </div>
         );
       })}
+
+      {(version.label || version.mismatch) && (
+        <footer className="footer">
+          {version.label && (
+            <span className="muted version" title="The relay's build">
+              {version.label}
+            </span>
+          )}
+          {version.mismatch && (
+            <span className="badge warn" title="Commands and the page may not match the relay">
+              {version.mismatch}
+            </span>
+          )}
+        </footer>
+      )}
     </div>
   );
 }

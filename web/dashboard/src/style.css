@@ -648,6 +648,29 @@ button.danger {
   color: var(--bad);
 }
 
+p.warn {
+  color: var(--warn);
+}
+
+/* The page's foot: the relay's build. */
+.footer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin-top: 24px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.footer .version {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
 .history-since,
 .version {
   font-size: 12px;

@@ -505,3 +505,25 @@ func TestQueueWatch(t *testing.T) {
 	// The window stays bounded.
 	assert.LessOrEqual(t, len(growing.samples), 32)
 }
+
+func TestSearch_NoQueueWarningWhileRebuilding(t *testing.T) {
+	s := newSearchFixture(t)
+	t0 := time.Now().Add(-time.Hour)
+	s.ix.mu.Lock()
+	for m := 0; m <= 40; m++ {
+		s.ix.queue.add(queueSample{at: t0.Add(time.Duration(m) * time.Minute), queued: int64(m * 100)})
+	}
+	require.NotEmpty(t, s.ix.queue.warning())
+	s.ix.mu.Unlock()
+
+	s.ix.setBuilding(true)
+	assert.Empty(t, s.status().Warning, "a rebuild pauses the indexer; its queue growing isn't falling behind")
+	s.ix.mu.Lock()
+	assert.Empty(t, s.ix.queue.samples, "nothing sampled while it builds")
+	s.ix.mu.Unlock()
+	s.ix.setBuilding(false)
+	s.status()
+	s.ix.mu.Lock()
+	assert.Len(t, s.ix.queue.samples, 1, "the history starts over after it")
+	s.ix.mu.Unlock()
+}

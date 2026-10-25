@@ -56,6 +56,9 @@ type SearchIndex struct {
 	checked time.Time
 	cached  searchCheck
 	queue   queueWatch
+	// building is set while a rebuild pauses the indexer, whose queue then
+	// grows without being behind.
+	building bool
 }
 
 type searchCheck struct {
@@ -154,8 +157,10 @@ func (s *SearchIndex) Status() Status {
 	st := s.Indexer.Status()
 	out.Behind, out.Queued = int64(st.Behind), st.Queued
 	s.mu.Lock()
-	s.queue.add(queueSample{at: time.Now(), queued: st.Queued, applied: st.Upserted + st.Deleted})
-	out.Warning = s.queue.warning()
+	if !s.building {
+		s.queue.add(queueSample{at: time.Now(), queued: st.Queued, applied: st.Upserted + st.Deleted})
+		out.Warning = s.queue.warning()
+	}
 	s.mu.Unlock()
 	if s.Client != nil {
 		out.LastTask = s.Client.LastTask()
@@ -242,6 +247,8 @@ func (s *SearchIndex) follow(ctx context.Context, progress func(Progress)) (Resu
 // build began, so nothing stored meanwhile is missed.
 func (s *SearchIndex) rebuild(ctx context.Context, progress func(Progress)) (Result, error) {
 	res := Result{EntriesBefore: s.check(true).docs}
+	s.setBuilding(true)
+	defer s.setBuilding(false)
 	err := s.Indexer.Exclusive(func() error {
 		from := s.Store.Head()
 		next := s.client(s.IndexName + "__next")
@@ -283,13 +290,26 @@ func (s *SearchIndex) rebuild(ctx context.Context, progress func(Progress)) (Res
 	return res, nil
 }
 
+// setBuilding marks a rebuild running or done; either way the queue's
+// history starts over.
+func (s *SearchIndex) setBuilding(on bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.building, s.queue = on, queueWatch{}
+}
+
 // buildInto writes every stored profile to target, keeping up to
 // MaxInFlight requests of BatchSize profiles enqueued so Meilisearch merges
 // them, and reports progress as profiles applied out of the stored kind 0
 // count.
 func (s *SearchIndex) buildInto(ctx context.Context, target search.Enqueuer, progress func(Progress)) (int64, error) {
 	size, inFlight := s.batching()
-	total := int64(s.Store.Counts().Kind(0))
+	// While an older store's counters are backfilled the count is partial:
+	// no total then, rather than a wrong one.
+	var total int64
+	if c := s.Store.Counts(); c.Ready {
+		total = int64(c.Kind(0))
+	}
 	type sent struct {
 		pending    search.Pending
 		read, docs int64
@@ -299,7 +319,11 @@ func (s *SearchIndex) buildInto(ctx context.Context, target search.Enqueuer, pro
 	var read, done, applied int64
 	report := func(phase string) {
 		if progress != nil {
-			progress(Progress{Phase: phase, Done: done, Total: max(total, done), Applied: applied})
+			p := Progress{Phase: phase, Done: done, Applied: applied}
+			if total > 0 {
+				p.Total = max(total, done)
+			}
+			progress(p)
 		}
 	}
 	settle := func() error {

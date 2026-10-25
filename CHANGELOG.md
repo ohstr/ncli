@@ -15,6 +15,7 @@
 - Changes a search rebuild to read only profiles, through the store's kind index, and to report progress as profiles applied out of all stored profiles.
 - Changes the dashboard to show a search rebuild as profiles applied out of the total, estimate time left from the recent pace, and label search's backlog as events of any kind.
 - Moves the relay's ncli and nmilat versions from the dashboard's top bar to its footer.
+- Recommends Meilisearch 1.55 or later, and documents upgrading its database with `--upgrade-db`.
 
 ## [0.8.0-rc.42]
 

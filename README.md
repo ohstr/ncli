@@ -179,6 +179,9 @@ cache:
       enabled: true
       readonly: false
       meilisearch: {host: http://localhost:7700, key: masterKey, index: ncli_events}
+      # profiles per request, and requests Meilisearch may merge
+      batchSize: 10000
+      maxInFlight: 4
     # NIP-85 user assertions (kind 30382); needs nip11.privkey
     stats:
       enabled: false
@@ -1379,6 +1382,20 @@ docker compose -f build/relay/docker-compose.prod.yaml --env-file build/relay/.e
 ```
 
 `build/relay/.env` is gitignored — never commit it.
+
+### Meilisearch versions
+
+Profile search needs Meilisearch 1.14 or later; 1.55 or later is
+recommended. Newer versions index large relays much faster (1.41 and 1.44
+make the word and prefix steps cheaper) and fix an indexing memory leak
+(1.39) and a crash when threads exit (1.52.4, 1.53.3, 1.54.3). Avoid
+1.41.x and 1.42.x, which have a typo-tolerance bug fixed in 1.43.
+
+An existing Meilisearch database upgrades in place when started once with
+`--upgrade-db` (`MEILI_UPGRADE_DB=true`). Starting from an empty database
+also works: the relay rebuilds search on its own. On a small host, setting
+`MEILI_MAX_INDEXING_MEMORY` (for example `1GiB`) leaves more memory to the
+page cache, which a large index needs.
 
 ## Development
 

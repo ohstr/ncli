@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-const meiliImage = "getmeili/meilisearch:v1.35"
+const meiliImage = "getmeili/meilisearch:v1.55.0"
 
 // StartMeili runs Meilisearch in Docker and returns its URL; skips when
 // Docker isn't available.

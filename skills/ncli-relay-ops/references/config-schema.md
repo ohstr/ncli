@@ -81,8 +81,8 @@ Durations take Go units (`250ms`, `1h`) or `d`/`w`/`mo` (`14d`); a bad one
 is `invalid_input`. A key from before this grouping (`cache.topZapped`,
 `cache.search`, `cache.profileStats`, `cache.verification`,
 `cache.scoring`, top-level `verificationWorkers`, `index_name`) fails
-startup with `usage` naming its new key; search's removed `batchSize`,
-`queueSize`, `batch_size` and `max_ch_size` fail with `usage` too.
+startup with `usage` naming its new key; search's removed `queueSize` and
+`max_ch_size` fail with `usage` too, and `batch_size` names `batchSize`.
 
 | Field | Type | Default | Notes |
 |---|---|---|---|
@@ -106,6 +106,16 @@ then filtered by kind, never a full-text match over note content.
 | `meilisearch.host` | string | Meilisearch URL |
 | `meilisearch.key` | string | Meilisearch API key |
 | `meilisearch.index` | string | Index name |
+| `batchSize` | int | Profiles per Meilisearch request, for a rebuild and the live queue (default `10000`, at most `100000`); a request is also capped at about 50 MB |
+| `maxInFlight` | int | Requests enqueued before waiting for the oldest, so Meilisearch indexes them in one pass (default `4`, at most `64`) |
+| `searchAbout` | bool | Whether profiles' about text is searchable (default `true`) |
+
+Only name, display name, about, NIP-05 and LUD-16 are searched. A query
+that is one npub, nprofile or 64-character hex key returns that profile
+alone. When the index settings change (an ncli upgrade or `searchAbout`),
+the relay rebuilds search into a new index and swaps it in; it never
+changes a live index's settings. Meilisearch 1.55 or later is recommended
+(see the README).
 
 ### `cache.profiles.stats`
 

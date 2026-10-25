@@ -85,6 +85,15 @@ cache:
         host: http://localhost:7700
         key: masterKey
         index: ncli_events
+      # Profiles per Meilisearch request, for a rebuild and the live queue
+      # (default 10000; each request is also capped at about 50 MB).
+      batchSize: 10000
+      # Requests enqueued before waiting for the oldest, so Meilisearch
+      # indexes them in one pass (default 4).
+      maxInFlight: 4
+      # Whether profiles' about text is searchable (default true). Changing
+      # it rebuilds the index.
+      searchAbout: true
 
     # NIP-85 stats: a REQ for kind 30382 with #d pubkeys gets relay-signed
     # rank, followers, following and zaps. Requires nip11.privkey.

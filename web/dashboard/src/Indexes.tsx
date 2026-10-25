@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, type IndexInfo, type Job, type Plan } from "./api";
-import { actions, ago, cancellable, count, ended, kindLabel, meta, note, percent, planText, progressText, stateLabel, tone } from "./indexes";
+import { actions, ago, cancellable, count, ended, kindLabel, lastTaskText, meta, note, type Pace, percent, planText, progressText, stateLabel, tone, track } from "./indexes";
 import { Panel } from "./Panel";
 
 const now = () => Date.now() / 1000;
@@ -21,6 +21,10 @@ interface Pending {
 
 function JobProgress({ job, t }: { job: Job; t: number }) {
   const pct = percent(job);
+  // The recent pace, for an estimate that follows a job that slows down.
+  const pace = useRef<{ id?: string; samples: Pace }>({ samples: [] });
+  if (pace.current.id !== job.id) pace.current = { id: job.id, samples: [] };
+  pace.current.samples = track(pace.current.samples, t, job.done);
   return (
     <>
       <div
@@ -34,7 +38,7 @@ function JobProgress({ job, t }: { job: Job; t: number }) {
         <span style={{ width: `${pct ?? 100}%` }} />
       </div>
       <p className="muted">
-        <strong>{kindLabel(job.kind)}</strong> {progressText(job, t)} · {job.trigger === "admin" ? "started by an admin" : "started by the relay"} {ago(job.started_at, t)}
+        <strong>{kindLabel(job.kind)}</strong> {progressText(job, t, pace.current.samples)} · {job.trigger === "admin" ? "started by an admin" : "started by the relay"} {ago(job.started_at, t)}
         {job.reason ? ` — ${job.reason}` : ""}
       </p>
     </>
@@ -90,6 +94,12 @@ function IndexCard({ ix, t, busy, feedback, onStart, onCancel }: CardProps) {
         </span>
       </div>
       {meta(ix, t) && <p className="muted">{meta(ix, t)}</p>}
+      {lastTaskText(ix) && <p className="muted last-task">{lastTaskText(ix)}</p>}
+      {ix.warning && (
+        <p className="warn" role="status">
+          {ix.warning}
+        </p>
+      )}
       {running ? <JobProgress job={running} t={t} /> : line && <p className={ix.state === "unreachable" ? "error" : "muted"}>{line}</p>}
       {!running && last && (
         <p className="muted last">

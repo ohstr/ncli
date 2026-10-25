@@ -249,9 +249,10 @@ holds the store writer at most 25 ms at a time, so writes never wait on it.
 |---|---|
 | Feature off while events were stored, then on again | `catch_up` from where the index stopped: deletes first, then the new events. No rebuild |
 | Too many deletes while off (100k), layout change, store written by an older ncli, or never built | `rebuild` (state `needs_rebuild`, `reason` says which) |
-| Relay stopped or crashed mid-rebuild | The job reads `interrupted`; the rebuild resumes where it stopped |
+| Relay stopped or crashed mid-rebuild | The job reads `interrupted`; the rebuild resumes where it stopped (search starts its build index over) |
 | Relay died during the same index's job 3 times in a row within an hour | That job is `failed` with `parked: true` and not started again until `relay index rebuild` (or `drop`) |
 | Scoring settings changed | stats `rescore`; search `rebuild` |
+| Search index settings changed (an ncli upgrade, or `searchAbout`) | search `rebuild` into a new index, swapped in; the live index's settings are never changed in place |
 | Meilisearch down | search `unreachable`; profiles wait in the store and go in once it answers |
 | Meilisearch index deleted or recreated | search `rebuild` |
 | A job failed, or panicked | Retried after 1, 5, then 15 minutes (`retry_at`); a panic fails the job, not the relay |
@@ -265,8 +266,13 @@ holds the store writer at most 25 ms at a time, so writes never wait on it.
   `disabled`, and while a job runs `building`, `catching_up`, `rescoring`,
   `dropping`. `action` is the job the relay starts next; `reason` why.
 - `entries` is exact: zap receipts, followed profiles, Meilisearch
-  documents. `behind` is events stored since the index was last current;
-  search also has `queued` (profiles to look at again).
+  documents. `behind` is events stored since the index was last current
+  (for search, events of any kind); search also has `queued` (profiles to
+  look at again), `last_task` (the last Meilisearch batch: `duration_ms`,
+  `batch_documents`, `slowest_step`) and `warning` when its queue has
+  grown faster than profiles were applied for 30 minutes.
+- A search rebuild reads profiles only and counts them: `done`/`total` are
+  profiles applied out of all stored profiles.
 - A job has `kind` (`catch_up`, `rebuild`, `rescore`, `reap` frees old
   data, `drop`), `trigger`, `phase`, `done`/`total`, `applied`,
   `entries_before`/`entries_after`, `duration_ms` and a one-line `summary`.
@@ -371,9 +377,9 @@ ncli relay verify npub1... --refresh --json
   `meilisearch`), `cache.profileStats` → `cache.profiles.stats`,
   `cache.verification` → `cache.profiles.checks`, `cache.scoring` →
   `cache.profiles.scoring`, `verificationWorkers` →
-  `cache.profiles.checks.workers`. Search's `batchSize`/`queueSize` (and
-  `batch_size`/`max_ch_size`) were removed and fail at startup too:
-  profiles reach search from the store, nothing is queued in memory.
+  `cache.profiles.checks.workers`, search's `batch_size` → `batchSize`.
+  Search's `queueSize` and `max_ch_size` were removed and fail at startup
+  too: profiles reach search from the store, nothing is queued in memory.
 
 ### Zap ranking and the relay's own stats
 

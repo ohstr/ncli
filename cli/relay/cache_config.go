@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ohstr/ncli/cli/common"
+	"github.com/ohstr/ncli/cli/common/meilisearch"
 	"github.com/ohstr/nmilat/relay"
 	"github.com/ohstr/nmilat/utils"
 	"github.com/spf13/viper"
@@ -38,6 +39,46 @@ type SearchConfig struct {
 	Enabled     bool              `mapstructure:"enabled"`
 	Readonly    bool              `mapstructure:"readonly"`
 	Meilisearch MeilisearchConfig `mapstructure:"meilisearch"`
+	// BatchSize is the profiles sent to Meilisearch per request, by the
+	// live indexer and a rebuild (default 10000; a request is also capped
+	// at about 50 MB).
+	BatchSize int `mapstructure:"batchSize"`
+	// MaxInFlight is how many requests are enqueued before waiting for the
+	// oldest, so Meilisearch indexes them in one pass (default 4).
+	MaxInFlight int `mapstructure:"maxInFlight"`
+	// SearchAbout makes a profile's about text searchable (default true).
+	// Changing it rebuilds the index.
+	SearchAbout *bool `mapstructure:"searchAbout"`
+}
+
+// meiliOptions are the Meilisearch client options search's config sets.
+func (s *SearchConfig) meiliOptions() []meilisearch.Option {
+	if s != nil && s.SearchAbout != nil && !*s.SearchAbout {
+		return []meilisearch.Option{meilisearch.WithoutAbout()}
+	}
+	return nil
+}
+
+// Search batching bounds: Meilisearch's payload cap makes much larger
+// batches pointless, and many more tasks in flight only queue there.
+const (
+	maxSearchBatch    = 100_000
+	maxSearchInFlight = 64
+)
+
+// checkSearchBatching rejects batchSize and maxInFlight out of range.
+func checkSearchBatching(cfg *RelayConfig) error {
+	s := cfg.searchConfig()
+	if s == nil {
+		return nil
+	}
+	if s.BatchSize < 0 || s.BatchSize > maxSearchBatch {
+		return &common.CLIError{Err: fmt.Errorf("cache.profiles.search.batchSize must be between 1 and %d (0 for the default)", maxSearchBatch), Code: common.CodeInvalidInput, Input: "cache.profiles.search.batchSize"}
+	}
+	if s.MaxInFlight < 0 || s.MaxInFlight > maxSearchInFlight {
+		return &common.CLIError{Err: fmt.Errorf("cache.profiles.search.maxInFlight must be between 1 and %d (0 for the default)", maxSearchInFlight), Code: common.CodeInvalidInput, Input: "cache.profiles.search.maxInFlight"}
+	}
+	return nil
 }
 
 type MeilisearchConfig struct {
@@ -166,14 +207,13 @@ var renamedKeys = []struct{ old, new string }{
 	{"cache.profiles.search.key", "cache.profiles.search.meilisearch.key"},
 	{"cache.profiles.search.index_name", "cache.profiles.search.meilisearch.index"},
 	{"cache.zaps.window", "cache.zaps.windows"},
+	{"cache.profiles.search.batch_size", "cache.profiles.search.batchSize"},
 }
 
 // removedKeys are config keys with nothing left to set; each fails startup
 // saying why.
 var removedKeys = []struct{ key, why string }{
-	{"cache.profiles.search.batchSize", "search takes profiles from the store in batches of its own"},
 	{"cache.profiles.search.queueSize", "profiles reach search from the store; nothing is queued in memory"},
-	{"cache.profiles.search.batch_size", "search takes profiles from the store in batches of its own"},
 	{"cache.profiles.search.max_ch_size", "profiles reach search from the store; nothing is queued in memory"},
 }
 

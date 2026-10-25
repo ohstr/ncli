@@ -44,6 +44,17 @@ export interface Job {
   parked?: boolean;
 }
 
+export interface TaskStat {
+  at: string;
+  task: number;
+  documents: number;
+  batch: number;
+  batch_documents: number;
+  duration_ms: number;
+  slowest_step?: string;
+  slowest_ms?: number;
+}
+
 export type IndexState =
   | "disabled"
   | "empty"
@@ -74,6 +85,10 @@ export interface IndexInfo {
   built_at?: number;
   retired?: number;
   error?: string;
+  // warning is a problem that needs no action yet (search falling behind).
+  warning?: string;
+  // last_task is search's last Meilisearch batch.
+  last_task?: TaskStat;
   running?: Job;
   last?: Job;
   retry_at?: number;

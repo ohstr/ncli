@@ -60,13 +60,17 @@ func TestRenamedKeysFailNamingTheNewOne(t *testing.T) {
 	t.Run("removed search queue keys say why", func(t *testing.T) {
 		for key, why := range map[string]string{
 			"queueSize":   "nothing is queued in memory",
-			"batchSize":   "batches of its own",
 			"max_ch_size": "nothing is queued in memory",
 		} {
 			loadRelayConfigFromYAML(t, "store: x.db\ncache:\n  profiles:\n    search: {enabled: true, "+key+": 5}\n")
 			requireCode(t, checkRenamedKeys(viper.GetViper()), common.CodeUsage, "cache.profiles.search."+key+" was removed: ")
 			requireCode(t, checkRenamedKeys(viper.GetViper()), common.CodeUsage, why)
 		}
+	})
+
+	t.Run("search batching keys pass", func(t *testing.T) {
+		loadRelayConfigFromYAML(t, "store: x.db\ncache:\n  profiles:\n    search: {enabled: true, batchSize: 5000, maxInFlight: 2, searchAbout: false}\n")
+		require.NoError(t, checkRenamedKeys(viper.GetViper()))
 	})
 
 	t.Run("the new layout passes", func(t *testing.T) {

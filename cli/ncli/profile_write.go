@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"sort"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -110,9 +111,9 @@ func listCommand(name, short string, kind int, add bool) *cobra.Command {
 		Long: `Reads your current list from the relays, changes only the people given
 -- every other entry, petname, relay hint and private (encrypted) item is
 kept -- and publishes it. <who> is an npub, hex, nprofile, nip-05 or
-vault label. Refuses if no relay answers, and never publishes an empty
-list unless --allow-empty, so a list is never lost to an unreachable
-relay.`,
+vault label. Refuses unless every relay answers, so a list is never
+rebuilt from a stale copy, and never removes the last person unless
+--allow-empty.`,
 		Example: fmt.Sprintf(`  ncli profile %s npub1... alice@example.com --signer me`, name),
 		Args:    common.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -139,8 +140,8 @@ relay.`,
 				if len(changed) == 0 {
 					return nil, nil, nil, errNoChange
 				}
-				if !add && len(nip51.Values(next, "p")) == 0 && len(next.Tags) == 0 && next.Content == "" && !allowEmpty {
-					return nil, nil, nil, common.UsageError(cmd, errors.New("this would publish an empty list; pass --allow-empty to mean it"))
+				if !add && len(nip51.Values(next, "p")) == 0 && !allowEmpty {
+					return nil, nil, nil, common.UsageError(cmd, errors.New("this would leave no one on the list; pass --allow-empty to mean it"))
 				}
 				if add {
 					return next, changed, []string{}, nil
@@ -253,75 +254,14 @@ func runRelaysSet(cmd *cobra.Command, _ []string) error {
 		return out, nil
 	}
 	var err error
-	if read, err = normalize(read); err != nil {
-		return err
-	}
-	if write, err = normalize(write); err != nil {
-		return err
-	}
-	if both, err = normalize(both); err != nil {
-		return err
-	}
-	if dm, err = normalize(dm); err != nil {
-		return err
+	for _, list := range []*[]string{&read, &write, &both, &dm} {
+		if *list, err = normalize(*list); err != nil {
+			return err
+		}
 	}
 
 	ctx, cancel := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
-	targets, err := profileTargets(cmd)
-	if err != nil {
-		return err
-	}
-	signer, closeSigner, err := social.Signer(cmd)
-	if err != nil {
-		return err
-	}
-	defer closeSigner()
-
-	var events []*nip01.Event
-	if len(read)+len(write)+len(both) > 0 {
-		var entries []nip65.RelayEntry
-		for _, r := range both {
-			entries = append(entries, nip65.RelayEntry{URL: r, Read: true, Write: true})
-		}
-		for _, r := range read {
-			entries = append(entries, nip65.RelayEntry{URL: r, Read: true})
-		}
-		for _, r := range write {
-			entries = append(entries, nip65.RelayEntry{URL: r, Write: true})
-		}
-		events = append(events, nip65.NewRelayList(signer.PubKey(), entries))
-	}
-	if len(dm) > 0 {
-		events = append(events, nip17.NewDMRelayList(dm))
-	}
-	now := uint64(time.Now().Unix())
-	for _, ev := range events {
-		ev.CreatedAt = now
-		if err := signer.Sign(ctx, ev); err != nil {
-			return social.SignerError(cmd, err)
-		}
-	}
-	report, err := social.Publish(ctx, cmd, targets, events, signer)
-	if err != nil {
-		return err
-	}
-	if jsonMode, _ := cmd.Flags().GetBool("json"); jsonMode {
-		common.PrintJSON(report)
-	} else {
-		social.PrintReportLines(cmd, report)
-	}
-	return social.ReportError(cmd, report)
-}
-
-// writeReplaceable reads the signer's newest event of kind, lets change
-// build its replacement, and publishes it to the same relays. It refuses
-// to publish when no relay answered, or (without --create) when none had
-// a current version.
-func writeReplaceable(cmd *cobra.Command, kind int, change func(old *nip01.Event) (next *nip01.Event, added, removed []string, err error)) error {
-	ctx, cancel := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
-	defer cancel()
-	jsonMode, _ := cmd.Flags().GetBool("json")
 	targets, err := profileTargets(cmd)
 	if err != nil {
 		return err
@@ -333,51 +273,171 @@ func writeReplaceable(cmd *cobra.Command, kind int, change func(old *nip01.Event
 	defer closeSigner()
 	me := strings.ToLower(signer.PubKey())
 
-	old, err := currentReplaceable(ctx, cmd, targets, kind, me, signer)
-	if err != nil {
-		return err
-	}
-	if create, _ := cmd.Flags().GetBool("create"); old == nil && !create {
-		return common.NotFoundError(cmd, "", fmt.Errorf("no relay has your current kind %d, so nothing was published (it may just not be on these relays); --create starts a new one", kind))
-	}
-
-	next, added, removed, err := change(old)
-	if errors.Is(err, errNoChange) {
-		if jsonMode {
-			common.PrintJSON(listChange{Kind: kind, Added: []string{}, Removed: []string{}})
-		} else {
-			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "nothing to change")
+	var changes []listChange
+	var reports []*client.PublishReport
+	replace := func(kind int, next *nip01.Event) error {
+		c, err := replaceOne(ctx, cmd, targets, signer, me, kind, func(old *nip01.Event) (*nip01.Event, []string, []string, error) {
+			added, removed := tagDiff(old, next)
+			if len(added) == 0 && len(removed) == 0 {
+				return nil, nil, nil, errNoChange
+			}
+			return next, added, removed, nil
+		})
+		if err != nil {
+			return err
+		}
+		changes = append(changes, *c)
+		if c.Report != nil {
+			reports = append(reports, c.Report)
 		}
 		return nil
 	}
+	if len(read)+len(write)+len(both) > 0 {
+		var entries []nip65.RelayEntry
+		for _, r := range both {
+			entries = append(entries, nip65.RelayEntry{URL: r, Read: true, Write: true})
+		}
+		for _, r := range read {
+			entries = append(entries, nip65.RelayEntry{URL: r, Read: true})
+		}
+		for _, r := range write {
+			entries = append(entries, nip65.RelayEntry{URL: r, Write: true})
+		}
+		if err := replace(nip65.KindRelayListMetadata, nip65.NewRelayList(me, entries)); err != nil {
+			return err
+		}
+	}
+	if len(dm) > 0 {
+		if err := replace(nip17.KindDMRelays, nip17.NewDMRelayList(dm)); err != nil {
+			return err
+		}
+	}
+	if jsonMode, _ := cmd.Flags().GetBool("json"); jsonMode {
+		common.PrintJSON(changes)
+	} else {
+		for _, c := range changes {
+			printChange(cmd, c)
+		}
+	}
+	for _, r := range reports {
+		if err := social.ReportError(cmd, r); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// tagDiff lists the tags (joined) in next but not old, and in old but not
+// next.
+func tagDiff(old, next *nip01.Event) (added, removed []string) {
+	key := func(t []string) string { return strings.Join(t, " ") }
+	have := map[string]bool{}
+	if old != nil {
+		for _, t := range old.Tags {
+			have[key(t)] = true
+		}
+	}
+	want := map[string]bool{}
+	for _, t := range next.Tags {
+		want[key(t)] = true
+		if !have[key(t)] {
+			added = append(added, key(t))
+		}
+	}
+	if old != nil {
+		for _, t := range old.Tags {
+			if !want[key(t)] {
+				removed = append(removed, key(t))
+			}
+		}
+	}
+	return added, removed
+}
+
+// writeReplaceable reads the signer's current event of kind, lets change
+// build its replacement, publishes it and prints the change.
+func writeReplaceable(cmd *cobra.Command, kind int, change func(old *nip01.Event) (next *nip01.Event, added, removed []string, err error)) error {
+	ctx, cancel := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+	targets, err := profileTargets(cmd)
 	if err != nil {
 		return err
 	}
+	signer, closeSigner, err := social.Signer(cmd)
+	if err != nil {
+		return err
+	}
+	defer closeSigner()
+
+	c, err := replaceOne(ctx, cmd, targets, signer, strings.ToLower(signer.PubKey()), kind, change)
+	if err != nil {
+		return err
+	}
+	if jsonMode, _ := cmd.Flags().GetBool("json"); jsonMode {
+		common.PrintJSON(c)
+	} else {
+		printChange(cmd, *c)
+	}
+	if c.Report == nil {
+		return nil
+	}
+	return social.ReportError(cmd, c.Report)
+}
+
+// replaceOne reads me's current event of kind from every target, lets
+// change build its replacement and publishes it to the same targets. It
+// refuses unless every target answered (a relay that didn't may hold a
+// newer version than the others), and without --create when none had one.
+// A change of nothing publishes nothing.
+func replaceOne(ctx context.Context, cmd *cobra.Command, targets *client.TargetsSpec, signer client.Crypto, me string, kind int, change func(old *nip01.Event) (*nip01.Event, []string, []string, error)) (*listChange, error) {
+	old, err := currentReplaceable(ctx, cmd, targets, kind, me, signer)
+	if err != nil {
+		return nil, err
+	}
+	if create, _ := cmd.Flags().GetBool("create"); old == nil && !create {
+		return nil, common.NotFoundError(cmd, "", fmt.Errorf("no relay has your current kind %d, so nothing was published (it may just not be on these relays); --create starts a new one", kind))
+	}
+	next, added, removed, err := change(old)
+	if errors.Is(err, errNoChange) {
+		return &listChange{Kind: kind, Added: []string{}, Removed: []string{}}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if added == nil {
+		added = []string{}
+	}
+	if removed == nil {
+		removed = []string{}
+	}
+	next.PubKey, next.ID, next.Sig = "", "", ""
 	next.CreatedAt = uint64(time.Now().Unix())
 	if old != nil && next.CreatedAt <= old.CreatedAt {
 		// A replacement must be newer than what it replaces.
 		next.CreatedAt = old.CreatedAt + 1
 	}
 	if err := signer.Sign(ctx, next); err != nil {
-		return social.SignerError(cmd, err)
+		return nil, social.SignerError(cmd, err)
 	}
 	report, err := social.Publish(ctx, cmd, targets, []*nip01.Event{next}, signer)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	out := listChange{ID: next.ID, Kind: kind, Added: added, Removed: removed, Created: old == nil, Event: next, Report: report}
-	if jsonMode {
-		common.PrintJSON(out)
-	} else {
-		for _, a := range added {
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "+ %s\n", displayItem(a))
-		}
-		for _, r := range removed {
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "- %s\n", displayItem(r))
-		}
-		social.PrintReportLines(cmd, report)
+	return &listChange{ID: next.ID, Kind: kind, Added: added, Removed: removed, Created: old == nil, Event: next, Report: report}, nil
+}
+
+func printChange(cmd *cobra.Command, c listChange) {
+	if c.ID == "" {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "kind %d: nothing to change\n", c.Kind)
+		return
 	}
-	return social.ReportError(cmd, report)
+	for _, a := range c.Added {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "+ %s\n", displayItem(a))
+	}
+	for _, r := range c.Removed {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "- %s\n", displayItem(r))
+	}
+	social.PrintReportLines(cmd, c.Report)
 }
 
 func displayItem(v string) string {
@@ -387,31 +447,43 @@ func displayItem(v string) string {
 	return v
 }
 
-// currentReplaceable is author's newest valid event of kind on targets, nil
-// if none has one. Every target failing is a network error.
+// currentReplaceable is author's newest valid event of kind, nil if no
+// target has one. Every target must answer: one that doesn't may hold the
+// newest version, and merging onto an older one would lose what it adds.
 func currentReplaceable(ctx context.Context, cmd *cobra.Command, targets *client.TargetsSpec, kind int, author string, signer client.Signer) (*nip01.Event, error) {
 	timeout, _ := cmd.Flags().GetDuration("timeout")
 	filters := nip01.NewSubscriptionFilterGroup(&nip01.SubscriptionFilter{Kinds: []int{kind}, Authors: []string{author}})
-	var events []*nip01.Event
-	err := common.WithSpinner(cmd, fmt.Sprintf("reading your current kind %d", kind), func() error {
-		var qErr error
-		events, qErr = client.QueryTargetsWithAuth(ctx, targets, filters, timeout, signer)
-		return qErr
-	})
-	if err != nil {
-		if errors.Is(err, client.ErrNoReachableTargets) {
-			return nil, common.NetworkError(cmd, "", fmt.Errorf("no relay answered, so nothing was published: %w", err))
+	reads := make([]client.TargetRead, len(targets.Relays))
+	_ = common.WithSpinner(cmd, fmt.Sprintf("reading your current kind %d", kind), func() error {
+		var wg sync.WaitGroup
+		for i, t := range targets.Relays {
+			wg.Add(1)
+			go func(i int, t *client.FlowSpec) {
+				defer wg.Done()
+				reads[i] = client.ReadTarget(ctx, t, filters, timeout, signer)
+			}(i, t)
 		}
-		return nil, queryError(cmd, err)
-	}
+		wg.Wait()
+		return nil
+	})
+	var failed []string
 	var newest *nip01.Event
-	for _, ev := range events {
-		if ev.Kind != kind || !strings.EqualFold(ev.PubKey, author) || ev.Verify(nip01.WithoutPowCheck()) != nil {
+	for _, r := range reads {
+		if r.Err != nil || r.Restricted {
+			failed = append(failed, r.Target)
 			continue
 		}
-		if newest == nil || ev.CreatedAt > newest.CreatedAt || (ev.CreatedAt == newest.CreatedAt && ev.ID < newest.ID) {
-			newest = ev
+		for _, ev := range r.Events {
+			if ev.Kind != kind || !strings.EqualFold(ev.PubKey, author) || ev.Verify(nip01.WithoutPowCheck()) != nil {
+				continue
+			}
+			if newest == nil || ev.CreatedAt > newest.CreatedAt || (ev.CreatedAt == newest.CreatedAt && ev.ID < newest.ID) {
+				newest = ev
+			}
 		}
+	}
+	if len(failed) > 0 {
+		return nil, common.NetworkError(cmd, strings.Join(failed, ","), fmt.Errorf("couldn't read your current kind %d from %s, so nothing was published; retry, or pass -s with only the relays you can reach", kind, strings.Join(failed, ", ")))
 	}
 	return newest, nil
 }

@@ -122,7 +122,19 @@ func TestProfileWrites(t *testing.T) {
 	})
 
 	t.Run("relays set", func(t *testing.T) {
-		e.MustOK(t, as("profile", "relays", "set", "--both", "wss://both.example", "--read", "wss://in.example", "--dm", "wss://dm.example")...)
+		// No current list: nothing is replaced without --create.
+		e.Run(t, as("profile", "relays", "set", "--both", "wss://both.example")...).ExpectErr(t, "not_found")
+		var cs []change
+		e.MustOK(t, as("profile", "relays", "set", "--both", "wss://both.example", "--read", "wss://in.example", "--dm", "wss://dm.example", "--create")...).JSON(t, &cs)
+		if len(cs) != 2 || !cs[0].Created || len(cs[0].Added) != 2 {
+			t.Fatalf("changes %+v", cs)
+		}
+		// Replacing the list reports what it drops.
+		var again []change
+		e.MustOK(t, as("profile", "relays", "set", "--both", "wss://both.example", "--read", "wss://in.example", "--write", "wss://out.example")...).JSON(t, &again)
+		if len(again) != 1 || len(again[0].Added) != 1 || len(again[0].Removed) != 0 {
+			t.Fatalf("second set %+v", again)
+		}
 		nip65 := latest(t, e, r.URL, alice.PubHex, 10002)
 		if nip65 == nil || !hasTag(*nip65, "r", "wss://both.example") || !hasTag(*nip65, "r", "wss://in.example", "read") || hasTag(*nip65, "r", "wss://both.example", "read") {
 			t.Fatalf("10002 %+v", nip65)
@@ -142,6 +154,20 @@ func TestProfileWrites(t *testing.T) {
 	t.Run("an unreachable relay publishes nothing", func(t *testing.T) {
 		dead := DeadRelayURL(t)
 		e.Run(t, "profile", "follow", mallory.Npub, "--signer", alice.Nsec, "-s", dead, "--timeout", "2s", "--json").ExpectErr(t, "network")
+		// Even when another relay answers: the silent one may hold a newer list.
+		before := latest(t, e, r.URL, alice.PubHex, 3)
+		e.Run(t, "profile", "follow", mallory.Npub, "--signer", alice.Nsec, "-s", r.URL+","+dead, "--timeout", "2s", "--json").ExpectErr(t, "network")
+		if after := latest(t, e, r.URL, alice.PubHex, 3); after.ID != before.ID {
+			t.Fatal("published although a relay didn't answer")
+		}
+	})
+
+	t.Run("the last person needs --allow-empty, whatever else the list holds", func(t *testing.T) {
+		// alice's follow list keeps its relay JSON and "t" tag; only bob is left.
+		e.Run(t, as("profile", "unfollow", bob.Npub)...).ExpectErr(t, "usage")
+		if pk := pTags(latest(t, e, r.URL, alice.PubHex, 3)); !slices.Equal(pk, []string{bob.PubHex}) {
+			t.Fatalf("follows changed by a refused unfollow: %v", pk)
+		}
 	})
 
 	t.Run("through a socket signer", func(t *testing.T) {

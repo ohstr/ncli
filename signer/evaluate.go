@@ -1,12 +1,14 @@
 package signer
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/ohstr/nmilat/nip01"
 	"github.com/ohstr/nmilat/nip46"
+	"github.com/ohstr/nmilat/nip59"
 )
 
 // Request is everything a policy decision depends on.
@@ -27,6 +29,9 @@ type Request struct {
 	SignerPub string
 }
 
+// nip59MaxBackdate is how far NIP-59 moves a seal's created_at into the past.
+const nip59MaxBackdate = 48 * time.Hour
+
 // Decision is Evaluate's verdict.
 type Decision struct {
 	Allow  bool
@@ -37,6 +42,29 @@ type Decision struct {
 	Consumed []string
 	// Rate is the matched rule's limit, nil if none.
 	Rate *Rate
+	// UnwrapFrom, when set, allows the request only if its result is a
+	// seal signed by one of these pubkeys; see CheckUnwrapResult.
+	UnwrapFrom map[string]bool
+}
+
+// CheckUnwrapResult returns why a decrypted gift wrap may not be released
+// under d, or "" if it may: it must be a kind 13 seal whose signature
+// verifies and whose author is in d.UnwrapFrom.
+func CheckUnwrapResult(d Decision, result string) string {
+	if d.UnwrapFrom == nil {
+		return ""
+	}
+	var seal nip01.Event
+	if err := json.Unmarshal([]byte(result), &seal); err != nil || seal.Kind != nip59.KindSeal {
+		return "result is not a seal"
+	}
+	if seal.Verify(nip01.WithoutPowCheck()) != nil {
+		return "seal does not verify"
+	}
+	if !d.UnwrapFrom[strings.ToLower(seal.PubKey)] {
+		return "seal is from a sender unwrap_from does not list"
+	}
+	return ""
 }
 
 func deny(rule, format string, args ...any) Decision {
@@ -103,6 +131,13 @@ func Evaluate(req Request, p *Policy, used func(id string) bool) Decision {
 		}
 	}
 
+	if req.Method == nip46.MethodSignEvent && req.Event.Kind == nip59.KindSeal {
+		// NIP-59 backdates a seal by up to two days, to hide when it was
+		// sent; its content is ciphertext only the recipient opens.
+		if seal := nip59MaxBackdate + p.ruleSkew(rule); seal > maxAge {
+			maxAge = seal
+		}
+	}
 	if req.Method == nip46.MethodSignEvent {
 		created := unixTime(req.Event.CreatedAt)
 		if created.After(req.Now.Add(p.ruleSkew(rule))) {
@@ -113,7 +148,7 @@ func Evaluate(req Request, p *Policy, used func(id string) bool) Decision {
 		}
 	}
 
-	return Decision{Allow: true, Rule: rule.Name, Consumed: consumed, Rate: rule.rate}
+	return Decision{Allow: true, Rule: rule.Name, Consumed: consumed, Rate: rule.rate, UnwrapFrom: rule.selector().unwrapFrom}
 }
 
 func matches(s *Selector, req *Request) bool {

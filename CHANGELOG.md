@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.8.0-rc.44]
+
+### Added
+
+- Adds the signer's `nip44_message_keys` method and `unwrap_from` rule: one message's keys for a proof, and opening a gift wrap only when it holds a seal from a listed sender. Both are denied unless a rule names them, so existing policies behave the same.
+
+### Changed
+
+- Changes the signer to accept a kind 13 seal backdated by up to 2 days, as NIP-59 requires, where other kinds keep the policy's age limit.
+
 ## [0.8.0-rc.43]
 
 ### Added

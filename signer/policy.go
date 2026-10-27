@@ -45,6 +45,8 @@ var ruleMethods = map[string]bool{
 	nip46.MethodNIP04Decrypt: true,
 	nip46.MethodNIP44Encrypt: true,
 	nip46.MethodNIP44Decrypt: true,
+
+	nip46.MethodNIP44MessageKeys: true,
 }
 
 // Duration is a time.Duration written as a Go duration string ("15m").
@@ -77,12 +79,16 @@ type Selector struct {
 	Kinds        []int               `json:"kinds,omitempty"`
 	Counterparts []string            `json:"counterparts,omitempty"`
 	Tags         map[string][]string `json:"tags,omitempty"`
+	// UnwrapFrom allows nip44_decrypt from any counterpart (a gift wrap's
+	// one-time key) only when the result is a seal signed by one of these.
+	UnwrapFrom []string `json:"unwrap_from,omitempty"`
 
 	counterparts map[string]bool
+	unwrapFrom   map[string]bool
 }
 
 func (s *Selector) empty() bool {
-	return len(s.Methods) == 0 && len(s.Kinds) == 0 && len(s.Counterparts) == 0 && len(s.Tags) == 0
+	return len(s.Methods) == 0 && len(s.Kinds) == 0 && len(s.Counterparts) == 0 && len(s.Tags) == 0 && len(s.UnwrapFrom) == 0
 }
 
 // Bind ties an attestation to the target event. Exactly one form is set:
@@ -268,6 +274,9 @@ func (p *Policy) validateRule(r *Rule, baseDir string, opts LoadOptions) error {
 	if err := validateSelector(sel); err != nil {
 		return err
 	}
+	if r.Deny != nil && len(sel.UnwrapFrom) > 0 {
+		return errors.New("unwrap_from only applies to allow rules")
+	}
 	if r.Deny != nil && (len(r.DenyMatching) > 0 || r.Rate != "" || r.Require != nil || r.MaxClockSkew != nil) {
 		return errors.New("deny rules take only a selector")
 	}
@@ -323,7 +332,26 @@ func attLabel(a *AttestationSpec, i int) string {
 func validateSelector(s *Selector) error {
 	for _, m := range s.Methods {
 		if !ruleMethods[m] {
-			return fmt.Errorf("unknown method %q (want sign_event, nip04_encrypt, nip04_decrypt, nip44_encrypt or nip44_decrypt)", m)
+			return fmt.Errorf("unknown method %q (want sign_event, nip04_encrypt, nip04_decrypt, nip44_encrypt, nip44_decrypt or nip44_message_keys)", m)
+		}
+	}
+	if len(s.UnwrapFrom) > 0 {
+		if len(s.Counterparts) > 0 || len(s.Kinds) > 0 || len(s.Tags) > 0 {
+			return errors.New("unwrap_from can't be combined with counterparts, kinds or tags")
+		}
+		if len(s.Methods) == 0 {
+			s.Methods = []string{nip46.MethodNIP44Decrypt}
+		}
+		if len(s.Methods) != 1 || s.Methods[0] != nip46.MethodNIP44Decrypt {
+			return errors.New("unwrap_from only applies to nip44_decrypt")
+		}
+		s.unwrapFrom = map[string]bool{}
+		for _, c := range s.UnwrapFrom {
+			hexKey, err := ParsePubkey(c)
+			if err != nil {
+				return fmt.Errorf("unwrap_from: %w", err)
+			}
+			s.unwrapFrom[hexKey] = true
 		}
 	}
 	eventFields := len(s.Kinds) > 0 || len(s.Tags) > 0

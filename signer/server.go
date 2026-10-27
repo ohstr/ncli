@@ -59,6 +59,9 @@ type Server struct {
 
 	// consumed carries attestation ids from authorize to the decision log.
 	consumed sync.Map // *nipLS.Request -> []string
+	// unwrap carries an unwrap_from decision from authorize to the result
+	// check; record drops it if the request failed before that.
+	unwrap sync.Map // *nipLS.Request -> Decision
 	logMu    sync.Mutex
 }
 
@@ -109,7 +112,7 @@ func New(cfg Config) (*Server, error) {
 
 	s.ls, err = nipLS.NewServer(nipLS.ServerConfig{
 		Key:        key,
-		Policy:     nipLS.PolicyFunc(s.authorize),
+		Policy:     serverPolicy{s},
 		Guard:      cfg.GuardExtra,
 		AllowUIDs:  cfg.AllowUIDs,
 		AllowGIDs:  cfg.AllowGIDs,
@@ -210,6 +213,29 @@ func (s *Server) authorize(_ context.Context, req *nipLS.Request) error {
 	if len(d.Consumed) > 0 {
 		s.consumed.Store(req, d.Consumed)
 	}
+	if d.UnwrapFrom != nil {
+		s.unwrap.Store(req, d)
+	}
+	return nil
+}
+
+// serverPolicy is the Server's nipLS policy: authorize, then, for an
+// unwrap_from rule, the decrypted result.
+type serverPolicy struct{ s *Server }
+
+func (p serverPolicy) Authorize(ctx context.Context, req *nipLS.Request) error {
+	return p.s.authorize(ctx, req)
+}
+
+func (p serverPolicy) AuthorizeResult(_ context.Context, req *nipLS.Request, result string) error {
+	v, ok := p.s.unwrap.LoadAndDelete(req)
+	if !ok {
+		return nil
+	}
+	d := v.(Decision)
+	if reason := CheckUnwrapResult(d, result); reason != "" {
+		return nipLS.Denyf("rule %q: %s", d.Rule, reason)
+	}
 	return nil
 }
 
@@ -270,6 +296,7 @@ type Record struct {
 
 func (s *Server) record(d nipLS.Decision) {
 	req := d.Request
+	s.unwrap.Delete(req)
 	r := Record{
 		Time:        d.Time.UTC().Format(time.RFC3339),
 		ReqID:       req.ID,

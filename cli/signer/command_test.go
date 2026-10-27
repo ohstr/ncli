@@ -145,6 +145,38 @@ func TestCheckCounterpart(t *testing.T) {
 	}
 }
 
+func TestCheckUnwrapFromAndMessageKeys(t *testing.T) {
+	_, signerPub := key(t, "signer")
+	_, friend := key(t, "friend")
+	_, stranger := key(t, "stranger")
+	_, wrapKey := key(t, "one-time")
+	dir := t.TempDir()
+	policy := filepath.Join(dir, "policy.yaml")
+	_ = os.WriteFile(policy, []byte("kind: signer-policy\nrules:\n"+
+		"  - {name: inbox, allow: {unwrap_from: ["+friend+"]}}\n"+
+		"  - {name: proofs, allow: {methods: [nip44_message_keys], counterparts: ["+friend+"]}}\n"), 0o600)
+	check := func(extra ...string) (string, error) {
+		return execSigner(t, append([]string{"check", "--policy", policy, "--pubkey", signerPub, "--json"}, extra...)...)
+	}
+
+	out, err := check("--method", "nip44_decrypt", "--counterpart", wrapKey)
+	if err != nil || !strings.Contains(out, "--seal-from") {
+		t.Fatalf("without --seal-from: %q %v", out, err)
+	}
+	if _, err := check("--method", "nip44_decrypt", "--counterpart", wrapKey, "--seal-from", friend); err != nil {
+		t.Fatalf("listed sender: %v", err)
+	}
+	if _, err := check("--method", "nip44_decrypt", "--counterpart", wrapKey, "--seal-from", stranger); common.ExitCode(err) != 7 {
+		t.Fatalf("unlisted sender: %v", err)
+	}
+	if _, err := check("--method", "nip44_message_keys", "--counterpart", friend); err != nil {
+		t.Fatalf("message keys for friend: %v", err)
+	}
+	if _, err := check("--method", "nip44_message_keys", "--counterpart", stranger); common.ExitCode(err) != 7 {
+		t.Fatalf("message keys for stranger: %v", err)
+	}
+}
+
 func TestServeRefusesPlaintextKeys(t *testing.T) {
 	priv, _ := key(t, "signer")
 	nsec, _ := nip19.EncodePrivateKey(priv)

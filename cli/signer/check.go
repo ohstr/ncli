@@ -31,7 +31,8 @@ created before the signer started" check; --now pins the clock so
 committed fixtures stay valid.
 
 For encrypt/decrypt rules pass --method and --counterpart instead of
---events.`,
+--events. An unwrap_from rule decides on the decrypted seal's author:
+add --seal-from to check one.`,
 		Example: `  ncli signer check --policy policy.yaml -e event.json --pubkey npub1...
   ncli signer check --policy policy.yaml -e state.json --attestations approval.json \
     --now 2026-10-08T12:00:00Z --start-time 2026-10-08T11:00:00Z
@@ -53,6 +54,7 @@ For encrypt/decrypt rules pass --method and --counterpart instead of
 	f.String("attestations", "", "Signed attestation event(s) sent with every sign_event")
 	f.String("method", nip46.MethodSignEvent, "Method to evaluate")
 	f.String("counterpart", "", "Peer pubkey for an encrypt/decrypt method")
+	f.String("seal-from", "", "For an unwrap_from rule: the author of the seal the decrypt would return")
 	f.String("pubkey", "", "Signer pubkey (npub or hex); defaults to the events' own pubkey")
 	f.String("now", "", "Evaluate as of this time (RFC3339 or unix seconds; default: now)")
 	f.String("start-time", "", "Signer start time (RFC3339 or unix seconds); attestations created before it are rejected")
@@ -178,6 +180,23 @@ func runCheck(cmd *cobra.Command, _ []string) error {
 			return common.InvalidInputError(cmd, counterpartFlag, err)
 		}
 		d := signer.Evaluate(signer.Request{Method: method, Counterpart: counterpart, Now: now, StartTime: start, SignerPub: pub}, policy, used)
+		if d.Allow && d.UnwrapFrom != nil {
+			// The rule decides on the decrypted seal's author, which only
+			// --seal-from can stand in for offline.
+			sealFrom, _ := f.GetString("seal-from")
+			switch {
+			case sealFrom == "":
+				d.Reason = "allowed only if the result is a seal from an unwrap_from sender; pass --seal-from to check one"
+			default:
+				author, err := signer.ParsePubkey(sealFrom)
+				if err != nil {
+					return common.InvalidInputError(cmd, sealFrom, err)
+				}
+				if !d.UnwrapFrom[author] {
+					d = signer.Decision{Rule: d.Rule, Reason: "seal is from a sender unwrap_from does not list"}
+				}
+			}
+		}
 		results = append(results, fill(CheckResult{Method: method, Counterpart: counterpart}, d))
 	}
 

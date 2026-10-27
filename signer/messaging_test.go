@@ -120,6 +120,8 @@ func TestUnwrapFromValidation(t *testing.T) {
 		"two methods":       "allow: {unwrap_from: [%[1]s], methods: [nip44_decrypt, nip04_decrypt]}",
 		"deny rule":         "deny: {unwrap_from: [%[1]s]}",
 		"bad key":           "allow: {unwrap_from: [npub1nope]}",
+		"keys for anyone":   "allow: {methods: [nip44_message_keys]}",
+		"keys and more":     "allow: {methods: [nip44_message_keys, nip44_encrypt]}",
 	} {
 		body := "kind: signer-policy\nrules:\n  - name: r\n    " + rule + "\n"
 		if _, err := LoadPolicy(writePolicy(t, body, friend), LoadOptions{}); err == nil {

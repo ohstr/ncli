@@ -31,6 +31,9 @@ selector, unless serve/check runs with `--allow-catch-all`.
   `[sign_event]`, `counterparts` implies all four encrypt/decrypt
   methods (not `nip44_message_keys`, which must be named), and
   `unwrap_from` implies `[nip44_decrypt]`.
+- **`nip44_message_keys` needs `counterparts`.** A message's keys open it
+  as surely as decrypting it, so an allow rule for it must name whose
+  messages may be proved; one that doesn't is a load error.
 - **`unwrap_from` stands alone.** It takes no `counterparts`, `kinds` or
   `tags`, only `nip44_decrypt`, and only in an allow rule. Put a
   `counterparts` rule for the same senders before it, for the seals.

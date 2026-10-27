@@ -277,6 +277,11 @@ func (p *Policy) validateRule(r *Rule, baseDir string, opts LoadOptions) error {
 	if r.Deny != nil && len(sel.UnwrapFrom) > 0 {
 		return errors.New("unwrap_from only applies to allow rules")
 	}
+	// A message's keys open it as surely as decrypting it does: allowing them
+	// for anyone would get round unwrap_from.
+	if r.Allow != nil && containsString(sel.Methods, nip46.MethodNIP44MessageKeys) && len(sel.Counterparts) == 0 {
+		return errors.New("nip44_message_keys needs counterparts: whose messages may be proved")
+	}
 	if r.Deny != nil && (len(r.DenyMatching) > 0 || r.Rate != "" || r.Require != nil || r.MaxClockSkew != nil) {
 		return errors.New("deny rules take only a selector")
 	}

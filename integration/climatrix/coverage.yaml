@@ -97,7 +97,14 @@
 "prefs relays clear": {modes: [json], tests: [TestPrefs]}
 "prefs relays list": {modes: [json], tests: [TestPrefs]}
 "prefs relays remove": {modes: [json], tests: [TestPrefs]}
-"profile": {modes: [json, errors], tests: [TestQuery]}
+"profile": {modes: [json, errors], tests: [TestQuery, TestProfileWrites]}
+"profile follow": {modes: [json, errors], tests: [TestProfileWrites]}
+"profile mute": {modes: [json], tests: [TestProfileWrites]}
+"profile relays": {modes: [errors], tests: [TestProfileWrites]}
+"profile relays set": {modes: [json, errors], tests: [TestProfileWrites]}
+"profile set": {modes: [json, errors], tests: [TestProfileWrites]}
+"profile unfollow": {modes: [json], tests: [TestProfileWrites]}
+"profile unmute": {modes: [json, errors], tests: [TestProfileWrites]}
 "publish": {modes: [json, errors], tests: [TestPublish, TestSignerPublish, TestRelayLogin_AuthRequired, TestRelayLogin_MembershipRequired]}
 "relay": {modes: [json, errors], tests: [TestRelayAdmin, TestRelayJSONLogs, TestHarness_RelaySeedsCorpus, TestRelayCheck], pending: "-c context creation (phase 5)"}
 "relay context": {modes: [json], tests: [TestRelayContext]}

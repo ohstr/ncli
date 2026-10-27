@@ -79,6 +79,17 @@ func resolveQueryAuthSigner(cmd *cobra.Command) (client.Signer, func(), error) {
 	return client.KeySigner(priv), func() {}, nil
 }
 
+// authorsError classifies a failed --authors (or --tag p=) resolution: a
+// nip-05 that can't be fetched is network, a malformed npub or unknown
+// vault label is invalid_input or not_found.
+func authorsError(cmd *cobra.Command, err error) error {
+	var ae *client.AuthorError
+	if errors.As(err, &ae) {
+		return keyresolve.ClassifyIdentifierError(cmd, ae.Input, ae.Err)
+	}
+	return common.NetworkError(cmd, "", err)
+}
+
 // queryError classifies a find/dump failure.
 func queryError(cmd *cobra.Command, err error) error {
 	if errors.Is(err, client.ErrNoReachableTargets) {

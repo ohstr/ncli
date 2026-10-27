@@ -2,6 +2,7 @@ package client
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -265,6 +266,28 @@ func TestResolveFilterAuthors_HexPassthrough(t *testing.T) {
 	want := []string{"cd50647935202dd319529eea22d58d4e1c212f422995701c732358590559c4af", "abcdef01"}
 	if strings.Join(specs[0].Authors, ",") != strings.Join(want, ",") {
 		t.Fatalf("ResolveFilterAuthors() Authors = %v, want unchanged %v", specs[0].Authors, want)
+	}
+}
+
+func TestResolveFilterAuthors_PersonForms(t *testing.T) {
+	const hex = "cd50647935202dd319529eea22d58d4e1c212f422995701c732358590559c4af"
+	npub, _ := nip19.EncodePublicKey(hex)
+	nprofile, _ := nip19.EncodeProfile(hex, []string{"wss://r.example"})
+	specs := []*FilterSpec{NewFilterSpec(&nip01.SubscriptionFilter{
+		Authors: []string{npub, nprofile, "not-anyone", "abcdef01"},
+	})}
+	if err := ResolveFilterAuthors(specs); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{hex, hex, "not-anyone", "abcdef01"}
+	if strings.Join(specs[0].Authors, ",") != strings.Join(want, ",") {
+		t.Fatalf("Authors = %v, want %v", specs[0].Authors, want)
+	}
+
+	bad := []*FilterSpec{NewFilterSpec(&nip01.SubscriptionFilter{Authors: []string{"npub1nope"}})}
+	var ae *AuthorError
+	if err := ResolveFilterAuthors(bad); !errors.As(err, &ae) || ae.Input != "npub1nope" {
+		t.Fatalf("malformed npub: %v", err)
 	}
 }
 

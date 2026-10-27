@@ -67,7 +67,7 @@ with reason login_required, signer_refused or relay_refused.`,
 		defer closeSigner()
 
 		if err := client.ResolveFilterAuthors(filtersSpec); err != nil {
-			return common.NetworkError(cmd, "", err)
+			return authorsError(cmd, err)
 		}
 
 		err = common.WithSpinner(cmd, targetsMessage("exporting from", targetsSpec), func() error {

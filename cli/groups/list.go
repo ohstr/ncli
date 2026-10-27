@@ -101,7 +101,7 @@ func runList(cmd *cobra.Command, args []string) error {
 	var scopeToPubkey string
 	switch {
 	case memberFlag != "":
-		if scopeToPubkey, err = keyresolve.Pubkey(cmd, memberFlag); err != nil {
+		if scopeToPubkey, err = keyresolve.PubkeyArg(cmd, memberFlag); err != nil {
 			return err
 		}
 	case mineFlag:

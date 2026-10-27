@@ -126,7 +126,7 @@ rules:
 		e.Run(t, g("send", "chat", "x", "--identity", alice.Nsec, "--signer", s.URI)...).ExpectErr(t, "usage")
 		e.Run(t, g("feed")...).ExpectErr(t, "usage")
 		e.Run(t, g("send", "chat", " ", "--identity", alice.Nsec)...).ExpectErr(t, "invalid_input")
-		e.Run(t, g("members", "add", "chat", "no-such-label", "--identity", alice.Nsec)...).ExpectErr(t, "not_found")
+		e.Run(t, g("members", "add", "chat", "no-such-label", "--identity", alice.Nsec)...).ExpectErr(t, "invalid_input")
 		// The agent's policy has no rule for a group edit.
 		e.Run(t, g("edit", "chat", "--name", "x", "--signer", s.URI)...).ExpectErr(t, "auth")
 	})

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ohstr/ncli/cli/common"
+	"github.com/ohstr/ncli/cli/keyresolve"
 	"github.com/ohstr/ncli/client"
 	"github.com/ohstr/ncli/signer"
 	"github.com/ohstr/nmilat/nip01"
@@ -138,8 +139,8 @@ func runCheck(cmd *cobra.Command, _ []string) error {
 	pub := ""
 	if pubkeyFlag != "" {
 		var err error
-		if pub, err = signer.ParsePubkey(pubkeyFlag); err != nil {
-			return common.InvalidInputError(cmd, pubkeyFlag, err)
+		if pub, err = keyresolve.PubkeyArg(cmd, pubkeyFlag); err != nil {
+			return err
 		}
 	} else {
 		for _, ev := range events {
@@ -175,9 +176,9 @@ func runCheck(cmd *cobra.Command, _ []string) error {
 			results = append(results, fill(res, d))
 		}
 	} else {
-		counterpart, err := signer.ParsePubkey(counterpartFlag)
+		counterpart, err := keyresolve.PubkeyArg(cmd, counterpartFlag)
 		if err != nil {
-			return common.InvalidInputError(cmd, counterpartFlag, err)
+			return err
 		}
 		d := signer.Evaluate(signer.Request{Method: method, Counterpart: counterpart, Now: now, StartTime: start, SignerPub: pub}, policy, used)
 		if d.Allow && d.UnwrapFrom != nil {
@@ -188,9 +189,9 @@ func runCheck(cmd *cobra.Command, _ []string) error {
 			case sealFrom == "":
 				d.Reason = "allowed only if the result is a seal from an unwrap_from sender; pass --seal-from to check one"
 			default:
-				author, err := signer.ParsePubkey(sealFrom)
+				author, err := keyresolve.PubkeyArg(cmd, sealFrom)
 				if err != nil {
-					return common.InvalidInputError(cmd, sealFrom, err)
+					return err
 				}
 				if !d.UnwrapFrom[author] {
 					d = signer.Decision{Rule: d.Rule, Reason: "seal is from a sender unwrap_from does not list"}

@@ -39,7 +39,7 @@ func runMembersAdd(cmd *cobra.Command, args []string) error {
 	defer cancel()
 
 	groupID, roles := args[0], args[2:]
-	memberPubkey, err := keyresolve.Pubkey(cmd, args[1])
+	memberPubkey, err := keyresolve.PubkeyArg(cmd, args[1])
 	if err != nil {
 		return err
 	}
@@ -70,7 +70,7 @@ func runMembersRemove(cmd *cobra.Command, args []string) error {
 	defer cancel()
 
 	groupID := args[0]
-	memberPubkey, err := keyresolve.Pubkey(cmd, args[1])
+	memberPubkey, err := keyresolve.PubkeyArg(cmd, args[1])
 	if err != nil {
 		return err
 	}

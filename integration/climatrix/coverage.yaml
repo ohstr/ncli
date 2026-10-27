@@ -37,7 +37,7 @@
 "dm read": {modes: [json, text, errors], tests: [TestDM, TestDM_Errors]}
 "dm send": {modes: [json, text, errors], tests: [TestDM, TestDM_Errors]}
 "dm verify": {modes: [json, text, errors], tests: [TestDM, TestDM_Errors]}
-"dump": {modes: [json, errors], tests: [TestQuery, TestRelayLogin_AuthRequired]}
+"dump": {modes: [json, errors], tests: [TestQuery, TestRelayLogin_AuthRequired, TestPersonForms]}
 "event": {modes: [errors], tests: [TestBareGroupCommands]}
 "event delete": {modes: [json, errors], tests: [TestEventSocial]}
 "event diff": {modes: [json], tests: [TestEventAuthoring]}
@@ -57,7 +57,7 @@
 "event validate": {modes: [json, errors], tests: [TestEventAuthoring]}
 "event verify": {modes: [json, text, errors], tests: [TestEventVerifyAndGet]}
 "event wrap": {modes: [json, errors], tests: [TestEventWrapUnwrapFrom]}
-"find": {modes: [json, tty, errors], tests: [TestQuery, TestAddressableLookups, TestTTY_Spinner, TestTimeoutCoversHandshake, TestRelayLogin_AuthRequired, TestRelayLogin_MembershipRequired, TestRelayLogin_NIP46Bunker, TestFindFollow, TestFindFollow_Errors]}
+"find": {modes: [json, tty, errors], tests: [TestQuery, TestAddressableLookups, TestTTY_Spinner, TestTimeoutCoversHandshake, TestRelayLogin_AuthRequired, TestRelayLogin_MembershipRequired, TestRelayLogin_NIP46Bunker, TestFindFollow, TestFindFollow_Errors, TestPersonForms]}
 "groups": {modes: [errors], tests: [TestBareGroupCommands]}
 "groups create": {modes: [json, errors], tests: [TestGroupsCLI]}
 "groups delete": {modes: [json, errors], tests: [TestGroupsModeration]}

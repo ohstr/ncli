@@ -212,24 +212,60 @@ func ResolveIdentifier(input string) (*IdentityInspection, error) {
 	return result, nil
 }
 
-// ResolveFilterAuthors replaces every nip-05 "name@domain" entry in each
-// filter's Authors with its resolved hex pubkey, in place -- lets
-// --authors and a --targets file's embedded filters mix nip-05 addresses
-// with hex pubkeys/prefixes, which are left untouched.
+// AuthorError is an --authors entry that names no one: a malformed npub or
+// nprofile.
+type AuthorError struct {
+	Input string
+	Err   error
+}
+
+func (e *AuthorError) Error() string { return fmt.Sprintf("author %q: %v", e.Input, e.Err) }
+func (e *AuthorError) Unwrap() error { return e.Err }
+
+// ResolveFilterAuthors replaces every author in each filter that isn't hex
+// with its hex pubkey, in place: a nip-05 "name@domain", an npub, an
+// nprofile or a saved vault label. Hex pubkeys and prefixes, and any other
+// value, are left untouched, so --authors and a --targets file's filters
+// can mix all of them. A nip-05 that can't be fetched returns a plain
+// error; a malformed npub or nprofile, an *AuthorError.
 func ResolveFilterAuthors(specs []*FilterSpec) error {
 	for _, spec := range specs {
 		for i, a := range spec.Authors {
-			if !strings.Contains(a, "@") {
+			switch {
+			case isHexPrefix(a):
 				continue
+			case strings.Contains(a, "@"):
+				pubHex, err := ResolveNip05(a)
+				if err != nil {
+					return err
+				}
+				spec.Authors[i] = pubHex
+			default:
+				insp, err := ResolveIdentifier(a)
+				switch {
+				case err == nil:
+					spec.Authors[i] = strings.ToLower(insp.PubKeyHex)
+				case strings.HasPrefix(a, "npub1") || strings.HasPrefix(a, "nprofile1"):
+					return &AuthorError{Input: a, Err: err}
+				}
+				// Anything else that names no one is sent as given, as before.
 			}
-			pubHex, err := ResolveNip05(a)
-			if err != nil {
-				return err
-			}
-			spec.Authors[i] = pubHex
 		}
 	}
 	return nil
+}
+
+// isHexPrefix reports whether s is a hex pubkey or a prefix of one.
+func isHexPrefix(s string) bool {
+	if s == "" || len(s) > 64 {
+		return false
+	}
+	for _, c := range s {
+		if !strings.ContainsRune("0123456789abcdefABCDEF", c) {
+			return false
+		}
+	}
+	return true
 }
 
 // ResolveNip05 resolves a "name@domain" nip-05 identifier to its hex pubkey

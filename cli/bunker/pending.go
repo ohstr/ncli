@@ -235,6 +235,7 @@ with the same scope as an existing one replaces it.`,
 		Example: `  ncli bunker sessions set-grant <pubkey> --grants grants.yaml`,
 		Args:    common.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			args[0] = sessionPubkey(args[0])
 			path, _ := cmd.Flags().GetString("grants")
 			spec, err := LoadGrantSpec(path)
 			if err != nil {

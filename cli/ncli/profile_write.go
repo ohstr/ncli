@@ -28,10 +28,27 @@ type listChange struct {
 	ID      string                `json:"id"`
 	Kind    int                   `json:"kind"`
 	Added   []string              `json:"added"`
+	Changed []string              `json:"changed"`
 	Removed []string              `json:"removed"`
 	Created bool                  `json:"created"`
 	Event   *nip01.Event          `json:"event"`
 	Report  *client.PublishReport `json:"report"`
+}
+
+// diff is what a write changes: items (or profile fields) added, changed
+// in place, and removed.
+type diff struct {
+	Added, Changed, Removed []string
+}
+
+// orEmpty makes nil lists empty, so --json prints [] rather than null.
+func (d diff) orEmpty() diff {
+	for _, l := range []*[]string{&d.Added, &d.Changed, &d.Removed} {
+		if *l == nil {
+			*l = []string{}
+		}
+	}
+	return d
 }
 
 // errNoChange is a write that would change nothing: nothing is published.
@@ -122,7 +139,7 @@ rebuilt from a stale copy, and never removes the last person unless
 				return err
 			}
 			allowEmpty, _ := cmd.Flags().GetBool("allow-empty")
-			return writeReplaceable(cmd, kind, func(old *nip01.Event) (*nip01.Event, []string, []string, error) {
+			return writeReplaceable(cmd, kind, func(old *nip01.Event) (*nip01.Event, diff, error) {
 				var next *nip01.Event
 				var changed []string
 				switch {
@@ -138,15 +155,15 @@ rebuilt from a stale copy, and never removes the last person unless
 					next, changed = nip51.Remove(old, kind, "p", people...)
 				}
 				if len(changed) == 0 {
-					return nil, nil, nil, errNoChange
+					return nil, diff{}, errNoChange
 				}
 				if !add && len(nip51.Values(next, "p")) == 0 && !allowEmpty {
-					return nil, nil, nil, common.UsageError(cmd, errors.New("this would leave no one on the list; pass --allow-empty to mean it"))
+					return nil, diff{}, common.UsageError(cmd, errors.New("this would leave no one on the list; pass --allow-empty to mean it"))
 				}
 				if add {
-					return next, changed, []string{}, nil
+					return next, diff{Added: changed}, nil
 				}
-				return next, []string{}, changed, nil
+				return next, diff{Removed: changed}, nil
 			})
 		},
 	}
@@ -194,43 +211,46 @@ func runProfileSet(cmd *cobra.Command, _ []string) error {
 	if len(changes) == 0 {
 		return common.InvocationOrHelp(cmd, nil, errors.New("give at least one field to change"))
 	}
-	return writeReplaceable(cmd, 0, func(old *nip01.Event) (*nip01.Event, []string, []string, error) {
+	return writeReplaceable(cmd, 0, func(old *nip01.Event) (*nip01.Event, diff, error) {
 		meta := map[string]json.RawMessage{}
 		next := nip01.NewEvent(0, "")
 		next.Tags = [][]string{}
 		if old != nil {
 			if old.Content != "" {
 				if err := json.Unmarshal([]byte(old.Content), &meta); err != nil {
-					return nil, nil, nil, common.InvalidInputError(cmd, old.ID, fmt.Errorf("your current profile is not a JSON object, so it can't be merged: %w", err))
+					return nil, diff{}, common.InvalidInputError(cmd, old.ID, fmt.Errorf("your current profile is not a JSON object, so it can't be merged: %w", err))
 				}
 			}
 			next.Tags = old.Tags
 		}
-		added, removed := []string{}, []string{}
+		var d diff
 		for k, raw := range changes {
-			if raw == nil {
-				if _, ok := meta[k]; ok {
-					delete(meta, k)
-					removed = append(removed, k)
-				}
-				continue
-			}
-			if string(meta[k]) != string(raw) {
+			before, had := meta[k]
+			switch {
+			case raw == nil && had:
+				delete(meta, k)
+				d.Removed = append(d.Removed, k)
+			case raw == nil:
+			case !had:
 				meta[k] = raw
-				added = append(added, k)
+				d.Added = append(d.Added, k)
+			case string(before) != string(raw):
+				meta[k] = raw
+				d.Changed = append(d.Changed, k)
 			}
 		}
-		if len(added) == 0 && len(removed) == 0 {
-			return nil, nil, nil, errNoChange
+		if len(d.Added)+len(d.Changed)+len(d.Removed) == 0 {
+			return nil, diff{}, errNoChange
 		}
-		sort.Strings(added)
-		sort.Strings(removed)
+		sort.Strings(d.Added)
+		sort.Strings(d.Changed)
+		sort.Strings(d.Removed)
 		content, err := json.Marshal(meta)
 		if err != nil {
-			return nil, nil, nil, common.RuntimeError(cmd, err)
+			return nil, diff{}, common.RuntimeError(cmd, err)
 		}
 		next.Content = string(content)
-		return next, added, removed, nil
+		return next, d, nil
 	})
 }
 
@@ -276,12 +296,12 @@ func runRelaysSet(cmd *cobra.Command, _ []string) error {
 	var changes []listChange
 	var reports []*client.PublishReport
 	replace := func(kind int, next *nip01.Event) error {
-		c, err := replaceOne(ctx, cmd, targets, signer, me, kind, func(old *nip01.Event) (*nip01.Event, []string, []string, error) {
+		c, err := replaceOne(ctx, cmd, targets, signer, me, kind, func(old *nip01.Event) (*nip01.Event, diff, error) {
 			added, removed := tagDiff(old, next)
 			if len(added) == 0 && len(removed) == 0 {
-				return nil, nil, nil, errNoChange
+				return nil, diff{}, errNoChange
 			}
-			return next, added, removed, nil
+			return next, diff{Added: added, Removed: removed}, nil
 		})
 		if err != nil {
 			return err
@@ -356,7 +376,7 @@ func tagDiff(old, next *nip01.Event) (added, removed []string) {
 
 // writeReplaceable reads the signer's current event of kind, lets change
 // build its replacement, publishes it and prints the change.
-func writeReplaceable(cmd *cobra.Command, kind int, change func(old *nip01.Event) (next *nip01.Event, added, removed []string, err error)) error {
+func writeReplaceable(cmd *cobra.Command, kind int, change func(old *nip01.Event) (*nip01.Event, diff, error)) error {
 	ctx, cancel := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 	targets, err := profileTargets(cmd)
@@ -389,7 +409,7 @@ func writeReplaceable(cmd *cobra.Command, kind int, change func(old *nip01.Event
 // refuses unless every target answered (a relay that didn't may hold a
 // newer version than the others), and without --create when none had one.
 // A change of nothing publishes nothing.
-func replaceOne(ctx context.Context, cmd *cobra.Command, targets *client.TargetsSpec, signer client.Crypto, me string, kind int, change func(old *nip01.Event) (*nip01.Event, []string, []string, error)) (*listChange, error) {
+func replaceOne(ctx context.Context, cmd *cobra.Command, targets *client.TargetsSpec, signer client.Crypto, me string, kind int, change func(old *nip01.Event) (*nip01.Event, diff, error)) (*listChange, error) {
 	old, err := currentReplaceable(ctx, cmd, targets, kind, me, signer)
 	if err != nil {
 		return nil, err
@@ -397,19 +417,14 @@ func replaceOne(ctx context.Context, cmd *cobra.Command, targets *client.Targets
 	if create, _ := cmd.Flags().GetBool("create"); old == nil && !create {
 		return nil, common.NotFoundError(cmd, "", fmt.Errorf("no relay has your current kind %d, so nothing was published (it may just not be on these relays); --create starts a new one", kind))
 	}
-	next, added, removed, err := change(old)
+	next, d, err := change(old)
 	if errors.Is(err, errNoChange) {
-		return &listChange{Kind: kind, Added: []string{}, Removed: []string{}}, nil
+		return &listChange{Kind: kind, Added: []string{}, Changed: []string{}, Removed: []string{}}, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	if added == nil {
-		added = []string{}
-	}
-	if removed == nil {
-		removed = []string{}
-	}
+	d = d.orEmpty()
 	next.PubKey, next.ID, next.Sig = "", "", ""
 	next.CreatedAt = uint64(time.Now().Unix())
 	if old != nil && next.CreatedAt <= old.CreatedAt {
@@ -423,7 +438,7 @@ func replaceOne(ctx context.Context, cmd *cobra.Command, targets *client.Targets
 	if err != nil {
 		return nil, err
 	}
-	return &listChange{ID: next.ID, Kind: kind, Added: added, Removed: removed, Created: old == nil, Event: next, Report: report}, nil
+	return &listChange{ID: next.ID, Kind: kind, Added: d.Added, Changed: d.Changed, Removed: d.Removed, Created: old == nil, Event: next, Report: report}, nil
 }
 
 func printChange(cmd *cobra.Command, c listChange) {
@@ -433,6 +448,9 @@ func printChange(cmd *cobra.Command, c listChange) {
 	}
 	for _, a := range c.Added {
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "+ %s\n", displayItem(a))
+	}
+	for _, ch := range c.Changed {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "~ %s\n", displayItem(ch))
 	}
 	for _, r := range c.Removed {
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "- %s\n", displayItem(r))

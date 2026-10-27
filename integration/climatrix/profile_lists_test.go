@@ -12,6 +12,7 @@ import (
 type change struct {
 	ID      string      `json:"id"`
 	Added   []string    `json:"added"`
+	Changed []string    `json:"changed"`
 	Removed []string    `json:"removed"`
 	Created bool        `json:"created"`
 	Event   nip01.Event `json:"event"`
@@ -83,6 +84,12 @@ func TestProfileWrites(t *testing.T) {
 		e.MustOK(t, as("profile", "set", "--about", "hello")...).JSON(t, &same)
 		if same.ID != "" || latest(t, e, r.URL, alice.PubHex, 0).ID != c.ID {
 			t.Fatalf("no-op published %+v", same)
+		}
+		// Editing a field that exists is a change, not an addition.
+		var edit change
+		e.MustOK(t, as("profile", "set", "--about", "hello again")...).JSON(t, &edit)
+		if !slices.Equal(edit.Changed, []string{"about"}) || len(edit.Added) != 0 || len(edit.Removed) != 0 {
+			t.Fatalf("edit %+v", edit)
 		}
 	})
 

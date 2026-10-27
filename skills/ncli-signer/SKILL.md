@@ -168,6 +168,38 @@ rules:
 - **Always allowed.** `get_public_key`, `ping`, `signer_status`, and
   no-op acks for `connect`, `get_relays`, `switch_relays` and `logout`.
 
+### Messages: decrypt, unwrap, prove
+
+- `counterparts` scopes `nip04_*`/`nip44_encrypt`/`nip44_decrypt`. It does
+  not cover `nip44_message_keys` (one payload's keys, for `ncli dm prove`):
+  name that method explicitly, with its counterparts.
+- A gift wrap is encrypted from a one-time key no list can name. To let the
+  agent read DMs without opening everything, use `unwrap_from`: it allows
+  `nip44_decrypt` from any counterpart, but the signer returns the result
+  only if it is a seal, signed by a listed sender. Anyone else's message
+  never leaves the signer, whatever the client asks.
+- A kind 13 seal is backdated up to 2 days (NIP-59); the signer accepts that
+  for kind 13 only.
+
+```yaml
+  - name: dm-crypto
+    allow: {methods: [nip44_encrypt, nip44_decrypt], counterparts: [npub1alice..., npub1self...]}
+  - name: dm-inbox
+    allow: {unwrap_from: [npub1alice..., npub1self...]}
+  - name: dm-proofs
+    allow: {methods: [nip44_message_keys], counterparts: [npub1alice...]}
+  - name: dm-seals
+    allow: {kinds: [13]}
+```
+
+```sh
+# an unwrap_from rule decides on the seal's author: say who it would be
+ncli signer check --policy policy.yaml --method nip44_decrypt --counterpart <any-key> --seal-from npub1alice... --pubkey npub1self...
+```
+
+Skill `ncli-messaging` has a full messaging policy and what each command
+asks the signer for.
+
 [references/policy.md](references/policy.md) is the full reference:
 selectors, binds and templates, target-age rules, and why to scope auth
 kinds. [references/kubernetes.md](references/kubernetes.md) covers the

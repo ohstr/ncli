@@ -13,6 +13,7 @@
 - Adds `groups send`, `groups read` and `groups feed`: post a chat message, read a group (`--thread`, `-f/--follow`, `--state`), or read what mentions you across your groups, as the same message shape as `dm read`.
 - Adds `--signer` to every `groups` command, so a group write or a private group's read can go through a socket signer or bunker instead of a key held here.
 - Adds npub, nprofile, nip-05 and vault labels wherever a person is named: `find`/`dump --authors`, `--tag p=`, `groups members add/remove`, `groups list --member`, `relay members show/add/remove` and `signer check`; `bunker sessions` takes an npub. Hex is unchanged, and a value that names no one is still sent as given or refused as before.
+- Adds the `ncli-messaging` skill and `examples/signer/messaging-policy.yaml`, a signer policy for an agent that messages people.
 - Adds `profile set`, `profile relays set`, `profile follow/unfollow` and `profile mute/unmute`. Each reads your current version and changes only what you name, and nothing is published when no relay answers or without `--create` when none has one.
 
 ### Changed

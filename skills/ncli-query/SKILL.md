@@ -169,6 +169,32 @@ distinguishable from "queried successfully, found nothing." Test this
 yourself with a bogus host: `ncli find <id> -s relay.invalid.example
 --json` should fail with a network error, not print `[]`.
 
+### Naming people in filters
+
+`--authors` and `--tag p=` take an npub, nprofile or nip-05 as well as hex;
+`--authors` also takes a saved vault label. A malformed npub is
+`invalid_input`. Anything else is sent as given (a hex prefix stays a
+prefix; most relays match only full keys).
+
+### `find -f/--follow`: wait for new events
+
+```sh
+# history, then every new match as one JSON line, until interrupted
+ncli find -f --kinds 1 --authors npub1... -s wss://relay.example
+# --state records what was printed: a restart prints only what's new
+ncli find -f --kinds 7 --tag e=<event-id> -s wss://relay.example --state reactions.state
+# wait for the first reply, then stop
+ncli find -f --kinds 1,1111 --tag e=<event-id> -s wss://relay.example | head -n1
+```
+
+Every target is followed at once and each event printed once. A relay that
+drops is redialed with backoff (a warning on stderr), resuming from the
+newest event it gave. Only all targets failing at the start is an error
+(`network`). With `--state`, delivery across a restart is at least once and
+never skips an event. `-o` doesn't combine with `-f`, and `--state` needs it;
+a local `.db` target can't be followed (`usage`). `-S` is short for
+`--since`.
+
 ## `profile`
 
 Looking someone up is `ncli profile`, not `ncli find -k 0`: one query,

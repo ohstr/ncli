@@ -66,6 +66,51 @@ func TestShippedPoliciesUnchanged(t *testing.T) {
 	}
 }
 
+// The example messaging policy loads and decides as its comments say.
+func TestExampleMessagingPolicy(t *testing.T) {
+	_, file, _, _ := runtime.Caller(0)
+	path := filepath.Join(filepath.Dir(file), "..", "examples", "signer", "messaging-policy.yaml")
+	const (
+		self    = "7d899a75887357482f435cca415699c0dcf29807c604edf05e7b494de275d326"
+		alice   = "180c1a67e139062ec4c58182926f7b7e55912227b10d3ab645fbb8c16bbd5e7b"
+		mallory = "2055a977d599b9943ddd0f7f57f21a7a1906afdd867bd0360383655ae5638ff6"
+	)
+	p, err := LoadPolicy(path, LoadOptions{SignerPub: self})
+	if err != nil {
+		t.Fatal(err)
+	}
+	crypto := func(method, cp string) Decision {
+		return Evaluate(Request{Method: method, Counterpart: cp, Now: t0, SignerPub: self}, p, noneUsed)
+	}
+	for _, c := range []struct {
+		method, cp, rule string
+		allow           bool
+	}{
+		{nip46.MethodNIP44Encrypt, alice, "dm-crypto", true},
+		{nip46.MethodNIP44Encrypt, self, "dm-crypto", true},
+		{nip46.MethodNIP44Encrypt, mallory, "", false},
+		{nip46.MethodNIP44MessageKeys, alice, "dm-proofs", true},
+		{nip46.MethodNIP44MessageKeys, mallory, "", false},
+		// Any other counterpart is a wrap's one-time key: allowed only
+		// for a seal from a listed sender.
+		{nip46.MethodNIP44Decrypt, mallory, "dm-inbox", true},
+	} {
+		d := crypto(c.method, c.cp)
+		if d.Allow != c.allow || (c.allow && d.Rule != c.rule) {
+			t.Errorf("%s %s: %+v", c.method, c.cp[:8], d)
+		}
+	}
+	if d := crypto(nip46.MethodNIP44Decrypt, mallory); d.UnwrapFrom == nil || d.UnwrapFrom[mallory] || !d.UnwrapFrom[alice] {
+		t.Fatalf("inbox rule %+v", d)
+	}
+	for kind, allow := range map[int]bool{13: true, 9: true, 7: true, 1111: true, 0: true, 10050: true, 4: false, 30618: false} {
+		d := Evaluate(Request{Method: nip46.MethodSignEvent, Event: target(t, self, kind, t0, "x"), Now: t0, SignerPub: self}, p, noneUsed)
+		if d.Allow != allow {
+			t.Errorf("kind %d: %+v", kind, d)
+		}
+	}
+}
+
 func TestUnwrapFromValidation(t *testing.T) {
 	_, friend := testKey(t, "friend")
 	for name, rule := range map[string]string{

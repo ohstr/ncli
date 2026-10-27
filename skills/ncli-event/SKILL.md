@@ -198,11 +198,43 @@ ncli find --kinds 1059 --tag p=<my-hex> -s wss://inbox.example \
   | ncli event unwrap --identity me --json
 ```
 
-Needs a private key (`--identity` vault label or nsec, or
-`NCLI_EVENT_IDENTITY`); a bunker can't decrypt here. Checks the wrap's and
-seal's signatures and that the inner event claims the seal's author.
-Output: `{"wrap_id","seal_id","sender","rumor"}`. A wrap not addressed to
-you is `invalid_input` (exit 3).
+Opens with `--identity` (vault label or nsec, or `NCLI_EVENT_IDENTITY`), or
+`--signer bunker+unix://...` so the key stays in the signer. Checks the
+wrap's and seal's signatures, that the inner event claims the seal's
+author, and that its id (if set) is its hash. Output:
+`{"wrap_id","seal_id","sender","rumor"}`. A wrap not addressed to you is
+`invalid_input` (exit 3).
+
+```sh
+# open only alice's seals; others are skipped undecrypted, and the output is a list
+ncli find --kinds 1059 --tag p=npub1me... -s wss://inbox.example \
+  | ncli event unwrap --signer bunker+unix:///run/signer/agent.sock --from npub1alice... --json
+```
+
+`ncli event wrap --to <who>` does the reverse for any unsigned event (seal
+with `--signer`, gift-wrap under a one-time key). For chat, use `ncli dm`
+(skill `ncli-messaging`).
+
+## react / reply / post / repost / delete
+
+Signed with `--signer` (`bunker+unix://`, `bunker://` or an identity).
+Published to `--to`, else to where the target was found plus `--relays`
+(or the prefs relays).
+
+```sh
+ncli event react nevent1... "👀" --signer me
+ncli event reply nevent1... "agreed" --signer me
+ncli event post "hello" --hashtag nostr -m npub1bob... --quote note1... --signer me
+ncli event repost note1... --signer me
+ncli event delete note1... --reason typo --signer me
+```
+
+- `react`: kind 7 with `e`, `p`, `k`, plus `a` (addressable) and `h` (group).
+- `reply`: kind 1 with NIP-10 markers for a note, kind 9 quoting it for a
+  group message, else a NIP-22 comment (kind 1111) keeping the root.
+- `delete`: kind 5; refuses events that aren't the signer's.
+
+`--json` prints `{"id","kind","event","report"}`.
 
 ## validate
 

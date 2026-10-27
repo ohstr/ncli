@@ -59,6 +59,7 @@ never touches the network.`,
 	cmd.AddCommand(newThreadCommand())
 	cmd.AddCommand(newDiffCommand())
 	cmd.AddCommand(newUnwrapCommand())
+	cmd.AddCommand(newWrapCommand())
 	cmd.AddCommand(newValidateCommand())
 
 	return cmd

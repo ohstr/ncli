@@ -35,6 +35,16 @@ func ClassifyIdentifierError(cmd *cobra.Command, identifier string, err error) e
 	return common.InvalidInputError(cmd, input, err)
 }
 
+// Pubkey resolves a person -- vault label, npub, hex, nprofile, nip-05 or
+// nsec -- to a lowercase hex pubkey. A nip-05 is fetched over HTTPS.
+func Pubkey(cmd *cobra.Command, value string) (string, error) {
+	resolved, err := client.ResolveIdentifier(value)
+	if err != nil {
+		return "", ClassifyIdentifierError(cmd, value, err)
+	}
+	return strings.ToLower(resolved.PubKeyHex), nil
+}
+
 // VaultError classifies a vault unlock/create failure: a vault key gone
 // missing (identities saved, key lost) is not_found; anything else -- a
 // wrong password -- is auth.

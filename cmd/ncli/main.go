@@ -7,6 +7,7 @@ import (
 	"github.com/ohstr/ncli/cli/blossom"
 	"github.com/ohstr/ncli/cli/bunker"
 	"github.com/ohstr/ncli/cli/common"
+	"github.com/ohstr/ncli/cli/dm"
 	"github.com/ohstr/ncli/cli/event"
 	"github.com/ohstr/ncli/cli/groups"
 	"github.com/ohstr/ncli/cli/huddle"
@@ -65,6 +66,10 @@ func init() {
 	// mounts create/list/show plus huddle's own "join" (implemented in
 	// cli/huddle, mounted only here) as its children; see NewSpaceCommand.
 	ncli.RootCmd.AddCommand(space.NewSpaceCommand())
+
+	// Register NIP-17 private messages ("dm") -- send/read/prove/verify,
+	// sealed and opened through a signer; see NewDMCommand.
+	ncli.RootCmd.AddCommand(dm.NewDMCommand())
 }
 
 func main() {

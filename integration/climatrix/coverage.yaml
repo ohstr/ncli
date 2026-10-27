@@ -32,6 +32,11 @@
 "bunker status": {modes: [json], tests: [TestTTY_BunkerDaemon, TestBunkerWithoutDaemon]}
 "bunker stop": {modes: [json, errors], tests: [TestTTY_BunkerDaemon, TestBunkerWithoutDaemon]}
 "decode": {modes: [json, text, tty, errors], tests: [TestDecode, TestTTY_FailureShapes, TestTTY_Color]}
+"dm": {modes: [errors], tests: [TestDM_Errors]}
+"dm prove": {modes: [json, errors], tests: [TestDM]}
+"dm read": {modes: [json, text, errors], tests: [TestDM, TestDM_Errors]}
+"dm send": {modes: [json, text, errors], tests: [TestDM, TestDM_Errors]}
+"dm verify": {modes: [json, text, errors], tests: [TestDM, TestDM_Errors]}
 "dump": {modes: [json, errors], tests: [TestQuery, TestRelayLogin_AuthRequired]}
 "event": {modes: [errors], tests: [TestBareGroupCommands]}
 "event diff": {modes: [json], tests: [TestEventAuthoring]}
@@ -43,9 +48,10 @@
 "event seen": {modes: [json, errors], tests: [TestEventSeenAndRebroadcast]}
 "event show": {modes: [json, text], tests: [TestEventVerifyAndGet]}
 "event thread": {modes: [json], tests: [TestEventAuthoring]}
-"event unwrap": {modes: [json, errors], tests: [TestEventUnwrap]}
+"event unwrap": {modes: [json, errors], tests: [TestEventUnwrap, TestEventWrapUnwrapFrom]}
 "event validate": {modes: [json, errors], tests: [TestEventAuthoring]}
 "event verify": {modes: [json, text, errors], tests: [TestEventVerifyAndGet]}
+"event wrap": {modes: [json, errors], tests: [TestEventWrapUnwrapFrom]}
 "find": {modes: [json, tty, errors], tests: [TestQuery, TestAddressableLookups, TestTTY_Spinner, TestTimeoutCoversHandshake, TestRelayLogin_AuthRequired, TestRelayLogin_MembershipRequired, TestRelayLogin_NIP46Bunker, TestFindFollow, TestFindFollow_Errors]}
 "groups": {modes: [errors], tests: [TestBareGroupCommands]}
 "groups create": {modes: [json, errors], tests: [TestGroupsCLI]}

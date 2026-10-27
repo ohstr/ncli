@@ -105,8 +105,8 @@ github.com/muesli/termenv v0.16.0 h1:S5AlUN9dENB57rsbnkPyfdGuWIlkmzJjbFf0Tf5FWUc
 github.com/muesli/termenv v0.16.0/go.mod h1:ZRfOIKPFDYQoDFF4Olj7/QJbW60Ol/kL1pU3VfY/Cnk=
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 h1:C3w9PqII01/Oq1c1nUAm88MOHcQC9l5mIlSMApZMrHA=
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822/go.mod h1:+n7T8mK8HuQTcFwEeznm/DIxMOiR9yIdICNftLE1DvQ=
-github.com/ohstr/nmilat v0.5.0-rc.42.0.20261027125713-426053dfbab8 h1:AZLH7Sxu4Z2gRJYG05i2lfAMysLE1hNU4vheDs6QyS8=
-github.com/ohstr/nmilat v0.5.0-rc.42.0.20261027125713-426053dfbab8/go.mod h1:1ZBZb7JTkbBpoXizIGdylX0jhseXcjwkQWaZ4sW4cE0=
+github.com/ohstr/nmilat v0.5.0-rc.42.0.20261027155703-d19e5431b800 h1:OJDpsmKc/hsViAuGOJHav4PEXtKztg+a6kEYlyftRuU=
+github.com/ohstr/nmilat v0.5.0-rc.42.0.20261027155703-d19e5431b800/go.mod h1:1ZBZb7JTkbBpoXizIGdylX0jhseXcjwkQWaZ4sW4cE0=
 github.com/pelletier/go-toml/v2 v2.2.3 h1:YmeHyLY8mFWbdkNWwpr+qIL2bEqT0o95WSdkNHvL12M=
 github.com/pelletier/go-toml/v2 v2.2.3/go.mod h1:MfCQTFTvCcUyyvvwm1+G6H/jORL20Xlb6rzQu9GuUkc=
 github.com/pion/datachannel v1.6.3 h1:HZAYLpunVI0xi057ZiANl558d0uSpomcWw4UEPz3qXs=

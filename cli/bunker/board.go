@@ -2094,6 +2094,8 @@ var methodLabels = map[string]string{
 	nip46.MethodNIP04Decrypt: "Decrypt messages (NIP-04)",
 	nip46.MethodNIP44Encrypt: "Encrypt messages (NIP-44)",
 	nip46.MethodNIP44Decrypt: "Decrypt messages (NIP-44)",
+
+	nip46.MethodNIP44MessageKeys: "Reveal one message's keys, to prove it (NIP-44)",
 }
 
 // kindLabels names the handful of event kinds a general user is likely to

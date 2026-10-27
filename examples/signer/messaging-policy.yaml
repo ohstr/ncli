@@ -1,0 +1,66 @@
+# Policy for an agent that talks on Nostr: DMs with listed people, group
+# chat, reactions, replies and its own profile. Replace the npubs: ALICE is
+# someone the agent may message, SELF is the agent's own key (its copy of
+# what it sends).
+#
+#   ncli signer serve --socket /run/signer/agent.sock \
+#     --policy messaging-policy.yaml --state-dir /var/lib/signer --watch
+kind: signer-policy
+max_clock_skew: 10m
+rules:
+  # Seal and open DMs with these people only. Seals are backdated up to
+  # 2 days (NIP-59); the signer allows that for kind 13.
+  - name: dm-crypto
+    allow:
+      methods: [nip44_encrypt, nip44_decrypt]
+      counterparts:
+        # ALICE
+        - npub1rqxp5elp8yrza3x9sxpfymmm0e2ezg38kyxn4dj9lwuvz6aateasjxsxdy
+        # SELF
+        - npub10kye5avgwdt5st6rtn9yz45ecrw09xq8cczwmuz70dy5mcn46vnqruw9nk
+    deny_matching:
+      - 'nsec1[02-9ac-hj-np-z]{58}'
+      - 'ncryptsec1'
+  - name: dm-seals
+    allow: {kinds: [13]}
+
+  # Open a gift wrap (its one-time key can't be listed) only when it holds a
+  # seal from these people; anyone else's message never leaves the signer.
+  - name: dm-inbox
+    allow:
+      unwrap_from:
+        # ALICE
+        - npub1rqxp5elp8yrza3x9sxpfymmm0e2ezg38kyxn4dj9lwuvz6aateasjxsxdy
+        # SELF
+        - npub10kye5avgwdt5st6rtn9yz45ecrw09xq8cczwmuz70dy5mcn46vnqruw9nk
+
+  # "ncli dm prove": reveal one message's keys, for these people only.
+  - name: dm-proofs
+    allow:
+      methods: [nip44_message_keys]
+      counterparts:
+        # ALICE
+        - npub1rqxp5elp8yrza3x9sxpfymmm0e2ezg38kyxn4dj9lwuvz6aateasjxsxdy
+
+  # Group chat (9), reactions (7), notes and replies (1, 1111), reposts
+  # (6, 16) and deletions of its own events (5).
+  - name: social
+    allow: {kinds: [1, 5, 6, 7, 9, 16, 1111]}
+    deny_matching:
+      - 'nsec1[02-9ac-hj-np-z]{58}'
+      - 'ncryptsec1'
+    rate: 60/m
+
+  # Its own profile, follows, mutes and relay lists.
+  - name: profile
+    allow: {kinds: [0, 3, 10000, 10002, 10050]}
+    rate: 10/h
+
+  # NIP-42 login, only to its own relays.
+  - name: relay-login
+    allow:
+      kinds: [22242]
+      tags: {relay: ["wss://relay.example", "wss://inbox.example"]}
+
+  - name: everything-else
+    deny: {}

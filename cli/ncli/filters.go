@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/ohstr/ncli/cli/common"
+	"github.com/ohstr/ncli/cli/keyresolve"
 	"github.com/ohstr/ncli/client"
 	"github.com/ohstr/nmilat/nip01"
 	"github.com/spf13/cobra"
@@ -29,11 +30,17 @@ func registerInlineFilterFlags(cmd *cobra.Command) {
 	cmd.Flags().StringP("kinds", "k", "", `Comma-separated event kinds, e.g. "1,7"`)
 	cmd.Flags().StringP("authors", "a", "", "Comma-separated author pubkeys (hex, prefix, or nip-05)")
 	cmd.Flags().StringP("ids", "i", "", "Comma-separated event IDs (hex, or a prefix)")
-	cmd.Flags().String("since", "", `Absolute unix timestamp or relative duration ("1h", "1w 2d", ...), looking backward`)
+	cmd.Flags().StringP("since", "S", "", `Absolute unix timestamp or relative duration ("1h", "1w 2d", ...), looking backward`)
 	cmd.Flags().String("until", "", "Absolute unix timestamp or relative duration, looking forward")
 	cmd.Flags().IntP("limit", "l", 0, "Max events to return")
 	cmd.Flags().String("search", "", "NIP-50 profile search (name/about/nip05/lud16), not note content")
 	cmd.Flags().StringArray("tag", nil, `Repeatable tag filter as "key=value", e.g. --tag e=<id> --tag p=<pubkey>`)
+}
+
+// namesPerson reports whether a --tag p= value is an npub, nprofile or
+// nip-05, to resolve to hex; any other value is matched as given.
+func namesPerson(s string) bool {
+	return strings.HasPrefix(s, "npub1") || strings.HasPrefix(s, "nprofile1") || strings.Contains(s, "@")
 }
 
 // inlineFilterFlagsChanged reports whether the caller set any inline filter
@@ -103,6 +110,13 @@ func buildInlineFilterSpec(cmd *cobra.Command) (*client.FilterSpec, error) {
 			key, value, ok := strings.Cut(t, "=")
 			if !ok || key == "" {
 				return nil, common.InvalidInputError(cmd, t, fmt.Errorf(`invalid --tag %q: must be in the form "key=value"`, t))
+			}
+			if (key == "p" || key == "P") && namesPerson(value) {
+				pk, err := keyresolve.Pubkey(cmd, value)
+				if err != nil {
+					return nil, err
+				}
+				value = pk
 			}
 			filter.Tags[key] = append(filter.Tags[key], value)
 		}

@@ -38,6 +38,8 @@ var grantableMethods = map[string]bool{
 	nip46.MethodNIP04Decrypt: true,
 	nip46.MethodNIP44Encrypt: true,
 	nip46.MethodNIP44Decrypt: true,
+
+	nip46.MethodNIP44MessageKeys: true,
 }
 
 // KindsSpec is a sign_event grant entry's kind scope: either every kind

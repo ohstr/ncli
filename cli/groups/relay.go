@@ -3,8 +3,10 @@ package groups
 import (
 	"errors"
 	"net/url"
+	"strings"
 
 	"github.com/ohstr/ncli/cli/common"
+	"github.com/ohstr/ncli/cli/keyresolve"
 	"github.com/ohstr/ncli/client"
 	"github.com/spf13/cobra"
 )
@@ -32,19 +34,36 @@ func resolveRelay(cmd *cobra.Command, relayFlag string) (*url.URL, error) {
 }
 
 // resolveWriteTarget resolves everything a group write command needs beyond
-// its own arguments: the relay to publish to and the identity to sign with.
-func resolveWriteTarget(cmd *cobra.Command) (relayURL *url.URL, pubKeyHex, privKeyHex string, err error) {
+// its own arguments: the relay to publish to and what signs: --signer (a
+// socket signer, bunker or identity), else the --identity key. Call
+// closeSigner when done.
+func resolveWriteTarget(cmd *cobra.Command) (relayURL *url.URL, pubKeyHex string, signer client.Signer, closeSigner func(), err error) {
 	relayFlag, _ := cmd.Flags().GetString("relay")
 	relayURL, err = resolveRelay(cmd, relayFlag)
 	if err != nil {
-		return nil, "", "", err
+		return nil, "", nil, nil, err
 	}
 
 	identityFlag, _ := cmd.Flags().GetString("identity")
-	pubKeyHex, privKeyHex, err = resolveIdentity(cmd, identityFlag)
-	if err != nil {
-		return nil, "", "", err
+	if signerFlag := groupSigner(cmd, identityFlag); signerFlag != "" {
+		if identityFlag != "" {
+			return nil, "", nil, nil, common.InvocationError(cmd, errors.New("pass --identity or --signer, not both"))
+		}
+		jsonMode, _ := cmd.Flags().GetBool("json")
+		signer, closeSigner, err = keyresolve.ResolveSigner(cmd, jsonMode, signerFlag)
+		if err != nil {
+			return nil, "", nil, nil, err
+		}
+		return relayURL, strings.ToLower(signer.PubKey()), signer, closeSigner, nil
 	}
 
-	return relayURL, pubKeyHex, privKeyHex, nil
+	pubKeyHex, privKeyHex, err := resolveIdentity(cmd, identityFlag)
+	if err != nil {
+		return nil, "", nil, nil, err
+	}
+	local, err := client.NewLocalSigner(privKeyHex)
+	if err != nil {
+		return nil, "", nil, nil, common.RuntimeError(cmd, err)
+	}
+	return relayURL, pubKeyHex, local, func() {}, nil
 }

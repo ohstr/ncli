@@ -21,14 +21,24 @@ selector, unless serve/check runs with `--allow-catch-all`.
 
 | Field | Applies to | Matches when |
 |---|---|---|
-| `methods` | all | the method is listed: `sign_event`, `nip04_encrypt`, `nip04_decrypt`, `nip44_encrypt`, `nip44_decrypt` |
+| `methods` | all | the method is listed: `sign_event`, `nip04_encrypt`, `nip04_decrypt`, `nip44_encrypt`, `nip44_decrypt`, `nip44_message_keys` |
 | `kinds` | `sign_event` | the event kind is listed |
 | `tags` | `sign_event` | for every key, some tag with that name has a first value matching an entry: exact, or a prefix when the entry ends in `*` |
 | `counterparts` | encrypt/decrypt | the peer pubkey (npub or hex) is listed |
+| `unwrap_from` | `nip44_decrypt` | any counterpart; the result is released only if it is a kind 13 seal that verifies, signed by a listed pubkey |
 
 - **Default methods.** If `methods` is omitted, `kinds`/`tags` imply
-  `[sign_event]`, and `counterparts` implies all four encrypt/decrypt
-  methods.
+  `[sign_event]`, `counterparts` implies all four encrypt/decrypt
+  methods (not `nip44_message_keys`, which must be named), and
+  `unwrap_from` implies `[nip44_decrypt]`.
+- **`nip44_message_keys` needs `counterparts`.** A message's keys open it
+  as surely as decrypting it, so an allow rule for it must name whose
+  messages may be proved; one that doesn't is a load error.
+- **`unwrap_from` stands alone.** It takes no `counterparts`, `kinds` or
+  `tags`, only `nip44_decrypt`, and only in an allow rule. Put a
+  `counterparts` rule for the same senders before it, for the seals.
+- **Seals.** A `sign_event` of kind 13 may be up to 48h (plus the skew)
+  old, as NIP-59 backdates seals; other kinds keep the age limit.
 - **No mixing.** Combining `kinds`/`tags` with `counterparts` in one
   selector is a load error. Split them into two rules.
 - **Empty selector.** `deny: {}` matches everything, which makes it the

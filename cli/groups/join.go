@@ -2,10 +2,11 @@ package groups
 
 import (
 	"fmt"
-	"github.com/ohstr/ncli/client"
 	"os/signal"
 	"strings"
 	"syscall"
+
+	"github.com/ohstr/ncli/client"
 
 	"github.com/ohstr/ncli/cli/common"
 	"github.com/ohstr/nmilat/nip29"
@@ -39,13 +40,14 @@ func runJoin(cmd *cobra.Command, args []string) error {
 	code, _ := cmd.Flags().GetString("invite-code")
 	reason, _ := cmd.Flags().GetString("reason")
 
-	relayURL, pubKeyHex, privKeyHex, err := resolveWriteTarget(cmd)
+	relayURL, pubKeyHex, signer, closeSigner, err := resolveWriteTarget(cmd)
 	if err != nil {
 		return err
 	}
+	defer closeSigner()
 
 	ev := nip29.NewJoinRequest(pubKeyHex, groupID, code, reason)
-	report, err := signAndPublish(ctx, cmd, relayURL, groupID, ev, privKeyHex)
+	report, err := signAndPublish(ctx, cmd, relayURL, groupID, ev, signer)
 	if err != nil {
 		return err
 	}

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ohstr/ncli/cli/common"
+	"github.com/ohstr/ncli/cli/keyresolve"
 	"github.com/ohstr/ncli/client"
 	"github.com/ohstr/ncli/signer"
 	"github.com/ohstr/nmilat/nip01"
@@ -31,7 +32,8 @@ created before the signer started" check; --now pins the clock so
 committed fixtures stay valid.
 
 For encrypt/decrypt rules pass --method and --counterpart instead of
---events.`,
+--events. An unwrap_from rule decides on the decrypted seal's author, so
+--seal-from is required for it.`,
 		Example: `  ncli signer check --policy policy.yaml -e event.json --pubkey npub1...
   ncli signer check --policy policy.yaml -e state.json --attestations approval.json \
     --now 2026-10-08T12:00:00Z --start-time 2026-10-08T11:00:00Z
@@ -53,6 +55,7 @@ For encrypt/decrypt rules pass --method and --counterpart instead of
 	f.String("attestations", "", "Signed attestation event(s) sent with every sign_event")
 	f.String("method", nip46.MethodSignEvent, "Method to evaluate")
 	f.String("counterpart", "", "Peer pubkey for an encrypt/decrypt method")
+	f.String("seal-from", "", "For an unwrap_from rule: the author of the seal the decrypt would return")
 	f.String("pubkey", "", "Signer pubkey (npub or hex); defaults to the events' own pubkey")
 	f.String("now", "", "Evaluate as of this time (RFC3339 or unix seconds; default: now)")
 	f.String("start-time", "", "Signer start time (RFC3339 or unix seconds); attestations created before it are rejected")
@@ -136,8 +139,8 @@ func runCheck(cmd *cobra.Command, _ []string) error {
 	pub := ""
 	if pubkeyFlag != "" {
 		var err error
-		if pub, err = signer.ParsePubkey(pubkeyFlag); err != nil {
-			return common.InvalidInputError(cmd, pubkeyFlag, err)
+		if pub, err = keyresolve.PubkeyArg(cmd, pubkeyFlag); err != nil {
+			return err
 		}
 	} else {
 		for _, ev := range events {
@@ -173,11 +176,28 @@ func runCheck(cmd *cobra.Command, _ []string) error {
 			results = append(results, fill(res, d))
 		}
 	} else {
-		counterpart, err := signer.ParsePubkey(counterpartFlag)
+		counterpart, err := keyresolve.PubkeyArg(cmd, counterpartFlag)
 		if err != nil {
-			return common.InvalidInputError(cmd, counterpartFlag, err)
+			return err
 		}
 		d := signer.Evaluate(signer.Request{Method: method, Counterpart: counterpart, Now: now, StartTime: start, SignerPub: pub}, policy, used)
+		if d.Allow && d.UnwrapFrom != nil {
+			// The rule decides on the decrypted seal's author, which only
+			// --seal-from can stand in for offline.
+			// Without it the answer would be "it depends", which a CI gate
+			// reading the exit code can't tell from yes.
+			sealFrom, _ := f.GetString("seal-from")
+			if sealFrom == "" {
+				return common.InvocationError(cmd, fmt.Errorf("rule %q decides on the decrypted seal's author: pass --seal-from", d.Rule))
+			}
+			author, err := keyresolve.PubkeyArg(cmd, sealFrom)
+			if err != nil {
+				return err
+			}
+			if !d.UnwrapFrom[author] {
+				d = signer.Decision{Rule: d.Rule, Reason: "seal is from a sender unwrap_from does not list"}
+			}
+		}
 		results = append(results, fill(CheckResult{Method: method, Counterpart: counterpart}, d))
 	}
 

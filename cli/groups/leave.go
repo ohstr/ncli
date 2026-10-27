@@ -34,13 +34,14 @@ func runLeave(cmd *cobra.Command, args []string) error {
 	groupID := args[0]
 	reason, _ := cmd.Flags().GetString("reason")
 
-	relayURL, pubKeyHex, privKeyHex, err := resolveWriteTarget(cmd)
+	relayURL, pubKeyHex, signer, closeSigner, err := resolveWriteTarget(cmd)
 	if err != nil {
 		return err
 	}
+	defer closeSigner()
 
 	ev := nip29.NewLeaveRequest(pubKeyHex, groupID, reason)
-	report, err := signAndPublish(ctx, cmd, relayURL, groupID, ev, privKeyHex)
+	report, err := signAndPublish(ctx, cmd, relayURL, groupID, ev, signer)
 	if err != nil {
 		return err
 	}

@@ -28,11 +28,11 @@ const previousQueryTimeout = 10 * time.Second
 // A group with no prior history (e.g. right after "groups create") simply
 // has nothing to reference -- that's normal, not an error, so this only
 // returns an error for an actual query failure, never for an empty
-// timeline. The read is made as the writer (privKeyHex), so a private
+// timeline. The read is made as the writer (signer), so a private
 // group's member sees its timeline; a refused read -- a group that doesn't
 // exist yet looks the same as one the writer can't see -- also just means
 // nothing to reference.
-func attachPreviousTags(ctx context.Context, relayURL *url.URL, groupID string, ev *nip01.Event, privKeyHex string) error {
+func attachPreviousTags(ctx context.Context, relayURL *url.URL, groupID string, ev *nip01.Event, signer client.Signer) error {
 	targets, err := client.TargetsFromRelayList([]string{relayURL.String()})
 	if err != nil {
 		return err
@@ -42,7 +42,7 @@ func attachPreviousTags(ctx context.Context, relayURL *url.URL, groupID string, 
 		nip01.NewFilter().WithTag(nip29.TagGroupID, groupID).WithLimit(nip29.RecommendedTimelineReferences),
 	)
 
-	events, err := client.QueryTargetsWithAuth(ctx, targets, filters, previousQueryTimeout, client.KeySigner(privKeyHex))
+	events, err := client.QueryTargetsWithAuth(ctx, targets, filters, previousQueryTimeout, signer)
 	if errors.Is(err, client.ErrRestricted) {
 		return nil
 	}

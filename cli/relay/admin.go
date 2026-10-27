@@ -13,6 +13,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/ohstr/ncli/cli/common"
+	"github.com/ohstr/ncli/cli/keyresolve"
 	"github.com/ohstr/nmilat/nip11"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
@@ -416,7 +417,10 @@ func runMembersList(cmd *cobra.Command, args []string) error {
 
 func runMembersShow(cmd *cobra.Command, args []string) error {
 	jsonMode, _ := cmd.Flags().GetBool("json")
-	pubkey := args[0]
+	pubkey, err := keyresolve.PubkeyArg(cmd, args[0])
+	if err != nil {
+		return err
+	}
 	resp, err := adminRequest(cmd, "GET", "/admin/membership/members/"+pubkey)
 	if err != nil {
 		return common.RuntimeError(cmd, err)
@@ -435,7 +439,10 @@ func runMembersShow(cmd *cobra.Command, args []string) error {
 
 func runMembersAdd(cmd *cobra.Command, args []string) error {
 	jsonMode, _ := cmd.Flags().GetBool("json")
-	pubkey := args[0]
+	pubkey, err := keyresolve.PubkeyArg(cmd, args[0])
+	if err != nil {
+		return err
+	}
 	roles, _ := cmd.Flags().GetStringArray("role")
 
 	resp, err := adminRequestBody(cmd, "POST", "/admin/membership/members", map[string]interface{}{"pubkey": pubkey, "roles": roles})
@@ -458,7 +465,10 @@ func runMembersAdd(cmd *cobra.Command, args []string) error {
 
 func runMembersRemove(cmd *cobra.Command, args []string) error {
 	jsonMode, _ := cmd.Flags().GetBool("json")
-	pubkey := args[0]
+	pubkey, err := keyresolve.PubkeyArg(cmd, args[0])
+	if err != nil {
+		return err
+	}
 	resp, err := adminRequest(cmd, "DELETE", "/admin/membership/members/"+pubkey)
 	if err != nil {
 		return common.RuntimeError(cmd, err)

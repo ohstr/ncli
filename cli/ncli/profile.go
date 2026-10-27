@@ -93,6 +93,7 @@ servers and lightning address an identity has published.`,
 	cmd.Flags().StringSliceP("relays", "s", nil, "Comma-separated relay URLs to query (defaults to `ncli prefs relays`)")
 	cmd.Flags().Duration("timeout", 10*time.Second, "Per-relay query timeout")
 	cmd.Flags().Bool("no-verify", false, "Skip the HTTPS nip-05 verification round trip")
+	addProfileWriteCommands(cmd)
 
 	return cmd
 }

@@ -23,7 +23,7 @@ docs drifting from what's actually shipped.
   since ncli's admin commands hard-target `localhost` with no `--url`
   override.
 
-Seventeen rounds (`rounds/r0-bootstrap.md` .. `r16-index-lifecycle.md`)
+Nineteen rounds (`rounds/r0-bootstrap.md` .. `r18-social.md`)
 cover install, identity, relay queries, relay admin, publish/apply,
 PoW mining, NIP-46 bunker signing (started and driven with no TTY),
 a local policy signer on a unix socket (R14: policy, socket signing,

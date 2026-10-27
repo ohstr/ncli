@@ -59,12 +59,13 @@ func runEdit(cmd *cobra.Command, args []string) error {
 
 	groupID := args[0]
 
-	relayURL, pubKeyHex, privKeyHex, err := resolveWriteTarget(cmd)
+	relayURL, pubKeyHex, signer, closeSigner, err := resolveWriteTarget(cmd)
 	if err != nil {
 		return err
 	}
+	defer closeSigner()
 
-	current, err := currentGroupMetadata(ctx, relayURL, groupID, privKeyHex)
+	current, err := currentGroupMetadata(ctx, relayURL, groupID, signer)
 	if err != nil {
 		if errors.Is(err, client.ErrRestricted) {
 			return common.AuthError(cmd, err)
@@ -75,7 +76,7 @@ func runEdit(cmd *cobra.Command, args []string) error {
 	params := mergeEditParams(current, pubKeyHex, groupID, editFlagsFromCmd(cmd))
 
 	ev := nip29.NewEditMetadata(pubKeyHex, groupID, params)
-	return publishGroupEvent(ctx, cmd, relayURL, groupID, ev, privKeyHex)
+	return publishGroupEvent(ctx, cmd, relayURL, groupID, ev, signer)
 }
 
 // editFlags is runEdit's cobra flags, read once up front so
@@ -172,7 +173,7 @@ func mergeEditParams(current *nip29.GroupMetadata, pubKeyHex, groupID string, f 
 // has no metadata event yet -- a brand-new group, or one on a relay that
 // hasn't mirrored it yet, simply edits from a blank slate.
 //
-// privKeyHex authenticates the query (NIP-42) as the editor: groups are
+// signer authenticates the query (NIP-42) as the editor: groups are
 // private by default, so an unauthenticated read here would always come
 // back empty for the common case, and mergeEditParams would then "carry
 // forward" blank values for every field it didn't overwrite -- silently
@@ -181,7 +182,7 @@ func mergeEditParams(current *nip29.GroupMetadata, pubKeyHex, groupID string, f 
 // of collapsing to a blank slate, since this editor's own query being
 // denied means its edit's premise (merge onto what's there now) doesn't
 // hold -- not that there's nothing there.
-func currentGroupMetadata(ctx context.Context, relayURL *url.URL, groupID, privKeyHex string) (*nip29.GroupMetadata, error) {
+func currentGroupMetadata(ctx context.Context, relayURL *url.URL, groupID string, signer client.Signer) (*nip29.GroupMetadata, error) {
 	targets, err := client.TargetsFromRelayList([]string{relayURL.String()})
 	if err != nil {
 		return nil, err
@@ -191,7 +192,7 @@ func currentGroupMetadata(ctx context.Context, relayURL *url.URL, groupID, privK
 		nip01.NewFilter().WithKinds(nip29.KindGroupMetadata).WithTag("d", groupID).WithLimit(1),
 	)
 
-	events, err := client.QueryTargetsWithAuth(ctx, targets, filters, metadataQueryTimeout, client.KeySigner(privKeyHex))
+	events, err := client.QueryTargetsWithAuth(ctx, targets, filters, metadataQueryTimeout, signer)
 	if err != nil {
 		return nil, err
 	}

@@ -69,18 +69,18 @@ func runTree(cmd *cobra.Command, args []string) error {
 
 	timeout, _ := cmd.Flags().GetDuration("timeout")
 
-	identityFlag, _ := cmd.Flags().GetString("identity")
-	privKeyHex, err := resolveIdentityOptional(cmd, identityFlag)
+	signer, closeSigner, err := resolveReadSigner(cmd)
 	if err != nil {
 		return err
 	}
+	defer closeSigner()
 
 	filters := nip01.NewSubscriptionFilterGroup(nip01.NewFilter().WithKinds(nip29.KindGroupMetadata))
 
 	var events []*nip01.Event
 	err = common.WithSpinner(cmd, fmt.Sprintf("Building the group tree on %s", relayURL.Host), func() error {
 		var qErr error
-		events, qErr = client.QueryTargetsWithAuth(ctx, targets, filters, timeout, client.KeySigner(privKeyHex))
+		events, qErr = client.QueryTargetsWithAuth(ctx, targets, filters, timeout, signer)
 		return qErr
 	})
 	if err != nil {
@@ -102,7 +102,7 @@ func runTree(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(result.Nodes) == 0 {
-		if privKeyHex == "" {
+		if signer == nil {
 			fmt.Println("(no groups found -- a private group is invisible to an anonymous connection)")
 		} else {
 			fmt.Println("(no groups found)")

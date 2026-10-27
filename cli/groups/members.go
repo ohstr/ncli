@@ -5,8 +5,8 @@ import (
 	"syscall"
 
 	"github.com/ohstr/ncli/cli/common"
+	"github.com/ohstr/ncli/cli/keyresolve"
 	"github.com/ohstr/nmilat/nip29"
-	"github.com/ohstr/nmilat/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -38,18 +38,20 @@ func runMembersAdd(cmd *cobra.Command, args []string) error {
 	ctx, cancel := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	groupID, memberPubkey, roles := args[0], args[1], args[2:]
-	if err := utils.Validate32Key(memberPubkey); err != nil {
-		return common.InvalidInputError(cmd, memberPubkey, err)
-	}
-
-	relayURL, pubKeyHex, privKeyHex, err := resolveWriteTarget(cmd)
+	groupID, roles := args[0], args[2:]
+	memberPubkey, err := keyresolve.PubkeyArg(cmd, args[1])
 	if err != nil {
 		return err
 	}
 
+	relayURL, pubKeyHex, signer, closeSigner, err := resolveWriteTarget(cmd)
+	if err != nil {
+		return err
+	}
+	defer closeSigner()
+
 	ev := nip29.NewPutUser(pubKeyHex, groupID, memberPubkey, roles...)
-	return publishGroupEvent(ctx, cmd, relayURL, groupID, ev, privKeyHex)
+	return publishGroupEvent(ctx, cmd, relayURL, groupID, ev, signer)
 }
 
 func newMembersRemoveCommand() *cobra.Command {
@@ -67,16 +69,18 @@ func runMembersRemove(cmd *cobra.Command, args []string) error {
 	ctx, cancel := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	groupID, memberPubkey := args[0], args[1]
-	if err := utils.Validate32Key(memberPubkey); err != nil {
-		return common.InvalidInputError(cmd, memberPubkey, err)
-	}
-
-	relayURL, pubKeyHex, privKeyHex, err := resolveWriteTarget(cmd)
+	groupID := args[0]
+	memberPubkey, err := keyresolve.PubkeyArg(cmd, args[1])
 	if err != nil {
 		return err
 	}
 
+	relayURL, pubKeyHex, signer, closeSigner, err := resolveWriteTarget(cmd)
+	if err != nil {
+		return err
+	}
+	defer closeSigner()
+
 	ev := nip29.NewRemoveUser(pubKeyHex, groupID, memberPubkey)
-	return publishGroupEvent(ctx, cmd, relayURL, groupID, ev, privKeyHex)
+	return publishGroupEvent(ctx, cmd, relayURL, groupID, ev, signer)
 }

@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.8.0-rc.44]
+
+### Added
+
+- Adds the signer's `nip44_message_keys` method and `unwrap_from` rule: one message's keys for a proof, and opening a gift wrap only when it holds a seal from a listed sender. Both are denied unless a rule names them, so existing policies behave the same. ([#199](https://github.com/ohstr/ncli/pull/199))
+- Adds `find -f/--follow`, which keeps the subscription open on every relay and prints each new event once as a JSON line, reconnecting when a relay drops. `--state` records what was printed, so a restart resumes without gaps or repeats. ([#199](https://github.com/ohstr/ncli/pull/199))
+- Adds `-S` as the short form of `--since` on `find`, `dump` and `miner check`. ([#199](https://github.com/ohstr/ncli/pull/199))
+- Adds `ncli dm send/read/prove/verify`: NIP-17 private messages sealed and opened through `--signer`, so the key can stay in `ncli signer serve`. `read` opens only `--from` senders' seals, and `prove` gives a third party one message to check with `verify`, with no key that opens any other. ([#199](https://github.com/ohstr/ncli/pull/199))
+- Adds `event wrap`, which seals and gift-wraps any event, and `--signer`/`--from` on `event unwrap`, which opens only the named senders' seals. ([#199](https://github.com/ohstr/ncli/pull/199))
+- Adds `event react`, `reply`, `post`, `repost` and `delete`, signed through `--signer`. A reply is threaded the way its target's kind expects, and a reaction or reply to a group message carries the group's `h` tag. ([#199](https://github.com/ohstr/ncli/pull/199))
+- Adds `groups send`, `groups read` and `groups feed`: post a chat message, read a group (`--thread`, `-f/--follow`, `--state`), or read what mentions you across your groups, as the same message shape as `dm read`. ([#199](https://github.com/ohstr/ncli/pull/199))
+- Adds `--signer` to every `groups` command, so a group write or a private group's read can go through a socket signer or bunker instead of a key held here. ([#199](https://github.com/ohstr/ncli/pull/199))
+- Adds npub, nprofile, nip-05 and vault labels wherever a person is named: `find`/`dump --authors`, `--tag p=`, `groups members add/remove`, `groups list --member`, `relay members show/add/remove` and `signer check`; `bunker sessions` takes an npub. Hex is unchanged, and a value that names no one is still sent as given or refused as before. ([#199](https://github.com/ohstr/ncli/pull/199))
+- Adds the `ncli-messaging` skill and `examples/signer/messaging-policy.yaml`, a signer policy for an agent that messages people. ([#199](https://github.com/ohstr/ncli/pull/199))
+- Adds `profile set`, `profile relays set`, `profile follow/unfollow` and `profile mute/unmute`. Each reads your current version and changes only what you name, and nothing is published unless every relay answers, or without `--create` when none has one. ([#199](https://github.com/ohstr/ncli/pull/199))
+
+### Changed
+
+- Changes `event unwrap` to refuse a message whose id doesn't match its content. ([#199](https://github.com/ohstr/ncli/pull/199))
+- Changes the signer to accept a kind 13 seal backdated by up to 2 days, as NIP-59 requires, where other kinds keep the policy's age limit. ([#199](https://github.com/ohstr/ncli/pull/199))
+- Builds with nmilat v0.5.0-rc.43, which adds signer-based gift wraps, message keys and the NIP builders these commands use, and fixes a relay deadlock when a multi-tag query ran while a write grew the store. ([#199](https://github.com/ohstr/ncli/pull/199))
+
 ## [0.8.0-rc.43]
 
 ### Added

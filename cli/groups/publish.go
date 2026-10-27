@@ -8,27 +8,28 @@ import (
 	"strings"
 
 	"github.com/ohstr/ncli/cli/common"
+	"github.com/ohstr/ncli/cli/keyresolve"
 	"github.com/ohstr/ncli/client"
 	"github.com/ohstr/nmilat/nip01"
 	"github.com/spf13/cobra"
 )
 
-// signAndPublish attaches `previous` references, signs ev with privKeyHex,
+// signAndPublish attaches `previous` references, signs ev with signer,
 // and publishes it to relayURL, returning the publish report for the
 // caller to present. Shared by every ncli groups write command so they
 // can't drift into inconsistent signing/publish shapes; most callers just
 // hand the report to printPublishReport, but one (invite) has its own
 // extra field to report alongside it.
-func signAndPublish(ctx context.Context, cmd *cobra.Command, relayURL *url.URL, groupID string, ev *nip01.Event, privKeyHex string) (*client.PublishReport, error) {
-	if err := attachPreviousTags(ctx, relayURL, groupID, ev, privKeyHex); err != nil {
+func signAndPublish(ctx context.Context, cmd *cobra.Command, relayURL *url.URL, groupID string, ev *nip01.Event, signer client.Signer) (*client.PublishReport, error) {
+	if err := attachPreviousTags(ctx, relayURL, groupID, ev, signer); err != nil {
 		if errors.Is(err, client.ErrNoReachableTargets) {
 			return nil, common.NetworkError(cmd, relayURL.String(), err)
 		}
 		return nil, common.RuntimeError(cmd, err)
 	}
 
-	if err := ev.Sign(privKeyHex); err != nil {
-		return nil, common.RuntimeError(cmd, err)
+	if err := signer.Sign(ctx, ev); err != nil {
+		return nil, keyresolve.SignerError(cmd, "", err)
 	}
 
 	targets, err := client.TargetsFromRelayList([]string{relayURL.String()})
@@ -39,7 +40,7 @@ func signAndPublish(ctx context.Context, cmd *cobra.Command, relayURL *url.URL, 
 	var report *client.PublishReport
 	err = common.WithSpinner(cmd, fmt.Sprintf("Publishing to %s", relayURL.Host), func() error {
 		var pErr error
-		report, pErr = client.PublishToTargets(ctx, targets, []*nip01.Event{ev}, client.KeySigner(privKeyHex))
+		report, pErr = client.PublishToTargets(ctx, targets, []*nip01.Event{ev}, signer)
 		return pErr
 	})
 	if err != nil {
@@ -55,8 +56,8 @@ func signAndPublish(ctx context.Context, cmd *cobra.Command, relayURL *url.URL, 
 // (text by default, structured JSON under --json, matching "ncli publish")
 // -- the common case, for every write command with nothing beyond the
 // publish outcome itself to report.
-func publishGroupEvent(ctx context.Context, cmd *cobra.Command, relayURL *url.URL, groupID string, ev *nip01.Event, privKeyHex string) error {
-	report, err := signAndPublish(ctx, cmd, relayURL, groupID, ev, privKeyHex)
+func publishGroupEvent(ctx context.Context, cmd *cobra.Command, relayURL *url.URL, groupID string, ev *nip01.Event, signer client.Signer) error {
+	report, err := signAndPublish(ctx, cmd, relayURL, groupID, ev, signer)
 	if err != nil {
 		return err
 	}

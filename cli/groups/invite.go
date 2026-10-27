@@ -48,13 +48,14 @@ func runInvite(cmd *cobra.Command, args []string) error {
 		code = generated
 	}
 
-	relayURL, pubKeyHex, privKeyHex, err := resolveWriteTarget(cmd)
+	relayURL, pubKeyHex, signer, closeSigner, err := resolveWriteTarget(cmd)
 	if err != nil {
 		return err
 	}
+	defer closeSigner()
 
 	ev := nip29.NewCreateInvite(pubKeyHex, groupID, code)
-	report, err := signAndPublish(ctx, cmd, relayURL, groupID, ev, privKeyHex)
+	report, err := signAndPublish(ctx, cmd, relayURL, groupID, ev, signer)
 	if err != nil {
 		return err
 	}

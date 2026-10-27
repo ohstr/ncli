@@ -1238,6 +1238,33 @@ join to a closed group without a code waits for an admin to `members add`
 you. See
 [`skills/ncli-groups/SKILL.md`](skills/ncli-groups/SKILL.md).
 
+## `dm`, and talking through a signer
+
+Private messages (NIP-17), group chat, reactions, replies and your own
+profile, all signed, sealed and opened through `--signer`, so an agent can
+talk on Nostr while its key stays in `ncli signer serve`.
+
+```sh
+ncli dm send --to npub1alice... "on my way" -s wss://inbox.example --signer bunker+unix:///run/signer/agent.sock
+# only alice's messages are opened; -f streams new ones
+ncli dm read --from npub1alice... -s wss://inbox.example -f --state dm.state
+# show one message to anyone, who checks it without a key
+ncli dm prove <wrap-id> --from npub1alice... -s wss://inbox.example -o proof.json
+ncli dm verify proof.json --from npub1alice...
+
+ncli groups send standup "done" --relay wss://relay.example --signer bunker+unix:///run/signer/agent.sock
+ncli event react nevent1... "👀" --signer bunker+unix:///run/signer/agent.sock
+ncli profile follow npub1bob... --signer bunker+unix:///run/signer/agent.sock
+# wait for new events
+ncli find -f --kinds 1 --tag e=<event-id> -s wss://relay.example
+```
+
+The signer policy decides who the agent may message: `unwrap_from` lets it
+open gift wraps only from listed senders, and `nip44_message_keys` (for
+`dm prove`) must be named. See
+[`skills/ncli-messaging/SKILL.md`](skills/ncli-messaging/SKILL.md) and
+[`examples/signer/messaging-policy.yaml`](examples/signer/messaging-policy.yaml).
+
 ## `blossom`
 
 Upload, fetch, and manage media: a client for the

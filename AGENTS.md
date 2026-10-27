@@ -13,10 +13,13 @@ that priority order.
 |---|---|
 | `ncli apply -f <spec.yaml>` | Run a `stream`/`sync`/`inspect` workflow from a YAML spec |
 | `ncli dump -o <out.json>` | Export events to JSON from a relay, `.db` file, or prefs relays |
-| `ncli find <id>` / `-t <targets.yaml>` | Look up events by ID (hex/note/nevent) or author (npub/nprofile/nip-05), and/or filter, across targets |
+| `ncli find <id>` / `-t <targets.yaml>` | Look up events by ID (hex/note/nevent) or author (npub/nprofile/nip-05), and/or filter, across targets; `-f/--follow` keeps the subscription open and prints each new event once as a JSON line (`--state <file>` resumes after a restart without gaps or repeats) |
+| `ncli dm send/read/prove/verify` | NIP-17 private messages through `--signer`: `send --to <who>` seals and gift-wraps (plus a copy to yourself); `read --from <who>...` opens only those senders' seals (`-f`, `--state`, `-S`); `prove` gives a third party one message (seal + that payload's message keys) and `verify` checks it with no key. `-s/--relays` is required |
+| `ncli profile set` / `relays set` / `follow` / `unfollow` / `mute` / `unmute` | Publish your profile (kind 0), relay lists (10002, DM 10050), follows (3) or mutes (10000) through `--signer`: each reads your current version and changes only what you name (`relays set` replaces the list it names, reporting what it drops); nothing is published unless every relay answers, or (without `--create`) if none has one, and never a list without people unless `--allow-empty` |
 | `ncli profile <identifier>` | Readable profile card for one identity — metadata, following count, relay list, Blossom servers, lightning address, and NIP-85 stats (rank, followers, zaps) from any relay that serves them — aggregated across every relay (not stopping at the first hit like `find`) |
 | `ncli event verify/get/show <ref...>` | Verify any event's id and signature (plus author, kind, PoW, expiration, delegation, zap, `--deleted`, `--cross-relays`), print it raw, or show it as a card -- from an nevent/note/naddr/hex id/`kind:pubkey:d`, event JSON, `-f` files or stdin, looked up on the reference's relay hints, `-s` (or prefs) and the author's NIP-65 outbox; no identity needed. `verify` exits 1 if any event is invalid |
-| `ncli event new/id/encode/seen/rebroadcast/thread/diff/unwrap/validate` | Build an unsigned event from flags or compute ids; spell an event as nevent/naddr with hints; list which relays hold it; copy it unchanged to `--to` relays; walk its NIP-10/NIP-22 thread; diff two events; decrypt a NIP-59 gift wrap with `--identity`; run nmilat's per-kind rules on it |
+| `ncli event new/id/encode/seen/rebroadcast/thread/diff/unwrap/validate` | Build an unsigned event from flags or compute ids; spell an event as nevent/naddr with hints; list which relays hold it; copy it unchanged to `--to` relays; walk its NIP-10/NIP-22 thread; diff two events; decrypt a NIP-59 gift wrap with `--identity` or `--signer` (`--from` opens only those senders' seals); run nmilat's per-kind rules on it |
+| `ncli event react/reply/post/repost/delete/wrap` | Through `--signer`: a NIP-25 reaction (`e`/`p`/`k`, `a`, and the group's `h`), a reply threaded for its target's kind (NIP-10, a group's kind 9, else NIP-22), a note, a NIP-18 repost, a NIP-09 deletion of your own events, or a NIP-59 gift wrap of any event |
 | `ncli ping <relay...>` / `-t <targets.yaml>` | Probe whether targets are reachable (connect + subscribe), no events fetched |
 | `ncli prefs relays add/list/remove/clear` | Manage the default relay list `find`/`dump`/`ping`/`miner check` fall back to |
 | `ncli relay --config <relay.yaml>` | Run the relay server (`--check` validates the config and exits); `groups` block hosts NIP-29 groups: `roles` (which roles may send which moderation kinds), `roleDescriptions` (kind 39003), `admins` (moderate every group), `moderationLog`, `pendingJoins`; `agent_auth` block enables NIP-AA (an agent key gains virtual membership from its owner's NIP-43 membership via a NIP-OA credential, no separate enrollment); `nip86` block serves the NIP-86 management API on the relay URL so an app can moderate (ban pubkeys/events, allow/disallow kinds, block IPs, rename the relay; saved in `<store>.moderation.json`) and administer membership without a terminal; `query` block serves buzz's NIP-CW `POST /query` bridge, a one-shot HTTP alternative to a WS REQ/EOSE round trip -- NIP-98 there binds identity; results are further gated to the signer's own NIP-43 membership when `nip11.limitation.membership_required` is set, same as REQ/COUNT; `cache.profiles.stats` serves NIP-85 user assertions (kind 30382 by `#d`: rank, followers/following, zaps received/sent, per coin) signed with `nip11.privkey`; `cache.profiles.checks` sets when NIP-05/lightning addresses are re-checked (TTL, retry backoff, per-host spacing; never on an index rebuild) and `cache.profiles.scoring` the profile score weights; `cache.zaps` serves the signed `zap-ranking` cache action (listed `windows` and `coins`, capped `limit`, cached); `cache.relay.stats` publishes the relay's own NIP-66 kind 30166 (counts, zap totals, requirements) |
@@ -28,7 +31,7 @@ that priority order.
 | `ncli bunker` | Run as a NIP-46 remote signer: approve/reject other clients' signing requests from a live TUI, remembering per-app decisions so you aren't re-prompted every time. Without a terminal (or with `--json`) it starts the signer in the background instead and prints its status — a second call reports the running one, `conflict` if `--identity` names a different key |
 | `ncli bunker attach/status/stop/connect/history` / `ncli bunker sessions list/grants/rename/revoke/revoke-grant/set-grant` | Reattach to, query, stop, or pair a running bunker daemon without opening the TUI; review resolved requests; manage each app's remembered permissions |
 | `ncli bunker pending list/approve/reject` / `ncli bunker sessions set-grant` | Everything the TUI decides, from a script: list requests awaiting a decision, approve or reject one by id (`--always` remembers it, with `--any-kind`, `--for <dur>` or `--uses <n>` like the TUI's buttons), or apply a `--grants` spec to an already-paired app |
-| `ncli signer serve` / `status` / `check` | Local policy signer on a unix socket: holds one key in memory and answers the NIP-46 method set as newline-delimited JSON (no relay, no encryption; socket permissions plus optional `--allow-uid`/`--allow-gid` authenticate). A `kind: signer-policy` file decides (default deny; selectors, `deny_matching`, rate limits, `require: attestations` such as a signed "approve <id>"). Built in: never signs its own key, never counts a self-signed or pre-start attestation, single-use attestations persisted in `--state-dir`. `status` probes it (exit 6 when down); `check` dry-runs a policy offline (exit 7 on any denial) |
+| `ncli signer serve` / `status` / `check` | Local policy signer on a unix socket: holds one key in memory and answers the NIP-46 method set as newline-delimited JSON (no relay, no encryption; socket permissions plus optional `--allow-uid`/`--allow-gid` authenticate). A `kind: signer-policy` file decides (default deny; selectors, `deny_matching`, rate limits, `require: attestations` such as a signed "approve <id>"; `unwrap_from` releases a decrypted gift wrap only when it holds a seal from a listed sender; `nip44_message_keys` must be named to be allowed). Built in: never signs its own key, never counts a self-signed or pre-start attestation, single-use attestations persisted in `--state-dir`. `status` probes it (exit 6 when down); `check` dry-runs a policy offline (exit 7 on any denial) |
 | `ncli id sign --signer` / `ncli publish --signer` | Sign through a socket signer: `bunker+unix:///abs/path.sock` (or `unix://`); `--signer` also takes an identity. `id sign --attestations <file>` passes events a policy requires. A policy denial is `auth` (exit 7). `publish` also logs in (NIP-42) with it, or with `--auth-signer`; `find`/`dump --auth-identity` and `apply --auth-signer` take the same forms plus `bunker://`, signing only the login |
 | `ncli blossom upload/download/list/rm/mirror/report` | Client for the Blossom protocol (BUD-01..12): content-addressed blob storage authenticated with a Nostr identity |
 | `ncli blossom servers add/remove/list/discover` | Manage the default Blossom server list, optionally publishing/discovering it as a signed kind:10063 (BUD-03) event |
@@ -41,6 +44,7 @@ that priority order.
 | `ncli groups create/edit --parent <id>` | NIP-29 Subgroups: links a group under a parent (`create --parent` is create+link in one call; `edit --parent ""` detaches to root). Relay-enforced: no self-reference/cycle, parent must exist, submitter must also admin the *new* parent, and both groups must share the same `--private`/`--public` setting (a signed kind:39000 can't be redacted per viewer, so a mixed-visibility link would permanently leak one group's id via the other's public side) |
 | `ncli groups tree` | Reads every visible kind:39000 and assembles the parent/child hierarchy locally (per NIP-29's own recommended assembly) — text tree or `--json` for a scripted caller |
 | `ncli groups members add/remove` / `ncli groups pins set` / `ncli groups delete-event` | More NIP-29 writes: add/remove a member (optionally with roles), replace a group's pinned-events list (whole list, not append — passing nothing clears every pin), or delete one of the group's own events |
+| `ncli groups send/read/feed` | Group chat: `send <group> <text>` posts a kind 9 (`-r` quotes the message answered, `-m` tags a person); `read <group>` prints its messages (`--thread`, `-f`, `--state`); `feed` prints what mentions you across your groups. Every `groups` command takes `--signer` as well as `--identity` |
 | `ncli groups list` / `ncli groups show <group-id>` | Read a relay's groups (metadata) or one group's full detail (metadata/admins/members); `--identity` authenticates (NIP-42) so a member can see their own private group; omitted, it falls back to `groups.identity` or the vault's sole entry, else stays anonymous. `show` names one group, so the relay refuses it outright (exit `7`, `auth`) without membership — and, as of the relay's own existence-oracle fix, identically for a group that doesn't exist at all, not just a private one; `list` names none, so it silently drops private groups you're not a member of instead |
 | `ncli id [identifier]` | Generate or inspect a Nostr keypair (local vault) |
 | `ncli id import` | Save an existing private key (nsec/hex/ncryptsec) to the vault, read from stdin or `--file`, never an argument; first valid line wins; re-running is a no-op and a key is never saved twice (`--force` relabels it) |
@@ -69,8 +73,9 @@ status`/`index`/`jobs`/`verify`/`metrics token`, `relay members`/`invites`/`role
 `miner mine`/`check`, `publish`, `huddle list`, `space create`/
 `list`/`show`/`chat send`/`chat list`, `bunker`/`status`/`stop`/
 `connect`/`history`/`sessions`/`pending`, `signer status`/`check`, `event verify`/`show`/`encode`/`seen`/
-`rebroadcast`/`thread`/`diff`/`unwrap`/`validate`, `groups create`/`edit`/`delete`/`invite`/`join`/`leave`/
-`members`/`pins`/`delete-event`/`list`/`show`, and `prefs relays add`/
+`rebroadcast`/`thread`/`diff`/`unwrap`/`validate`/`react`/`reply`/`post`/`repost`/`delete`, `groups create`/`edit`/`delete`/`invite`/`join`/`leave`/
+`members`/`pins`/`delete-event`/`list`/`show`/`send`/`read`/`feed`, `dm send`/`read`/`verify`,
+`profile set`/`relays set`/`follow`/`unfollow`/`mute`/`unmute`, and `prefs relays add`/
 `remove`/`list`/`clear`/`prefs path` are human-readable text by default
 and switch their *success* output to structured JSON on stdout with
 `--json`. `find` has no
@@ -85,7 +90,10 @@ show --follow` under `--json` (one JSON object per line). Without a
 terminal or with `--json`, `space join`'s stdout is NDJSON (one JSON
 object per line, ending with an `ended` line), not a single document.
 `signer serve` always writes one decision object per line, for as long as
-it runs.
+it runs. `find -f`, `dm read -f`, `groups read -f` and `groups feed -f`
+stream too: one JSON object per line (an event, or for `dm`/`groups` the
+same message object `dm read --json` lists), until interrupted (exit 0).
+`dm prove` always prints its proof as JSON.
 `-q/--quiet` drops the stderr narration on any command (warnings/errors
 still show), for callers that can't rely on stdout/stderr being captured
 separately.
@@ -207,6 +215,11 @@ or invoking a command in that area:
 - Creating or administering a NIP-29 relay-hosted group (`groups create`/
   `edit`/`delete`/`invite`/`join`/`leave`/`members`/`pins`/`delete-event`/
   `list`/`show`) → `skills/ncli-groups/SKILL.md`
+- Talking on Nostr through a signer: private messages and proving one
+  (`dm send/read/prove/verify`), group chat (`groups send/read/feed`),
+  reactions, replies and posts (`event react/reply/post/repost/delete`),
+  your own profile and lists (`profile set/relays set/follow/mute`), or
+  waiting for new events (`find -f`) → `skills/ncli-messaging/SKILL.md`
 
 These skills assume only the `ncli` binary is available — no access to this
 source tree. Each is also built into the binary: `ncli skills show <name>`

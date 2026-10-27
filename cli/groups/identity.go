@@ -70,3 +70,34 @@ func resolveIdentityOptional(cmd *cobra.Command, identityFlag string) (privKeyHe
 	jsonMode, _ := cmd.Flags().GetBool("json")
 	return keyresolve.ResolveIdentityOptional(cmd, identityFlag, "groups.identity", jsonMode)
 }
+
+// groupSigner is --signer, else NCLI_SIGNER when --identity isn't given
+// either; "" means sign with --identity's key.
+func groupSigner(cmd *cobra.Command, identityFlag string) string {
+	if v, _ := cmd.Flags().GetString("signer"); v != "" {
+		return v
+	}
+	if identityFlag != "" {
+		return ""
+	}
+	return viper.GetString("signer")
+}
+
+// resolveReadSigner is what a read logs in (NIP-42) with: --signer, else
+// resolveIdentityOptional's key, else nil (anonymous). Call closeSigner
+// when done.
+func resolveReadSigner(cmd *cobra.Command) (signer client.Signer, closeSigner func(), err error) {
+	identityFlag, _ := cmd.Flags().GetString("identity")
+	if signerFlag := groupSigner(cmd, identityFlag); signerFlag != "" {
+		if identityFlag != "" {
+			return nil, nil, common.InvocationError(cmd, errors.New("pass --identity or --signer, not both"))
+		}
+		jsonMode, _ := cmd.Flags().GetBool("json")
+		return keyresolve.ResolveSigner(cmd, jsonMode, signerFlag)
+	}
+	privKeyHex, err := resolveIdentityOptional(cmd, identityFlag)
+	if err != nil {
+		return nil, nil, err
+	}
+	return client.KeySigner(privKeyHex), func() {}, nil
+}

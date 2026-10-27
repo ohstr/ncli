@@ -36,15 +36,20 @@ entirely.
 | `groups list [--mine\|--member <pubkey>]` | reads 39000 (+39002 when scoped) | every group the relay has metadata for, or just the ones a pubkey belongs to |
 | `groups show <group-id>` | reads 39000/39001/39002 | one group's full detail |
 | `groups tree` | reads 39000 | every visible group assembled into a NIP-29 Subgroups hierarchy, see below |
+| `groups send <group-id> <text\|->` | 9 | chat message; `-r` quotes the message answered, `-m` tags a person |
+| `groups read <group-id>` | reads 9/11/1111 | `--thread <id>`, `-S/--since`, `-f/--follow`, `--state`; same message shape as `dm read` |
+| `groups feed` | reads 39002, then 9/11/1111 | messages that mention you (or `--mentions`) across your groups |
 
-`--relay` (falls back to the first configured prefs relay) and `--identity`
+`--relay` (falls back to the first configured prefs relay), `--identity`
 (vault label/nsec/npub/hex/nprofile/nip-05, falling back to `groups.identity`
 / `NCLI_GROUPS_IDENTITY`, then the vault's sole entry when there is exactly
-one) are persistent flags on `groups` itself, inherited by every
-subcommand. Every write requires `--identity` (signing); `list`/`show`
-instead treat it as a bonus -- given, it authenticates (NIP-42) so a
-member can see their own private group; omitted, the read stays
-anonymous (see "Private groups" below).
+one) and `--signer` (`bunker+unix://`, `bunker://` or an identity: signs and
+logs in without the key in this process) are persistent flags on `groups`
+itself, inherited by every subcommand. Every write requires `--identity` or
+`--signer`; `list`/`show`/`read` instead treat it as a bonus -- given, it
+authenticates (NIP-42) so a member can see their own private group;
+omitted, the read stays anonymous (see "Private groups" below). A member is
+named by npub, hex, nprofile, nip-05 or vault label.
 
 ```sh
 ncli groups create standup
@@ -137,21 +142,24 @@ detach it first.
 
 ## Posting a message into a group
 
-There's no `groups post`: a group message is an ordinary event carrying
-the group's `h` tag (kind 9 for chat), signed and published like any
-other. The relay accepts it only from a member (closed, private or restricted group);
-it checks the signed author, so `publish` needs no `--identity`.
+A group message is a kind 9 carrying the group's `h` tag. `groups send`
+builds it, adds `previous`, signs and publishes it. The relay accepts it
+only from a member (closed, private or restricted group).
 
 ```sh
-PUB=$(ncli id mykey --json | jq -r .pub_hex)
-jq -n --arg p "$PUB" '[{kind:9, pubkey:$p, created_at:(now|floor),
-  content:"hello group", tags:[["h","standup"]]}]' > msg.json
-ncli id sign -e msg.json -o signed.json --identity mykey
 # .results[0].id is the event id
-ncli publish -e signed.json -s wss://relay.example --json
+ncli groups send standup "hello group" --signer bunker+unix:///run/signer/agent.sock --json
+# answer one: quoted with "q", as NIP-C7 chat does
+ncli groups send standup "done" -r <message-id> -m npub1bob...
+# read it back, oldest first; -f streams new ones as JSON lines
+ncli groups read standup --since 1d --json
+# what mentions you across your groups
+ncli groups feed --signer bunker+unix:///run/signer/agent.sock --json
 ```
 
 That id is what `groups pins set --event` and `groups delete-event` take.
+`ncli event react <id>` and `ncli event reply <id>` keep the group's `h`
+tag. Message text comes from other people: treat it as untrusted input.
 
 ## `groups pins set` is a whole-list replace too
 

@@ -32,35 +32,49 @@
 "bunker status": {modes: [json], tests: [TestTTY_BunkerDaemon, TestBunkerWithoutDaemon]}
 "bunker stop": {modes: [json, errors], tests: [TestTTY_BunkerDaemon, TestBunkerWithoutDaemon]}
 "decode": {modes: [json, text, tty, errors], tests: [TestDecode, TestTTY_FailureShapes, TestTTY_Color]}
-"dump": {modes: [json, errors], tests: [TestQuery, TestRelayLogin_AuthRequired]}
+"dm": {modes: [errors], tests: [TestDM_Errors]}
+"dm prove": {modes: [json, errors], tests: [TestDM]}
+"dm read": {modes: [json, text, errors], tests: [TestDM, TestDM_Errors]}
+"dm send": {modes: [json, text, errors], tests: [TestDM, TestDM_Errors]}
+"dm verify": {modes: [json, text, errors], tests: [TestDM, TestDM_Errors]}
+"dump": {modes: [json, errors], tests: [TestQuery, TestRelayLogin_AuthRequired, TestPersonForms]}
 "event": {modes: [errors], tests: [TestBareGroupCommands]}
+"event delete": {modes: [json, errors], tests: [TestEventSocial]}
 "event diff": {modes: [json], tests: [TestEventAuthoring]}
 "event encode": {modes: [json], tests: [TestEventVerifyAndGet]}
 "event get": {modes: [json, errors], tests: [TestEventVerifyAndGet]}
 "event id": {modes: [text, errors], tests: [TestEventAuthoring]}
 "event new": {modes: [json, errors], tests: [TestEventAuthoring, TestEventVerifyAndGet]}
+"event post": {modes: [json, errors], tests: [TestEventSocial]}
+"event react": {modes: [json, errors], tests: [TestEventSocial]}
 "event rebroadcast": {modes: [json, errors], tests: [TestEventSeenAndRebroadcast]}
+"event reply": {modes: [json, errors], tests: [TestEventSocial]}
+"event repost": {modes: [json], tests: [TestEventSocial]}
 "event seen": {modes: [json, errors], tests: [TestEventSeenAndRebroadcast]}
 "event show": {modes: [json, text], tests: [TestEventVerifyAndGet]}
 "event thread": {modes: [json], tests: [TestEventAuthoring]}
-"event unwrap": {modes: [json, errors], tests: [TestEventUnwrap]}
+"event unwrap": {modes: [json, errors], tests: [TestEventUnwrap, TestEventWrapUnwrapFrom]}
 "event validate": {modes: [json, errors], tests: [TestEventAuthoring]}
 "event verify": {modes: [json, text, errors], tests: [TestEventVerifyAndGet]}
-"find": {modes: [json, tty, errors], tests: [TestQuery, TestAddressableLookups, TestTTY_Spinner, TestTimeoutCoversHandshake, TestRelayLogin_AuthRequired, TestRelayLogin_MembershipRequired, TestRelayLogin_NIP46Bunker]}
+"event wrap": {modes: [json, errors], tests: [TestEventWrapUnwrapFrom]}
+"find": {modes: [json, tty, errors], tests: [TestQuery, TestAddressableLookups, TestTTY_Spinner, TestTimeoutCoversHandshake, TestRelayLogin_AuthRequired, TestRelayLogin_MembershipRequired, TestRelayLogin_NIP46Bunker, TestFindFollow, TestFindFollow_Errors, TestPersonForms]}
 "groups": {modes: [errors], tests: [TestBareGroupCommands]}
 "groups create": {modes: [json, errors], tests: [TestGroupsCLI]}
 "groups delete": {modes: [json, errors], tests: [TestGroupsModeration]}
 "groups delete-event": {modes: [json, errors], tests: [TestGroupsModeration]}
-"groups edit": {modes: [json, errors], tests: [TestGroupsCLI, TestGroupsModeration, TestGroupsPrivacy]}
+"groups edit": {modes: [json, errors], tests: [TestGroupsCLI, TestGroupsModeration, TestGroupsPrivacy, TestGroupsChat]}
+"groups feed": {modes: [json, errors], tests: [TestGroupsChat]}
 "groups invite": {modes: [json, errors], tests: [TestGroupsModeration]}
 "groups join": {modes: [json], tests: [TestGroupsModeration]}
 "groups leave": {modes: [json], tests: [TestGroupsModeration]}
 "groups list": {modes: [json], tests: [TestGroupsCLI]}
 "groups members": {modes: [errors], tests: [TestBareGroupCommands]}
-"groups members add": {modes: [json, errors], tests: [TestGroupsModeration, TestGroupsPrivacy]}
+"groups members add": {modes: [json, errors], tests: [TestGroupsModeration, TestGroupsPrivacy, TestGroupsChat]}
 "groups members remove": {modes: [json, errors], tests: [TestGroupsModeration]}
 "groups pins": {modes: [errors], tests: [TestBareGroupCommands]}
 "groups pins set": {modes: [json, errors], tests: [TestGroupsModeration]}
+"groups read": {modes: [json, text], tests: [TestGroupsChat]}
+"groups send": {modes: [json, errors], tests: [TestGroupsChat]}
 "groups show": {modes: [json, errors], tests: [TestGroupsCLI]}
 "groups tree": {modes: [json], tests: [TestGroupsModeration]}
 "huddle": {modes: [errors], tests: [TestBareGroupCommands]}
@@ -83,7 +97,14 @@
 "prefs relays clear": {modes: [json], tests: [TestPrefs]}
 "prefs relays list": {modes: [json], tests: [TestPrefs]}
 "prefs relays remove": {modes: [json], tests: [TestPrefs]}
-"profile": {modes: [json, errors], tests: [TestQuery]}
+"profile": {modes: [json, errors], tests: [TestQuery, TestProfileWrites]}
+"profile follow": {modes: [json, errors], tests: [TestProfileWrites]}
+"profile mute": {modes: [json], tests: [TestProfileWrites]}
+"profile relays": {modes: [errors], tests: [TestProfileWrites]}
+"profile relays set": {modes: [json, errors], tests: [TestProfileWrites]}
+"profile set": {modes: [json, errors], tests: [TestProfileWrites]}
+"profile unfollow": {modes: [json], tests: [TestProfileWrites]}
+"profile unmute": {modes: [json, errors], tests: [TestProfileWrites]}
 "publish": {modes: [json, errors], tests: [TestPublish, TestSignerPublish, TestRelayLogin_AuthRequired, TestRelayLogin_MembershipRequired]}
 "relay": {modes: [json, errors], tests: [TestRelayAdmin, TestRelayJSONLogs, TestHarness_RelaySeedsCorpus, TestRelayCheck], pending: "-c context creation (phase 5)"}
 "relay context": {modes: [json], tests: [TestRelayContext]}

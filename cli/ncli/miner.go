@@ -329,7 +329,7 @@ Omit both to use the relays from "ncli prefs relays".`,
 			}
 
 			if err := client.ResolveFilterAuthors(filtersSpec); err != nil {
-				return common.NetworkError(cmd, "", err)
+				return authorsError(cmd, err)
 			}
 
 			if identity, _ := cmd.Flags().GetString("identity"); identity != "" {

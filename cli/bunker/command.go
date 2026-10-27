@@ -337,6 +337,7 @@ func newSessionsCommand() *cobra.Command {
 		Example: `  ncli bunker sessions revoke <pubkey>`,
 		Args:    common.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			args[0] = sessionPubkey(args[0])
 			jsonMode, _ := cmd.Flags().GetBool("json")
 
 			bunkerClient, err := DialIPC(SocketPath(), 2*time.Second)
@@ -368,6 +369,7 @@ func newSessionsCommand() *cobra.Command {
 		Example: `  ncli bunker sessions rename <pubkey> "My Wallet"`,
 		Args:    common.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			args[0] = sessionPubkey(args[0])
 			jsonMode, _ := cmd.Flags().GetBool("json")
 
 			bunkerClient, err := DialIPC(SocketPath(), 2*time.Second)
@@ -398,6 +400,7 @@ func newSessionsCommand() *cobra.Command {
 		Example: `  ncli bunker sessions grants <pubkey>`,
 		Args:    common.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			args[0] = sessionPubkey(args[0])
 			jsonMode, _ := cmd.Flags().GetBool("json")
 
 			bunkerClient, err := DialIPC(SocketPath(), 2*time.Second)
@@ -446,6 +449,7 @@ func newSessionsCommand() *cobra.Command {
 		Example: `  ncli bunker sessions revoke-grant <pubkey> --method sign_event`,
 		Args:    common.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			args[0] = sessionPubkey(args[0])
 			jsonMode, _ := cmd.Flags().GetBool("json")
 			method, _ := cmd.Flags().GetString("method")
 

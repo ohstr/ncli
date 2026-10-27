@@ -14,7 +14,7 @@
 set -euo pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-ALL_ROUNDS=(r0-bootstrap r1-identity r2-query r3-relay-ops r4-publish-apply r5-miner r6-bunker r7-blossom r8-error-contract r9-groups r10-space r11-relay-scenarios-write r12-relay-scenarios-serve r13-relay-scenarios-write-2 r14-signer r15-relay-login r16-index-lifecycle)
+ALL_ROUNDS=(r0-bootstrap r1-identity r2-query r3-relay-ops r4-publish-apply r5-miner r6-bunker r7-blossom r8-error-contract r9-groups r10-space r11-relay-scenarios-write r12-relay-scenarios-serve r13-relay-scenarios-write-2 r14-signer r15-relay-login r16-index-lifecycle r17-messaging r18-social)
 ROUNDS=("${@:-${ALL_ROUNDS[@]}}")
 
 RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -209,6 +209,22 @@ prepare_r14() {
   fi
 }
 
+# R17/R18 need two more people for the agent to talk to: eval-friend, whom
+# its policy allows, and eval-stranger, whom it doesn't. The agent uses
+# their keys directly only to play their part.
+prepare_people() {
+  echo "==> [${1}] saving the eval-friend and eval-stranger identities"
+  if ! docker compose exec -T agent bash -lc '
+    set -e
+    export PATH="$HOME/.local/bin:$PATH"
+    for who in eval-friend eval-stranger; do
+      ncli id "$who" --json >/dev/null 2>&1 || ncli id --save --label "$who" --json >/dev/null
+    done
+  '; then
+    echo "ERROR: [${1}] could not save eval-friend/eval-stranger (ncli is installed by r0-bootstrap)" >&2
+  fi
+}
+
 # R15 logs in to two relays the harness starts inside the agent container:
 # :5520 requires login and NIP-43 membership (eval-agent is a member),
 # :5521 requires login only. eval-outsider is a member of neither.
@@ -338,6 +354,10 @@ for round in "${ROUNDS[@]}"; do
       ;;
     r15-relay-login)
       prepare_r15
+      run_round "${round}" || echo "WARNING: [${round}] claude invocation exited non-zero" >&2
+      ;;
+    r17-messaging|r18-social)
+      prepare_people "${round}"
       run_round "${round}" || echo "WARNING: [${round}] claude invocation exited non-zero" >&2
       ;;
     r12-relay-scenarios-serve)

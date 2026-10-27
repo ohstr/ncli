@@ -20,6 +20,7 @@
 
 - Changes `event unwrap` to refuse a message whose id doesn't match its content. ([#199](https://github.com/ohstr/ncli/pull/199))
 - Changes the signer to accept a kind 13 seal backdated by up to 2 days, as NIP-59 requires, where other kinds keep the policy's age limit. ([#199](https://github.com/ohstr/ncli/pull/199))
+- Builds with nmilat v0.5.0-rc.43, which adds signer-based gift wraps, message keys and the NIP builders these commands use, and fixes a relay deadlock when a multi-tag query ran while a write grew the store. ([#199](https://github.com/ohstr/ncli/pull/199))
 
 ## [0.8.0-rc.43]
 

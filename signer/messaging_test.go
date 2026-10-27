@@ -84,7 +84,7 @@ func TestExampleMessagingPolicy(t *testing.T) {
 	}
 	for _, c := range []struct {
 		method, cp, rule string
-		allow           bool
+		allow            bool
 	}{
 		{nip46.MethodNIP44Encrypt, alice, "dm-crypto", true},
 		{nip46.MethodNIP44Encrypt, self, "dm-crypto", true},

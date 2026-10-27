@@ -59,23 +59,33 @@ func FromEvent(ev *nip01.Event, channel string) Message {
 			}
 		case "e":
 			hasE = true
+			marker := ""
 			if len(t) >= 4 {
-				switch t[3] {
-				case "reply":
-					m.ReplyTo = t[1]
-				case "root":
-					m.Root = t[1]
-				}
-			} else if m.ReplyTo == "" {
-				m.ReplyTo = t[1]
+				marker = t[3]
 			}
+			switch marker {
+			case "reply":
+				m.ReplyTo = t[1]
+			case "root":
+				m.Root = t[1]
+			case "mention":
+			default:
+				// No marker (NIP-17), or NIP-22's parent "e", whose 4th
+				// field is the parent's author, not a marker.
+				if m.ReplyTo == "" {
+					m.ReplyTo = t[1]
+				}
+			}
+		case "E":
+			// NIP-22's root.
+			m.Root = t[1]
 		}
 	}
 	if hasE && m.ReplyTo == "" && m.Root != "" {
 		// A direct reply to the root names only the root.
 		m.ReplyTo = m.Root
 	}
-	if m.Root == "" && m.ReplyTo != "" {
+	if m.Root == "" && m.ReplyTo != "" && ev.Kind == 1 {
 		if root, _, _ := nip10.Root(ev); root != ev.ID {
 			m.Root = root
 		}

@@ -246,7 +246,7 @@ func signAndPublish(ctx context.Context, cmd *cobra.Command, signer client.Crypt
 
 func publishTargets(cmd *cobra.Command, foundOn []string) (*client.TargetsSpec, error) {
 	if to, _ := cmd.Flags().GetString("to"); to != "" {
-		t, err := client.TargetsFromRelayList(social.SplitList(to))
+		t, err := client.TargetsFromRelayList(splitComma(to))
 		if err != nil {
 			return nil, common.InvalidInputError(cmd, to, err)
 		}
@@ -264,7 +264,7 @@ func publishTargets(cmd *cobra.Command, foundOn []string) (*client.TargetsSpec, 
 		add(r)
 	}
 	relaysVal, _ := cmd.Flags().GetString("relays")
-	for _, r := range social.SplitList(relaysVal) {
+	for _, r := range splitComma(relaysVal) {
 		add(r)
 	}
 	if len(list) == 0 {
@@ -288,6 +288,9 @@ func replyTo(parent *nip01.Event, relay, me, text string) (*nip01.Event, error) 
 	case 1:
 		ev := nip01.NewEvent(1, text)
 		ev.Tags = nip10.ReplyTags(parent, relay)
+		if group != "" {
+			ev.Tags = append(ev.Tags, []string{"h", group})
+		}
 		return ev, nil
 	case 9:
 		ev := nip01.NewEvent(9, text)

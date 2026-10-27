@@ -118,6 +118,14 @@ func TestEventSocial(t *testing.T) {
 		}
 	})
 
+	t.Run("a reply to a note in a group stays in the group", func(t *testing.T) {
+		inGroup := publishNote(t, e, r.URL, alice, "--content", "group note", "--tag", "h=team")
+		rep := act(t, e, append([]string{"reply", inGroup.ID, "seen", "--signer", bob.Nsec}, s...)...)
+		if rep.Event.Kind != 1 || !hasTag(rep.Event, "h", "team") || !hasTag(rep.Event, "e", inGroup.ID) {
+			t.Fatalf("reply %+v", rep.Event.Tags)
+		}
+	})
+
 	t.Run("repost", func(t *testing.T) {
 		rp := act(t, e, append([]string{"repost", note.ID, "--signer", bob.Nsec}, s...)...)
 		var inner nip01.Event

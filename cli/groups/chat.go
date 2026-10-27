@@ -274,6 +274,14 @@ func readMessagesAs(ctx context.Context, cmd *cobra.Command, relayURL *url.URL, 
 		return nil
 	}
 
+	// A one-shot run with --state starts where the last one left off.
+	if resume := state.Resume(10 * time.Minute); resume > 0 {
+		for _, flt := range filters.GetAll() {
+			if len(flt.IDs) == 0 && uint64(flt.Since) < resume {
+				flt.Since = resume
+			}
+		}
+	}
 	timeout, _ := f.GetDuration("timeout")
 	var events []*nip01.Event
 	err = common.WithSpinner(cmd, fmt.Sprintf("Reading %s", relayURL.Host), func() error {

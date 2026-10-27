@@ -205,6 +205,20 @@ func TestDM(t *testing.T) {
 		}
 	})
 
+	t.Run("state never hides another sender's messages", func(t *testing.T) {
+		e.MustOK(t, append([]string{"dm", "send", "--to", alice.Npub, "from mallory", "--signer", mallory.Nsec}, relay...)...)
+		state := filepath.Join(e.Dir, "alice.state")
+		first, _ := dmRead(t, e, append([]string{"--from", agent.Npub, "--signer", alice.Nsec, "--state", state}, relay...)...)
+		if hasContent(first, "from mallory") {
+			t.Fatal("read a sender not asked for")
+		}
+		// Skipped wraps weren't recorded, so asking for mallory finds hers.
+		later, _ := dmRead(t, e, append([]string{"--from", mallory.Npub, "--signer", alice.Nsec, "--state", state}, relay...)...)
+		if !hasContent(later, "from mallory") {
+			t.Fatalf("mallory's message lost to --state: %+v", later)
+		}
+	})
+
 	t.Run("follow streams new messages", func(t *testing.T) {
 		p := e.StartStream(t, append([]string{"dm", "read", "-f", "--from", alice.Npub, "--signer", s.URI, "--json"}, relay...)...)
 		var m dmMessage

@@ -98,6 +98,10 @@ func runRead(cmd *cobra.Command, _ []string) error {
 			filter.Since = since - back
 		}
 	}
+	// A one-shot run with --state starts where the last one left off.
+	if resume := state.Resume(wrapBackdate + 10*time.Minute); !follow && resume > filter.Since {
+		filter.Since = resume
+	}
 	filters := nip01.NewSubscriptionFilterGroup(filter)
 
 	r := &reader{signer: signer, from: from, since: since}
@@ -107,12 +111,14 @@ func runRead(cmd *cobra.Command, _ []string) error {
 			State:      state,
 			Overlap:    wrapBackdate + 10*time.Minute,
 			Emit: func(ev *nip01.Event, _ string) error {
-				m, ok, err := r.open(ctx, ev)
-				if err != nil {
+				m, show, record, err := r.open(ctx, ev)
+				switch {
+				case err != nil:
 					return err
-				}
-				if ok {
+				case show:
 					common.PrintJSONLine(m)
+				case !record:
+					return client.ErrSkip
 				}
 				return nil
 			},
@@ -138,12 +144,14 @@ func runRead(cmd *cobra.Command, _ []string) error {
 		if state.Seen(w.ID) {
 			continue
 		}
-		m, ok, err := r.open(ctx, w)
+		m, show, record, err := r.open(ctx, w)
 		if err != nil {
 			return readError(cmd, err)
 		}
-		state.Mark(w.ID, "", int64(w.CreatedAt))
-		if ok {
+		if record {
+			state.Mark(w.ID, "", int64(w.CreatedAt))
+		}
+		if show {
 			messages = append(messages, m)
 		}
 	}
@@ -170,25 +178,28 @@ type reader struct {
 	skipped, invalid int
 }
 
-// open returns the message in wrap, if it is one to print.
-func (r *reader) open(ctx context.Context, wrap *nip01.Event) (social.Message, bool, error) {
+// open returns the message in wrap, if it is one to print. record says
+// whether --state should remember the wrap: a message from another sender,
+// one the signer refused, or one older than --since is looked at again by a
+// later run.
+func (r *reader) open(ctx context.Context, wrap *nip01.Event) (m social.Message, show, record bool, err error) {
 	o, out, err := openWrap(ctx, r.signer, wrap, r.from)
 	if err != nil {
-		return social.Message{}, false, err
+		return social.Message{}, false, false, err
 	}
 	switch out {
 	case skipped:
 		r.skipped++
-		return social.Message{}, false, nil
+		return social.Message{}, false, false, nil
 	case invalid:
 		r.invalid++
 		log.Debug().Str("wrap", wrap.ID).Msg("could not open gift wrap")
-		return social.Message{}, false, nil
+		return social.Message{}, false, true, nil
 	}
 	if o.Rumor.CreatedAt < r.since {
-		return social.Message{}, false, nil
+		return social.Message{}, false, false, nil
 	}
-	return message(o), true, nil
+	return message(o), true, true, nil
 }
 
 func (r *reader) report() {

@@ -24,6 +24,10 @@ var ErrFollowLocal = errors.New("--follow needs relay targets, not a local .db f
 // maxSeen bounds the ids a FollowState remembers.
 const maxSeen = 5000
 
+// ErrSkip, returned by FollowOptions.Emit, leaves an event unrecorded in the
+// state: it is neither printed nor remembered, so a later run looks again.
+var ErrSkip = errors.New("skip")
+
 // FollowState is what a follow has delivered, so a restart resumes where it
 // stopped: recently seen ids and, per relay, the newest created_at seen.
 // Delivery across a crash is at least once: an id seen in the last second
@@ -126,6 +130,17 @@ func (s *FollowState) Save() error {
 	s.dirty = false
 	s.mu.Unlock()
 
+	if err := s.write(f); err != nil {
+		// Try again on the next Save.
+		s.mu.Lock()
+		s.dirty = true
+		s.mu.Unlock()
+		return err
+	}
+	return nil
+}
+
+func (s *FollowState) write(f followStateFile) error {
 	raw, err := json.Marshal(f)
 	if err != nil {
 		return err
@@ -144,6 +159,26 @@ func (s *FollowState) Save() error {
 		return err
 	}
 	return os.Rename(tmp.Name(), s.path)
+}
+
+// Resume is the since a one-shot read with this state starts from: overlap
+// before the newest event recorded from any relay, 0 when nothing is.
+func (s *FollowState) Resume(overlap time.Duration) uint64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var newest int64
+	for _, v := range s.since {
+		if v > newest {
+			newest = v
+		}
+	}
+	if newest == 0 {
+		return 0
+	}
+	if r := newest - int64(overlap.Seconds()); r > 0 {
+		return uint64(r)
+	}
+	return 0
 }
 
 // FollowOptions configures Follow.
@@ -391,14 +426,21 @@ func (f *follower) stream(ctx context.Context, sess *relaySession, relay string)
 	}
 }
 
+// emit hands ev to Emit once. It is recorded as delivered only after Emit
+// succeeds; ErrSkip leaves it unrecorded, to be looked at again.
 func (f *follower) emit(ev *nip01.Event, relay string) error {
 	f.emitMu.Lock()
 	defer f.emitMu.Unlock()
-	if !f.opts.State.Mark(ev.ID, relay, int64(ev.CreatedAt)) {
+	if f.opts.State.Seen(ev.ID) {
 		return nil
 	}
-	if err := f.opts.Emit(ev, relay); err != nil {
+	err := f.opts.Emit(ev, relay)
+	switch {
+	case errors.Is(err, ErrSkip):
+		return nil
+	case err != nil:
 		return fmt.Errorf("%w: %w", errEmit, err)
 	}
+	f.opts.State.Mark(ev.ID, relay, int64(ev.CreatedAt))
 	return nil
 }

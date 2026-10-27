@@ -339,6 +339,58 @@ func TestFollowPartialOutage(t *testing.T) {
 	}
 }
 
+// An event whose Emit fails, or is skipped, is not recorded: a resumed run
+// sees it again.
+func TestFollowRecordsOnlyWhatWasEmitted(t *testing.T) {
+	r := newLiveRelay(t)
+	now := time.Now().Unix()
+	r.add(note(t, "skip me", now))
+	r.add(note(t, "fail on me", now))
+	path := filepath.Join(t.TempDir(), "s.json")
+	state, _ := LoadFollowState(path)
+	targets, _ := TargetsFromRelayList([]string{r.url})
+	err := Follow(context.Background(), targets, kindFilter(), FollowOptions{
+		State: state,
+		Emit: func(ev *nip01.Event, _ string) error {
+			if ev.Content == "skip me" {
+				return ErrSkip
+			}
+			return errors.New("printer gone")
+		},
+	})
+	if err == nil {
+		t.Fatal("an Emit error must stop Follow")
+	}
+	back, _ := LoadFollowState(path)
+	if len(back.order) != 0 {
+		t.Fatalf("recorded %v", back.order)
+	}
+}
+
+func TestFollowStateSaveRetries(t *testing.T) {
+	dir := t.TempDir()
+	s, _ := LoadFollowState(filepath.Join(dir, "missing-dir", "s.json"))
+	s.Mark("a", "r", 1)
+	if err := s.Save(); err == nil {
+		t.Fatal("save into a missing directory succeeded")
+	}
+	if !s.dirty {
+		t.Fatal("a failed save must be retried")
+	}
+	if err := os.Mkdir(filepath.Join(dir, "missing-dir"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Save(); err != nil {
+		t.Fatal(err)
+	}
+	if back, _ := LoadFollowState(filepath.Join(dir, "missing-dir", "s.json")); !back.Seen("a") {
+		t.Fatal("not saved on retry")
+	}
+	if got := s.Resume(0); got != 1 {
+		t.Fatalf("resume %d", got)
+	}
+}
+
 func TestFollowStateFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "s.json")
 	s, _ := LoadFollowState(path)

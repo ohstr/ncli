@@ -86,7 +86,7 @@ ncli dm read --from npub1alice... -s wss://inbox.example --json
 # both sides of a conversation: add yourself
 ncli dm read --from npub1alice... --from npub1self... -s wss://inbox.example --json
 
-# poll: --state makes each run print only new messages
+# poll: --state makes each run print only new messages (one state file per reader)
 ncli dm read --from npub1alice... -s wss://inbox.example --state dm.state --json
 
 # stream: one JSON line per new message until interrupted
@@ -99,6 +99,10 @@ Gotchas:
   days earlier, as NIP-59 backdates them, so don't filter wraps yourself.
 - A message from someone not in `--from` is never decrypted: not by ncli,
   and not by the signer when the policy uses `unwrap_from`.
+- `--state` records only messages it printed (or could never open). A
+  skipped one is looked at again by a later run with another `--from`, as
+  long as it falls in the window the state resumes from (2 days and 10
+  minutes before the newest it recorded): keep one state file per reader.
 - With `--json`, a one-shot read prints one array (`[]` when empty); `-f`
   prints NDJSON.
 
@@ -174,9 +178,11 @@ aren't the signer's.
 ## Your profile and lists
 
 Each write reads your current version, changes only what you name, and
-publishes it to `-s` (or the prefs relays). If no relay answers, nothing is
-published (`network`). If none has a current version, nothing is published
-(`not_found`) unless `--create`.
+publishes it to `-s` (or the prefs relays). Unless every relay answers,
+nothing is published (`network`): a silent relay may hold a newer version.
+If none has a current version, nothing is published (`not_found`) unless
+`--create`. `relays set` replaces the list each flag names and reports what
+it drops.
 
 ```sh
 # an empty value removes a field; --field keeps JSON values as JSON
@@ -184,7 +190,7 @@ ncli profile set --name agent --about "I answer DMs" --field bot=true --signer m
 ncli profile follow npub1alice... bob@example.com --signer me
 ncli profile mute npub1spam... --signer me
 
-# refused if the list would end up empty, unless --allow-empty
+# refused if it would remove the last person, unless --allow-empty
 ncli profile unfollow npub1alice... --signer me
 
 # where you read and write (10002) and where people DM you (10050)

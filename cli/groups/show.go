@@ -81,16 +81,16 @@ func runShow(cmd *cobra.Command, args []string) error {
 	)
 	timeout, _ := cmd.Flags().GetDuration("timeout")
 
-	identityFlag, _ := cmd.Flags().GetString("identity")
-	privKeyHex, err := resolveIdentityOptional(cmd, identityFlag)
+	signer, closeSigner, err := resolveReadSigner(cmd)
 	if err != nil {
 		return err
 	}
+	defer closeSigner()
 
 	var events []*nip01.Event
 	err = common.WithSpinner(cmd, fmt.Sprintf("Querying %s for %s", relayURL.Host, groupID), func() error {
 		var qErr error
-		events, qErr = client.QueryTargetsWithAuth(ctx, targets, filters, timeout, client.KeySigner(privKeyHex))
+		events, qErr = client.QueryTargetsWithAuth(ctx, targets, filters, timeout, signer)
 		return qErr
 	})
 	if err != nil {
@@ -139,7 +139,7 @@ func runShow(cmd *cobra.Command, args []string) error {
 
 	if detail.Metadata == nil && detail.Admins == nil && detail.Members == nil {
 		msg := fmt.Errorf("no group %q on %s", groupID, relayURL.Host)
-		if privKeyHex == "" {
+		if signer == nil {
 			msg = fmt.Errorf("%w -- a private group is invisible to an anonymous connection", msg)
 		}
 		return common.NotFoundError(cmd, groupID, msg)

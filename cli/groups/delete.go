@@ -28,11 +28,12 @@ func runDelete(cmd *cobra.Command, args []string) error {
 
 	groupID := args[0]
 
-	relayURL, pubKeyHex, privKeyHex, err := resolveWriteTarget(cmd)
+	relayURL, pubKeyHex, signer, closeSigner, err := resolveWriteTarget(cmd)
 	if err != nil {
 		return err
 	}
+	defer closeSigner()
 
 	ev := nip29.NewDeleteGroup(pubKeyHex, groupID)
-	return publishGroupEvent(ctx, cmd, relayURL, groupID, ev, privKeyHex)
+	return publishGroupEvent(ctx, cmd, relayURL, groupID, ev, signer)
 }

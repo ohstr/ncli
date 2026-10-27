@@ -43,6 +43,7 @@ nothing.`,
 
 	cmd.PersistentFlags().String("relay", "", "Relay the group lives on (falls back to the first configured prefs relay)")
 	cmd.PersistentFlags().String("identity", "", "Identity to sign group events with (required for writes), or to authenticate a \"list\"/\"show\" read with (optional) -- vault label, nsec, npub, hex, nprofile, or nip-05")
+	cmd.PersistentFlags().String("signer", "", "Sign and log in through bunker+unix:///path.sock, bunker://..., or an identity, instead of --identity; the key stays in the signer")
 
 	cmd.AddCommand(newCreateCommand())
 	cmd.AddCommand(newEditCommand())
@@ -56,6 +57,9 @@ nothing.`,
 	cmd.AddCommand(newListCommand())
 	cmd.AddCommand(newShowCommand())
 	cmd.AddCommand(newTreeCommand())
+	cmd.AddCommand(newSendCommand())
+	cmd.AddCommand(newReadCommand())
+	cmd.AddCommand(newFeedCommand())
 
 	return cmd
 }

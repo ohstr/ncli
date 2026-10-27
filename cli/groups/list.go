@@ -5,15 +5,16 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"text/tabwriter"
 	"time"
 
 	"github.com/ohstr/ncli/cli/common"
+	"github.com/ohstr/ncli/cli/keyresolve"
 	"github.com/ohstr/ncli/client"
 	"github.com/ohstr/nmilat/nip01"
 	"github.com/ohstr/nmilat/nip29"
-	"github.com/ohstr/nmilat/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -88,11 +89,11 @@ func runList(cmd *cobra.Command, args []string) error {
 
 	timeout, _ := cmd.Flags().GetDuration("timeout")
 
-	identityFlag, _ := cmd.Flags().GetString("identity")
-	privKeyHex, err := resolveIdentityOptional(cmd, identityFlag)
+	signer, closeSigner, err := resolveReadSigner(cmd)
 	if err != nil {
 		return err
 	}
+	defer closeSigner()
 
 	mineFlag, _ := cmd.Flags().GetBool("mine")
 	memberFlag, _ := cmd.Flags().GetString("member")
@@ -100,18 +101,14 @@ func runList(cmd *cobra.Command, args []string) error {
 	var scopeToPubkey string
 	switch {
 	case memberFlag != "":
-		if err := utils.Validate32Key(memberFlag); err != nil {
-			return common.InvalidInputError(cmd, memberFlag, err)
+		if scopeToPubkey, err = keyresolve.Pubkey(cmd, memberFlag); err != nil {
+			return err
 		}
-		scopeToPubkey = memberFlag
 	case mineFlag:
-		if privKeyHex == "" {
-			return common.UsageError(cmd, errors.New("--mine requires --identity, to know which pubkey to scope to"))
+		if signer == nil {
+			return common.UsageError(cmd, errors.New("--mine requires --identity or --signer, to know which pubkey to scope to"))
 		}
-		scopeToPubkey, err = client.GetPublicKey(privKeyHex)
-		if err != nil {
-			return common.RuntimeError(cmd, err)
-		}
+		scopeToPubkey = strings.ToLower(signer.PubKey())
 	}
 
 	filterBuilders := []*nip01.SubscriptionFilter{nip01.NewFilter().WithKinds(nip29.KindGroupMetadata)}
@@ -123,7 +120,7 @@ func runList(cmd *cobra.Command, args []string) error {
 	var events []*nip01.Event
 	err = common.WithSpinner(cmd, fmt.Sprintf("Listing groups on %s", relayURL.Host), func() error {
 		var qErr error
-		events, qErr = client.QueryTargetsWithAuth(ctx, targets, filters, timeout, client.KeySigner(privKeyHex))
+		events, qErr = client.QueryTargetsWithAuth(ctx, targets, filters, timeout, signer)
 		return qErr
 	})
 	if err != nil {
@@ -179,11 +176,11 @@ func runList(cmd *cobra.Command, args []string) error {
 
 	if len(groupList) == 0 {
 		switch {
-		case scopeToPubkey != "" && privKeyHex == "":
+		case scopeToPubkey != "" && signer == nil:
 			fmt.Println("(no groups found -- a private group that pubkey belongs to is invisible to an anonymous connection)")
 		case scopeToPubkey != "":
 			fmt.Println("(no groups found -- that pubkey is not a member of any group visible to this connection)")
-		case privKeyHex == "":
+		case signer == nil:
 			fmt.Println("(no groups found -- a private group is invisible to an anonymous connection)")
 		default:
 			fmt.Println("(no groups found)")

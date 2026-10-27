@@ -30,11 +30,12 @@ func runDeleteEvent(cmd *cobra.Command, args []string) error {
 		return common.InvalidInputError(cmd, eventID, err)
 	}
 
-	relayURL, pubKeyHex, privKeyHex, err := resolveWriteTarget(cmd)
+	relayURL, pubKeyHex, signer, closeSigner, err := resolveWriteTarget(cmd)
 	if err != nil {
 		return err
 	}
+	defer closeSigner()
 
 	ev := nip29.NewDeleteEvent(pubKeyHex, groupID, eventID)
-	return publishGroupEvent(ctx, cmd, relayURL, groupID, ev, privKeyHex)
+	return publishGroupEvent(ctx, cmd, relayURL, groupID, ev, signer)
 }

@@ -49,11 +49,12 @@ func runPinsSet(cmd *cobra.Command, args []string) error {
 	events, _ := cmd.Flags().GetStringArray("event")
 	addresses, _ := cmd.Flags().GetStringArray("address")
 
-	relayURL, pubKeyHex, privKeyHex, err := resolveWriteTarget(cmd)
+	relayURL, pubKeyHex, signer, closeSigner, err := resolveWriteTarget(cmd)
 	if err != nil {
 		return err
 	}
+	defer closeSigner()
 
 	ev := nip29.NewUpdatePinList(pubKeyHex, groupID, events, addresses)
-	return publishGroupEvent(ctx, cmd, relayURL, groupID, ev, privKeyHex)
+	return publishGroupEvent(ctx, cmd, relayURL, groupID, ev, signer)
 }

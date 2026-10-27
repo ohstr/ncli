@@ -7,6 +7,7 @@ import (
 	"syscall"
 
 	"github.com/ohstr/ncli/cli/common"
+	"github.com/ohstr/ncli/client"
 	"github.com/ohstr/nmilat/nip01"
 	"github.com/ohstr/nmilat/nip29"
 	"github.com/spf13/cobra"
@@ -61,18 +62,19 @@ func runCreate(cmd *cobra.Command, args []string) error {
 		groupID = id
 	}
 
-	relayURL, pubKeyHex, privKeyHex, err := resolveWriteTarget(cmd)
+	relayURL, pubKeyHex, signer, closeSigner, err := resolveWriteTarget(cmd)
 	if err != nil {
 		return err
 	}
+	defer closeSigner()
 
 	ev := nip29.NewCreateGroup(pubKeyHex, groupID)
 
 	parent, _ := cmd.Flags().GetString("parent")
 	if parent == "" {
-		return publishGroupEvent(ctx, cmd, relayURL, groupID, ev, privKeyHex)
+		return publishGroupEvent(ctx, cmd, relayURL, groupID, ev, signer)
 	}
-	return createWithParent(ctx, cmd, relayURL, groupID, parent, ev, privKeyHex)
+	return createWithParent(ctx, cmd, relayURL, groupID, parent, ev, signer)
 }
 
 // createWithParent publishes the create event, then -- only once that
@@ -81,8 +83,8 @@ func runCreate(cmd *cobra.Command, args []string) error {
 // is a full replace and nothing else has had a chance to change them yet.
 // Both reports are combined into a single JSON value under --json, never
 // two concatenated ones, so a scripted caller gets one well-formed result.
-func createWithParent(ctx context.Context, cmd *cobra.Command, relayURL *url.URL, groupID, parent string, createEv *nip01.Event, privKeyHex string) error {
-	createReport, err := signAndPublish(ctx, cmd, relayURL, groupID, createEv, privKeyHex)
+func createWithParent(ctx context.Context, cmd *cobra.Command, relayURL *url.URL, groupID, parent string, createEv *nip01.Event, signer client.Signer) error {
+	createReport, err := signAndPublish(ctx, cmd, relayURL, groupID, createEv, signer)
 	if err != nil {
 		return err
 	}
@@ -96,7 +98,7 @@ func createWithParent(ctx context.Context, cmd *cobra.Command, relayURL *url.URL
 		Private: true,
 		Closed:  true,
 	})
-	parentReport, err := signAndPublish(ctx, cmd, relayURL, groupID, parentEv, privKeyHex)
+	parentReport, err := signAndPublish(ctx, cmd, relayURL, groupID, parentEv, signer)
 	if err != nil {
 		return err
 	}

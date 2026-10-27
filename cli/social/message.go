@@ -52,6 +52,11 @@ func FromEvent(ev *nip01.Event, channel string) Message {
 			m.Subject = t[1]
 		case "h":
 			m.Group = t[1]
+		case "q":
+			// A group chat reply quotes its parent (NIP-C7).
+			if channel == "group" && m.ReplyTo == "" {
+				m.ReplyTo = t[1]
+			}
 		case "e":
 			hasE = true
 			if len(t) >= 4 {

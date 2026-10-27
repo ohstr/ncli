@@ -59,13 +59,14 @@ if [ -n "${QUESTION}" ] && jq -e --arg q "${QUESTION}" --arg f "${FRIEND}" 'any(
 else
   add_check "reply_threaded" false "question '${QUESTION}', replies: ${REPLY}"
 fi
-DELS="$(agent_exec "ncli find --kinds 5 --authors ${AGENT} -s ${RELAY} --json" 2>/dev/null)"
-DELETED="$(jq -r '[.[] | .tags[] | select(.[0]=="e") | .[1]] | .[]' <<<"${DELS}" 2>/dev/null)"
+# ncli's relay applies a kind 5 but doesn't serve it back (ohstr/nmilat#209),
+# so the request is checked in the signer's log and the note's absence.
+LOG5="$(agent_exec "cat ${D}/decisions.ndjson" 2>/dev/null)"
 STILL="$(agent_exec "ncli find --kinds 1 --authors ${AGENT} -s ${RELAY} --json" 2>/dev/null | jq -r '[.[] | select(.content=="test note")] | length')"
-if [ -n "${DELETED}" ] && [ "${STILL}" = "0" ]; then
-  add_check "note_deleted" true "kind 5 published, the note is gone"
+if jq -se 'any(.[]; .decision=="allow" and .kind==5)' >/dev/null 2>&1 <<<"${LOG5}" && [ "${STILL}" = "0" ]; then
+  add_check "note_deleted" true "kind 5 signed, the note is gone"
 else
-  add_check "note_deleted" false "deletions: $(jq -c 'length' <<<"${DELS}" 2>/dev/null), test notes still served: ${STILL}"
+  add_check "note_deleted" false "kind 5 signed: $(jq -se 'any(.[]; .decision=="allow" and .kind==5)' <<<"${LOG5}" 2>/dev/null), test notes still served: ${STILL}"
 fi
 
 # --- the group ---------------------------------------------------------------------------

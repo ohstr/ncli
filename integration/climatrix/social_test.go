@@ -147,6 +147,13 @@ func TestEventSocial(t *testing.T) {
 		if del.Event.Kind != 5 || !hasTag(del.Event, "e", mine.ID) || !hasTag(del.Event, "k", "1") || del.Event.Content != "typo" {
 			t.Fatalf("deletion %+v", del.Event)
 		}
+		// The relay honours it: the note is gone. (ncli's relay doesn't
+		// serve kind 5 requests back; ohstr/nmilat#209.)
+		var gone []nip01.Event
+		e.MustOK(t, "find", "--ids", mine.ID, "-s", r.URL, "--json").JSON(t, &gone)
+		if len(gone) != 0 {
+			t.Fatal("deleted note still served")
+		}
 		e.Run(t, append([]string{"event", "delete", note.ID, "--signer", bob.Nsec, "--json"}, s...)...).ExpectErr(t, "invalid_input")
 	})
 

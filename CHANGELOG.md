@@ -5,6 +5,8 @@
 ### Added
 
 - Adds the signer's `nip44_message_keys` method and `unwrap_from` rule: one message's keys for a proof, and opening a gift wrap only when it holds a seal from a listed sender. Both are denied unless a rule names them, so existing policies behave the same.
+- Adds `find -f/--follow`, which keeps the subscription open on every relay and prints each new event once as a JSON line, reconnecting when a relay drops. `--state` records what was printed, so a restart resumes without gaps or repeats.
+- Adds `-S` as the short form of `--since` on `find`, `dump` and `miner check`.
 
 ### Changed
 

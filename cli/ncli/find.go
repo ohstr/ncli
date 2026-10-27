@@ -1,6 +1,8 @@
 package ncli
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os/signal"
 	"syscall"
@@ -10,6 +12,7 @@ import (
 	"github.com/ohstr/ncli/cli/keyresolve"
 	"github.com/ohstr/ncli/client"
 	"github.com/ohstr/nmilat/nip01"
+	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )
 
@@ -55,6 +58,13 @@ with reason login_required, signer_refused or relay_refused.`,
 					return common.InvocationOrHelp(cmd, args, err)
 				}
 			}
+			follow, _ := cmd.Flags().GetBool("follow")
+			if follow && cmd.Flags().Changed("out") {
+				return common.InvocationError(cmd, fmt.Errorf("--out can't be combined with --follow, which streams to stdout"))
+			}
+			if !follow && cmd.Flags().Changed("state") {
+				return common.InvocationError(cmd, fmt.Errorf("--state only applies with --follow"))
+			}
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -89,6 +99,10 @@ with reason login_required, signer_refused or relay_refused.`,
 
 			idFilter, filtersSpec := mergeFindIdentifier(identifier, filtersSpec)
 
+			if follow, _ := cmd.Flags().GetBool("follow"); follow {
+				return runFollow(ctx, cmd, idFilter, filtersSpec, targetsSpec, authSigner)
+			}
+
 			var outPath string
 			if cmd.Flags().Changed("out") {
 				outPath, err = validateArgFile(cmd, "out", false, ".json", ".jsonp")
@@ -118,6 +132,47 @@ func init() {
 	_ = findCmd.MarkFlagFilename("out", "json", "jsonp")
 
 	findCmd.Flags().Duration("timeout", 30*time.Second, "Max time to wait per target before giving up on it (0 = wait forever)")
+	findCmd.Flags().BoolP("follow", "f", false, "Keep the subscription open and print each new event as one JSON line, until interrupted")
+	findCmd.Flags().String("state", "", "With --follow: file recording what was printed, so a restart resumes without gaps or repeats")
+}
+
+// runFollow streams matches from every target as NDJSON until interrupted.
+func runFollow(ctx context.Context, cmd *cobra.Command, idFilter *nip01.SubscriptionFilter, filtersSpec []*client.FilterSpec, targets *client.TargetsSpec, authSigner client.Signer) error {
+	filters := nip01.NewSubscriptionFilterGroup()
+	if idFilter != nil {
+		filters.Add(idFilter)
+	}
+	for _, f := range filtersSpec {
+		filters.Add(&f.SubscriptionFilter)
+	}
+	if len(filters.GetAll()) == 0 {
+		filters.Add(&nip01.SubscriptionFilter{})
+	}
+	statePath, _ := cmd.Flags().GetString("state")
+	state, err := client.LoadFollowState(statePath)
+	if err != nil {
+		return common.InvalidInputError(cmd, statePath, err)
+	}
+	timeout, _ := cmd.Flags().GetDuration("timeout")
+	err = client.Follow(ctx, targets, filters, client.FollowOptions{
+		AuthSigner:  authSigner,
+		State:       state,
+		DialTimeout: timeout,
+		Emit: func(ev *nip01.Event, _ string) error {
+			common.PrintJSONLine(ev)
+			return nil
+		},
+		Warn: func(relay string, err error) {
+			log.Warn().Str("relay", relay).Err(err).Msg("reconnecting")
+		},
+	})
+	if errors.Is(err, client.ErrFollowLocal) {
+		return common.UsageError(cmd, err)
+	}
+	if err != nil {
+		return queryError(cmd, err)
+	}
+	return nil
 }
 
 // mergeFindIdentifier combines find's resolved positional identifier

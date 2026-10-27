@@ -46,7 +46,7 @@
 "event unwrap": {modes: [json, errors], tests: [TestEventUnwrap]}
 "event validate": {modes: [json, errors], tests: [TestEventAuthoring]}
 "event verify": {modes: [json, text, errors], tests: [TestEventVerifyAndGet]}
-"find": {modes: [json, tty, errors], tests: [TestQuery, TestAddressableLookups, TestTTY_Spinner, TestTimeoutCoversHandshake, TestRelayLogin_AuthRequired, TestRelayLogin_MembershipRequired, TestRelayLogin_NIP46Bunker]}
+"find": {modes: [json, tty, errors], tests: [TestQuery, TestAddressableLookups, TestTTY_Spinner, TestTimeoutCoversHandshake, TestRelayLogin_AuthRequired, TestRelayLogin_MembershipRequired, TestRelayLogin_NIP46Bunker, TestFindFollow, TestFindFollow_Errors]}
 "groups": {modes: [errors], tests: [TestBareGroupCommands]}
 "groups create": {modes: [json, errors], tests: [TestGroupsCLI]}
 "groups delete": {modes: [json, errors], tests: [TestGroupsModeration]}

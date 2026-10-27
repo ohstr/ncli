@@ -22,7 +22,7 @@ func newWrapCommand() *cobra.Command {
 wrap(s); publish them with "ncli publish -e -". For a chat message,
 "ncli dm send" does all of it.`,
 		Example: `  ncli event new --kind 14 --content hi --tag p=<hex> | ncli event wrap --to npub1... --signer me | ncli publish -e - -s wss://inbox.example`,
-		RunE: runWrap,
+		RunE:    runWrap,
 	}
 	cmd.Flags().String("to", "", "Recipient: npub, hex, nprofile, nip-05 or vault label (required)")
 	social.AddSignerFlag(cmd)

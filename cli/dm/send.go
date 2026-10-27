@@ -19,9 +19,9 @@ import (
 
 // sent is dm send's --json result.
 type sent struct {
-	ID     string               `json:"id"`
-	To     string               `json:"to"`
-	Wraps  []string             `json:"wraps"`
+	ID     string                `json:"id"`
+	To     string                `json:"to"`
+	Wraps  []string              `json:"wraps"`
 	Report *client.PublishReport `json:"report"`
 }
 

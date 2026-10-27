@@ -62,7 +62,7 @@ type Server struct {
 	// unwrap carries an unwrap_from decision from authorize to the result
 	// check; record drops it if the request failed before that.
 	unwrap sync.Map // *nipLS.Request -> Decision
-	logMu    sync.Mutex
+	logMu  sync.Mutex
 }
 
 // New loads the policy and prepares a server. It does not listen.

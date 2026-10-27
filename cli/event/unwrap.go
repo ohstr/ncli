@@ -145,4 +145,3 @@ Prints the rumor and its verified sender.`,
 	cmd.Flags().StringArray("from", nil, "Open only seals by this sender (repeatable); others are skipped unopened")
 	return cmd
 }
-

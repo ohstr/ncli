@@ -45,7 +45,7 @@ func resolveWriteTarget(cmd *cobra.Command) (relayURL *url.URL, pubKeyHex string
 	}
 
 	identityFlag, _ := cmd.Flags().GetString("identity")
-	if signerFlag, _ := cmd.Flags().GetString("signer"); signerFlag != "" {
+	if signerFlag := groupSigner(cmd, identityFlag); signerFlag != "" {
 		if identityFlag != "" {
 			return nil, "", nil, nil, common.InvocationError(cmd, errors.New("pass --identity or --signer, not both"))
 		}

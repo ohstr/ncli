@@ -115,6 +115,22 @@ rules:
 		p.Quiet(t, 500*time.Millisecond)
 	})
 
+	t.Run("NCLI_SIGNER stands in for --signer", func(t *testing.T) {
+		env := NewEnv(t)
+		env.Setenv("NCLI_SIGNER", s.URI)
+		var rep groupReport
+		env.MustOK(t, g("send", "chat", "via env")...).JSON(t, &rep)
+		var ms []groupMessage
+		e.MustOK(t, g("read", "chat", "--identity", alice.Nsec)...).JSON(t, &ms)
+		found := false
+		for _, m := range ms {
+			found = found || (m.Content == "via env" && m.From == agent.PubHex)
+		}
+		if !found {
+			t.Fatalf("message via NCLI_SIGNER missing: %+v", ms)
+		}
+	})
+
 	t.Run("text output", func(t *testing.T) {
 		res := e.MustOK(t, "groups", "read", "chat", "--relay", r.URL, "--signer", s.URI)
 		if !strings.Contains(res.Stdout, "standup at 10") || !strings.Contains(res.Stdout, "in chat") {

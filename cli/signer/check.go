@@ -32,8 +32,8 @@ created before the signer started" check; --now pins the clock so
 committed fixtures stay valid.
 
 For encrypt/decrypt rules pass --method and --counterpart instead of
---events. An unwrap_from rule decides on the decrypted seal's author:
-add --seal-from to check one.`,
+--events. An unwrap_from rule decides on the decrypted seal's author, so
+--seal-from is required for it.`,
 		Example: `  ncli signer check --policy policy.yaml -e event.json --pubkey npub1...
   ncli signer check --policy policy.yaml -e state.json --attestations approval.json \
     --now 2026-10-08T12:00:00Z --start-time 2026-10-08T11:00:00Z
@@ -184,17 +184,18 @@ func runCheck(cmd *cobra.Command, _ []string) error {
 		if d.Allow && d.UnwrapFrom != nil {
 			// The rule decides on the decrypted seal's author, which only
 			// --seal-from can stand in for offline.
+			// Without it the answer would be "it depends", which a CI gate
+			// reading the exit code can't tell from yes.
 			sealFrom, _ := f.GetString("seal-from")
 			if sealFrom == "" {
-				d.Reason = "allowed only if the result is a seal from an unwrap_from sender; pass --seal-from to check one"
-			} else {
-				author, err := keyresolve.PubkeyArg(cmd, sealFrom)
-				if err != nil {
-					return err
-				}
-				if !d.UnwrapFrom[author] {
-					d = signer.Decision{Rule: d.Rule, Reason: "seal is from a sender unwrap_from does not list"}
-				}
+				return common.InvocationError(cmd, fmt.Errorf("rule %q decides on the decrypted seal's author: pass --seal-from", d.Rule))
+			}
+			author, err := keyresolve.PubkeyArg(cmd, sealFrom)
+			if err != nil {
+				return err
+			}
+			if !d.UnwrapFrom[author] {
+				d = signer.Decision{Rule: d.Rule, Reason: "seal is from a sender unwrap_from does not list"}
 			}
 		}
 		results = append(results, fill(CheckResult{Method: method, Counterpart: counterpart}, d))

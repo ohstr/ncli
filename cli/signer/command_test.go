@@ -159,9 +159,9 @@ func TestCheckUnwrapFromAndMessageKeys(t *testing.T) {
 		return execSigner(t, append([]string{"check", "--policy", policy, "--pubkey", signerPub, "--json"}, extra...)...)
 	}
 
-	out, err := check("--method", "nip44_decrypt", "--counterpart", wrapKey)
-	if err != nil || !strings.Contains(out, "--seal-from") {
-		t.Fatalf("without --seal-from: %q %v", out, err)
+	// "It depends on the seal" is not an answer: --seal-from is required.
+	if _, err := check("--method", "nip44_decrypt", "--counterpart", wrapKey); common.ExitCode(err) != 2 || !strings.Contains(err.Error(), "--seal-from") {
+		t.Fatalf("without --seal-from: %v", err)
 	}
 	if _, err := check("--method", "nip44_decrypt", "--counterpart", wrapKey, "--seal-from", friend); err != nil {
 		t.Fatalf("listed sender: %v", err)

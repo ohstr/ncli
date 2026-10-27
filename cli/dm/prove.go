@@ -60,15 +60,15 @@ func runProve(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	wrap, err := loadWrap(cmd, args[0])
-	if err != nil {
-		return err
-	}
 	signer, closeSigner, err := social.Signer(cmd)
 	if err != nil {
 		return err
 	}
 	defer closeSigner()
+	wrap, err := loadWrap(cmd, args[0], signer)
+	if err != nil {
+		return err
+	}
 	keyer, ok := signer.(client.MessageKeyer)
 	if !ok {
 		return common.UnsupportedError(cmd, "", errors.New("this signer can't reveal message keys"))
@@ -108,8 +108,9 @@ func runProve(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// loadWrap reads a gift wrap from a file, stdin ("-"), or relays by id.
-func loadWrap(cmd *cobra.Command, ref string) (*nip01.Event, error) {
+// loadWrap reads a gift wrap from a file, stdin ("-"), or relays by id,
+// logging in (NIP-42) with signer where a relay asks.
+func loadWrap(cmd *cobra.Command, ref string, signer client.Signer) (*nip01.Event, error) {
 	var raw []byte
 	var err error
 	switch {
@@ -118,7 +119,7 @@ func loadWrap(cmd *cobra.Command, ref string) (*nip01.Event, error) {
 	case fileExists(ref):
 		raw, err = os.ReadFile(ref)
 	default:
-		return fetchWrap(cmd, ref)
+		return fetchWrap(cmd, ref, signer)
 	}
 	if err != nil {
 		return nil, common.RuntimeError(cmd, err)
@@ -133,7 +134,7 @@ func loadWrap(cmd *cobra.Command, ref string) (*nip01.Event, error) {
 	return evs[0], nil
 }
 
-func fetchWrap(cmd *cobra.Command, ref string) (*nip01.Event, error) {
+func fetchWrap(cmd *cobra.Command, ref string, signer client.Signer) (*nip01.Event, error) {
 	id, err := social.EventID(cmd, ref)
 	if err != nil {
 		return nil, err
@@ -146,7 +147,7 @@ func fetchWrap(cmd *cobra.Command, ref string) (*nip01.Event, error) {
 	var evs []*nip01.Event
 	err = common.WithSpinner(cmd, "fetching the wrap", func() error {
 		var qErr error
-		evs, qErr = client.QueryTargets(cmd.Context(), targets, nip01.NewSubscriptionFilterGroup(&nip01.SubscriptionFilter{IDs: []string{id}}), timeout)
+		evs, qErr = client.QueryTargetsWithAuth(cmd.Context(), targets, nip01.NewSubscriptionFilterGroup(&nip01.SubscriptionFilter{IDs: []string{id}}), timeout, signer)
 		return qErr
 	})
 	if err != nil {

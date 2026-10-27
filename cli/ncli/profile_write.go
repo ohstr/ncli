@@ -346,7 +346,7 @@ func writeReplaceable(cmd *cobra.Command, kind int, change func(old *nip01.Event
 		if jsonMode {
 			common.PrintJSON(listChange{Kind: kind, Added: []string{}, Removed: []string{}})
 		} else {
-			fmt.Fprintln(cmd.OutOrStdout(), "nothing to change")
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "nothing to change")
 		}
 		return nil
 	}
@@ -370,10 +370,10 @@ func writeReplaceable(cmd *cobra.Command, kind int, change func(old *nip01.Event
 		common.PrintJSON(out)
 	} else {
 		for _, a := range added {
-			fmt.Fprintf(cmd.OutOrStdout(), "+ %s\n", displayItem(a))
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "+ %s\n", displayItem(a))
 		}
 		for _, r := range removed {
-			fmt.Fprintf(cmd.OutOrStdout(), "- %s\n", displayItem(r))
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "- %s\n", displayItem(r))
 		}
 		social.PrintReportLines(cmd, report)
 	}

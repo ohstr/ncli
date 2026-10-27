@@ -214,9 +214,9 @@ func ReportError(cmd *cobra.Command, report *client.PublishReport) error {
 func PrintReportLines(cmd *cobra.Command, report *client.PublishReport) {
 	for _, r := range report.Results {
 		if r.Accepted {
-			fmt.Fprintf(cmd.OutOrStdout(), "published %s to %s\n", r.ID, r.Relay)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "published %s to %s\n", r.ID, r.Relay)
 		} else {
-			fmt.Fprintf(cmd.OutOrStdout(), "failed %s to %s: %s\n", r.ID, r.Relay, r.Error)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "failed %s to %s: %s\n", r.ID, r.Relay, r.Error)
 		}
 	}
 }

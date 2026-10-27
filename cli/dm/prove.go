@@ -104,7 +104,7 @@ func runProve(cmd *cobra.Command, args []string) error {
 		}
 		return nil
 	}
-	fmt.Fprintln(cmd.OutOrStdout(), string(raw))
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(raw))
 	return nil
 }
 

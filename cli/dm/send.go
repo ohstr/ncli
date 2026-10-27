@@ -122,7 +122,7 @@ func runSend(cmd *cobra.Command, args []string) error {
 	if jsonMode {
 		common.PrintJSON(out)
 	} else {
-		fmt.Fprintf(cmd.OutOrStdout(), "sent %s to %s\n", rumor.ID, social.Npub(to))
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "sent %s to %s\n", rumor.ID, social.Npub(to))
 		social.PrintReportLines(cmd, report)
 	}
 	return social.ReportError(cmd, report)

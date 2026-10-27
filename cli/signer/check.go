@@ -185,10 +185,9 @@ func runCheck(cmd *cobra.Command, _ []string) error {
 			// The rule decides on the decrypted seal's author, which only
 			// --seal-from can stand in for offline.
 			sealFrom, _ := f.GetString("seal-from")
-			switch {
-			case sealFrom == "":
+			if sealFrom == "" {
 				d.Reason = "allowed only if the result is a seal from an unwrap_from sender; pass --seal-from to check one"
-			default:
+			} else {
 				author, err := keyresolve.PubkeyArg(cmd, sealFrom)
 				if err != nil {
 					return err

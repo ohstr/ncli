@@ -76,10 +76,10 @@ func runVerify(cmd *cobra.Command, args []string) error {
 	if jsonMode {
 		common.PrintJSON(v)
 	} else if v.Verified {
-		fmt.Fprintf(cmd.OutOrStdout(), "verified: %s wrote\n", social.Npub(from))
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "verified: %s wrote\n", social.Npub(from))
 		social.PrintMessage(cmd.OutOrStdout(), *v.Message)
 		for _, p := range v.Message.Mentions {
-			fmt.Fprintf(cmd.OutOrStdout(), "to %s\n", social.Npub(p))
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "to %s\n", social.Npub(p))
 		}
 	}
 	if vErr != nil {

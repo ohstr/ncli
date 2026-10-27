@@ -106,9 +106,9 @@ func PrintMessage(w io.Writer, m Message) {
 	if m.ReplyTo != "" {
 		head += "  ↩ " + short(m.ReplyTo)
 	}
-	fmt.Fprintf(w, "%s  %s\n", head, short(m.ID))
+	_, _ = fmt.Fprintf(w, "%s  %s\n", head, short(m.ID))
 	for _, line := range strings.Split(m.Content, "\n") {
-		fmt.Fprintf(w, "  %s\n", line)
+		_, _ = fmt.Fprintf(w, "  %s\n", line)
 	}
 }
 

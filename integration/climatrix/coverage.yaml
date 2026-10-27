@@ -39,12 +39,17 @@
 "dm verify": {modes: [json, text, errors], tests: [TestDM, TestDM_Errors]}
 "dump": {modes: [json, errors], tests: [TestQuery, TestRelayLogin_AuthRequired]}
 "event": {modes: [errors], tests: [TestBareGroupCommands]}
+"event delete": {modes: [json, errors], tests: [TestEventSocial]}
 "event diff": {modes: [json], tests: [TestEventAuthoring]}
 "event encode": {modes: [json], tests: [TestEventVerifyAndGet]}
 "event get": {modes: [json, errors], tests: [TestEventVerifyAndGet]}
 "event id": {modes: [text, errors], tests: [TestEventAuthoring]}
 "event new": {modes: [json, errors], tests: [TestEventAuthoring, TestEventVerifyAndGet]}
+"event post": {modes: [json, errors], tests: [TestEventSocial]}
+"event react": {modes: [json, errors], tests: [TestEventSocial]}
 "event rebroadcast": {modes: [json, errors], tests: [TestEventSeenAndRebroadcast]}
+"event reply": {modes: [json, errors], tests: [TestEventSocial]}
+"event repost": {modes: [json], tests: [TestEventSocial]}
 "event seen": {modes: [json, errors], tests: [TestEventSeenAndRebroadcast]}
 "event show": {modes: [json, text], tests: [TestEventVerifyAndGet]}
 "event thread": {modes: [json], tests: [TestEventAuthoring]}

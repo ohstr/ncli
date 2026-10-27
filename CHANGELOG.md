@@ -9,6 +9,7 @@
 - Adds `-S` as the short form of `--since` on `find`, `dump` and `miner check`.
 - Adds `ncli dm send/read/prove/verify`: NIP-17 private messages sealed and opened through `--signer`, so the key can stay in `ncli signer serve`. `read` opens only `--from` senders' seals, and `prove` gives a third party one message to check with `verify`, with no key that opens any other.
 - Adds `event wrap`, which seals and gift-wraps any event, and `--signer`/`--from` on `event unwrap`, which opens only the named senders' seals.
+- Adds `event react`, `reply`, `post`, `repost` and `delete`, signed through `--signer`. A reply is threaded the way its target's kind expects, and a reaction or reply to a group message carries the group's `h` tag.
 
 ### Changed
 

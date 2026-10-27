@@ -60,6 +60,11 @@ never touches the network.`,
 	cmd.AddCommand(newDiffCommand())
 	cmd.AddCommand(newUnwrapCommand())
 	cmd.AddCommand(newWrapCommand())
+	cmd.AddCommand(newReactCommand())
+	cmd.AddCommand(newReplyCommand())
+	cmd.AddCommand(newPostCommand())
+	cmd.AddCommand(newRepostCommand())
+	cmd.AddCommand(newDeleteCommand())
 	cmd.AddCommand(newValidateCommand())
 
 	return cmd

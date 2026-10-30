@@ -1,12 +1,15 @@
 package client
 
 import (
+	"encoding/hex"
 	"strings"
 	"testing"
 
+	"github.com/flokiorg/go-flokicoin/chainutil/bech32"
 	"github.com/ohstr/nmilat/nip19"
 	"github.com/ohstr/nmilat/nipcash"
 	"github.com/ohstr/nmilat/nipcw"
+	"github.com/ohstr/nmilat/utils"
 )
 
 func TestDecodeEntity_Npub(t *testing.T) {
@@ -203,19 +206,17 @@ func TestDecodeEntity_CashToken(t *testing.T) {
 	relays := []string{"wss://relay.example.com"}
 	idRequired := true
 	amount := uint64(5000)
-	mintSig := make([]byte, 65)
 
-	tok, err := nipcash.Encode(nipcash.Token{
+	tok, err := signedCashToken(nipcash.Token{
 		HRP:                  "lokicash",
 		WalletPubkey:         pubkey,
 		Secret:               secret,
 		RelayURLs:            relays,
 		IdentityRequired:     &idRequired,
-		MintSignature:        mintSig,
 		AttestedAmountMillis: &amount,
 	})
 	if err != nil {
-		t.Fatalf("nipcash.Encode() error = %v", err)
+		t.Fatalf("signedCashToken() error = %v", err)
 	}
 
 	entity, err := DecodeEntity(tok)
@@ -246,14 +247,11 @@ func TestDecodeEntity_CashToken(t *testing.T) {
 }
 
 func TestDecodeEntity_CashTokenWithoutProvenance(t *testing.T) {
-	tok, err := nipcash.Encode(nipcash.Token{
-		HRP:          "satscash",
-		WalletPubkey: strings.Repeat("a", 64),
-		Secret:       strings.Repeat("b", 64),
-		RelayURLs:    []string{"wss://relay.example.com"},
-	})
+	// nipcash.Encode writes only signed tokens since nmilat v0.5.0-rc.45, but
+	// Decode still reads one without TLV 5, 6 and 8: write its TLVs by hand.
+	tok, err := unsignedCashToken("satscash", strings.Repeat("a", 64), strings.Repeat("b", 64), "wss://relay.example.com")
 	if err != nil {
-		t.Fatalf("nipcash.Encode() error = %v", err)
+		t.Fatalf("unsignedCashToken() error = %v", err)
 	}
 
 	entity, err := DecodeEntity(tok)
@@ -273,11 +271,12 @@ func TestDecodeEntity_CircleHub(t *testing.T) {
 	secret := strings.Repeat("b", 64)
 	relays := []string{"wss://relay.example.com"}
 
-	conn, err := nipcw.EncodeCircleHubConnection(nipcw.CircleHubConnection{
-		WalletPubkey: pubkey,
-		Secret:       secret,
-		RelayURLs:    relays,
-		Label:        "test-hub",
+	conn, err := signedCircleHub(nipcw.CircleHubConnection{
+		Pubkey:   pubkey,
+		Secret:   secret,
+		Relays:   relays,
+		Label:    "test-hub",
+		HasLabel: true,
 	})
 	if err != nil {
 		t.Fatalf("nipcw.EncodeCircleHubConnection() error = %v", err)
@@ -317,4 +316,65 @@ func TestDecodeEntity_InvalidCircleHub(t *testing.T) {
 	if _, err := DecodeEntity("circlehub1notvalidbech32"); err == nil {
 		t.Fatal("DecodeEntity(malformed circlehub) error = nil, want an error")
 	}
+}
+
+// signedCircleHub signs c as a Hub whose node key is 1 on bitcoin: since nmilat
+// v0.5.0-rc.45 a circlehub1 string carries TLV 4-6 (the Hub's identity, the
+// connection signature, the chain) and the encoder refuses an unsigned one.
+func signedCircleHub(c nipcw.CircleHubConnection) (string, error) {
+	const nodeKey = "0000000000000000000000000000000000000000000000000000000000000001"
+	const identity = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+	c.HubIdentity, c.Chain = identity, "bitcoin"
+	sign, err := nipcash.LocalChainSigner(nodeKey, "bitcoin")
+	if err != nil {
+		return "", err
+	}
+	if c, err = nipcw.SignCircleHubConnection(c, sign, identity); err != nil {
+		return "", err
+	}
+	return nipcw.EncodeCircleHubConnection(c)
+}
+
+// signedCashToken signs t as a mint whose node key is 0x01…01 (scheme 1): since
+// nmilat v0.5.0-rc.45 nipcash.Encode refuses a token without its mint
+// signature, attested amount and signature scheme.
+func signedCashToken(t nipcash.Token) (string, error) {
+	const minterKey = "0101010101010101010101010101010101010101010101010101010101010101"
+	sign, err := nipcash.LocalMintSigner(minterKey, t.HRP)
+	if err != nil {
+		return "", err
+	}
+	minter, err := utils.GetPublicKey(minterKey)
+	if err != nil {
+		return "", err
+	}
+	if t, err = nipcash.SignToken(t, nipcash.SchemeMintV1, nil, minter, sign); err != nil {
+		return "", err
+	}
+	return nipcash.Encode(t)
+}
+
+// unsignedCashToken: a cash token with TLV 0 (wallet pubkey), 1 (a relay) and
+// 2 (secret) only, as an older Hub wrote them.
+func unsignedCashToken(hrp, pubkeyHex, secretHex, relay string) (string, error) {
+	pk, err := hex.DecodeString(pubkeyHex)
+	if err != nil {
+		return "", err
+	}
+	sec, err := hex.DecodeString(secretHex)
+	if err != nil {
+		return "", err
+	}
+	var data []byte
+	for _, f := range []struct {
+		typ byte
+		v   []byte
+	}{{0, pk}, {1, []byte(relay)}, {2, sec}} {
+		data = append(append(data, f.typ, byte(len(f.v))), f.v...)
+	}
+	bits5, err := bech32.ConvertBits(data, 8, 5, true)
+	if err != nil {
+		return "", err
+	}
+	return bech32.Encode(hrp, bits5)
 }

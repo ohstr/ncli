@@ -74,7 +74,7 @@ var validators = map[int]validator{
 	nip88.KindPoll:                   {"nip88.ValidatePoll", nip88.ValidatePoll},
 	nipA0.KindVoiceMessage:           {"nipA0.ValidateVoiceMessage", nipA0.ValidateVoiceMessage},
 	nipA0.KindVoiceMessageReply:      {"nipA0.ValidateVoiceMessage", nipA0.ValidateVoiceMessage},
-	nipAZ.KindAltZapReceipt:          {"nipAZ.ValidateAltZapReceipt", nipAZ.ValidateAltZapReceipt},
+	nipAZ.KindAltZapReceipt:          {"nipAZ.ValidateAltZapReceiptForRelay", nipAZ.ValidateAltZapReceiptForRelay},
 	nipB0.KindWebBookmark:            {"nipB0.ValidateWebBookmark", nipB0.ValidateWebBookmark},
 	nipB7.KindBlossomServerList:      {"nipB7.ValidateBlossomServerList", nipB7.ValidateBlossomServerList},
 	nipB7.KindAuthorization:          {"nipB7.ValidateAuthorization", nipB7.ValidateAuthorization},

@@ -8,6 +8,7 @@ import (
 
 	"github.com/ohstr/nmilat/nipcash"
 	"github.com/ohstr/nmilat/nipcw"
+	"github.com/ohstr/nmilat/utils"
 )
 
 // TestDecodeCmd_NpubJSON drives the real binary end to end: generate an
@@ -82,11 +83,12 @@ func TestDecodeCmd_CircleHubJSON(t *testing.T) {
 	bin := buildTestBinary(t)
 
 	pubkey := strings.Repeat("a", 64)
-	conn, err := nipcw.EncodeCircleHubConnection(nipcw.CircleHubConnection{
-		WalletPubkey: pubkey,
-		Secret:       strings.Repeat("b", 64),
-		RelayURLs:    []string{"wss://relay.example.com"},
-		Label:        "test-hub",
+	conn, err := signedCircleHub(nipcw.CircleHubConnection{
+		Pubkey:   pubkey,
+		Secret:   strings.Repeat("b", 64),
+		Relays:   []string{"wss://relay.example.com"},
+		Label:    "test-hub",
+		HasLabel: true,
 	})
 	if err != nil {
 		t.Fatalf("nipcw.EncodeCircleHubConnection() error = %v", err)
@@ -128,16 +130,15 @@ func TestDecodeCmd_CashTokenJSON(t *testing.T) {
 
 	pubkey := strings.Repeat("a", 64)
 	amount := uint64(5000)
-	tok, err := nipcash.Encode(nipcash.Token{
+	tok, err := signedCashToken(nipcash.Token{
 		HRP:                  "lokicash",
 		WalletPubkey:         pubkey,
 		Secret:               strings.Repeat("b", 64),
 		RelayURLs:            []string{"wss://relay.example.com"},
-		MintSignature:        make([]byte, 65),
 		AttestedAmountMillis: &amount,
 	})
 	if err != nil {
-		t.Fatalf("nipcash.Encode() error = %v", err)
+		t.Fatalf("signedCashToken() error = %v", err)
 	}
 
 	out, err := exec.Command(bin, "decode", tok, "--json").Output()
@@ -183,4 +184,40 @@ func TestDecodeCmd_WrongArgCount(t *testing.T) {
 	if err := exec.Command(bin, "decode", "a", "b").Run(); err == nil {
 		t.Fatal("expected an error when more than one argument is given")
 	}
+}
+
+// signedCircleHub signs c as a Hub whose node key is 1 on bitcoin: since nmilat
+// v0.5.0-rc.45 a circlehub1 string carries TLV 4-6 (the Hub's identity, the
+// connection signature, the chain) and the encoder refuses an unsigned one.
+func signedCircleHub(c nipcw.CircleHubConnection) (string, error) {
+	const nodeKey = "0000000000000000000000000000000000000000000000000000000000000001"
+	const identity = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+	c.HubIdentity, c.Chain = identity, "bitcoin"
+	sign, err := nipcash.LocalChainSigner(nodeKey, "bitcoin")
+	if err != nil {
+		return "", err
+	}
+	if c, err = nipcw.SignCircleHubConnection(c, sign, identity); err != nil {
+		return "", err
+	}
+	return nipcw.EncodeCircleHubConnection(c)
+}
+
+// signedCashToken signs t as a mint whose node key is 0x01…01 (scheme 1): since
+// nmilat v0.5.0-rc.45 nipcash.Encode refuses a token without its mint
+// signature, attested amount and signature scheme.
+func signedCashToken(t nipcash.Token) (string, error) {
+	const minterKey = "0101010101010101010101010101010101010101010101010101010101010101"
+	sign, err := nipcash.LocalMintSigner(minterKey, t.HRP)
+	if err != nil {
+		return "", err
+	}
+	minter, err := utils.GetPublicKey(minterKey)
+	if err != nil {
+		return "", err
+	}
+	if t, err = nipcash.SignToken(t, nipcash.SchemeMintV1, nil, minter, sign); err != nil {
+		return "", err
+	}
+	return nipcash.Encode(t)
 }

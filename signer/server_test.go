@@ -1,6 +1,7 @@
 package signer
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -285,10 +286,20 @@ func TestServerOversizedLine(t *testing.T) {
 	}
 	defer func() { _ = conn.Close() }()
 	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
-	go func() { _, _ = conn.Write(bytes.Repeat([]byte("x"), nipLS.MaxMessageSize+10)) }()
-	buf := make([]byte, 64)
-	if n, err := conn.Read(buf); err == nil {
-		t.Fatalf("server answered an oversized line: %q", buf[:n])
+	// NIP-LS (S-LS-03, nmilat ≥ v0.5.0-rc.45): an over-long line gets an
+	// empty-id "invalid: line too long" answer and is never decided; the
+	// connection is kept.
+	go func() { _, _ = conn.Write(append(bytes.Repeat([]byte("x"), nipLS.MaxMessageSize+10), '\n')) }()
+	line, err := bufio.NewReader(conn).ReadBytes('\n')
+	if err != nil {
+		t.Fatalf("no answer to an oversized line: %v", err)
+	}
+	var resp nip46.Response
+	if err := json.Unmarshal(line, &resp); err != nil {
+		t.Fatalf("answer %q: %v", line, err)
+	}
+	if resp.RequestID != "" || resp.Result != "" || resp.Error != nipLS.ErrPrefixInvalid+"line too long" {
+		t.Fatalf("server answered an oversized line with %+v", resp)
 	}
 }
 

@@ -126,8 +126,8 @@ func DecodeEntity(input string) (*DecodedEntity, error) {
 		return &DecodedEntity{
 			Type:      "circlehub",
 			HRP:       nipcw.CircleHubConnectionHRP,
-			PubKeyHex: conn.WalletPubkey,
-			Relays:    conn.RelayURLs,
+			PubKeyHex: conn.Pubkey,
+			Relays:    conn.Relays,
 			Label:     conn.Label,
 		}, nil
 

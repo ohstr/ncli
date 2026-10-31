@@ -4,7 +4,7 @@
 
 ### Changed
 
-- Builds with nmilat v0.5.0-rc.46, which renames a circlehub1 connection's
+- Builds with nmilat v0.5.0-rc.47, which renames a circlehub1 connection's
   fields and refuses unsigned cash tokens and connections. `event validate`
   checks an AltZap receipt by rules 1-9 (`ValidateAltZapReceiptForRelay`),
   offline, as it does NIP-57's receipts; rule 10 needs the LNURL server.

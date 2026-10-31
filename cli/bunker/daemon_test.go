@@ -57,6 +57,27 @@ type fakeRelay struct {
 	events []*nip01.Event // published events, replayed to a matching REQ's filter before its EOSE -- the same "stored events, then EOSE" a real relay does, needed for tests where a REQ arrives after the matching EVENT was already published
 }
 
+// waitStored blocks until the fake relay has stored the event with this id,
+// failing the test after 5 s.
+func (fr *fakeRelay) waitStored(t *testing.T, id string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		fr.mu.Lock()
+		for _, ev := range fr.events {
+			if ev.ID == id {
+				fr.mu.Unlock()
+				return
+			}
+		}
+		fr.mu.Unlock()
+		if time.Now().After(deadline) {
+			t.Fatalf("the fake relay never stored event %s", id)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
 func newFakeRelay(t *testing.T) *fakeRelay {
 	t.Helper()
 	fr := &fakeRelay{conns: map[*websocket.Conn]*connState{}}
@@ -1525,10 +1546,11 @@ func TestDaemon_FetchProfile(t *testing.T) {
 	if !publisher.Send(profileEvent) {
 		t.Fatal("failed to publish the profile event")
 	}
-	// Send is fire-and-forget over the wire; give the fake relay's read
-	// loop a moment to actually store it before the daemon's own REQ
-	// (below) races in and finds nothing to replay.
-	time.Sleep(50 * time.Millisecond)
+	// Send is fire-and-forget over the wire: wait until the fake relay has
+	// stored it, or the daemon's own REQ (below) may race in and find
+	// nothing to replay (a fixed 50 ms lost that race on a loaded CI runner
+	// with the race detector on).
+	relay.waitStored(t, profileEvent.ID)
 
 	store, err := LoadStore(filepath.Join(t.TempDir(), "sessions.yaml"))
 	if err != nil {

@@ -13,6 +13,13 @@ import (
 	"github.com/ohstr/nmilat/relay"
 )
 
+// eventCountTimeout bounds how long a test waits for its events to be written. These tests check the
+// writes' order, never their speed, so it is a ceiling for the slowest honest run — -race in a 2-vCPU CI
+// VM beside the package's other tests — not a performance budget: 2002 events took over 10 s there
+// (1749 written at 10 s) while a run alone takes under a second. A passing test returns as soon as
+// the count is reached.
+const eventCountTimeout = 2 * time.Minute
+
 // waitForEventCount polls an outbound destination's success-ack counter
 // (FlatRow()[1], incremented by handleFlow's AddEvent on every non-duplicate
 // ACK) until it reaches at least want, or fails the test after timeout.
@@ -88,7 +95,7 @@ func TestLocalSubscriptionWriteConcurrentAgainstRealStore(t *testing.T) {
 		sc.handleEvent(ctx, srcFC, newRegressionTestEvent(i))
 	}
 
-	waitForEventCount(t, dstStat, numEvents, 20*time.Second)
+	waitForEventCount(t, dstStat, numEvents, eventCountTimeout)
 
 	// Sample a handful of IDs to confirm they were actually persisted, not
 	// just ACKed.
@@ -247,7 +254,7 @@ func TestLocalSubscriptionWriteOrdersDeletionAfterInFlightInserts(t *testing.T) 
 		sc.handleEvent(ctx, srcFC, newRegressionTestEvent(i))
 	}
 
-	waitForEventCount(t, dstStat, numFiller+2, 10*time.Second)
+	waitForEventCount(t, dstStat, numFiller+2, eventCountTimeout)
 
 	pes, err := store.FindEvents(ctx, &nip01.SubscriptionFilter{IDs: []string{targetID}})
 	if err != nil {

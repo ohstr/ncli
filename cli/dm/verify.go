@@ -38,6 +38,7 @@ Exits 1 if anything fails; no key is involved.`,
 		RunE: runVerify,
 	}
 	cmd.Flags().String("from", "", "Expected sender: npub, hex, nprofile, nip-05 or vault label (required)")
+	social.AddAttestFlags(cmd)
 	return cmd
 }
 
@@ -46,6 +47,10 @@ func runVerify(cmd *cobra.Command, args []string) error {
 	fromFlag, _ := cmd.Flags().GetString("from")
 	if fromFlag == "" {
 		return common.InvocationError(cmd, errors.New("--from is required"))
+	}
+	av, err := social.AttestViewOf(cmd)
+	if err != nil {
+		return err
 	}
 	from, err := keyresolve.Pubkey(cmd, fromFlag)
 	if err != nil {
@@ -69,6 +74,7 @@ func runVerify(cmd *cobra.Command, args []string) error {
 	rumor, vErr := nip59.VerifyProof(&proof, from)
 	if vErr == nil {
 		m := social.FromEvent(rumor, "dm")
+		av.Apply(&m)
 		v.Verified, v.Message = true, &m
 	} else {
 		v.Reason = vErr.Error()

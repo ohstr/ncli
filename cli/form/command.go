@@ -96,6 +96,10 @@ func open(ctx context.Context, cmd *cobra.Command, ids []string) (*session, erro
 	if err != nil {
 		return nil, err
 	}
+	av, err := social.AttestViewOf(cmd)
+	if err != nil {
+		return nil, err
+	}
 	signer, closeSigner, err := signerFor(cmd)
 	if err != nil {
 		return nil, err
@@ -107,6 +111,10 @@ func open(ctx context.Context, cmd *cobra.Command, ids []string) (*session, erro
 	}
 	me := strings.ToLower(signer.PubKey())
 	views, invalid := fold(items, me, clock().Unix())
+	for _, v := range views {
+		v.AttestTrusted = social.Trusted(v.AttestedBy, v.AttestValid, av.Owners)
+		v.attestWord = av.Word
+	}
 	if invalid > 0 {
 		log.Warn().Int("invalid", invalid).Msg("forms that break NIP-PF's rules skipped")
 	}

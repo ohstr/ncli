@@ -30,8 +30,16 @@ type Message struct {
 	Mentions  []string `json:"mentions"`
 	// Labels are the event's t tags' values, as its author set them
 	// (TagLabels): its author's word, like its content.
-	Labels  []string `json:"labels,omitempty"`
-	Content string   `json:"content"`
+	Labels []string `json:"labels,omitempty"`
+	// AttestedBy and AttestValid are the event's NIP-OA auth tag, checked
+	// (CheckAttestation): its owner (hex) and whether it holds. Both are
+	// absent with no auth tag. AttestTrusted: valid, by an owner the reader
+	// trusts (AttestView). The reader sets it; no event can.
+	AttestedBy    string `json:"attested_by,omitempty"`
+	AttestValid   *bool  `json:"attest_valid,omitempty"`
+	AttestTrusted bool   `json:"attest_trusted,omitempty"`
+	attestWord    string
+	Content       string `json:"content"`
 	// Type is "reaction" (a NIP-25 kind 7) or "delete" (a NIP-09 kind 5);
 	// empty for a message.
 	Type    string   `json:"type,omitempty"`
@@ -65,6 +73,7 @@ func FromEvent(ev *nip01.Event, channel string) Message {
 		CreatedAt: ev.CreatedAt, Kind: ev.Kind, Content: ev.Content, Mentions: []string{},
 		Labels: TagLabels(ev.Tags),
 	}
+	setAttestation(&m, ev)
 	seen := map[string]bool{}
 	hasE := false
 	for _, t := range ev.Tags {
@@ -162,6 +171,10 @@ func SortMessages(ms []Message) {
 func PrintMessage(w io.Writer, m Message) {
 	at := time.Unix(int64(m.CreatedAt), 0).UTC().Format("2006-01-02 15:04")
 	head := fmt.Sprintf("%s  %s", at, Inline(Npub(m.From)))
+	// the attestation, the client's column, right after the author
+	if a := AttestColumn(m.AttestedBy, m.AttestValid, m.AttestTrusted, m.attestWord); a != "" {
+		head += "  " + a
+	}
 	if m.Group != "" {
 		head += "  in " + Inline(m.Group)
 	}

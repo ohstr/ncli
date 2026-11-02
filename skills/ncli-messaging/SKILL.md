@@ -282,6 +282,26 @@ reader sees it after opening), a group or public form, posts, replies and
 reactions. A seal and a gift wrap never carry it (NIP-59), and an event that
 already has an `auth` tag keeps its own.
 
+## Reading attested keys
+
+`dm read`, `dm verify`, `groups read`/`feed` and the `form` commands check an
+event's `auth` tag: the owner's signature over the author's key and the
+conditions, and the event's kind and time against them. `--json` gives
+`attested_by` (the owner, hex) and `attest_valid`, and `attest_trusted` when
+the owner is one you named. Text output prints it in the client's own column,
+right after the author and before the labels and anything the author wrote:
+
+- `[agent of <owner npub>]` — valid, by an owner you trust:
+  `--trust-owners <npub>[,<npub>...]` or `NCLI_TRUST_OWNERS`. The word is
+  `--attest-label <word>` / `NCLI_ATTEST_LABEL` (default `agent`; 1-24
+  lowercase letters, digits or dashes).
+- `[attested by <owner npub>, owner not trusted]` — valid, any other owner.
+- `[invalid attestation]` — a tag that doesn't hold (a bad signature, two
+  tags, or an event its conditions don't cover).
+
+No column means no `auth` tag. A subject or a message that spells the column
+prints after `labels:`, never where it stands.
+
 ## Naming people
 
 Wherever a person is asked for (`--to`, `--from`, `-m`, `--mentions`,

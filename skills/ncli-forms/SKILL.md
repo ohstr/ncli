@@ -127,6 +127,10 @@ a title can't stand where they print:
   or `<id>  labels: -  (…)  <title>` for a form with none; the title comes
   last, after the parenthetical. Anything after the parenthetical is the
   author's title, whatever it says.
+- An attested author's key (NIP-OA `auth` tag) shows as in `dm read`
+  (`--trust-owners`, `--attest-label`; the `ncli-messaging` skill, "Reading
+  attested keys"): in `list` right after the id, in `show` after the author
+  (`attested_by`, `attest_valid`, `attest_trusted` in `--json`).
 - `show` and `respond`: the first line is `labels: … (its author's: …)`, then
   `form <id> by …`; the title follows `title: `, never at column 0.
 - `respond` on the terminal: the same two lines first, when the form has

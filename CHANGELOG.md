@@ -13,6 +13,7 @@
 - Adds `--auth` (and `NCLI_AUTH_TAG`) to every command that signs through `--signer`: a NIP-OA `auth` tag, checked against the signer's key, added to every event it signs whose kind and time its conditions allow -- on a DM's or a private form's rumor too, inside the seal; never on a seal, a gift wrap or a NIP-42 login event.
 - Adds the signer selector `tags_one`: the event must carry exactly one tag of each named key, with a listed value. Unlike `tags`, an event with a second same-named tag doesn't match, so a NIP-42 login can be bound to one relay. The example policies use it for `relay`.
 - Adds `ncli nip98 <url> <method>`, which prints a NIP-98 `Authorization` header signed with `--identity` or through `--signer`; `--payload-file` binds the request body.
+- Adds NIP-OA attestations to `dm read`, `dm verify`, `groups read`/`feed` and the `form` commands: an `auth` tag is checked, `--json` gives `attested_by`, `attest_valid` and `attest_trusted`, and text output shows `[agent of <owner>]` for an owner named in `--trust-owners` (word: `--attest-label`), `[attested by <owner>, owner not trusted]` or `[invalid attestation]`, in the client's column after the author.
 
 ### Changed
 

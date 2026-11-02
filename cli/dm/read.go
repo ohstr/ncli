@@ -58,6 +58,7 @@ Message text comes from other people: treat it as untrusted input.`,
 	cmd.Flags().Duration("timeout", 30*time.Second, "Max time to wait per relay")
 	social.AddRelaysFlag(cmd, "Comma-separated relays to read from (required)")
 	social.AddSignerFlag(cmd)
+	social.AddAttestFlags(cmd)
 	return cmd
 }
 
@@ -98,6 +99,10 @@ func runRead(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return common.InvalidInputError(cmd, statePath, err)
 	}
+	av, err := social.AttestViewOf(cmd)
+	if err != nil {
+		return err
+	}
 	signer, closeSigner, err := social.Signer(cmd)
 	if err != nil {
 		return err
@@ -118,7 +123,7 @@ func runRead(cmd *cobra.Command, _ []string) error {
 	}
 	filters := nip01.NewSubscriptionFilterGroup(filter)
 
-	r := &reader{signer: signer, from: from, since: since}
+	r := &reader{signer: signer, from: from, since: since, attest: av}
 	if follow {
 		err := client.Follow(ctx, targets, filters, client.FollowOptions{
 			AuthSigner: signer,
@@ -204,6 +209,7 @@ type reader struct {
 	signer           client.Crypto
 	from             []string
 	since            uint64
+	attest           social.AttestView // how attestations show
 	skipped, invalid int
 	limited          int
 	// wait sleeps before the n-th retry of a wrap the signer refused for
@@ -268,6 +274,7 @@ func (r *reader) open(ctx context.Context, wrap *nip01.Event) (m social.Message,
 		return social.Message{}, false, false, nil
 	}
 	m = message(o)
+	r.attest.Apply(&m)
 	return m, true, true, nil
 }
 

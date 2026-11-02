@@ -75,6 +75,7 @@ func addPlaceFlags(cmd *cobra.Command) {
 	cmd.Flags().Bool("inbox", false, "Private forms: also the DM relays (kind 10050) found on -s, yours to read and each recipient's to send (default: -s only)")
 	cmd.Flags().Duration("timeout", 30*time.Second, "Max time to wait per relay")
 	social.AddSignerFlag(cmd)
+	social.AddAttestFlags(cmd)
 }
 
 // readPlace reads --group/--relay or -s.

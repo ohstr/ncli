@@ -143,6 +143,7 @@ func addReadFlags(cmd *cobra.Command) {
 	cmd.Flags().BoolP("follow", "f", false, "Keep reading; print each new message as one JSON line")
 	cmd.Flags().String("state", "", "File recording printed messages, so a later run prints only new ones")
 	cmd.Flags().Duration("timeout", defaultQueryTimeout, "Query timeout")
+	social.AddAttestFlags(cmd)
 }
 
 func runFeed(cmd *cobra.Command, _ []string) error {
@@ -231,6 +232,15 @@ func readMessages(cmd *cobra.Command, filters *nip01.SubscriptionFilterGroup) er
 
 func readMessagesAs(ctx context.Context, cmd *cobra.Command, relayURL *url.URL, filters *nip01.SubscriptionFilterGroup, signer client.Signer) error {
 	f := cmd.Flags()
+	av, err := social.AttestViewOf(cmd)
+	if err != nil {
+		return err
+	}
+	read := func(ev *nip01.Event) social.Message {
+		m := social.FromEvent(ev, "group")
+		av.Apply(&m)
+		return m
+	}
 	follow, _ := f.GetBool("follow")
 	statePath, _ := f.GetString("state")
 	limit, _ := f.GetInt("limit")
@@ -261,7 +271,7 @@ func readMessagesAs(ctx context.Context, cmd *cobra.Command, relayURL *url.URL, 
 			AuthSigner: signer,
 			State:      state,
 			Emit: func(ev *nip01.Event, _ string) error {
-				common.PrintJSONLine(social.FromEvent(ev, "group"))
+				common.PrintJSONLine(read(ev))
 				return nil
 			},
 			Warn: func(relay string, err error) {
@@ -297,7 +307,7 @@ func readMessagesAs(ctx context.Context, cmd *cobra.Command, relayURL *url.URL, 
 		if ev.Verify(nip01.WithoutPowCheck()) != nil || !state.Mark(ev.ID, relayURL.String(), int64(ev.CreatedAt)) {
 			continue
 		}
-		messages = append(messages, social.FromEvent(ev, "group"))
+		messages = append(messages, read(ev))
 	}
 	if err := state.Save(); err != nil {
 		return common.RuntimeError(cmd, fmt.Errorf("saving --state: %w", err))

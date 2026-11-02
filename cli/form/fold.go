@@ -30,6 +30,13 @@ type View struct {
 	// author says it is, never who
 	// wrote it -- that is Form.Author.
 	Labels []string `json:"labels,omitempty"`
+	// AttestedBy, AttestValid: the form event's NIP-OA auth tag, checked
+	// (social.CheckAttestation); AttestTrusted: valid, by an owner the
+	// reader trusts (social.AttestView).
+	AttestedBy    string `json:"attested_by,omitempty"`
+	AttestValid   *bool  `json:"attest_valid,omitempty"`
+	AttestTrusted bool   `json:"attest_trusted,omitempty"`
+	attestWord    string
 	// last: the created_at of my latest response or withdrawal (0: none),
 	// so the next one is timed after it and counts (ties go to the lowest id).
 	last int64
@@ -47,6 +54,7 @@ func fold(items []item, me string, now int64) (views []*View, invalid int) {
 	}
 	var forms []*nippf.Form
 	labels := map[string][]string{}
+	attests := map[string]*social.Attestation{}
 	var responses []*nippf.Response
 	var results []*nippf.Result
 	respWay := map[*nippf.Response]reply{}
@@ -62,6 +70,7 @@ func fold(items []item, me string, now int64) (views []*View, invalid int) {
 			if !slices.ContainsFunc(forms, func(g *nippf.Form) bool { return g.ID == f.ID }) {
 				forms = append(forms, f)
 				labels[f.ID] = formLabels(it.ev.Tags)
+				attests[f.ID] = social.CheckAttestation(it.ev)
 			}
 		case nippf.KindResponse:
 			if r, err := nippf.ParseResponse(it.ev); err == nil {
@@ -96,6 +105,10 @@ func fold(items []item, me string, now int64) (views []*View, invalid int) {
 		closing := f.Closing(res)
 		selected := f.Select(rs, closing)
 		v := &View{Form: f, State: f.State(closing, now), Result: closing, Responses: selected, Tally: f.Tally(selected), Labels: labels[f.ID]}
+		if a := attests[f.ID]; a != nil {
+			valid := a.Valid
+			v.AttestedBy, v.AttestValid = a.Owner, &valid
+		}
 		switch {
 		case f.Private:
 			v.Where = "private"

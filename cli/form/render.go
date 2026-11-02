@@ -113,7 +113,16 @@ func listLine(v *View) string {
 	if you != "" {
 		parts = append(parts, you)
 	}
-	return fmt.Sprintf("%s  %s(%s)  %s", shortID(f.ID), labelFields(v.Labels), strings.Join(parts, "; "), social.Title(f.Title))
+	return fmt.Sprintf("%s  %s%s(%s)  %s", shortID(f.ID), attestField(v), labelFields(v.Labels), strings.Join(parts, "; "), social.Title(f.Title))
+}
+
+// attestField is the form's attestation (social.AttestColumn) and two
+// spaces, or "" for none: the client's, before any of the author's text.
+func attestField(v *View) string {
+	if a := social.AttestColumn(v.AttestedBy, v.AttestValid, v.AttestTrusted, v.attestWord); a != "" {
+		return a + "  "
+	}
+	return ""
 }
 
 // labelFields: "labels: #a #b  " ("labels: -  " for none), followed by two
@@ -141,7 +150,7 @@ func writeView(w io.Writer, v *View) {
 	f := v.Form
 	p := func(format string, a ...any) { _, _ = fmt.Fprintf(w, format, a...) }
 	writeLabels(w, v.Labels, f.Author)
-	p("form %s by %s, %s (%s)\n", esc(f.ID), npub(f.Author), when(f.CreatedAt), stateLine(v))
+	p("form %s by %s, %s%s (%s)\n", esc(f.ID), npub(f.Author), attestField(v), when(f.CreatedAt), stateLine(v))
 	p("\ntitle: %s\n", social.Title(f.Title))
 	if f.Context != "" {
 		p("\n")

@@ -144,6 +144,7 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 		log.Fatal().Err(err).Msg("failed to load NIP-86 moderation state")
 	}
 	sessionConfig.EventPolicy = moderation.eventPolicy
+	sessionConfig.RecipientOnlyKinds = config.recipientOnlyKinds()
 
 	wsHandler := relay.NewSessionHandler(
 		store,
@@ -257,7 +258,9 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 		// MembershipService: a NIP-43 join/leave processed over the
 		// WebSocket must be visible to /query immediately, not through a
 		// separate cache of the same store that updates on its own schedule.
-		mux.Handle("/query", m.HTTP("query", relay.NewQueryHandler(store, &cfg.Nip11.Limitation, wsHandler.Membership(), wsHandler.Groups())))
+		// wsHandler.QueryHandler() also applies RecipientOnlyKinds for the
+		// NIP-98 signer; relay.NewQueryHandler alone would skip them.
+		mux.Handle("/query", m.HTTP("query", wsHandler.QueryHandler()))
 	}
 
 	if eventsEnabled() {

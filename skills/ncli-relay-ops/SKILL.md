@@ -629,6 +629,11 @@ Full route, metric and config reference: `references/admin-plane-reference.md`.
   top-level key rather than erroring, so a config using the old flat shape
   loads with no complaint and simply never mounts either endpoint. See
   `examples/relay/app-backend-relay.yaml`.
+- Gift wraps (kind 1059) are served only to the pubkey their `p` tag names,
+  over REQ, COUNT and `/query`, unless `recipientOnlyKinds` says otherwise
+  (omitted means `[1059]`; `[]` turns it off). An anonymous REQ for 1059 is
+  closed `auth-required:`, so a client must AUTH as the recipient --
+  `dm read` does this with its `--signer`; `find` needs `--auth-identity`.
 - NIP-16 ephemeral event kinds (20000-29999) need no config anywhere --
   handling is automatic based on an event's own kind, not a toggle. Publish
   one against any relay to see it: accepted and briefly queryable, then

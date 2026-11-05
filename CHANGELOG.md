@@ -17,6 +17,7 @@
 
 ### Changed
 
+- Changes the relay to serve gift wraps (kind 1059) only to the pubkey they are addressed to, over REQ, COUNT and `POST /query`. The new `recipientOnlyKinds` key sets which kinds this applies to; `[]` restores the old behaviour.
 - Changes subjects, titles and message lines to print a non-ASCII letter that sits beside ASCII letters as an escape (look-alikes such as a Cyrillic `е`), collapse padding, and cap titles at 200 runes.
 
 ### Fixed

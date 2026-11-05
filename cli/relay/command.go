@@ -120,6 +120,23 @@ type RelayConfig struct {
 	// Homepage, on unless false, shows browsers that open the relay's URL a
 	// page built from its NIP-11 document.
 	Homepage *bool `mapstructure:"homepage"`
+
+	// RecipientOnlyKinds are served only to a reader authenticated as a
+	// pubkey in the event's "p" tags, over REQ, COUNT and /query. Omitted,
+	// it is [1059], so a gift wrap reaches only its recipient; [] serves
+	// every kind to anyone.
+	RecipientOnlyKinds []int `mapstructure:"recipientOnlyKinds"`
+}
+
+// defaultRecipientOnlyKinds keeps NIP-59 gift wraps to their recipient.
+var defaultRecipientOnlyKinds = []int{1059}
+
+// recipientOnlyKinds is RecipientOnlyKinds, or the default when omitted.
+func (c *RelayConfig) recipientOnlyKinds() []int {
+	if c.RecipientOnlyKinds == nil {
+		return defaultRecipientOnlyKinds
+	}
+	return c.RecipientOnlyKinds
 }
 
 // PowConfig configures NIP-13 proof-of-work enforcement for published

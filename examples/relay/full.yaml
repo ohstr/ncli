@@ -240,6 +240,13 @@ agent_auth:
   # spec, kind= clauses are advisory only unless a relay opts into this.
   kindEnforcement: false
 
+# recipientOnlyKinds (optional): kinds served only to a reader authenticated
+# (NIP-42, or the NIP-98 signer on /query) as a pubkey in the event's "p"
+# tags, over REQ, COUNT and /query. An anonymous REQ naming one is told
+# "auth-required:". Omitted, it is [1059], so a gift wrap reaches only its
+# recipient; [] serves every kind to anyone.
+recipientOnlyKinds: [1059]
+
 # httpBridge (optional): POST /query and POST /events, NIP-98-authenticated
 # one-shot HTTP alternatives to a WebSocket REQ/EOSE round trip and an
 # EVENT publish, respectively -- grouped under one key because they're the

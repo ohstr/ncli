@@ -12,7 +12,7 @@ description: >-
   join/roster/audio/chat experience itself once joined, and how a join can
   be refused. Use when setting up voice on a relay, listing which rooms
   are occupied right now, understanding the audio/chat UI after joining,
-  letting a browser or a buzz client into the same room, or working out
+  letting a browser or a WebSocket client into the same room, or working out
   why a join was refused.
 license: Unlicense
 ---
@@ -335,12 +335,12 @@ The client handles this; a hand-rolled client usually does not.
 
 ## Interop
 
-The WebSocket wire format matches `block/buzz`'s huddle transport
+The WebSocket wire format matches the huddle transport other clients speak
 byte-for-byte (8-byte header: `seq` u16, `ts_48k` u32, `level_dbov` i8,
 `flags` u8 with bit 0 = DTX; routing prefix `[peer_index]` on v1/v2,
-`[peer_index][epoch]` on v3), so a buzz client can join a room on an `ncli`
-relay. Buzz routes room ids as UUIDs, so use a UUID-shaped id when a buzz
-client has to dial in.
+`[peer_index][epoch]` on v3), so such a client can join a room on an `ncli`
+relay. Some clients route room ids as UUIDs, so use a UUID-shaped id when
+one has to dial in.
 
 Room lifecycle and discovery are NIP-53: a kind 30312 room whose `service` tag
 points at the endpoint, a 30313 session going planned -> live -> ended, kind

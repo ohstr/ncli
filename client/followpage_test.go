@@ -18,7 +18,7 @@ import (
 )
 
 // cappedRelay serves a REQ's stored events as most relays do: those within its since and until, the
-// newest first, at most its cap (strfry's maxFilterLimit 500, buzz 1000), then EOSE. reqs counts REQs.
+// newest first, at most its cap (strfry's maxFilterLimit 500, others 1000), then EOSE. reqs counts REQs.
 type cappedRelay struct {
 	url    string
 	cap    int

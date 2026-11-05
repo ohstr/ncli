@@ -1120,7 +1120,7 @@ no kind-24133 wrapper and no encryption.
 Every decision goes to stdout as one JSON line, with no content or key
 material. `--denials-file` collects denials alone.
 
-**For client authors** (ngit, buzz CLI, buzz-acp, ...):
+**For client authors** (ngit, agent bridges, ...):
 - Accept `bunker+unix:///abs/path.sock` (and `unix://`) wherever you
   accept `bunker://`.
 - Dial the path and write NIP-46 request JSON, one per line, without

@@ -263,7 +263,7 @@ recipientOnlyKinds: [1059]
 # sub-block, or this whole block, leaves that handler unmounted.
 httpBridge:
   # /query's request body is a JSON array of NIP-01 filters, the response a
-  # flat JSON array of matching events. This is buzz's own NIP-CW spec, not
+  # flat JSON array of matching events. This is the NIP-CW query bridge, not
   # ncli's own "NIP-CW" (the decode command's name for NIP-CASH's unrelated
   # Circle Wallet connection) and not NIP-98 (that's just the
   # request-signing transport, shared with the /admin endpoints above).

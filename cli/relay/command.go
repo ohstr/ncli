@@ -338,7 +338,7 @@ type HTTPBridgeConfig struct {
 //
 // This isn't named nip98 (that's just the request-signing transport, shared
 // with the /admin endpoints above and not specific to this feature) or
-// nipcw/nip_cw. The underlying spec really is buzz's own NIP-CW
+// nipcw/nip_cw. The underlying spec really is NIP-CW
 // (https://github.com/block/buzz/blob/main/docs/nips/NIP-CW.md), but that
 // short name is already `ncli decode`'s name for something unrelated --
 // NIP-CASH's Circle Wallet circlehub1... connection -- so reusing it here

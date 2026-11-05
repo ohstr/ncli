@@ -59,7 +59,7 @@ huddle:
   pingInterval: "30s"
 
   # Also mount /huddle/{id}/rtc, a WebRTC endpoint, so a browser can join the
-  # same rooms. Both endpoints share one set of rooms: a browser and a buzz
+  # same rooms. Both endpoints share one set of rooms: a browser and a WebSocket
   # client using the same room id are in the same call, not two.
   #
   # WebRTC is what makes video and screen share possible at all -- the

@@ -185,7 +185,7 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 	}
 
 	if queryEnabled() {
-		// "CW" is buzz's own letter code (NIP-CW) for this bridge, not
+		// "CW" is NIP-CW's letter code for this bridge, not
 		// nmilat's unrelated nipcw (NIP-CASH Circle Wallet) package -- see
 		// QueryConfig's doc comment.
 		supportedNips = supportedNips.With(nip11.NIPLetter("CW"))

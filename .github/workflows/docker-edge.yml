@@ -42,7 +42,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: dist
-          file: ncli/build/relay/Dockerfile.release
+          file: ncli/deploy/docker/Dockerfile.release
           push: true
           tags: |
             ghcr.io/ohstr/ncli:edge

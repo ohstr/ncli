@@ -1,0 +1,18 @@
+# Personal relay: the relay alone, no search or media.
+# Usage (from repo root):
+#   docker compose -f deploy/stacks/personal/compose.yaml up -d
+# Set nip11.pubkey in relay.yaml to your own key first.
+services:
+  relay:
+    image: ghcr.io/ohstr/ncli:${NCLI_VERSION:-latest}
+    container_name: ncli_relay
+    command: ["relay", "--config", "/app/ncli/config.yaml"]
+    ports:
+      - "${RELAY_BIND:-127.0.0.1}:5500:5500"
+    volumes:
+      - ncli_data:/app/ncli/data
+      - ./relay.yaml:/app/ncli/config.yaml:ro
+    restart: unless-stopped
+
+volumes:
+  ncli_data:

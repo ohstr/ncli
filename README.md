@@ -1422,21 +1422,28 @@ if one is set, otherwise it looks for `ncli.yaml`/`relay.yaml` in the
 current directory, then `$HOME`. Every YAML input `ncli` accepts has a
 documented sample under [`examples/`](examples/).
 
-## Docker
+## Docker and Kubernetes
 
-Runs the published `ghcr.io/ohstr/ncli` image alongside Meilisearch via
-[`build/relay/docker-compose.prod.yaml`](build/relay/docker-compose.prod.yaml).
-Meilisearch's port isn't exposed to the host and there's no default master
-key — set one yourself:
+[`deploy/`](deploy/) runs the published `ghcr.io/ohstr/ncli` image as one of
+several kinds of relay (`deploy/stacks/<kind>/`), each with a Docker Compose
+file and values for the shared Helm chart:
+
+| stack | what runs |
+|---|---|
+| `dev` | relay built from this checkout + Meilisearch (Compose only) |
+| `personal` | relay alone |
+| `public-search` | open relay + Meilisearch: profile search, stats, zap ranking |
+| `community` | members-only relay with NIP-29 groups and the HTTP bridge + Meilisearch + MinIO |
 
 ```sh
-cp build/relay/.env.example build/relay/.env
-# edit build/relay/.env: set MEILI_MASTER_KEY, optionally RELAY_CONFIG
-
-docker compose -f build/relay/docker-compose.prod.yaml --env-file build/relay/.env up -d
+cp deploy/stacks/public-search/.env.example deploy/stacks/public-search/.env
+# edit .env: RELAY_PRIVKEY, RELAY_URL, MEILI_MASTER_KEY
+docker compose -f deploy/stacks/public-search/compose.yaml up -d
 ```
 
-`build/relay/.env` is gitignored — never commit it.
+Secrets stay in `.env` (gitignored) or a Kubernetes Secret and reach the
+relay as `NCLI_*` environment variables. See
+[`deploy/README.md`](deploy/README.md) for Helm.
 
 ### Meilisearch versions
 

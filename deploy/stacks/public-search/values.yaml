@@ -1,0 +1,24 @@
+# Public relay with profile search on Kubernetes:
+#   kubectl create secret generic search-secrets \
+#     --from-literal=relay-privkey=<hex or nsec> \
+#     --from-literal=meili-master-key=$(openssl rand -base64 32)
+#   helm install search deploy/helm/ncli-relay \
+#     -f deploy/stacks/public-search/values.yaml \
+#     --set-file relayConfig=deploy/stacks/public-search/relay.yaml
+relayURL: wss://relay.example.com
+
+secrets:
+  existingSecret: search-secrets
+
+persistence:
+  size: 50Gi
+
+ingress:
+  enabled: true
+  host: relay.example.com
+  tlsSecretName: relay-tls
+
+meilisearch:
+  enabled: true
+  persistence:
+    size: 20Gi

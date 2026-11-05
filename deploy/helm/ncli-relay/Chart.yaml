@@ -1,0 +1,9 @@
+apiVersion: v2
+name: ncli-relay
+description: The ncli Nostr relay, with optional Meilisearch (profile search) and MinIO (S3 media storage).
+type: application
+version: 0.1.0
+appVersion: "latest"
+home: https://github.com/ohstr/ncli
+sources:
+  - https://github.com/ohstr/ncli

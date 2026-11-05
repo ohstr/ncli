@@ -61,7 +61,7 @@ conditions (reconnects, timing, fan-in/fan-out).
   for 0.0.0.0:<port>: address already in use`. These stacks open thousands
   of WebSocket connections, so the chance is real and it lands on whichever
   stack runs last -- a flake with no connection to the code under test.
-- **Real relay images, not mocks** -- built from `build/relay/Dockerfile`.
+- **Real relay images, not mocks** -- built from `deploy/docker/Dockerfile`.
 - **In-process client, not a compose service** -- same call `ncli apply`
   makes, but white-box.
 - **Force disruptions deterministically**: `docker compose restart` for an

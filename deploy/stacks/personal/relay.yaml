@@ -1,0 +1,13 @@
+# Personal relay: one person's outbox, open like most personal relays.
+# To refuse strangers, enroll yourself as its only member (see the community
+# stack's membership block). See examples/relay/personal-relay.yaml.
+port: 5500
+
+nip11:
+  name: "My Notes"
+  description: "One person's own outbox"
+  pubkey: "d3345d36e7885ad6340263309a96e0821b22e176ebc721098492063df5516086"
+  contact: "me@example.com"
+
+store: ./data/db/personal.db
+logdir: ./data/logs

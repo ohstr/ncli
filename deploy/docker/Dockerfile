@@ -26,7 +26,7 @@ COPY --from=builder /go/bin /bin
 
 # Relay configs use relative paths (store: ./data/db/..., logdir: ./data/logs),
 # so the working directory has to be where those are expected to land —
-# matching the volume mounts in docker-compose.dev.yaml/prod.yaml.
+# matching the volume mounts in deploy/stacks/*/compose.yaml.
 WORKDIR /app/ncli
 
 EXPOSE 5500

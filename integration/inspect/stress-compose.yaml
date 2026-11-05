@@ -6,7 +6,7 @@ name: ncli-inspect-stress-itest
 x-relay: &relay
   build:
     context: ../..
-    dockerfile: build/relay/Dockerfile
+    dockerfile: deploy/docker/Dockerfile
   image: ncli:inspect-stress-itest
   command: ["relay", "--config", "/config/relay.yaml"]
   restart: unless-stopped

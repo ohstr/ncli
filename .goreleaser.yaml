@@ -53,7 +53,7 @@ dockers:
     goos: linux
     goarch: amd64
     use: buildx
-    dockerfile: build/relay/Dockerfile.release
+    dockerfile: deploy/docker/Dockerfile.release
     image_templates:
       - "ghcr.io/ohstr/ncli:{{ .Version }}-amd64"
     build_flag_templates:
@@ -63,7 +63,7 @@ dockers:
     goos: linux
     goarch: amd64
     use: buildx
-    dockerfile: build/relay/Dockerfile.release
+    dockerfile: deploy/docker/Dockerfile.release
     image_templates:
       - "ghcr.io/ohstr/ncli:latest-amd64"
     build_flag_templates:
@@ -74,7 +74,7 @@ dockers:
     goos: linux
     goarch: amd64
     use: buildx
-    dockerfile: build/relay/Dockerfile.release
+    dockerfile: deploy/docker/Dockerfile.release
     image_templates:
       - "ghcr.io/ohstr/ncli:rc-amd64"
     build_flag_templates:
@@ -85,7 +85,7 @@ dockers:
     goos: linux
     goarch: arm64
     use: buildx
-    dockerfile: build/relay/Dockerfile.release
+    dockerfile: deploy/docker/Dockerfile.release
     image_templates:
       - "ghcr.io/ohstr/ncli:{{ .Version }}-arm64"
     build_flag_templates:
@@ -95,7 +95,7 @@ dockers:
     goos: linux
     goarch: arm64
     use: buildx
-    dockerfile: build/relay/Dockerfile.release
+    dockerfile: deploy/docker/Dockerfile.release
     image_templates:
       - "ghcr.io/ohstr/ncli:latest-arm64"
     build_flag_templates:
@@ -106,7 +106,7 @@ dockers:
     goos: linux
     goarch: arm64
     use: buildx
-    dockerfile: build/relay/Dockerfile.release
+    dockerfile: deploy/docker/Dockerfile.release
     image_templates:
       - "ghcr.io/ohstr/ncli:rc-arm64"
     build_flag_templates:

@@ -155,11 +155,11 @@ _dev-relay:
 
 # Start the local dev stack (relay + Meilisearch) via Docker Compose
 _dev-up:
-    docker compose -f build/relay/docker-compose.dev.yaml up
+    docker compose -f deploy/stacks/dev/compose.yaml up
 
 # Stop the local dev stack
 _dev-down:
-    docker compose -f build/relay/docker-compose.dev.yaml down
+    docker compose -f deploy/stacks/dev/compose.yaml down
 
 # Local stream e2e test stack (real destination + source ncli relay
 # containers -- see integration/stream/README.md): [up|down]. The Go test

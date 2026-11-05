@@ -1,0 +1,50 @@
+# Closed community relay: only members (NIP-43) may read and write; members
+# meet in closed NIP-29 groups; apps read and write over the NIP-98 HTTP
+# bridge; profile search runs on Meilisearch.
+# Secrets come from the environment: NCLI_NIP11_PRIVKEY, NCLI_NIP11_URL,
+# NCLI_CACHE_PROFILES_SEARCH_MEILISEARCH_KEY.
+# Enroll the first member with: ncli relay members add <npub> --config <this file>
+port: 5500
+
+nip11:
+  name: "Community"
+  description: "Members-only community relay"
+  contact: "admin@example.com"
+  privkey: ""
+  url: ""
+  limitation:
+    auth_required: true
+    membership_required: true
+
+store: ./data/db/community.db
+logdir: ./data/logs
+
+membership:
+  enabled: true
+  inviteTTL: 24h
+  inviteMaxUses: 1
+  publishAddRemoveEvents: true
+  # Only admins mint invites.
+  memberClaims: false
+
+groups:
+  roles:
+    admin: [9000, 9001, 9002, 9005, 9008, 9009, 9010]
+    moderator: [9005, 9010]
+  moderationLog: true
+  pendingJoins: true
+
+httpBridge:
+  query:
+    enabled: true
+  events:
+    enabled: true
+
+cache:
+  profiles:
+    search:
+      enabled: true
+      meilisearch:
+        host: http://meilisearch:7700
+        key: ""
+        index: ncli_community

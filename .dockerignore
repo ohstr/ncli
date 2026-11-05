@@ -8,7 +8,7 @@ data
 bin
 logs
 test
-build/relay/.dev
+deploy/stacks/dev/.dev
 .env
 .env.*web/dashboard/node_modules
 web/dashboard/dist

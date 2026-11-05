@@ -47,6 +47,10 @@ type GroupsConfig struct {
 	// code, for its admins to accept (put-user) or decline (remove-user),
 	// instead of refusing it.
 	PendingJoins bool `mapstructure:"pendingJoins"`
+
+	// MembershipNotices signs a seat notice for each member gained or lost;
+	// see MembershipNoticesConfig.
+	MembershipNotices *MembershipNoticesConfig `mapstructure:"membershipNotices"`
 }
 
 // groupModerationPolicy is the moderation policy groups.roles describes, or
@@ -137,4 +141,7 @@ func applyGroupsConfig(groups *relay.GroupsService, cfg *RelayConfig) {
 	}
 	groups.SetModerationLog(cfg.Groups.ModerationLog)
 	groups.SetPendingJoins(cfg.Groups.PendingJoins)
+	if kinds, ok := cfg.memberNotices(); ok {
+		groups.SetMemberNotices(kinds)
+	}
 }

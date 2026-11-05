@@ -227,6 +227,15 @@ groups:
   # refusing it. Off by default.
   pendingJoins: false
 
+  # A relay-signed seat notice to each pubkey that gains (added) or loses
+  # (removed) a seat in a hosted group, by any path: tags p (member),
+  # h (group), e (the event behind it). Only that member and relay admins
+  # read it; no client may publish those kinds. Needs nip11.privkey.
+  membershipNotices:
+    enabled: false
+    added: 44100
+    removed: 44101
+
 agent_auth:
   enabled: false
 
@@ -278,6 +287,52 @@ httpBridge:
     # self-authored-kind guard are enforced exactly as they would be over
     # WS.
     enabled: false
+
+  # /count (NIP-45) takes the same body, NIP-98 and access rules as /query
+  # and answers {"count": n} ("approximate": true when a lower bound).
+  count:
+    enabled: false
+
+# presence (optional): POST /query for {"kinds":[40902],"authors":[...]}
+# answers one relay-signed kind 20001 per author -- "online" while it has an
+# authenticated connection (or the status its own latest kind 20001 gave),
+# else "offline". Built on the spot, never stored. Needs nip11.privkey and
+# httpBridge.query.enabled.
+presence:
+  enabled: false
+  kind: 40902
+
+# blossom (optional): Blossom (BUD-01, BUD-02) on the relay's own origin.
+# An upload's kind 24242 token must name the relay's host ("server" tag) and
+# the blob's hash ("x" tag).
+blossom:
+  enabled: false
+  # Origin blobs are served from; empty means nip11.url as http(s).
+  publicURL: ""
+  uploadPaths: [/upload, /media/upload]
+  blobPrefix: /media
+  maxBlobBytes: 104857600
+  maxUploadsPerSigner: 2
+  maxConcurrentUploads: 8
+  membersOnly:
+    # Unset follows nip11.limitation.membership_required.
+    # upload: true
+    # A download then needs a "get" token from a member.
+    download: false
+  storage:
+    # dir (default: <store>.blobs) or s3 (any S3-compatible store, e.g. MinIO).
+    kind: dir
+    dir: ""
+    s3:
+      endpoint: ""
+      bucket: ""
+      region: ""
+      prefix: ""
+      # Leave the keys empty here and set NCLI_BLOSSOM_STORAGE_S3_ACCESSKEY
+      # and NCLI_BLOSSOM_STORAGE_S3_SECRETKEY.
+      accessKey: ""
+      secretKey: ""
+      useSSL: false
 
 # WebSocket connection tuning (optional, Go duration strings).
 handshakeTimeout: 5s

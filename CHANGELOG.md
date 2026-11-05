@@ -4,6 +4,10 @@
 
 ### Added
 
+- Adds `POST /count` (NIP-45) to the relay's HTTP bridge (`httpBridge.count.enabled`), with the same request, NIP-98 and access rules as `POST /query`.
+- Adds seat notices (`groups.membershipNotices`): the relay signs an event (kinds 44100/44101, configurable) to each pubkey that gains or loses a seat in a hosted group, readable only by that member and relay admins, so a client learns of a new or lost seat live.
+- Adds presence snapshots (`presence.enabled`): `POST /query` for `{"kinds":[40902],"authors":[...]}` answers one relay-signed kind 20001 per author, online or offline.
+- Adds Blossom on the relay's own origin (`blossom`): members upload with a kind 24242 token naming the relay, anyone (or only members) downloads with Range, and blobs live in a directory or S3-compatible storage such as MinIO.
 - Adds `dm react` and `dm unreact`: NIP-25 reactions and their NIP-09 retractions inside NIP-17 gift wraps, to the conversation's participants and a copy to yourself. `dm read` shows them as `reaction` / `delete` entries, and `--fold` applies the deletions (each only to its own author's events) and folds reactions into the messages they react to.
 - Adds the signer's `nipoa_attest` method and `attest` rule (`subordinates`, a required `max_until`, `kinds`): an attestation is signed only when such a rule allows it, so existing policies refuse every one. `signer check --method nipoa_attest --subordinate --conditions` decides one offline.
 - Adds `ncli id attest`, which signs a NIP-OA owner attestation with `--identity` or through `--signer` and prints the `auth` tag, verified.
@@ -23,6 +27,7 @@
 
 ### Fixed
 
+- Fixes `ncli blossom upload`, `rm`, `mirror` and `download` signing tokens with no `server` tag, which servers that scope tokens refuse. Each token now names the hosts it is sent to.
 - Fixes the Docker Compose stacks never turning on profile search: they passed Meilisearch settings as `SEARCH_*` variables, which the relay doesn't read. The stacks now set them in their relay config.
 - Fixes ncli's own NIP-98 headers (relay admin, huddle) tagging their anti-replay value `nonce`, which NIP-13 reads as a proof-of-work claim, so a socket signer's client refused them. They tag `salt`, as nmilat's `nip98.Sign` does; verifiers never read it, so old and new headers interoperate.
 - Fixes the signer charging an `unwrap_from` rule's rate before it knew the seal's author, so gift wraps from anyone could use up a listed sender's rate. The rate is charged only for a wrap the rule releases; refused wraps are remembered and refused again without decryption; `dm read` retries a wrap refused for rate instead of skipping it.

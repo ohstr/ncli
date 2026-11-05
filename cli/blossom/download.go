@@ -57,7 +57,7 @@ func newDownloadCommand() *cobra.Command {
 					return err
 				}
 				ttl, _ := cmd.Flags().GetDuration("auth-ttl")
-				auth, err = buildAuth(privKeyHex, pubKeyHex, nipB7.VerbGet, []string{hash}, ttl)
+				auth, err = buildAuth(privKeyHex, pubKeyHex, nipB7.VerbGet, []string{hash}, ttl, servers...)
 				if err != nil {
 					return common.RuntimeError(cmd, err)
 				}

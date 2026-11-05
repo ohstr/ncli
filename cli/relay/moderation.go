@@ -170,6 +170,17 @@ func (m *relayModeration) eventPolicy(ev *nip01.Event) string {
 	return ""
 }
 
+// bannedPubkey reports whether pubkey is banned (NIP-86 banpubkey).
+func (m *relayModeration) bannedPubkey(pubkey string) bool {
+	if m == nil {
+		return false
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	_, banned := m.state.BannedPubkeys[strings.ToLower(pubkey)]
+	return banned
+}
+
 // ipBlocked reports whether r comes from a blocked IP. Only the connection's
 // own address counts: a forwarded-for header is set by the client, so it
 // can't be trusted without knowing the proxy in front.

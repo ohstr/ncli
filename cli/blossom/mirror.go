@@ -69,7 +69,7 @@ func newMirrorCommand() *cobra.Command {
 
 					// Signed fresh per server, not once for the whole batch --
 					// see the identical comment in upload.go.
-					auth, err := buildAuth(privKeyHex, pubKeyHex, nipB7.VerbUpload, hashes, ttl)
+					auth, err := buildAuth(privKeyHex, pubKeyHex, nipB7.VerbUpload, hashes, ttl, server)
 					if err != nil {
 						res.Error = err.Error()
 						report.add(res)

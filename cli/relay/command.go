@@ -99,6 +99,8 @@ type RelayConfig struct {
 	Groups     *GroupsConfig      `mapstructure:"groups"`
 	Huddle     *HuddleConfig      `mapstructure:"huddle"`
 	HTTPBridge *HTTPBridgeConfig  `mapstructure:"httpBridge"`
+	Presence   *PresenceConfig    `mapstructure:"presence"`
+	Blossom    *BlossomConfig     `mapstructure:"blossom"`
 	Admin      *adminplane.Config `mapstructure:"admin"`
 
 	HandshakeTimeout string `mapstructure:"handshakeTimeout"`
@@ -327,6 +329,7 @@ type AgentAuthConfig struct {
 type HTTPBridgeConfig struct {
 	Query  *QueryConfig  `mapstructure:"query"`
 	Events *EventsConfig `mapstructure:"events"`
+	Count  *CountConfig  `mapstructure:"count"`
 }
 
 // QueryConfig configures the POST /query bridge: a one-shot HTTP alternative
@@ -565,6 +568,10 @@ func initConfig() error {
 
 	if err := checkGroupsConfig(&config); err != nil {
 		return &common.CLIError{Err: err, Code: common.CodeInvalidInput}
+	}
+
+	if err := checkCommunityConfig(&config); err != nil {
+		return err
 	}
 
 	if config.Port == 0 {

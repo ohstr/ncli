@@ -60,7 +60,8 @@ closest to what you're building and adapt its name/port/store.
 `examples/relay/full.yaml` documents every field at its default, commented:
 `description`, `limitation.*`, `pow.*`, `cache.profiles.*` (search,
 stats, checks, scoring), `cache.zaps.*`, `cache.relay.stats.*`,
-`membership.*`, `nip86.*`, `agent_auth.*`, `httpBridge.*`,
+`membership.*`, `nip86.*`, `agent_auth.*`, `httpBridge.*`, `presence.*`,
+`blossom.*`, `recipientOnlyKinds`,
 `handshakeTimeout`/`pingInterval`/`pongTimeout`/`writeTimeout`,
 `outgoingBufferSize`/`maxConcurrentStoreTasks`, `logs.*` rotation and
 `huddle.*`.
@@ -634,6 +635,18 @@ Full route, metric and config reference: `references/admin-plane-reference.md`.
   (omitted means `[1059]`; `[]` turns it off). An anonymous REQ for 1059 is
   closed `auth-required:`, so a client must AUTH as the recipient --
   `dm read` does this with its `--signer`; `find` needs `--auth-identity`.
+- Seat notices (`groups.membershipNotices`) are stored, so a client that
+  reconnects with `since` gets the ones it missed; read them with
+  `{"kinds":[44100,44101],"#p":[<you>]}` after AUTH as that pubkey. A
+  client can't publish those kinds (or the presence query kind): only the
+  relay's key may.
+- Blossom on the relay takes uploads whose kind 24242 token names the
+  relay's host in a `server` tag and the blob's hash in an `x` tag; a
+  token with no `server` tag is refused. `ncli blossom upload --server
+  https://<relay>` signs exactly that. Keep S3 keys out of `relay.yaml`:
+  leave `accessKey: ""`/`secretKey: ""` and set
+  `NCLI_BLOSSOM_STORAGE_S3_ACCESSKEY`/`_SECRETKEY` (an `NCLI_*` variable
+  only overrides a key the file already has).
 - NIP-16 ephemeral event kinds (20000-29999) need no config anywhere --
   handling is automatic based on an event's own kind, not a toggle. Publish
   one against any relay to see it: accepted and briefly queryable, then

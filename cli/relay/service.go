@@ -145,6 +145,8 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 	}
 	sessionConfig.EventPolicy = moderation.eventPolicy
 	sessionConfig.RecipientOnlyKinds = config.recipientOnlyKinds()
+	sessionConfig.RelayAuthoredKinds = config.relayAuthoredKinds()
+	sessionConfig.PresenceQueryKind = config.presenceKind()
 
 	wsHandler := relay.NewSessionHandler(
 		store,
@@ -269,7 +271,27 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 		// admin-pubkey allowlist. wsHandler.Membership() for the same
 		// reason /query shares it -- one live membership view, not a
 		// second cache.
-		mux.Handle("/events", m.HTTP("events", relay.NewEventsHandler(store, &cfg.Nip11.Limitation, wsHandler.Membership(), config.Nip11.Self, relay.WithEventsPolicy(moderation.eventPolicy))))
+		mux.Handle("/events", m.HTTP("events", relay.NewEventsHandler(store, &cfg.Nip11.Limitation, wsHandler.Membership(), config.Nip11.Self,
+			relay.WithEventsPolicy(moderation.eventPolicy), relay.WithEventsRelayAuthoredKinds(config.relayAuthoredKinds()...))))
+	}
+
+	if countEnabled() {
+		// Same admission as /query (NIP-98, membership, private groups,
+		// recipient-only kinds), answered {"count": n}.
+		mux.Handle("/count", m.HTTP("count", wsHandler.CountHandler()))
+	}
+
+	if blossomEnabled() {
+		blossom, err := newBlossomServer(&config, wsHandler.Membership(), moderation)
+		if err != nil {
+			log.Fatal().Err(err).Msg("failed to start Blossom")
+		}
+		blossomMux := http.NewServeMux()
+		blossom.Register(blossomMux)
+		for _, p := range config.Blossom.uploadPaths() {
+			mux.Handle(p, m.HTTP("blossom", blossomMux))
+		}
+		mux.Handle(config.Blossom.blobPrefix()+"/", m.HTTP("blossom", blossomMux))
 	}
 
 	// ADMIN ENDPOINTS

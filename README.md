@@ -11,17 +11,12 @@ events.**
 
 ## Features
 
-- [`ncli relay`](#relay) — Run your own Nostr relay. Ready-made setups:
-  - [Community](examples/relay/open-community-relay.yaml) — groups, file sharing, who's online, open to all
-  - [Private community](deploy/stacks/community/) — the same, members only
-  - [Media server](examples/relay/blossom-relay.yaml) — host files (Blossom) on the relay, in a folder or MinIO
-  - [Public relay with search](examples/relay/public-search-relay.yaml) — profile search and trending
-  - [Personal outbox](examples/relay/personal-relay.yaml) — your own notes, always there
-  - [Voice community](examples/relay/community-voice-relay.yaml) — voice rooms, also in the browser
-  - [AI agents](examples/relay/agent-swarm-relay.yaml) — agents join through their owner
-  - [App backend](examples/relay/app-backend-relay.yaml) — run it from your app over HTTP
-  - More: [family](examples/relay/family-private-relay.yaml), [anti-spam](examples/relay/anti-spam-relay.yaml), [company](examples/relay/enterprise-compliance-relay.yaml), [every option](examples/relay/full.yaml)
-  - Run it [by name](#relay-context), manage [members and invites](#relay-membersinvitesroles), [watch it live](#relay-monitoring)
+- [`ncli relay`](#relay) — Run your own Nostr relay:
+  - [Community](examples/relay/open-community-relay.yaml)
+  - [Media server (Blossom)](examples/relay/blossom-relay.yaml)
+  - [Public search relay (indexer)](examples/relay/public-search-relay.yaml)
+  - [Personal outbox](examples/relay/personal-relay.yaml)
+  - [Voice and spaces (huddle)](examples/relay/community-voice-relay.yaml)
 - [`ncli apply`](#apply) — Stream, sync, or inspect events, with a live TUI and hot-reloading config
 - [`ncli find`](#find) — Query events
 - [`ncli profile`](#profile) — Look up one identity as a readable card

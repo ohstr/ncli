@@ -47,6 +47,8 @@ var scenarioExampleFiles = []string{
 	"enterprise-compliance-relay.yaml",
 	"family-private-relay.yaml",
 	"tracked-membership-relay.yaml",
+	"open-community-relay.yaml",
+	"blossom-relay.yaml",
 }
 
 // TestScenarioExamplesLoadThroughTheRealConfigLoader guards against the

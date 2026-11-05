@@ -1,0 +1,55 @@
+# Scenario: an open community -- anyone can read and post, people meet in
+# NIP-29 groups, a member hears live when they gain or lose a seat, apps ask
+# who is online, and enrolled members share files through Blossom on the
+# relay itself. For a members-only community, see deploy/stacks/community/.
+nip11:
+  name: "Open Community"
+  description: "Groups, files and who's online, open to everyone"
+  # Generated with `ncli id --json` for this example only -- never reuse a
+  # privkey that's ever appeared in a public repo for anything real. The
+  # relay signs group state, seat notices and presence answers with it.
+  privkey: "50511c279f4d02cddf997b36cf0f2f7ccfd1a637433bb58095a444ecc09c1a87"
+  pubkey: "e232bbb804c271d1ad64b3c633410878f7403e1321b110dd9cbd27e6ee1de3dc"
+  contact: "admin@example.com"
+  # Logins (NIP-42) and Blossom uploads are checked against this address.
+  url: "wss://community.example.com"
+  # No membership_required: everyone reads and posts. Set it (with
+  # auth_required) to make the whole relay members-only.
+
+logdir: "./data/logs"
+store: "./data/db/open-community.db"
+port: 5513
+
+# Membership here only decides who may upload files; it gates nothing else.
+membership:
+  enabled: true
+
+groups:
+  roles:
+    admin: [9000, 9001, 9002, 9005, 9008, 9009, 9010]
+    moderator: [9005, 9010]
+  moderationLog: true
+  # A relay-signed notice (kinds 44100/44101) to each member gaining or
+  # losing a seat, readable only by that member and relay admins.
+  membershipNotices:
+    enabled: true
+
+httpBridge:
+  query:
+    enabled: true
+  events:
+    enabled: true
+  count:
+    enabled: true
+
+# POST /query for {"kinds":[40902],"authors":[...]} answers who is online.
+presence:
+  enabled: true
+
+# Files on the relay's own origin: PUT /upload, GET /media/<sha256>.
+blossom:
+  enabled: true
+  membersOnly:
+    upload: true
+  storage:
+    kind: dir

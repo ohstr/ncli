@@ -11,10 +11,12 @@ port: 5500
 
 nip11:
   name: "Community"
-  description: "Members-only community relay"
+  description: "Community relay"
   contact: "admin@example.com"
   privkey: ""
   url: ""
+  # Members only. Remove both lines to let anyone read and post; groups,
+  # notices, presence and member-only uploads keep working.
   limitation:
     auth_required: true
     membership_required: true

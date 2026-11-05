@@ -1,0 +1,43 @@
+# Scenario: a media server -- the relay hosts files (Blossom, BUD-01/02) on
+# its own address, so clients upload and fetch images and attachments from
+# the same place they read events. Only enrolled members upload, since an
+# open upload endpoint gets abused; anyone with a link downloads.
+nip11:
+  name: "Media Relay"
+  description: "Nostr relay with Blossom file hosting"
+  # Generated with `ncli id --json` for this example only -- never reuse a
+  # privkey that's ever appeared in a public repo for anything real.
+  privkey: "6ca6077f3bdfb2a8c18be603603d6738ea083ccc6bfa68b1e7a74f4866bfcfc6"
+  pubkey: "110697c48bd9a952b4056d12959ae1e404a0af21df7a6a80f6d868f95216ef1a"
+  contact: "admin@example.com"
+  # An upload's kind 24242 token must name this host in its "server" tag.
+  url: "wss://media.example.com"
+
+logdir: "./data/logs"
+store: "./data/db/media.db"
+port: 5514
+
+# Who may upload: enroll them with `ncli relay members add <npub>`.
+membership:
+  enabled: true
+
+blossom:
+  enabled: true
+  # PUT /upload (and /media/upload); GET or HEAD /media/<sha256>[.ext].
+  uploadPaths: [/upload, /media/upload]
+  blobPrefix: /media
+  maxBlobBytes: 104857600   # 100 MiB per file
+  maxUploadsPerSigner: 2
+  membersOnly:
+    upload: true
+    # true: a download needs a "get" token from a member.
+    download: false
+  storage:
+    kind: dir   # files under <store>.blobs
+    # To keep files in MinIO or any S3-compatible store instead:
+    # kind: s3
+    # s3:
+    #   endpoint: minio:9000
+    #   bucket: ncli-media
+    #   accessKey: ""   # set NCLI_BLOSSOM_STORAGE_S3_ACCESSKEY
+    #   secretKey: ""   # set NCLI_BLOSSOM_STORAGE_S3_SECRETKEY

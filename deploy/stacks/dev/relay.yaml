@@ -1,0 +1,20 @@
+# Dev relay: open, with profile search against the stack's Meilisearch.
+# The search key comes from NCLI_CACHE_PROFILES_SEARCH_MEILISEARCH_KEY.
+port: 5500
+
+nip11:
+  name: ncli-dev-relay
+  pubkey: 9b14dff44fb8d74e2b90d5ae1501b935e073a5245749458a3e261021646f4e11
+  contact: admin@example.com
+
+store: ./data/db/notes.db
+logdir: ./data/logs
+
+cache:
+  profiles:
+    search:
+      enabled: true
+      meilisearch:
+        host: http://meilisearch:7700
+        key: ""
+        index: ncli_dev

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -85,17 +86,29 @@ func resolveIdentity(cmd *cobra.Command, jsonMode bool, identity string) (privKe
 	return privKeyHex, resolved.PubKeyHex, nil
 }
 
+// serverHosts is each server URL's host[:port], the value a BUD-11 "server"
+// tag carries.
+func serverHosts(servers []string) []string {
+	var hosts []string
+	for _, s := range servers {
+		if u, err := url.Parse(s); err == nil && u.Host != "" {
+			hosts = append(hosts, u.Host)
+		}
+	}
+	return hosts
+}
+
 // buildAuth signs a BUD-11 kind:24242 Authorization token for verb, scoped
-// to hashes if given (nil/empty means unscoped -- valid for any blob).
-// It's left unscoped to any particular server ("server" tag omitted) so
-// one signed token can be reused across every target server in a single
-// multi-server operation.
-func buildAuth(privKeyHex, pubKeyHex, verb string, hashes []string, ttl time.Duration) (*nip01.Event, error) {
+// to hashes if given (nil/empty means unscoped -- valid for any blob) and to
+// the hosts of servers (a "server" tag each), which servers that check the
+// tag require. No servers leaves it valid on any server.
+func buildAuth(privKeyHex, pubKeyHex, verb string, hashes []string, ttl time.Duration, servers ...string) (*nip01.Event, error) {
 	event := nipB7.NewAuthorization(nipB7.AuthorizationParams{
 		Pubkey:     pubKeyHex,
 		Verb:       verb,
 		Content:    "ncli blossom " + verb,
 		Expiration: time.Now().Add(ttl),
+		Servers:    serverHosts(servers),
 		Hashes:     hashes,
 	})
 	if err := event.Sign(privKeyHex); err != nil {

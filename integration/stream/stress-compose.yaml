@@ -8,7 +8,7 @@ name: ncli-stream-stress-itest
 x-relay: &relay
   build:
     context: ../..
-    dockerfile: build/relay/Dockerfile
+    dockerfile: deploy/docker/Dockerfile
   image: ncli:stream-stress-itest
   command: ["relay", "--config", "/config/relay.yaml"]
   restart: unless-stopped

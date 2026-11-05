@@ -1,0 +1,36 @@
+# Public relay: anyone may read and post; profile search, NIP-85 stats,
+# zap-ranked trending and NIP-66 stats. Secrets come from the environment:
+# NCLI_NIP11_PRIVKEY, NCLI_NIP11_URL, NCLI_CACHE_PROFILES_SEARCH_MEILISEARCH_KEY.
+# See examples/relay/public-search-relay.yaml for what each block does.
+port: 5500
+
+nip11:
+  name: "Open Community Relay"
+  description: "Public relay with profile search and zap-ranked trending"
+  contact: "admin@example.com"
+  privkey: ""
+  url: ""
+
+store: ./data/db/public-search.db
+logdir: ./data/logs
+
+cache:
+  profiles:
+    search:
+      enabled: true
+      meilisearch:
+        host: http://meilisearch:7700
+        key: ""
+        index: ncli_public_search
+      batchSize: 10000
+      maxInFlight: 4
+    stats:
+      enabled: true
+    checks:
+      ttl: 7d
+  zaps:
+    enabled: true
+    windows: [24h, 7d, 30d, all]
+  relay:
+    stats:
+      enabled: true

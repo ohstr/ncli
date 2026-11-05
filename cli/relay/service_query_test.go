@@ -163,7 +163,7 @@ func TestNewServer_QueryAdvertisesNIPCWWhenEnabled(t *testing.T) {
 			break
 		}
 	}
-	require.True(t, sawCW, "supported_nips must advertise CW once query.enabled is true, so a buzz-relay client can tell the bridge is there before trying it")
+	require.True(t, sawCW, "supported_nips must advertise CW once query.enabled is true, so an HTTP-bridge client can tell the bridge is there before trying it")
 }
 
 const queryTestURL = "http://example.com/query"

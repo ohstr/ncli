@@ -9,7 +9,7 @@ import (
 
 // A follow's stored events, paged: a relay serves
 // a REQ's stored events newest first, at most its own cap (strfry 500,
-// buzz 1000), then EOSE. A subscription resumed after a gap that holds
+// others 1000), then EOSE. A subscription resumed after a gap that holds
 // more than that got only the newest: an event dated back (NIP-59 dates a
 // wrap up to two days in the past) under a flood dated now was never
 // delivered. So once the stored events end, the follow asks again for

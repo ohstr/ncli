@@ -133,7 +133,7 @@ media scenarios will negotiate and then time out with no packets.
   playback, not a different protocol. Confirming the capture UI stays a
   manual step.
 - **Audio playback.** Nothing in this repo decodes Opus yet.
-- **A real `buzz` client.** Wire compatibility is byte-for-byte by
+- **A real third-party huddle client.** Wire compatibility is byte-for-byte by
   construction, but confirming it stays a manual acceptance step.
 
 ## Manual: poke at it by hand

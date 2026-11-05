@@ -114,12 +114,12 @@ func TestStatsLines_EscapesHostileValues(t *testing.T) {
 		Provider: "aa",
 		Tags: map[string]string{
 			"followers":      "12\x1b[2J34",            // ESC in a "numeric" stat
-			"following":      "5‮6",                    // right-to-left override
+			"following":      "5\u202e6",               // right-to-left override
 			"zap_first_recd": "not-a-ts\nfailed login", // unixDate parse-fail fallback
 		},
 	}
 	got := strings.Join(statsLines(s, 1), "\n")
-	if strings.ContainsAny(got, "\x1b‮") {
+	if strings.ContainsAny(got, "\x1b\u202e") {
 		t.Errorf("stats lines leaked a raw control/bidi rune: %q", got)
 	}
 	// statsLines returns one string per line; a hostile value's own newline

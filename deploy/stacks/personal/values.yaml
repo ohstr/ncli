@@ -1,0 +1,10 @@
+# Personal relay on Kubernetes:
+#   helm install notes deploy/helm/ncli-relay \
+#     -f deploy/stacks/personal/values.yaml \
+#     --set-file relayConfig=deploy/stacks/personal/relay.yaml
+persistence:
+  size: 5Gi
+
+ingress:
+  enabled: false
+  host: notes.example.com

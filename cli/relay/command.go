@@ -99,6 +99,8 @@ type RelayConfig struct {
 	Groups     *GroupsConfig      `mapstructure:"groups"`
 	Huddle     *HuddleConfig      `mapstructure:"huddle"`
 	HTTPBridge *HTTPBridgeConfig  `mapstructure:"httpBridge"`
+	Presence   *PresenceConfig    `mapstructure:"presence"`
+	Blossom    *BlossomConfig     `mapstructure:"blossom"`
 	Admin      *adminplane.Config `mapstructure:"admin"`
 
 	HandshakeTimeout string `mapstructure:"handshakeTimeout"`
@@ -120,6 +122,23 @@ type RelayConfig struct {
 	// Homepage, on unless false, shows browsers that open the relay's URL a
 	// page built from its NIP-11 document.
 	Homepage *bool `mapstructure:"homepage"`
+
+	// RecipientOnlyKinds are served only to a reader authenticated as a
+	// pubkey in the event's "p" tags, over REQ, COUNT and /query. Omitted,
+	// it is [1059], so a gift wrap reaches only its recipient; [] serves
+	// every kind to anyone.
+	RecipientOnlyKinds []int `mapstructure:"recipientOnlyKinds"`
+}
+
+// defaultRecipientOnlyKinds keeps NIP-59 gift wraps to their recipient.
+var defaultRecipientOnlyKinds = []int{1059}
+
+// recipientOnlyKinds is RecipientOnlyKinds, or the default when omitted.
+func (c *RelayConfig) recipientOnlyKinds() []int {
+	if c.RecipientOnlyKinds == nil {
+		return defaultRecipientOnlyKinds
+	}
+	return c.RecipientOnlyKinds
 }
 
 // PowConfig configures NIP-13 proof-of-work enforcement for published
@@ -310,6 +329,7 @@ type AgentAuthConfig struct {
 type HTTPBridgeConfig struct {
 	Query  *QueryConfig  `mapstructure:"query"`
 	Events *EventsConfig `mapstructure:"events"`
+	Count  *CountConfig  `mapstructure:"count"`
 }
 
 // QueryConfig configures the POST /query bridge: a one-shot HTTP alternative
@@ -318,7 +338,7 @@ type HTTPBridgeConfig struct {
 //
 // This isn't named nip98 (that's just the request-signing transport, shared
 // with the /admin endpoints above and not specific to this feature) or
-// nipcw/nip_cw. The underlying spec really is buzz's own NIP-CW
+// nipcw/nip_cw. The underlying spec really is NIP-CW
 // (https://github.com/block/buzz/blob/main/docs/nips/NIP-CW.md), but that
 // short name is already `ncli decode`'s name for something unrelated --
 // NIP-CASH's Circle Wallet circlehub1... connection -- so reusing it here
@@ -548,6 +568,10 @@ func initConfig() error {
 
 	if err := checkGroupsConfig(&config); err != nil {
 		return &common.CLIError{Err: err, Code: common.CodeInvalidInput}
+	}
+
+	if err := checkCommunityConfig(&config); err != nil {
+		return err
 	}
 
 	if config.Port == 0 {

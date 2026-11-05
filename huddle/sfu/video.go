@@ -16,7 +16,7 @@ import (
 // can participate in. Video cannot: a room carries huddle audio frames and a
 // WebSocket peer is audio-only by design. So video is forwarded directly between
 // the WebRTC peers sharing a room id, and a WebSocket peer simply never sees it.
-// That is the graceful degrade -- a buzz client in a screen-share call hears the
+// That is the graceful degrade -- a WebSocket client in a screen-share call hears the
 // call and misses only the picture.
 //
 //	WebRTC peer A --video--> videoHub --> WebRTC peer B, C

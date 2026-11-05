@@ -1,0 +1,283 @@
+package relay
+
+import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/ohstr/ncli/cli/common"
+	"github.com/ohstr/nmilat/nip01"
+	"github.com/ohstr/nmilat/nip11"
+	"github.com/ohstr/nmilat/nip29"
+	"github.com/ohstr/nmilat/nipB7"
+	relayclient "github.com/ohstr/nmilat/relay/client"
+	"github.com/ohstr/nmilat/wire"
+	"github.com/stretchr/testify/require"
+)
+
+func communityRelayConfig(t *testing.T) RelayConfig {
+	up := true
+	return RelayConfig{
+		Nip11: nip11.Metadata{
+			PubKey: testPubKey, PrivKey: testPrivKey, Self: testPubKey, URL: huddleRelayURL,
+		},
+		Membership: &MembershipConfig{Enabled: true},
+		Groups:     &GroupsConfig{MembershipNotices: &MembershipNoticesConfig{Enabled: true}},
+		HTTPBridge: &HTTPBridgeConfig{
+			Query:  &QueryConfig{Enabled: true},
+			Events: &EventsConfig{Enabled: true},
+			Count:  &CountConfig{Enabled: true},
+		},
+		Presence: &PresenceConfig{Enabled: true},
+		Blossom: &BlossomConfig{
+			Enabled:     true,
+			MembersOnly: BlossomMembersOnly{Upload: &up},
+			Storage:     BlossomStorage{Dir: filepath.Join(t.TempDir(), "blobs")},
+		},
+	}
+}
+
+// connectAs opens a WebSocket to ts and logs in as privKey.
+func connectAs(t *testing.T, ts *httptest.Server, privKey string) *relayclient.Connection {
+	t.Helper()
+	u, err := url.Parse("ws" + strings.TrimPrefix(ts.URL, "http"))
+	require.NoError(t, err)
+	conn, err := relayclient.Connect(context.Background(), u)
+	require.NoError(t, err)
+	t.Cleanup(conn.Close)
+	authAs(t, conn, privKey)
+	return conn
+}
+
+// reqEvents runs one REQ on conn and returns the events before EOSE.
+func reqEvents(t *testing.T, conn *relayclient.Connection, filter *nip01.SubscriptionFilter) []*nip01.Event {
+	t.Helper()
+	conn.Outgoing() <- wire.NewRequestPacket("q", nip01.NewSubscriptionFilterGroup(filter))
+	var events []*nip01.Event
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case res := <-conn.Read():
+			switch r := res.(type) {
+			case *wire.EventSubscriptionResponse:
+				events = append(events, r.Event)
+			case *wire.EOSESubscriptionResponse:
+				return events
+			case *wire.ClosedSubscriptionResponse:
+				t.Fatalf("REQ closed: %s", r.Message)
+			}
+		case <-deadline:
+			t.Fatal("timed out waiting for EOSE")
+		}
+	}
+}
+
+func publishAs(t *testing.T, conn *relayclient.Connection, ev *nip01.Event, privKey string) *wire.OkSubscriptionResponse {
+	t.Helper()
+	require.NoError(t, ev.Sign(privKey))
+	ok, err := conn.Publish(context.Background(), ev)
+	require.NoError(t, err)
+	return ok
+}
+
+// postNIP98 POSTs body to ts+path signed by privKey.
+func postNIP98(t *testing.T, ts *httptest.Server, path, privKey string, body []byte) *http.Response {
+	t.Helper()
+	target := ts.URL + path
+	header, err := common.GenerateNIP98Header(privKey, target, http.MethodPost, body)
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodPost, target, bytes.NewReader(body))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", header)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = resp.Body.Close() })
+	return resp
+}
+
+func countAs(t *testing.T, ts *httptest.Server, privKey string, body string) int64 {
+	t.Helper()
+	resp := postNIP98(t, ts, "/count", privKey, []byte(body))
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var got struct{ Count int64 }
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&got))
+	return got.Count
+}
+
+func blossomToken(t *testing.T, privKey, verb, sha string) string {
+	t.Helper()
+	ev := nipB7.NewAuthorization(nipB7.AuthorizationParams{
+		Verb: verb, Expiration: time.Now().Add(time.Minute), Servers: []string{"relay.test"}, Hashes: []string{sha},
+	})
+	require.NoError(t, ev.Sign(privKey))
+	h, err := nipB7.EncodeAuthHeader(ev)
+	require.NoError(t, err)
+	return h
+}
+
+func TestScenario_CommunityRelay(t *testing.T) {
+	ts := bootScenario(t, communityRelayConfig(t))
+	enrollMember(t, ts.URL, scenarioMemberPub)
+
+	member := connectAs(t, ts, scenarioMemberPriv)
+	agent := connectAs(t, ts, scenarioAgentPriv)
+
+	const groupID = "closed-room"
+	require.True(t, publishAs(t, member, nip29.NewCreateGroup(scenarioMemberPub, groupID), scenarioMemberPriv).Accepted)
+	put := nip29.NewPutUser(scenarioMemberPub, groupID, scenarioAgentPub)
+	require.True(t, publishAs(t, member, put, scenarioMemberPriv).Accepted)
+
+	notices := &nip01.SubscriptionFilter{Kinds: []int{44100}, Tags: map[string][]string{"p": {scenarioAgentPub}}}
+
+	t.Run("the agent gets its seat notice", func(t *testing.T) {
+		got := reqEvents(t, agent, notices)
+		require.Len(t, got, 1)
+		require.Equal(t, testPubKey, got[0].PubKey)
+		require.Contains(t, got[0].Tags, []string{"h", groupID})
+		require.Contains(t, got[0].Tags, []string{"e", put.ID})
+	})
+
+	t.Run("nobody else reads it", func(t *testing.T) {
+		require.Empty(t, reqEvents(t, member, notices))
+		body := `[{"kinds":[44100],"#p":["` + scenarioAgentPub + `"]}]`
+		require.EqualValues(t, 0, countAs(t, ts, scenarioMemberPriv, body))
+		require.EqualValues(t, 1, countAs(t, ts, scenarioAgentPriv, body))
+	})
+
+	t.Run("a client can't forge one", func(t *testing.T) {
+		forged := &nip01.Event{Kind: 44100, CreatedAt: uint64(time.Now().Unix()), Tags: [][]string{{"p", scenarioAgentPub}, {"h", groupID}}}
+		require.False(t, publishAs(t, member, forged, scenarioMemberPriv).Accepted)
+
+		viaHTTP := &nip01.Event{Kind: 44101, CreatedAt: uint64(time.Now().Unix()), Tags: [][]string{{"p", scenarioAgentPub}, {"h", groupID}}}
+		require.NoError(t, viaHTTP.Sign(scenarioMemberPriv))
+		body, err := json.Marshal(viaHTTP)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusForbidden, postNIP98(t, ts, "/events", scenarioMemberPriv, body).StatusCode)
+	})
+
+	t.Run("presence over /query", func(t *testing.T) {
+		const absent = "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee6"
+		resp := postNIP98(t, ts, "/query", scenarioMemberPriv, []byte(`[{"kinds":[40902],"authors":["`+scenarioAgentPub+`","`+absent+`"]}]`))
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		var got []nip01.Event
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&got))
+		status := map[string]string{}
+		for _, ev := range got {
+			require.Equal(t, testPubKey, ev.PubKey)
+			status[ev.Tags[0][1]] = ev.Content
+		}
+		require.Equal(t, map[string]string{scenarioAgentPub: "online", absent: "offline"}, status)
+	})
+
+	t.Run("blossom on the relay origin", func(t *testing.T) {
+		blob := []byte("a file for the room")
+		sum := sha256.Sum256(blob)
+		sha := hex.EncodeToString(sum[:])
+		upload := func(path, privKey string) *http.Response {
+			req, err := http.NewRequest(http.MethodPut, ts.URL+path, bytes.NewReader(blob))
+			require.NoError(t, err)
+			req.Header.Set("Authorization", blossomToken(t, privKey, nipB7.VerbUpload, sha))
+			resp, err := http.DefaultClient.Do(req)
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = resp.Body.Close() })
+			return resp
+		}
+
+		require.Equal(t, http.StatusForbidden, upload("/upload", scenarioAgentPriv).StatusCode, "a non-member must not upload")
+		resp := upload("/media/upload", scenarioMemberPriv)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		var d nipB7.BlobDescriptor
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&d))
+		require.Equal(t, "https://relay.test/media/"+sha, d.URL)
+
+		get, err := http.Get(ts.URL + "/media/" + sha + ".txt")
+		require.NoError(t, err)
+		defer func() { _ = get.Body.Close() }()
+		got, _ := io.ReadAll(get.Body)
+		require.Equal(t, blob, got)
+
+		notBlob, err := http.Get(ts.URL + "/media/readme.txt")
+		require.NoError(t, err)
+		_ = notBlob.Body.Close()
+		require.Equal(t, http.StatusNotFound, notBlob.StatusCode)
+	})
+}
+
+func TestCheckCommunityConfig(t *testing.T) {
+	valid := func() RelayConfig {
+		c := communityRelayConfig(t)
+		return c
+	}
+	require.NoError(t, func() error { c := valid(); return checkCommunityConfig(&c) }())
+
+	for name, tc := range map[string]func(*RelayConfig){
+		"notices without a key":       func(c *RelayConfig) { c.Nip11.PrivKey = "" },
+		"notices with one kind twice": func(c *RelayConfig) { c.Groups.MembershipNotices.Added = 44101 },
+		"presence without /query":     func(c *RelayConfig) { c.HTTPBridge.Query = nil },
+		"blossom without a host":      func(c *RelayConfig) { c.Nip11.URL = "" },
+		"blossom at the root":         func(c *RelayConfig) { c.Blossom.BlobPrefix = "/" },
+		"blossom over /query":         func(c *RelayConfig) { c.Blossom.UploadPaths = []string{"/query"} },
+		"s3 without a bucket": func(c *RelayConfig) {
+			c.Blossom.Storage = BlossomStorage{Kind: "s3", S3: BlossomS3{Endpoint: "minio:9000"}}
+		},
+		"an unknown storage kind": func(c *RelayConfig) { c.Blossom.Storage.Kind = "ftp" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			c := valid()
+			tc(&c)
+			require.Error(t, checkCommunityConfig(&c))
+		})
+	}
+
+	t.Run("defaults", func(t *testing.T) {
+		c := valid()
+		k, ok := c.memberNotices()
+		require.True(t, ok)
+		require.Equal(t, 44100, k.Added)
+		require.Equal(t, 44101, k.Removed)
+		require.Equal(t, 40902, c.presenceKind())
+		require.ElementsMatch(t, []int{44100, 44101, 40902}, c.relayAuthoredKinds())
+		require.Equal(t, "https://relay.test", c.blossomPublicURL())
+		require.Equal(t, "/media", c.Blossom.blobPrefix())
+		require.Equal(t, []string{"/upload", "/media/upload"}, c.Blossom.uploadPaths())
+	})
+
+	t.Run("loads from yaml", func(t *testing.T) {
+		cfg := loadRelayConfigFromYAML(t, `
+groups:
+  membershipNotices:
+    enabled: true
+    added: 45000
+presence:
+  enabled: true
+httpBridge:
+  count:
+    enabled: true
+blossom:
+  enabled: true
+  membersOnly:
+    upload: true
+    download: true
+  storage:
+    kind: s3
+    s3:
+      endpoint: minio:9000
+      bucket: media
+`)
+		k, _ := cfg.memberNotices()
+		require.Equal(t, 45000, k.Added)
+		require.True(t, cfg.HTTPBridge.Count.Enabled)
+		require.True(t, cfg.Blossom.MembersOnly.Download)
+		require.Equal(t, "media", cfg.Blossom.Storage.S3.Bucket)
+	})
+}

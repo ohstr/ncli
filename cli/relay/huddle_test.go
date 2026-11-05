@@ -307,7 +307,7 @@ func TestHuddleNIPsAreDeclared(t *testing.T) {
 }
 
 // TestWebSocketAndWebRTCPeersShareARoom is why both endpoints are handed the same
-// room manager: a browser and a buzz client using one room id have to end up in
+// room manager: a browser and a WebSocket client using one room id have to end up in
 // one call. Give them separate managers and each would sit alone in its own room,
 // hearing nothing, with no error anywhere to say why.
 func TestWebSocketAndWebRTCPeersShareARoom(t *testing.T) {
@@ -325,7 +325,7 @@ func TestWebSocketAndWebRTCPeersShareARoom(t *testing.T) {
 	ts := httptest.NewServer(mux)
 	t.Cleanup(ts.Close)
 
-	// A buzz-style client on the WebSocket endpoint.
+	// A client on the WebSocket endpoint.
 	wsConn, wsPeer := handshakeOn(t, ts, "audio", "room-1", alicePriv)
 	require.Equal(t, "joined", wsPeer.Type)
 

@@ -1,0 +1,77 @@
+# The relay config (relay.yaml). Pass a stack's file with
+#   --set-file relayConfig=deploy/stacks/<kind>/relay.yaml
+# Keep secrets out of it: leave nip11.privkey (and any search key) as ""
+# and supply them through `secrets` below; they reach the relay as NCLI_* env.
+relayConfig: ""
+
+# The relay's public address (nip11.url), e.g. wss://relay.example.com.
+# Set as NCLI_NIP11_URL when relay.yaml carries `url: ""`.
+relayURL: ""
+
+image:
+  repository: ghcr.io/ohstr/ncli
+  # Defaults to the chart's appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# Port the relay listens on inside the pod; must match relay.yaml's `port`.
+port: 5500
+
+persistence:
+  enabled: true
+  size: 10Gi
+  storageClass: ""
+
+resources: {}
+
+# Extra environment for the relay container (list of EnvVar).
+extraEnv: []
+
+secrets:
+  # Use a Secret you manage, with any of these keys: relay-privkey,
+  # meili-master-key, minio-root-user, minio-root-password.
+  existingSecret: ""
+  # Otherwise the chart creates one from these values.
+  relayPrivkey: ""
+  meiliMasterKey: ""
+  minioRootUser: ""
+  minioRootPassword: ""
+
+service:
+  type: ClusterIP
+  port: 5500
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: relay.example.com
+  # Secret holding the TLS certificate; empty serves plain HTTP.
+  tlsSecretName: ""
+
+meilisearch:
+  enabled: false
+  image:
+    repository: getmeili/meilisearch
+    tag: v1.35
+  persistence:
+    size: 5Gi
+    storageClass: ""
+  resources: {}
+
+minio:
+  enabled: false
+  # MinIO no longer publishes images on Docker Hub; Chainguard builds them.
+  image:
+    repository: cgr.dev/chainguard/minio
+    tag: latest
+  clientImage:
+    repository: cgr.dev/chainguard/minio-client
+    tag: latest
+  bucket: ncli-media
+  persistence:
+    size: 20Gi
+    storageClass: ""
+  resources: {}

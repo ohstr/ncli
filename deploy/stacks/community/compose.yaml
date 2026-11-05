@@ -1,0 +1,68 @@
+# Closed community relay: relay + Meilisearch (profile search) + MinIO
+# (S3-compatible object storage for media).
+# Usage (from repo root):
+#   cp deploy/stacks/community/.env.example deploy/stacks/community/.env
+#   docker compose -f deploy/stacks/community/compose.yaml up -d
+#
+# Only the relay is published on the host. Meilisearch and MinIO stay on
+# the stack's network; minio-init creates the bucket once and exits.
+services:
+  relay:
+    image: ghcr.io/ohstr/ncli:${NCLI_VERSION:-latest}
+    container_name: ncli_community_relay
+    command: ["relay", "--config", "/app/ncli/config.yaml"]
+    ports:
+      - "${RELAY_BIND:-0.0.0.0}:5500:5500"
+    volumes:
+      - ncli_data:/app/ncli/data
+      - ./relay.yaml:/app/ncli/config.yaml:ro
+    depends_on:
+      meilisearch:
+        condition: service_started
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      - NCLI_NIP11_PRIVKEY=${RELAY_PRIVKEY:?Set RELAY_PRIVKEY in .env}
+      - NCLI_NIP11_URL=${RELAY_URL:?Set RELAY_URL in .env}
+      - NCLI_CACHE_PROFILES_SEARCH_MEILISEARCH_KEY=${MEILI_MASTER_KEY:?Set MEILI_MASTER_KEY in .env}
+      - NCLI_BLOSSOM_STORAGE_S3_BUCKET=${MINIO_BUCKET:-ncli-media}
+      - NCLI_BLOSSOM_STORAGE_S3_ACCESSKEY=${MINIO_ROOT_USER:?Set MINIO_ROOT_USER in .env}
+      - NCLI_BLOSSOM_STORAGE_S3_SECRETKEY=${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env}
+    restart: unless-stopped
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.35
+    container_name: ncli_community_search
+    environment:
+      - MEILI_MASTER_KEY=${MEILI_MASTER_KEY:?Set MEILI_MASTER_KEY in .env}
+      - MEILI_ENV=production
+      - MEILI_NO_ANALYTICS=true
+    volumes:
+      - meili_data:/meili_data
+    restart: unless-stopped
+
+  # MinIO no longer publishes images on Docker Hub; Chainguard builds it.
+  minio:
+    image: cgr.dev/chainguard/minio:latest
+    container_name: ncli_community_minio
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:?Set MINIO_ROOT_USER in .env}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env}
+    volumes:
+      - minio_data:/data
+    restart: unless-stopped
+
+  minio-init:
+    image: cgr.dev/chainguard/minio-client:latest
+    depends_on:
+      - minio
+    environment:
+      - MC_HOST_local=http://${MINIO_ROOT_USER}:${MINIO_ROOT_PASSWORD}@minio:9000
+    command: ["mb", "--ignore-existing", "local/${MINIO_BUCKET:-ncli-media}"]
+    restart: on-failure
+
+volumes:
+  ncli_data:
+  meili_data:
+  minio_data:

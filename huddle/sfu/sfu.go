@@ -3,7 +3,7 @@
 //
 //	browser --DTLS/SRTP--> sfu --------+
 //	                                   |  one room.Room
-//	buzz client --WS binary--> wsaudio -+
+//	huddle peer --WS binary--> wsaudio -+
 //
 // It is a selective forwarding unit, not a mixer: a speaker's Opus is
 // repacketized between RTP and huddle frames by huddle/rtp and never decoded,

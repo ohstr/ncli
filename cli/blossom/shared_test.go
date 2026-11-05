@@ -71,12 +71,12 @@ func TestPrintFanoutReport_EscapesServerText(t *testing.T) {
 		Item:   "f.txt",
 		Server: "https://s\x1b[31m.example",
 		OK:     true,
-		URL:    "https://s.example/‮evil\nname.png",
+		URL:    "https://s.example/\u202eevil\nname.png",
 	})
 
 	out := captureStdout(t, func() { printFanoutReport(false, report) })
 
-	if strings.ContainsAny(out, "\x1b‮") {
+	if strings.ContainsAny(out, "\x1b\u202e") {
 		t.Errorf("accepted-path output leaked a raw control/bidi rune: %q", out)
 	}
 	// One result line plus the summary line = two newlines; a raw newline

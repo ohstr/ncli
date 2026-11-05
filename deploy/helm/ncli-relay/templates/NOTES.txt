@@ -1,0 +1,12 @@
+ncli relay {{ include "ncli-relay.fullname" . }} is deployed.
+
+{{- if .Values.ingress.enabled }}
+Clients connect to {{ if .Values.ingress.tlsSecretName }}wss{{ else }}ws{{ end }}://{{ .Values.ingress.host }}
+{{- else }}
+Reach it from your machine with:
+  kubectl port-forward svc/{{ include "ncli-relay.fullname" . }} {{ .Values.service.port }}
+then connect to ws://127.0.0.1:{{ .Values.service.port }}
+{{- end }}
+
+Check its config with:
+  kubectl exec statefulset/{{ include "ncli-relay.fullname" . }} -- ncli relay --config /app/ncli/config.yaml --check

@@ -1,0 +1,30 @@
+# Closed community relay on Kubernetes, with Meilisearch and MinIO:
+#   kubectl create secret generic community-secrets \
+#     --from-literal=relay-privkey=<hex or nsec> \
+#     --from-literal=meili-master-key=$(openssl rand -base64 32) \
+#     --from-literal=minio-root-user=ncli \
+#     --from-literal=minio-root-password=$(openssl rand -base64 24)
+#   helm install community deploy/helm/ncli-relay \
+#     -f deploy/stacks/community/values.yaml \
+#     --set-file relayConfig=deploy/stacks/community/relay.yaml
+relayURL: wss://community.example.com
+
+secrets:
+  existingSecret: community-secrets
+
+persistence:
+  size: 20Gi
+
+ingress:
+  enabled: true
+  host: community.example.com
+  tlsSecretName: community-tls
+
+meilisearch:
+  enabled: true
+
+minio:
+  enabled: true
+  bucket: ncli-media
+  persistence:
+    size: 50Gi

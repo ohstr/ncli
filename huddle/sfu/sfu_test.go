@@ -251,7 +251,7 @@ func TestBrowserAudioReachesAWebSocketPeer(t *testing.T) {
 	h := newHarness(t, nil)
 
 	// The WebSocket-side listener: joined directly with a channel sink, which is
-	// exactly what wsaudio does for a buzz client.
+	// exactly what wsaudio does for a WebSocket client.
 	listener := room.NewChannelSink()
 	if _, _, _, err := h.rooms.Join("room-1", "ws-listener", 3, listener); err != nil {
 		t.Fatalf("listener join: %v", err)

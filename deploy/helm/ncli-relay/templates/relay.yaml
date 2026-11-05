@@ -1,0 +1,160 @@
+{{- $fullname := include "ncli-relay.fullname" . -}}
+{{- $secret := include "ncli-relay.secretName" . -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $fullname }}
+  labels:
+    {{- include "ncli-relay.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  serviceName: {{ $fullname }}
+  selector:
+    matchLabels:
+      {{- include "ncli-relay.selector" . | nindent 6 }}
+      app.kubernetes.io/component: relay
+  template:
+    metadata:
+      labels:
+        {{- include "ncli-relay.selector" . | nindent 8 }}
+        app.kubernetes.io/component: relay
+      annotations:
+        checksum/config: {{ .Values.relayConfig | sha256sum }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: relay
+          image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["relay", "--config", "/app/ncli/config.yaml"]
+          ports:
+            - name: relay
+              containerPort: {{ .Values.port }}
+          env:
+            {{- if or .Values.secrets.existingSecret .Values.secrets.relayPrivkey }}
+            - name: NCLI_NIP11_PRIVKEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secret }}
+                  key: relay-privkey
+                  optional: true
+            {{- end }}
+            {{- with .Values.relayURL }}
+            - name: NCLI_NIP11_URL
+              value: {{ . | quote }}
+            {{- end }}
+            {{- if .Values.meilisearch.enabled }}
+            - name: NCLI_CACHE_PROFILES_SEARCH_MEILISEARCH_HOST
+              value: {{ include "ncli-relay.meiliHost" . | quote }}
+            - name: NCLI_CACHE_PROFILES_SEARCH_MEILISEARCH_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secret }}
+                  key: meili-master-key
+            {{- end }}
+            {{- if .Values.minio.enabled }}
+            - name: NCLI_BLOSSOM_STORAGE_S3_ENDPOINT
+              value: {{ include "ncli-relay.minioEndpoint" . | quote }}
+            - name: NCLI_BLOSSOM_STORAGE_S3_BUCKET
+              value: {{ .Values.minio.bucket | quote }}
+            - name: NCLI_BLOSSOM_STORAGE_S3_ACCESSKEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secret }}
+                  key: minio-root-user
+            - name: NCLI_BLOSSOM_STORAGE_S3_SECRETKEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secret }}
+                  key: minio-root-password
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          readinessProbe:
+            tcpSocket:
+              port: relay
+          volumeMounts:
+            - name: data
+              mountPath: /app/ncli/data
+            - name: config
+              mountPath: /app/ncli/config.yaml
+              subPath: relay.yaml
+              readOnly: true
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ $fullname }}-config
+        {{- if not .Values.persistence.enabled }}
+        - name: data
+          emptyDir: {}
+        {{- end }}
+  {{- if .Values.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- with .Values.persistence.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size }}
+  {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}
+  labels:
+    {{- include "ncli-relay.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    {{- include "ncli-relay.selector" . | nindent 4 }}
+    app.kubernetes.io/component: relay
+  ports:
+    - name: relay
+      port: {{ .Values.service.port }}
+      targetPort: relay
+{{- if .Values.ingress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $fullname }}
+  labels:
+    {{- include "ncli-relay.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- with .Values.ingress.tlsSecretName }}
+  tls:
+    - hosts: [{{ $.Values.ingress.host | quote }}]
+      secretName: {{ . }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $fullname }}
+                port:
+                  name: relay
+{{- end }}

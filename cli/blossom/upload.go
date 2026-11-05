@@ -100,7 +100,7 @@ the bytes as-is.`,
 						// Scoped to this blob's hash (BUD-11 "x"): an unscoped
 						// token authorizes uploading anything until it
 						// expires, and servers that check it refuse it.
-						auth, err := buildAuth(privKeyHex, pubKeyHex, verb, []string{sum}, ttl)
+						auth, err := buildAuth(privKeyHex, pubKeyHex, verb, []string{sum}, ttl, server)
 						if err != nil {
 							report.add(serverResult{Item: path, Server: server, Error: err.Error()})
 							continue

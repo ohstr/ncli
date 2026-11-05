@@ -2,8 +2,8 @@
 /test/
 *.log
 
-# Runtime data for the local Docker dev stack (build/relay/docker-compose.dev.yaml)
-/build/.dev/
+# Runtime data for the local Docker dev stack (deploy/stacks/dev/compose.yaml)
+/deploy/stacks/dev/.dev/
 
 # Recovery store from a manual `ncli apply -f integration/stream/stream.yaml` run
 /integration/stream/.recovery/

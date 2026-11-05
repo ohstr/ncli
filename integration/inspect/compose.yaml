@@ -6,7 +6,7 @@ services:
   target1:
     build:
       context: ../..
-      dockerfile: build/relay/Dockerfile
+      dockerfile: deploy/docker/Dockerfile
     image: ncli:inspect-itest
     command: ["relay", "--config", "/config/relay.yaml"]
     ports:
@@ -19,7 +19,7 @@ services:
   target2:
     build:
       context: ../..
-      dockerfile: build/relay/Dockerfile
+      dockerfile: deploy/docker/Dockerfile
     image: ncli:inspect-itest
     command: ["relay", "--config", "/config/relay.yaml"]
     ports:
@@ -32,7 +32,7 @@ services:
   target3:
     build:
       context: ../..
-      dockerfile: build/relay/Dockerfile
+      dockerfile: deploy/docker/Dockerfile
     image: ncli:inspect-itest
     command: ["relay", "--config", "/config/relay.yaml"]
     ports:

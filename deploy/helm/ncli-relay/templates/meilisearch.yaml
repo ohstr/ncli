@@ -1,0 +1,72 @@
+{{- if .Values.meilisearch.enabled }}
+{{- $name := printf "%s-meilisearch" (include "ncli-relay.fullname" .) -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "ncli-relay.labels" . | nindent 4 }}
+    app.kubernetes.io/component: meilisearch
+spec:
+  replicas: 1
+  serviceName: {{ $name }}
+  selector:
+    matchLabels:
+      {{- include "ncli-relay.selector" . | nindent 6 }}
+      app.kubernetes.io/component: meilisearch
+  template:
+    metadata:
+      labels:
+        {{- include "ncli-relay.selector" . | nindent 8 }}
+        app.kubernetes.io/component: meilisearch
+    spec:
+      containers:
+        - name: meilisearch
+          image: "{{ .Values.meilisearch.image.repository }}:{{ .Values.meilisearch.image.tag }}"
+          env:
+            - name: MEILI_ENV
+              value: production
+            - name: MEILI_NO_ANALYTICS
+              value: "true"
+            - name: MEILI_MASTER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "ncli-relay.secretName" . }}
+                  key: meili-master-key
+          ports:
+            - name: http
+              containerPort: 7700
+          volumeMounts:
+            - name: data
+              mountPath: /meili_data
+          {{- with .Values.meilisearch.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- with .Values.meilisearch.persistence.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.meilisearch.persistence.size }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "ncli-relay.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "ncli-relay.selector" . | nindent 4 }}
+    app.kubernetes.io/component: meilisearch
+  ports:
+    - name: http
+      port: 7700
+      targetPort: http
+{{- end }}

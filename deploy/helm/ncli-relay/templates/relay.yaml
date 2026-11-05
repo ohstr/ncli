@@ -55,6 +55,22 @@ spec:
                   name: {{ $secret }}
                   key: meili-master-key
             {{- end }}
+            {{- if .Values.minio.enabled }}
+            - name: NCLI_BLOSSOM_STORAGE_S3_ENDPOINT
+              value: {{ include "ncli-relay.minioEndpoint" . | quote }}
+            - name: NCLI_BLOSSOM_STORAGE_S3_BUCKET
+              value: {{ .Values.minio.bucket | quote }}
+            - name: NCLI_BLOSSOM_STORAGE_S3_ACCESSKEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secret }}
+                  key: minio-root-user
+            - name: NCLI_BLOSSOM_STORAGE_S3_SECRETKEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secret }}
+                  key: minio-root-password
+            {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

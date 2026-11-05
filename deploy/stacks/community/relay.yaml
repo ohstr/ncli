@@ -1,8 +1,11 @@
 # Closed community relay: only members (NIP-43) may read and write; members
-# meet in closed NIP-29 groups; apps read and write over the NIP-98 HTTP
-# bridge; profile search runs on Meilisearch.
+# meet in closed NIP-29 groups and learn of a new or lost seat live; apps
+# read, write and count over the NIP-98 HTTP bridge and ask who is online;
+# members share files through Blossom on the relay's own origin, stored in
+# MinIO; profile search runs on Meilisearch.
 # Secrets come from the environment: NCLI_NIP11_PRIVKEY, NCLI_NIP11_URL,
-# NCLI_CACHE_PROFILES_SEARCH_MEILISEARCH_KEY.
+# NCLI_CACHE_PROFILES_SEARCH_MEILISEARCH_KEY,
+# NCLI_BLOSSOM_STORAGE_S3_ACCESSKEY, NCLI_BLOSSOM_STORAGE_S3_SECRETKEY.
 # Enroll the first member with: ncli relay members add <npub> --config <this file>
 port: 5500
 
@@ -33,12 +36,38 @@ groups:
     moderator: [9005, 9010]
   moderationLog: true
   pendingJoins: true
+  # A relay-signed notice (kinds 44100/44101) to each member gaining or
+  # losing a seat, readable only by that member and relay admins.
+  membershipNotices:
+    enabled: true
 
 httpBridge:
   query:
     enabled: true
   events:
     enabled: true
+  count:
+    enabled: true
+
+# POST /query for {"kinds":[40902],"authors":[...]} answers who is online.
+presence:
+  enabled: true
+
+# Blossom on the relay's origin: PUT /upload (and /media/upload), GET
+# /media/<sha256>. Only members upload; anyone with the URL downloads.
+blossom:
+  enabled: true
+  maxBlobBytes: 104857600
+  membersOnly:
+    upload: true
+    download: false
+  storage:
+    kind: s3
+    s3:
+      endpoint: minio:9000
+      bucket: ncli-media
+      accessKey: ""
+      secretKey: ""
 
 cache:
   profiles:

@@ -11,10 +11,17 @@ events.**
 
 ## Features
 
-- [`ncli relay`](#relay) — Run a fast, low-level Nostr relay server
-- [`ncli relay context`](#relay-context) — Save, switch, and run relays by name, auto-creating new ones
-- [`ncli relay members/invites/roles`](#relay-membersinvitesroles) — Manage a running relay's NIP-43 membership over NIP-98 HTTP
-- [`ncli relay status/index/jobs/verify/dashboard`](#relay-monitoring) — Monitor a running relay (Prometheus, dashboard), rebuild its indexes and check profiles
+- [`ncli relay`](#relay) — Run your own Nostr relay. Ready-made setups:
+  - [Community](examples/relay/open-community-relay.yaml) — groups, file sharing, who's online, open to all
+  - [Private community](deploy/stacks/community/) — the same, members only
+  - [Media server](examples/relay/blossom-relay.yaml) — host files (Blossom) on the relay, in a folder or MinIO
+  - [Public relay with search](examples/relay/public-search-relay.yaml) — profile search and trending
+  - [Personal outbox](examples/relay/personal-relay.yaml) — your own notes, always there
+  - [Voice community](examples/relay/community-voice-relay.yaml) — voice rooms, also in the browser
+  - [AI agents](examples/relay/agent-swarm-relay.yaml) — agents join through their owner
+  - [App backend](examples/relay/app-backend-relay.yaml) — run it from your app over HTTP
+  - More: [family](examples/relay/family-private-relay.yaml), [anti-spam](examples/relay/anti-spam-relay.yaml), [company](examples/relay/enterprise-compliance-relay.yaml), [every option](examples/relay/full.yaml)
+  - Run it [by name](#relay-context), manage [members and invites](#relay-membersinvitesroles), [watch it live](#relay-monitoring)
 - [`ncli apply`](#apply) — Stream, sync, or inspect events, with a live TUI and hot-reloading config
 - [`ncli find`](#find) — Query events
 - [`ncli profile`](#profile) — Look up one identity as a readable card
@@ -39,13 +46,13 @@ events.**
 
 ## Installation
 
-**AI agents:**
+**Agents:**
 
 ```
 Fetch https://ohstr.github.io/ncli/PROMPT.md
 ```
 
-See [Agent skills](#agent-skills) below for what that does.
+See [Agent skills](#agent-skills).
 
 **macOS / Linux:**
 
@@ -53,8 +60,8 @@ See [Agent skills](#agent-skills) below for what that does.
 curl -fsSL https://ohstr.github.io/ncli/install.sh | sh
 ```
 
-Detects your OS and CPU (amd64/arm64 — including 64-bit Raspberry Pi OS) and
-installs to `/usr/local/bin` if writable, otherwise `~/.local/bin`.
+Detects OS and CPU (amd64/arm64, including 64-bit Raspberry Pi OS); installs
+to `/usr/local/bin` if writable, else `~/.local/bin`.
 
 **Homebrew** (macOS/Linux):
 
@@ -68,8 +75,7 @@ brew install ohstr/tap/ncli
 irm https://ohstr.github.io/ncli/install.ps1 | iex
 ```
 
-Installs to a per-user directory and updates your user `PATH` — no
-Administrator prompt.
+Installs per user and updates your user `PATH`; no Administrator prompt.
 
 **go install**:
 
@@ -77,7 +83,7 @@ Administrator prompt.
 go install github.com/ohstr/ncli/cmd/ncli@latest
 ```
 
-**Docker** — no toolchain required:
+**Docker**:
 
 ```sh
 # :latest tracks the newest release, :edge tracks main — see Docker section below.
@@ -86,7 +92,7 @@ docker run --rm ghcr.io/ohstr/ncli:latest --help
 
 **From source** — see [Development](#development).
 
-Check what you're running, and where ncli keeps its files:
+Show the version and where ncli keeps its files:
 
 ```sh
 ncli version
@@ -136,18 +142,17 @@ Run a Nostr relay server.
 
 </details>
 
-**Quickest way to get one running**:
+**Quickest start**:
 
 ```sh
 ncli relay -c bee_community
 ```
 
-Generates a minimal config (shape: [`examples/relay/minimal.yaml`](examples/relay/minimal.yaml))
-with a fresh identity and starts serving — see
-[`relay context`](#relay-context).
+Creates a minimal config ([`examples/relay/minimal.yaml`](examples/relay/minimal.yaml))
+with a fresh identity and starts serving; see [`relay context`](#relay-context).
 
-Want full control? Write your own config and pass it with `--config` —
-every field, at default, commented: [`examples/relay/full.yaml`](examples/relay/full.yaml)
+For full control, pass your own config with `--config`. Every field, at its
+default, commented: [`examples/relay/full.yaml`](examples/relay/full.yaml)
 
 ```yaml
 # examples/relay/full.yaml
@@ -239,9 +244,8 @@ logs:
 ncli relay --config examples/relay/full.yaml
 ```
 
-Only `store` and a `pubkey` (or a `privkey`, to derive one) are actually
-required — `logdir` defaults to the current directory, and everything else
-defaults too, down to this minimal config:
+Only `store` and a `pubkey` (or a `privkey` to derive one) are required;
+`logdir` defaults to the current directory and the rest has defaults:
 
 ```yaml
 # examples/relay/minimal.yaml
@@ -260,15 +264,15 @@ logdir: ./data/logs
 ncli relay --config examples/relay/minimal.yaml
 ```
 
-Once it's running, watch and operate it from its admin listener — see
-[relay monitoring](#relay-monitoring) below:
+Once running, operate it from its admin listener (see
+[relay monitoring](#relay-monitoring)):
 
 ```sh
 # health and live metrics
 ncli relay status --config examples/relay/minimal.yaml
 ```
 
-With search enabled, `--search` on `find`/`dump` is a **people** search
+With search enabled, `--search` on `find`/`dump` searches **people**
 (NIP-50), not event content.
 
 ```sh
@@ -276,11 +280,10 @@ With search enabled, `--search` on `find`/`dump` is a **people** search
 ncli find --search "jack" -k 1 -l 5 -s localhost:5500
 ```
 
-Require NIP-13 proof-of-work on published events with a `pow:` block —
-`min: 0` (the default) accepts everything, even a lying `nonce` tag; a
-non-zero `min` is advertised via NIP-11 either way, and `strict: true` is
-what actually rejects events, both under-difficulty ones and ones whose
-`nonce` tag doesn't match reality:
+Require NIP-13 proof-of-work with a `pow:` block. `min: 0` (default)
+accepts everything. A non-zero `min` is advertised in NIP-11; only
+`strict: true` rejects events, both under-difficulty ones and ones whose
+`nonce` tag is false:
 
 ```yaml
 pow:
@@ -290,12 +293,12 @@ pow:
   min: 20
 ```
 
-See [`examples/relay/anti-spam-relay.yaml`](examples/relay/anti-spam-relay.yaml)
-for a relay with this actually enforced (`strict: true`).
+Enforced example (`strict: true`):
+[`examples/relay/anti-spam-relay.yaml`](examples/relay/anti-spam-relay.yaml).
 
-Let people talk to each other through the relay — group voice calls, plus video
-and screen sharing for browsers — with a `huddle:` block. Calls get their own
-WebSocket endpoint, so a client connects to that as well as the Nostr socket:
+Host group voice calls (plus video and screen sharing for browsers) with a
+`huddle:` block. Calls use their own WebSocket endpoint, next to the Nostr
+socket:
 
 ```yaml
 nip11:
@@ -307,10 +310,8 @@ huddle:
   rtc: true
 ```
 
-The relay forwards audio without decoding it, so it links no codec. See
-[`examples/relay/community-voice-relay.yaml`](examples/relay/community-voice-relay.yaml)
-for the documented preset, and [`ncli huddle`](#huddle) for joining a call
-from a terminal.
+Preset: [`examples/relay/community-voice-relay.yaml`](examples/relay/community-voice-relay.yaml);
+details in [`ncli huddle`](#huddle).
 
 Host NIP-29 groups with your own roles, and moderate the relay from any
 NIP-86 client:
@@ -331,15 +332,23 @@ nip86:
 ```
 
 NIP-86 bans pubkeys and events, allows or disallows kinds, blocks IPs and
-renames the relay (name, description, icon); that state is kept in
-`<store>.moderation.json`. See
-[`skills/ncli-relay-ops`](skills/ncli-relay-ops/SKILL.md).
+renames the relay (name, description, icon); saved in
+`<store>.moderation.json`.
+
+More config blocks, each documented in
+[`skills/ncli-relay-ops`](skills/ncli-relay-ops/SKILL.md) and
+[`examples/relay/full.yaml`](examples/relay/full.yaml):
+
+- `recipientOnlyKinds` — gift wraps (kind 1059) go only to the pubkey in their `p` tag; default `[1059]`, `[]` turns it off.
+- `httpBridge.count` — `POST /count` (NIP-45), same rules as `/query`.
+- `groups.membershipNotices` — a relay-signed notice (kinds 44100/44101) to a member who gains or loses a seat in a group.
+- `presence` — `POST /query` for kind 40902 answers who is online.
+- `blossom` — Blossom uploads and downloads on the relay's own origin, stored in a directory or S3/MinIO.
 
 ### Example configs
 
-Every file under [`examples/relay/`](examples/relay/) is a working config,
-commented top to bottom. Pick the scenario closest to yours and start from
-it:
+Every file under [`examples/relay/`](examples/relay/) is a working, fully
+commented config. Start from the closest one:
 
 | File | For |
 |---|---|
@@ -354,14 +363,19 @@ it:
 | [`family-private-relay.yaml`](examples/relay/family-private-relay.yaml) | a closed circle the operator enrolls by hand |
 | [`tracked-membership-relay.yaml`](examples/relay/tracked-membership-relay.yaml) | open to all, with a member roster and roles |
 | [`enterprise-compliance-relay.yaml`](examples/relay/enterprise-compliance-relay.yaml) | members + proof-of-work + NIP-86 admin, stacked |
-| [`agent-swarm-relay.yaml`](examples/relay/agent-swarm-relay.yaml) | AI agents posting under their owner's membership (NIP-AA) |
+| [`agent-swarm-relay.yaml`](examples/relay/agent-swarm-relay.yaml) | agents posting under their owner's membership (NIP-AA) |
 | [`app-backend-relay.yaml`](examples/relay/app-backend-relay.yaml) | an app's backend administering and querying over HTTP |
 | [`community-voice-relay.yaml`](examples/relay/community-voice-relay.yaml) | voice calls and meeting spaces (huddles) |
+| [`open-community-relay.yaml`](examples/relay/open-community-relay.yaml) | an open community: groups, seat notices, who's online, files |
+| [`blossom-relay.yaml`](examples/relay/blossom-relay.yaml) | a media server: Blossom file hosting on the relay |
+
+For a members-only community with search and MinIO, ready for Compose or
+Helm, see [`deploy/stacks/community`](deploy/stacks/community/).
 
 ## `relay context`
 
-Save, switch, and run relays by name, instead of retyping `--config
-path/to/relay.yaml` on every `status`/`members`/`invites`/... call:
+Save, switch, and run relays by name instead of repeating `--config
+path/to/relay.yaml` on every call:
 
 ```sh
 ncli relay context add bee_community ~/relays/bee-community.yaml
@@ -380,16 +394,16 @@ ncli relay context
 ncli relay context remove outbox
 ```
 
-`--config`, if given, always wins. Otherwise the current context, if one is
-set, wins over any `ncli.yaml`/`relay.yaml` in the current directory.
+`--config` always wins; next the current context, then
+`ncli.yaml`/`relay.yaml` in the current directory.
 
 ### `-c`/`--context`: run a context directly, creating it if new
 
-`ncli relay -c <name>` runs a saved context without `context use` first.
-If `<name>` doesn't exist, it creates one: a minimal config and a fresh
-identity, saved to the vault under `<name>` (suffixed on a label
-collision), under `.ncli/relays/<name>/`. Registered, but not switched to
-as current.
+`ncli relay -c <name>` runs a saved context without `context use`. If
+`<name>` doesn't exist, it creates a minimal config under
+`.ncli/relays/<name>/` and a fresh identity saved to the vault as `<name>`
+(suffixed if the label is taken). The new context is saved but not made
+current.
 
 `-q`/`--json` skip the confirmation. `--identity <nsec-or-vault-label>`
 uses an existing identity instead of generating one. `--context` and
@@ -397,9 +411,9 @@ uses an existing identity instead of generating one. `--context` and
 
 ## `relay members`/`invites`/`roles`
 
-NIP-43 membership admin, NIP-98-signed with `nip11.privkey` and gated on
-`membership.enabled: true`. Enroll
-members, hand out invite codes, and define roles on a running relay:
+Manage NIP-43 membership on a running relay: add members, issue invite
+codes, define roles. Needs `membership.enabled: true`; requests are
+NIP-98-signed with `nip11.privkey`.
 
 ```sh
 # enroll a pubkey directly -- no invite code needed
@@ -422,13 +436,12 @@ ncli relay roles create vip --label "VIP" --color 280 --config examples/relay/co
 ncli relay roles list --config examples/relay/community-membership-relay.yaml
 ```
 
-NIP-43 has no "delete role" event, so `roles create` re-run with the same
-`id` supersedes it rather than a separate `roles delete`.
+There is no `roles delete`; re-run `roles create` with the same `id` to
+replace a role.
 
-**NIP-AA agent auth** (optional, on top of membership) lets an agent key
-gain virtual membership from its owner's NIP-43 membership by presenting a
-valid NIP-OA "auth" tag credential during AUTH, without separately
-enrolling the agent key itself:
+**NIP-AA agent auth** (optional): an agent key counts as a member through
+its owner's NIP-43 membership by presenting a NIP-OA `auth` tag during
+AUTH, without being enrolled itself:
 
 ```yaml
 # requires nip11.limitation.membership_required (which itself requires
@@ -439,18 +452,17 @@ agent_auth:
   kindEnforcement: false
 ```
 
-See [`examples/relay/agent-swarm-relay.yaml`](examples/relay/agent-swarm-relay.yaml)
-for a relay built around this, or the commented-out block in
-[`examples/relay/community-membership-relay.yaml`](examples/relay/community-membership-relay.yaml)
-and the fully-documented one in
-[`examples/relay/full.yaml`](examples/relay/full.yaml).
+Examples: [`agent-swarm-relay.yaml`](examples/relay/agent-swarm-relay.yaml),
+the commented block in
+[`community-membership-relay.yaml`](examples/relay/community-membership-relay.yaml),
+and [`full.yaml`](examples/relay/full.yaml).
 
 <a id="relay-monitoring"></a>
 
 ## `relay status`/`index`/`jobs`/`verify`/`dashboard`
 
 Monitor and maintain a running relay through its admin listener
-(`127.0.0.1:<port+1>` by default), signed with `nip11.privkey`:
+(default `127.0.0.1:<port+1>`), signed with `nip11.privkey`:
 
 ```sh
 # health and live metrics
@@ -472,7 +484,7 @@ ncli relay verify npub1... --refresh
 ncli relay dashboard
 ```
 
-To serve Prometheus metrics, or the dashboard from the relay itself:
+Serve Prometheus metrics, or the dashboard from the relay itself:
 
 ```yaml
 admin:
@@ -482,8 +494,8 @@ admin:
   metrics: {enabled: true, tokensFile: ./data/metrics.tokens}
 ```
 
-Sign in with a browser extension, an nsec (signed in the page, never sent;
-optionally remembered encrypted with a password) or a remote signer
+Sign in with a browser extension, an nsec (used in the page, never sent;
+optionally saved encrypted with a password) or a remote signer
 (`bunker://` or a `nostrconnect://` QR code).
 
 ```sh
@@ -491,18 +503,17 @@ optionally remembered encrypted with a password) or a remote signer
 ncli relay metrics token add prometheus
 ```
 
-Opening the relay's URL in a browser shows a homepage built from its NIP-11
+The relay's URL in a browser shows a homepage built from its NIP-11
 (`homepage: false` turns it off).
 
 Examples: [`dashboard-relay.yaml`](examples/relay/dashboard-relay.yaml),
-[`examples/monitoring/`](examples/monitoring/). Security and the full
-reference: `ncli skills show ncli-relay-ops`.
+[`examples/monitoring/`](examples/monitoring/). Security and full reference:
+`ncli skills show ncli-relay-ops`.
 
 ## `prefs`
 
-Default relays for `find`/`ping`/`dump`/`miner`/`publish` — a default
-relay list that `find`, `ping`, `dump`, `miner check`, and `publish` all
-use automatically whenever you don't pass your own relays.
+Default relays that `find`, `ping`, `dump`, `miner check` and `publish` use
+when you pass none.
 
 ```sh
 ncli prefs relays add relay.primal.net
@@ -523,11 +534,10 @@ ncli prefs path
 
 ## `find`
 
-Query events: looks up an event by ID and/or filter, stopping at the
-**first** matching target (`dump` merges across every target instead).
-The identifier can be an event (hex ID, `note1...`/`nevent1...`) or an
-author (`npub1...`, `nprofile1...`, nip-05 `name@domain`) — author-only
-defaults to their profile (kind 0).
+Look up events by ID and/or filter, stopping at the **first** target that
+matches (`dump` merges every target). The identifier is an event (hex ID,
+`note1...`/`nevent1...`) or an author (`npub1...`, `nprofile1...`, nip-05
+`name@domain`); an author alone returns their profile (kind 0).
 
 ```sh
 # nip-05 address -> their profile (kind 0)
@@ -549,24 +559,23 @@ ncli find --kinds 1 --limit 5 -s relay.ohstr.com,relay.primal.net
 ![`ncli find` resolving a nip-05 address and its recent notes](docs/vhs/find.gif)
 
 More filter flags (`-a/--authors`, `-i/--ids`, `--since`/`--until`/
-`--search`/`--tag`) live behind `ncli find --help`.
+`--search`/`--tag`): `ncli find --help`.
 
-`--auth-identity` (alias `--signer`) logs in (NIP-42) to a relay that
+`--auth-identity` (alias `--signer`) logs in (NIP-42) where a relay
 requires it: a socket signer (`bunker+unix:///path.sock`), a NIP-46
-`bunker://...`, or a vault label/nsec. A read signs only the login, one
-kind 22242 per connection. Omit it to query anonymously. A failed login
-exits 7 with `reason` `login_required`, `signer_refused` or
-`relay_refused` in `--json`.
+`bunker://...`, or a vault label/nsec. Only the login is signed, one kind
+22242 per connection; omit it to query anonymously. A failed login exits 7
+with `reason` `login_required`, `signer_refused` or `relay_refused` in
+`--json`.
 
 ```sh
 ncli find --kinds 1 -s wss://relay.example --auth-identity mykey
 ncli find --kinds 1 -s wss://relay.example --auth-identity bunker+unix:///run/signer/agent.sock
 ```
 
-A `--targets` file isn't just a relay list — it can carry `filters` too, so
-a single YAML file replaces both `-s` and the inline filter flags at once
-(an author given as the positional identifier, like below, still ANDs in
-on top of the file's own filters):
+A `--targets` file can carry `filters` as well as relays, replacing both
+`-s` and the filter flags (a positional author is still ANDed with the
+file's filters):
 
 ```sh
 ncli find jack@primal.net -t examples/targets.yaml
@@ -595,8 +604,8 @@ spec:
 
 ## `profile`
 
-To look someone *up*, reach for `ncli profile` rather than `find -k 0` —
-one query, four records, printed as a card instead of raw JSON:
+Look someone up as a readable card (one query, four records) instead of
+`find -k 0` JSON:
 
 ```sh
 ncli profile npub1...
@@ -634,23 +643,20 @@ ncli profile npub1... --json
   queried 4 relay(s) · profile updated 2026-09-21
 ```
 
-It gathers kind:0 (metadata), kind:3 (contacts → the following count),
-kind:10002 (NIP-65 relays, `↕` read+write / `↓` read / `↑` write) and
-kind:10063 (Blossom servers) in a single subscription, and **aggregates
-across every relay** instead of stopping at the first match the way
-`find` does — a relay list often lives somewhere other than the profile.
+It reads kind:0 (metadata), kind:3 (following count), kind:10002 (NIP-65
+relays: `↕` read+write, `↓` read, `↑` write) and kind:10063 (Blossom
+servers) in one subscription, and **merges every relay** instead of
+stopping at the first match like `find`.
 
-The claimed nip-05 is checked against its domain (`✔` verified, `✘`
-mismatch, `⚠` unreachable); `--no-verify` skips that round trip. An
-identity that published nothing still renders, with each section reading
-`not published`, and exits 0.
+The nip-05 is checked against its domain (`✔` verified, `✘` mismatch,
+`⚠` unreachable); `--no-verify` skips it. An identity that published
+nothing still renders (`not published`) and exits 0.
 
 ## `event`
 
-Work with any event, whoever signed it, with no vault identity: name it
-by an nevent/note/naddr, a hex id or a `kind:pubkey:d` coordinate, or
-give it in full as JSON, `-f` files or stdin. It is looked up on the
-reference's own relay hints, then `-s` (or `ncli prefs relays`), then the
+Work with any event, no vault identity needed. Name it by nevent/note/naddr,
+hex id or `kind:pubkey:d`, or pass JSON, `-f` files or stdin. Lookup order:
+the reference's relay hints, then `-s` (or `ncli prefs relays`), then the
 author's NIP-65 write relays.
 
 ```sh
@@ -680,13 +686,11 @@ versions), `unwrap` (decrypt a NIP-59 gift wrap with `--identity`) and
 
 ## `ping`
 
-Test relay connectivity: confirms a relay actually speaks the protocol,
-not just accepts a connection. Fetches no events, and exits non-zero if
-any relay is unreachable.
+Check that relays speak the protocol, not just accept a connection.
+Fetches no events; exits non-zero if any relay is unreachable.
 
-Results narrate as plain log lines by default. Pass `--tui` for a live
-interactive board instead -- only takes effect in a real terminal and
-without `--json`/`--quiet`, falling back to plain narration otherwise.
+Output is plain log lines. `--tui` shows a live board instead (only in a
+real terminal, without `--json`/`--quiet`).
 
 ```sh
 # relays are plain arguments, no flag needed -- scheme optional too
@@ -709,8 +713,8 @@ ncli ping relay.primal.net relay.snort.social --tui
 
 ## `dump`
 
-Export events to JSON: same targets/filters as `find`, but merges results
-across **every** target instead of stopping at the first match.
+Export events to JSON: same targets/filters as `find`, but merges
+**every** target.
 
 ```sh
 # export a relay's events to JSON
@@ -728,13 +732,12 @@ ncli dump -t examples/targets.yaml -o out.json
 
 ![`ncli dump` exporting events to JSON](docs/vhs/dump.gif)
 
-`-o/--out` is required (`.json` or `.jsonp`). `--auth-identity` works the
-same way it does for `find` -- see above.
+`-o/--out` is required (`.json` or `.jsonp`). `--auth-identity` works as
+in [`find`](#find).
 
 ## `publish`
 
-Send events to relays: the write-side counterpart to `dump`, sends signed
-events to relays and reports each one's `OK`.
+Send signed events to relays and report each one's `OK`.
 
 ```sh
 # mine + auto-sign, then publish
@@ -745,13 +748,11 @@ ncli publish -e signed.json -s wss://relay.ohstr.com
 ncli publish -e events.json -s relay.ohstr.com,relay.snort.social --json
 ```
 
-Exits non-zero if any (event, relay) pair fails — the same
-composes-into-CI/scripts convention as `miner check`.
+Exits non-zero if any (event, relay) pair fails.
 
 A relay that requires login (NIP-42) gets one kind 22242 per connection,
-signed by `--signer`, or by `--auth-signer` when the login identity
-differs (e.g. events someone else signed). The refused event is retried
-once.
+signed by `--signer`, or by `--auth-signer` when the login identity differs
+(e.g. events someone else signed). The refused event is retried once.
 
 ```sh
 ncli publish -e signed.json --auth-signer bunker+unix:///run/signer/agent.sock -s wss://members.example
@@ -759,26 +760,21 @@ ncli publish -e signed.json --auth-signer bunker+unix:///run/signer/agent.sock -
 
 ## `apply`
 
-Stream, sync, inspect: `ncli apply -f <file>` runs one of three workflows,
-chosen by the file's `kind`. Fully annotated versions of each live under
-[`examples/apply/`](examples/apply/) — the snippets below are trimmed to
-the essentials.
+`ncli apply -f <file>` runs one of three workflows, chosen by the file's
+`kind`. Annotated versions live in [`examples/apply/`](examples/apply/);
+the snippets below are trimmed.
 
-`--strict-pow` (default `false`) makes `apply` reject an untrusted event
-whose `nonce` tag doesn't meet its declared PoW difficulty, instead of
-accepting it — settable via the flag or the spec's own `strictPow: true`
-field, flag wins when passed explicitly.
+- `--strict-pow` (default `false`) rejects an untrusted event whose `nonce`
+  tag doesn't meet its declared difficulty. The spec's `strictPow: true`
+  does the same; the flag wins when passed.
+- `--auth-signer` logs in (NIP-42) to stream/sync relays that require it
+  (`bunker+unix://`, `bunker://`, or a key); only login events are signed.
 
-`--auth-signer` logs in (NIP-42) to stream/sync relays that require it
-(`bunker+unix://`, `bunker://`, or a key); only login events are signed.
+Full walkthrough, including `trusted: true` and relay-side PoW:
+[`skills/ncli-apply/SKILL.md`](skills/ncli-apply/SKILL.md).
 
-See [`skills/ncli-apply/SKILL.md`](skills/ncli-apply/SKILL.md) for the full
-walkthrough, including `trusted: true` exemptions and relay-side PoW
-enforcement.
-
-**`stream`** — tail events live, forwarding everything matching `filters`
-from every `from` flow to every `to` flow until interrupted (any number of
-sources and destinations, mixed relays/stores):
+**`stream`** — forward everything matching `filters` from every `from` to
+every `to` until interrupted (any mix of relays and stores):
 
 ```yaml
 kind: stream
@@ -800,8 +796,8 @@ spec:
 ncli apply -f examples/apply/stream.yaml
 ```
 
-**`sync`** — NIP-77 negentropy reconciliation between exactly one local
-store and one remote relay (`direction: both|up|down`):
+**`sync`** — NIP-77 negentropy sync between one local store and one relay
+(`direction: both|up|down`):
 
 ```yaml
 kind: sync
@@ -821,8 +817,8 @@ spec:
 ncli apply -f examples/apply/sync.yaml
 ```
 
-**`inspect`** — read-only query across any number of targets, any mix of
-relays/stores; never publishes or writes to a target:
+**`inspect`** — read-only query across any mix of relays and stores; never
+writes to a target:
 
 ```yaml
 kind: inspect
@@ -843,46 +839,40 @@ ncli apply -f examples/apply/inspect.yaml
 
 ### TUI
 
-`ncli apply` opens a full-screen terminal dashboard by default — a live,
-sortable table of per-flow metrics (events, errors, throughput) next to a
-live log pane, for `stream`/`sync`. Some keys:
+For `stream`/`sync`, `ncli apply` opens a full-screen dashboard: a sortable
+table of per-flow metrics (events, errors, throughput) and a log pane. Keys:
 
 - `Tab` / `Shift+Tab` — move focus between panels
 - a column's highlighted letter — sort by that column
 - `d` — remove a flow from the running stream/sync (with confirmation)
-- `Ctrl+S` — snapshot the current spec (incl. any live edits) to a new YAML file
-- `r` — restart; editing and saving the spec file on disk also prompts a reload
+- `Ctrl+S` — save the current spec (with live edits) to a new YAML file
+- `r` — restart; saving the spec file on disk also prompts a reload
 
 ![`ncli apply` streaming live events into the TUI dashboard](docs/vhs/apply-stream.gif)
 
 ![`ncli apply` reconciling a local store against a relay (sync)](docs/vhs/apply-sync.gif)
 
-`inspect` uses a different layout: a compact Targets strip, the ambient
-log, then a full-width table of matched events anchored at the bottom.
-Some keys:
+`inspect` shows a Targets strip, the log, then a table of matched events.
+Keys:
 
-- `Enter` — open the selected event in a scrollable, read-only JSON detail view
-- `Ctrl+S` — save the selected event to a local JSON file, from the table
-  or the detail view; repeated saves in a session append to the same file
-  (`<spec-file>-events-<timestamp>.json`)
-- `w` / `s` — Wrap/Autoscroll toggle for whichever panel is focused (the
-  events table only has Autoscroll — its cells are always single-line, so
-  open the detail view for the full value)
-- any arrow/Page/Home/End move pins the selection and turns off
-  Autoscroll; press `s` to resume following the tail
+- `Enter` — open the selected event as read-only JSON
+- `Ctrl+S` — save the selected event to a JSON file; saves in one session
+  append to the same file (`<spec-file>-events-<timestamp>.json`)
+- `w` / `s` — toggle Wrap/Autoscroll on the focused panel (the events table
+  has Autoscroll only; open the detail view for full values)
+- arrow/Page/Home/End pins the selection and turns off Autoscroll; `s`
+  resumes it
 
-Add `raw: true` to a `stream` spec to skip the TUI and just log to stdout —
-useful when piping output or running under a process supervisor.
+`raw: true` in a `stream` spec skips the TUI and logs to stdout (for pipes
+or a process supervisor).
 
 ![`ncli apply` inspecting matched events across relays and a local store](docs/vhs/apply-inspect.gif)
 
 ## `miner`
 
-Mine and verify proof-of-work: `ncli miner mine` finds a NIP-13
-proof-of-work nonce for an event, searching across every CPU core by
-default. Author the note inline with
-`--content`/`--content-file` (fills in `created_at`/`kind` for you) plus
-`--identity` for the pubkey — no hand-written event file needed:
+`ncli miner mine` finds a NIP-13 proof-of-work nonce, on every CPU core by
+default. Write the note inline with `--content`/`--content-file` (fills in
+`created_at`/`kind`) and `--identity` for the pubkey:
 
 ```sh
 ncli miner mine --content "hello from ncli" --tag t=nostr --identity mykey -d 24 -o mined.json
@@ -898,12 +888,10 @@ ncli miner mine --content "hello from ncli" --tag t=nostr --identity mykey -d 24
 
 ![`ncli miner mine` finding a proof-of-work nonce](docs/vhs/miner.gif)
 
-If `--identity` resolves to a private key, the mined event is **signed
-automatically** — ready for `ncli publish` as-is. A pubkey-only identity
-mines but can't sign.
+If `--identity` has a private key, the mined event is **signed** and ready
+for `ncli publish`. A pubkey-only identity mines but can't sign.
 
-For anything `--content`/`--content-file` can't express, pass a
-structured event file instead:
+For anything else, pass an event file:
 
 ```yaml
 # examples/event.yaml
@@ -920,24 +908,23 @@ content: "hello from ncli"
 ncli miner mine -e examples/event.yaml -o mined.json -d 24
 ```
 
-It never overwrites `-e`'s file unless you pass `--in-place`. `--json`
-reports the mined result as structured JSON.
+`-e`'s file is only overwritten with `--in-place`. `--json` prints the
+result as JSON.
 
-`ncli miner check` verifies PoW on already-mined events — from a file:
+`ncli miner check` verifies PoW on events from a file:
 
 ```sh
 ncli miner check -e events.json
 ```
 
-or fetched live (same filters as above), optionally narrowed to one
-identity's own events — a one-liner PoW compliance audit:
+or fetched from relays (same filters), optionally only one identity's
+events:
 
 ```sh
 ncli miner check -s relay.ohstr.com --identity mykey --kinds 1 --since 7d --json
 ```
 
-It exits non-zero the moment any checked event fails, so it composes
-directly into CI/cron:
+It exits non-zero if any event fails, so it fits CI/cron:
 
 ```sh
 ncli miner check -e events.json || alert-oncall "PoW compliance regression"
@@ -945,10 +932,9 @@ ncli miner check -e events.json || alert-oncall "PoW compliance regression"
 
 ## `bunker`
 
-Run as a NIP-46 remote signer: your private key never leaves this
-process. Other Nostr apps send it encrypted signing requests over a
-relay; you approve or reject each one from a live TUI, or a remembered
-grant handles it automatically.
+Run a NIP-46 remote signer: the key never leaves this process. Apps send
+encrypted signing requests over a relay; you approve or reject each in a
+TUI, or a remembered grant answers it.
 
 ```sh
 ncli bunker --identity mykey --relay wss://relay.example
@@ -971,12 +957,10 @@ ncli bunker stop
 
 ![`ncli bunker` pairing an app via nostrconnect://, approving one request with a remembered grant, rejecting another outside its scope](docs/vhs/bunker.gif)
 
-Approving a request can grant an "Always" permission instead of a one-off
-decision, and on Linux/macOS the TUI can detach into a background daemon
-so other apps stay connected.
+An approval can be "Always" instead of one-off. On Linux/macOS the TUI can
+detach into a background daemon so apps stay connected.
 
-Pairing works both directions other bunker apps expect (`bunker://` and
-`nostrconnect://`), from inside the TUI (`c`) or scripted:
+Pair with `bunker://` or `nostrconnect://`, from the TUI (`c`) or a script:
 
 ```sh
 # prints a bunker:// URI to paste into a client
@@ -986,9 +970,9 @@ ncli bunker connect "nostrconnect://..."
 ncli bunker connect --grants examples/bunker/agent.yaml
 ```
 
-Everything the TUI does also works without a terminal, for scripts and
-agents. With no TTY (or with `--json`), `ncli bunker` starts the signer in
-the background and prints its status:
+Everything the TUI does also works from scripts. With no TTY (or with
+`--json`), `ncli bunker` starts the signer in the background and prints its
+status:
 
 ```sh
 # start headless; prints the same JSON as `bunker status --json`
@@ -1004,19 +988,19 @@ ncli bunker pending reject <id>
 ncli bunker sessions set-grant <pubkey> --grants grants.yaml
 ```
 
-See [`skills/ncli-bunker/SKILL.md`](skills/ncli-bunker/SKILL.md) for the
-full walkthrough, including the Windows platform gap, the grants-spec
-format, and pairing an AI agent for unattended signing.
+See [`skills/ncli-bunker/SKILL.md`](skills/ncli-bunker/SKILL.md) for
+Windows limits, the grants-spec format, and pairing an agent for unattended
+signing.
 
 ## `signer`
 
 A local signer for processes on the same machine or pod: `ncli` holds the
 key in memory and signs over a unix socket, as a policy allows. No relay,
-no network listener. A sign round trip takes under a millisecond.
+no network listener; a signature takes under a millisecond.
 
-Built for AI agents: the key sits in a sidecar container, and the
-agent's tools ask it to sign. A prompt-injected agent can't read the key
-and can't sign what the policy forbids.
+For agents: the key sits in a sidecar container and the agent's tools ask
+it to sign. A prompt-injected agent can't read the key or sign what the
+policy forbids.
 
 ```sh
 # key from an ncryptsec file (or --identity <vault label>)
@@ -1033,7 +1017,7 @@ ncli signer check --policy policy.yaml -e event.json --pubkey npub1...
 ```
 
 **Policy** (`kind: signer-policy`): rules are tried in order, the first
-whose selector matches decides, and anything unmatched is denied.
+match decides, anything unmatched is denied.
 
 ```yaml
 kind: signer-policy
@@ -1060,22 +1044,20 @@ rules:
 - **Selectors** match on `methods`, `kinds`, `counterparts` (for
   encrypt/decrypt) and `tags`. A tag value matches exactly, or as a prefix
   when it ends in `*`.
-- **`require: attestations`** lists other signed events the request must
-  carry, such as a human approval or a CI result. An attestation binds to
-  the target in one of three ways: `{tag: e, from: id}`,
-  `{tag: d, from: "tag:d"}`, or `{content: "approve {id}"}` /
-  `{content_contains: ...}`. Each attestation is single-use.
-- **Built in, always on:**
-  - An event whose content or tags contain the signer's own key is never
-    signed.
-  - An attestation signed by the signer's own key never counts.
-  - An attestation created before the signer started never counts.
+- **`require: attestations`** lists signed events the request must carry
+  (a human approval, a CI result). Bind one to the target with
+  `{tag: e, from: id}`, `{tag: d, from: "tag:d"}`, or
+  `{content: "approve {id}"}` / `{content_contains: ...}`. Each is
+  single-use.
+- **Always on:** an event whose content or tags contain the signer's own
+  key is never signed; an attestation signed by the signer's key, or made
+  before the signer started, never counts.
 
-The full reference is in
+Full reference:
 [`skills/ncli-signer/references/policy.md`](skills/ncli-signer/references/policy.md).
 
-**Threat model.** Any process that can open the socket is a client, so
-the socket's file mode, owner and `--allow-uid`/`--allow-gid` are the
+**Threat model.** Any process that can open the socket is a client; the
+socket's mode, owner and `--allow-uid`/`--allow-gid` are the
 authentication.
 
 | A compromised client can | It cannot |
@@ -1086,15 +1068,14 @@ authentication.
 | | replay an attestation, within a run or across restarts |
 
 Residual risks:
-- If another process runs as the signer's uid or shares its PID
-  namespace, it can read the key from memory. Use a separate container,
-  a separate uid and `shareProcessNamespace: false`.
+- A process with the signer's uid or PID namespace can read the key from
+  memory. Use a separate container, a separate uid and
+  `shareProcessNamespace: false`.
 - An approver's key is as powerful as the rule it unlocks.
-- An attestation made within `max_clock_skew` before a restart may still
-  validate once if `--state-dir` was lost, so keep the skew small on
-  rules that need attestations.
+- If `--state-dir` is lost, an attestation made within `max_clock_skew`
+  before a restart may validate once more; keep the skew small.
 - Unscoped auth kinds (22242, 27235) let a client log in as the signer
-  anywhere. Scope them with `tags`.
+  anywhere; scope them with `tags`.
 
 **Protocol.** The NIP-46 method set (`get_public_key`, `sign_event`,
 `nip04_*`, `nip44_*`, `ping`) is sent as one JSON object per line:
@@ -1123,25 +1104,22 @@ material. `--denials-file` collects denials alone.
 **For client authors** (ngit, agent bridges, ...):
 - Accept `bunker+unix:///abs/path.sock` (and `unix://`) wherever you
   accept `bunker://`.
-- Dial the path and write NIP-46 request JSON, one per line, without
-  encrypting it or wrapping it in an event. Read one response line per
-  request.
-- To pass attestations, send them as `params[1]` of `sign_event`.
+- Dial the path and write plain NIP-46 request JSON, one per line (no
+  encryption, no event wrapper); read one response line per request.
+- Send attestations as `params[1]` of `sign_event`.
 - Treat `denied: ...` as a refusal, not a transport error.
 - In Go, [`nmilat/nipLS`](https://github.com/ohstr/nmilat/tree/main/nipLS)
-  does all of this (`nipLS.Dial`) and serves it (`nipLS.NewServer`). The
-  protocol is [NIP-LS](https://github.com/ohstr/nips/blob/main/NIP-LS.md).
+  dials (`nipLS.Dial`) and serves (`nipLS.NewServer`) it. Spec:
+  [NIP-LS](https://github.com/ohstr/nips/blob/main/NIP-LS.md).
 
 `examples/signer/` has a full agent policy and a Kubernetes pod manifest
-with the sidecar.
-
-See [`skills/ncli-signer/SKILL.md`](skills/ncli-signer/SKILL.md).
+with the sidecar. See [`skills/ncli-signer/SKILL.md`](skills/ncli-signer/SKILL.md).
 
 ## `space`
 
 A meeting space (NIP-53, kind:30312) is a published record of where a
-meeting lives. It lasts even when nobody is in it, and joining it opens its
-voice call (a huddle) plus its chat.
+meeting lives; it lasts when empty. Joining opens its voice call (a huddle)
+and its chat.
 
 ```sh
 ncli space create standup --summary "Daily sync" --relay wss://relay.example --identity mykey
@@ -1151,10 +1129,10 @@ ncli space show standup --relay wss://relay.example
 ncli space join standup --relay wss://relay.example --identity mykey
 ```
 
-Without a terminal (or with `--json`), `space join` streams the call as
-JSON lines instead (`joined`, `participant_joined`/`left`,
-`speaking_started`/`stopped`, `chat`, `ended`) until `--duration` or an
-interrupt. The chat also works on its own, without joining:
+Without a terminal (or with `--json`), `space join` streams JSON lines
+(`joined`, `participant_joined`/`left`, `speaking_started`/`stopped`,
+`chat`, `ended`) until `--duration` or an interrupt. Chat works without
+joining:
 
 ```sh
 ncli space join 30312:<pubkey>:standup --relay wss://relay.example --duration 60s --json
@@ -1166,29 +1144,25 @@ See [`skills/ncli-space/SKILL.md`](skills/ncli-space/SKILL.md).
 
 ## `huddle`
 
-The voice rooms behind spaces, hosted by the relay itself. Enable the
-`huddle:` block (shape:
-[`examples/relay/community-voice-relay.yaml`](examples/relay/community-voice-relay.yaml)),
-then see which rooms have someone in them:
+The voice rooms behind spaces, hosted by the relay. Enable the `huddle:`
+block ([`examples/relay/community-voice-relay.yaml`](examples/relay/community-voice-relay.yaml)),
+then list rooms that have someone in them:
 
 ```sh
 ncli huddle list --relay wss://relay.example
 ```
 
-Join a room with [`ncli space join`](#space). The view shows who is in the room and who is speaking, read from the level
-telemetry every audio frame already carries. It never captures a microphone, so
-joining puts no audio into the room.
+Join with [`ncli space join`](#space): it shows who is in the room and who
+is speaking. It never captures a microphone, so joining adds no audio.
 
-Two endpoints reach the same rooms: `/huddle/{id}/audio` carries Opus over a
-plain WebSocket, and `/huddle/{id}/rtc` is a WebRTC SFU that also carries video
-and screen share. The same room id is the same call through either. The relay
-forwards Opus without decoding it, so it links no codec.
+Two endpoints reach the same rooms (same room id, same call):
+`/huddle/{id}/audio` (Opus over a plain WebSocket) and `/huddle/{id}/rtc`
+(a WebRTC SFU that also carries video and screen share). The relay forwards
+Opus without decoding it.
 
-`huddle.enabled` requires `nip11.url` — a joining client's NIP-42 event names
-the relay, and the endpoint validates against it. `huddle.allowedOrigins` is
-empty by default, which allows any origin: admission is gated by a signed
-challenge, so `Origin` is not the security boundary, and refusing on it would
-only lock out browsers while every CLI client kept working.
+`huddle.enabled` requires `nip11.url` (the joining client's NIP-42 event
+names it). `huddle.allowedOrigins` is empty by default, allowing any origin;
+admission is checked by a signed challenge, not `Origin`.
 
 Hearing the call needs a build with audio output:
 
@@ -1199,9 +1173,9 @@ go build -tags huddleaudio ./cmd/ncli
 CGO_ENABLED=1 go build -tags huddleaudio ./cmd/ncli
 ```
 
-Output needs cgo and ALSA on Linux and the release binaries are built without
-cgo, so it is not in the default build. Without the tag the roster still works
-and the status line says `watching only`.
+Release binaries are built without it (audio needs cgo, and ALSA on Linux).
+Without the tag the roster still works and the status line says
+`watching only`.
 
 ## `groups`
 
@@ -1232,17 +1206,15 @@ ncli groups delete standup --relay wss://relay.example --identity mykey
 ncli groups leave standup --relay wss://relay.example --identity friend
 ```
 
-A private group is invisible without `--identity`: `list` silently leaves it
-out, and `show` is refused (`auth`). On a relay with `groups.pendingJoins`, a
-join to a closed group without a code waits for an admin to `members add`
-you. See
+A private group is hidden without `--identity`: `list` leaves it out and
+`show` is refused (`auth`). With `groups.pendingJoins`, a codeless join to a
+closed group waits for an admin to `members add` you. See
 [`skills/ncli-groups/SKILL.md`](skills/ncli-groups/SKILL.md).
 
 ## `dm`, and talking through a signer
 
-Private messages (NIP-17), group chat, reactions, replies and your own
-profile, all signed, sealed and opened through `--signer`, so an agent can
-talk on Nostr while its key stays in `ncli signer serve`.
+Private messages (NIP-17), group chat, reactions, replies and your profile,
+all through `--signer`, so an agent's key can stay in `ncli signer serve`.
 
 ```sh
 ncli dm send --to npub1alice... "on my way" -s wss://inbox.example --signer bunker+unix:///run/signer/agent.sock
@@ -1262,22 +1234,22 @@ ncli profile follow npub1bob... --signer bunker+unix:///run/signer/agent.sock
 ncli find -f --kinds 1 --tag e=<event-id> -s wss://relay.example
 ```
 
-The signer policy decides who the agent may message: `unwrap_from` lets it
-open gift wraps only from listed senders, and `nip44_message_keys` (for
-`dm prove`) must be named. See
+In the signer policy, `unwrap_from` limits which senders' gift wraps open,
+and `nip44_message_keys` (for `dm prove`) must be named. See
 [`skills/ncli-messaging/SKILL.md`](skills/ncli-messaging/SKILL.md) and
 [`examples/signer/messaging-policy.yaml`](examples/signer/messaging-policy.yaml).
 
 ## `form`, questions answered in one response (NIP-PF)
 
-Forms ask one or more questions — single or multiple choice, text, number,
-date, time — with the option their author recommends and why, notes
-required on some options, defaults, a quorum and an end. Each responder
-answers every question in one response (the latest counts), and the author
-closes the form with a result: decided, default or cancelled. A form is
-private (one rumor gift-wrapped to each responder and to you, sent to `-s`
+A form asks questions (single or multiple choice, text, number, date,
+time) with the author's recommended option and why, optional required
+notes, defaults, a quorum and an end. Each responder answers all questions
+in one response (the latest counts); the author closes it with a result:
+decided, default or cancelled.
+
+A form is private (gift-wrapped to each responder and to you, sent to `-s`
 only; `--inbox` adds each recipient's DM relays, kind 10050), in a NIP-29
-group, or public; everything is signed through `--signer`.
+group, or public. Everything is signed through `--signer`.
 
 ```sh
 ncli form create --spec ask.json --to npub1bob... -s wss://inbox.example --signer bunker+unix:///run/signer/agent.sock
@@ -1288,15 +1260,13 @@ ncli form respond 3f2a9c -s wss://inbox.example     # question by question on th
 ncli form result 3f2a9c --status decided --choose revert --content "reverted" -s wss://inbox.example
 ```
 
-A response the form refuses is refused before anything is sent. The rules
-are nmilat's `nippf` (ohstr's NIP-PF draft). See
+A response the form would refuse is refused before sending. See
 [`skills/ncli-forms/SKILL.md`](skills/ncli-forms/SKILL.md).
 
 ## `blossom`
 
-Upload, fetch, and manage media: a client for the
-[Blossom protocol](https://github.com/hzrd149/blossom), content-addressed
-blob storage authenticated with your Nostr identity instead of a login.
+A client for [Blossom](https://github.com/hzrd149/blossom) media servers:
+content-addressed storage, authenticated with your Nostr identity.
 
 ```sh
 ncli blossom servers add https://blossom.example --identity mykey --publish
@@ -1315,10 +1285,9 @@ ncli blossom servers list
 ncli blossom servers remove https://blossom.example
 ```
 
-`upload`/`rm`/`mirror` fan out to every configured server and report a
-result per (item, server) pair; `download` tries them in order and stops
-at the first that answers. Any command taking a target identity also
-accepts someone else's, not just your own:
+`upload`/`rm`/`mirror` go to every configured server and report each
+(item, server) result; `download` tries servers in order until one answers.
+Commands that take an identity also accept someone else's:
 
 ```sh
 # someone else's media, not just your own
@@ -1327,14 +1296,13 @@ ncli blossom list alice@example.com
 ncli blossom servers discover alice@example.com --add
 ```
 
-See [`skills/ncli-blossom/SKILL.md`](skills/ncli-blossom/SKILL.md) for the
-full walkthrough, including the multi-server fan-out/fallback model and
-BUD-03 server-list publishing/discovery.
+See [`skills/ncli-blossom/SKILL.md`](skills/ncli-blossom/SKILL.md),
+including BUD-03 server-list publishing and discovery.
 
 ## `id`
 
-Generate or inspect a Nostr identity: no argument generates a new keypair
-(hex, nsec, npub); an argument resolves/inspects an existing one.
+No argument generates a keypair (hex, nsec, npub); an argument inspects an
+existing identity.
 
 ```sh
 # generate an identity, save it to the local vault (prints only the public key)
@@ -1370,10 +1338,8 @@ ncli id sign --identity mykey -e draft.json -o signed.json
 ncli id delegate --issuer mykey --delegatee otherkey --json
 ```
 
-The vault is encrypted under a password. `ncli id sign` signs an unsigned
-event with an identity's private key; `ncli id delegate` mints a NIP-26
-delegation token from one; `ncli id attest <npub> --until <time>` signs a
-NIP-OA owner attestation with an identity or through `--signer`.
+The vault is password-encrypted. `ncli id attest <npub> --until <time>`
+signs a NIP-OA owner attestation with an identity or through `--signer`.
 
 ![`ncli id` generating a keypair, then inspecting a nip-05 address](docs/vhs/id.gif)
 
@@ -1395,9 +1361,8 @@ ncli decode npub1... --json
 
 ## Agent skills
 
-For coding agents: [`AGENTS.md`](AGENTS.md) points to the matching skill
-under [`skills/`](skills/) (one per command group, usable standalone with
-just the `ncli` binary on `PATH`).
+[`AGENTS.md`](AGENTS.md) points agents to the matching skill under
+[`skills/`](skills/): one per command group, needing only `ncli` on `PATH`.
 
 ```
 # from the ncli binary itself, matching its version, into your agent's skills dir
@@ -1415,18 +1380,16 @@ npx skills add ohstr/ncli --all -y
 
 ## Configuration
 
-Config is loaded via [viper](https://github.com/spf13/viper) from a YAML
-file or `NCLI_`-prefixed environment variables. Without `--config`, ncli
-uses the current [`relay context`](#relay-context)
-if one is set, otherwise it looks for `ncli.yaml`/`relay.yaml` in the
-current directory, then `$HOME`. Every YAML input `ncli` accepts has a
-documented sample under [`examples/`](examples/).
+Config comes from a YAML file or `NCLI_`-prefixed environment variables.
+Without `--config`, ncli uses the current [`relay context`](#relay-context),
+then `ncli.yaml`/`relay.yaml` in the current directory, then `$HOME`. Every
+YAML input has a documented sample under [`examples/`](examples/).
 
 ## Docker and Kubernetes
 
-[`deploy/`](deploy/) runs the published `ghcr.io/ohstr/ncli` image as one of
-several kinds of relay (`deploy/stacks/<kind>/`), each with a Docker Compose
-file and values for the shared Helm chart:
+[`deploy/`](deploy/) runs the `ghcr.io/ohstr/ncli` image as one of several
+relay stacks (`deploy/stacks/<kind>/`), each with a Compose file and values
+for the shared Helm chart:
 
 | stack | what runs |
 |---|---|
@@ -1442,26 +1405,24 @@ docker compose -f deploy/stacks/public-search/compose.yaml up -d
 ```
 
 Secrets stay in `.env` (gitignored) or a Kubernetes Secret and reach the
-relay as `NCLI_*` environment variables. See
-[`deploy/README.md`](deploy/README.md) for Helm.
+relay as `NCLI_*` variables. Helm: [`deploy/README.md`](deploy/README.md).
 
 ### Meilisearch versions
 
-Profile search needs Meilisearch 1.14 or later; 1.55 or later is
-recommended. Newer versions index large relays much faster (1.41 and 1.44
-make the word and prefix steps cheaper) and fix an indexing memory leak
-(1.39) and a crash when threads exit (1.52.4, 1.53.3, 1.54.3). Avoid
-1.41.x and 1.42.x, which have a typo-tolerance bug fixed in 1.43.
+Profile search needs Meilisearch 1.14+; 1.55+ is recommended (faster
+indexing on large relays since 1.41/1.44; fixes for an indexing memory leak
+in 1.39 and a thread-exit crash in 1.52.4, 1.53.3, 1.54.3). Avoid 1.41.x
+and 1.42.x (typo-tolerance bug, fixed in 1.43).
 
-An existing Meilisearch database upgrades in place when started once with
-`--upgrade-db` (`MEILI_UPGRADE_DB=true`). Starting from an empty database
-also works: the relay rebuilds search on its own. On a small host, setting
-`MEILI_MAX_INDEXING_MEMORY` (for example `1GiB`) leaves more memory to the
-page cache, which a large index needs.
+- Upgrade an existing database in place by starting once with
+  `--upgrade-db` (`MEILI_UPGRADE_DB=true`), or start empty: the relay
+  rebuilds search itself.
+- On a small host, set `MEILI_MAX_INDEXING_MEMORY` (e.g. `1GiB`) to leave
+  memory for the page cache a large index needs.
 
 ## Development
 
-This project uses [`just`](https://github.com/casey/just) as its task runner:
+Tasks run with [`just`](https://github.com/casey/just):
 
 ```sh
 # go build -o bin/ncli ./cmd/ncli
@@ -1489,10 +1450,10 @@ just dev down
 just vhs
 ```
 
-> Building from source needs one extra one-time setup step — see
+> Building from source needs a one-time setup step: see
 > [CONTRIBUTING.md](CONTRIBUTING.md#getting-set-up).
 
-Releases are cut manually via the `workflow_dispatch`-only
+Releases are cut by hand with the `workflow_dispatch`-only
 [`.github/workflows/release.yml`](.github/workflows/release.yml).
 
 ## License

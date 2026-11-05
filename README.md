@@ -12,11 +12,11 @@ events.**
 ## Features
 
 - [`ncli relay`](#relay) — Run your own Nostr relay:
-  - Community — [example](examples/relay/open-community-relay.yaml)
-  - Media server (Blossom) — [example](examples/relay/blossom-relay.yaml)
-  - Public search relay (indexer) — [example](examples/relay/public-search-relay.yaml)
-  - Personal outbox — [example](examples/relay/personal-relay.yaml)
-  - Voice and spaces (huddle) — [example](examples/relay/community-voice-relay.yaml)
+  - Community — [`open-community-relay.yaml`](examples/relay/open-community-relay.yaml)
+  - Media server (Blossom) — [`blossom-relay.yaml`](examples/relay/blossom-relay.yaml)
+  - Public search relay (indexer) — [`public-search-relay.yaml`](examples/relay/public-search-relay.yaml)
+  - Personal outbox — [`personal-relay.yaml`](examples/relay/personal-relay.yaml)
+  - Voice and spaces (huddle) — [`community-voice-relay.yaml`](examples/relay/community-voice-relay.yaml)
 - [`ncli apply`](#apply) — Stream, sync, or inspect events, with a live TUI and hot-reloading config
 - [`ncli find`](#find) — Query events
 - [`ncli profile`](#profile) — Look up one identity as a readable card

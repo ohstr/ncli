@@ -22,7 +22,7 @@
 ### Changed
 
 - Changes `build/relay/` to `deploy/`: one Helm chart with optional Meilisearch and MinIO, and a ready-to-run stack per kind of relay (`dev`, `personal`, `public-search`, `community`). Secrets reach the relay as `NCLI_*` variables. ([#224](https://github.com/ohstr/ncli/pull/224))
-- Changes the relay to serve gift wraps (kind 1059) only to their recipient. `recipientOnlyKinds: []` restores the old behaviour. ([#224](https://github.com/ohstr/ncli/pull/224))
+- Changes the relay to serve gift wraps (kind 1059) only to a reader logged in (NIP-42) as their recipient, so a signer policy must allow kind 22242 for its key to read them. `recipientOnlyKinds: []` restores the old behaviour. ([#224](https://github.com/ohstr/ncli/pull/224))
 - Changes subjects, titles and message lines to print a non-ASCII letter that sits beside ASCII letters as an escape (look-alikes such as a Cyrillic `е`), collapse padding, and cap titles at 200 runes. ([#218](https://github.com/ohstr/ncli/pull/218))
 
 ### Fixed

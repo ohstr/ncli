@@ -10,8 +10,8 @@ import (
 )
 
 // dmPolicy lets the agent seal, open and prove messages with alice only,
-// plus copies to itself.
-func dmPolicy(t *testing.T, e *Env) string {
+// plus copies to itself, and log in to relay to read its gift wraps.
+func dmPolicy(t *testing.T, e *Env, relay string) string {
 	t.Helper()
 	agent, alice := A(t, "agent"), A(t, "alice")
 	return e.WriteFile("dm-policy.yaml", fmt.Sprintf(`kind: signer-policy
@@ -24,9 +24,11 @@ rules:
     allow: {methods: [nip44_message_keys], counterparts: [%[1]s, %[2]s]}
   - name: inbox
     allow: {unwrap_from: [%[1]s, %[2]s]}
+  - name: relay-login
+    allow: {kinds: [22242], tags: {relay: [%[3]s]}}
   - name: rest
     deny: {}
-`, alice.Npub, agent.Npub))
+`, alice.Npub, agent.Npub, relay))
 }
 
 type dmMessage struct {
@@ -72,7 +74,7 @@ func TestDM(t *testing.T) {
 	r := StartRelay(t, "", nil)
 	e := NewEnv(t)
 	agent, alice, mallory := A(t, "agent"), A(t, "alice"), A(t, "mallory")
-	s := startSigner(t, e, dmPolicy(t, e))
+	s := startSigner(t, e, dmPolicy(t, e, r.URL))
 	relay := []string{"-s", r.URL}
 
 	var sent dmSent

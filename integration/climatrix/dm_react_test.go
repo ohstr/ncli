@@ -48,7 +48,7 @@ func TestDMReactions(t *testing.T) {
 	r := StartRelay(t, "", nil)
 	e := NewEnv(t)
 	agent, alice, mallory := A(t, "agent"), A(t, "alice"), A(t, "mallory")
-	s := startSigner(t, e, dmPolicy(t, e))
+	s := startSigner(t, e, dmPolicy(t, e, r.URL))
 	relay := []string{"-s", r.URL}
 	with := func(args ...string) []string { return append(args, relay...) }
 

@@ -227,8 +227,10 @@ func TestCheckCommunityConfig(t *testing.T) {
 		"blossom without a host":      func(c *RelayConfig) { c.Nip11.URL = "" },
 		"blossom at the root":         func(c *RelayConfig) { c.Blossom.BlobPrefix = "/" },
 		"blossom over /query":         func(c *RelayConfig) { c.Blossom.UploadPaths = []string{"/query"} },
-		"s3 without a bucket":         func(c *RelayConfig) { c.Blossom.Storage = BlossomStorage{Kind: "s3", S3: BlossomS3{Endpoint: "minio:9000"}} },
-		"an unknown storage kind":     func(c *RelayConfig) { c.Blossom.Storage.Kind = "ftp" },
+		"s3 without a bucket": func(c *RelayConfig) {
+			c.Blossom.Storage = BlossomStorage{Kind: "s3", S3: BlossomS3{Endpoint: "minio:9000"}}
+		},
+		"an unknown storage kind": func(c *RelayConfig) { c.Blossom.Storage.Kind = "ftp" },
 	} {
 		t.Run(name, func(t *testing.T) {
 			c := valid()

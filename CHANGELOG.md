@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.8.0-rc.48]
+## [0.8.0-rc.49]
 
 ### Added
 
@@ -8,6 +8,21 @@
 - Adds seat notices (`groups.membershipNotices`): the relay tells a member, live, when they gain or lose a seat in a group. Only that member and relay admins can read one. ([#224](https://github.com/ohstr/ncli/pull/224))
 - Adds presence (`presence.enabled`): `POST /query` for kind 40902 answers whether each author is online. ([#224](https://github.com/ohstr/ncli/pull/224))
 - Adds Blossom on the relay's own origin (`blossom`): members upload, anyone or only members download, and files live in a directory or MinIO. ([#224](https://github.com/ohstr/ncli/pull/224))
+
+### Changed
+
+- Changes `build/relay/` to `deploy/`: one Helm chart with optional Meilisearch and MinIO, and a ready-to-run stack per kind of relay (`dev`, `personal`, `public-search`, `community`). Secrets reach the relay as `NCLI_*` variables. ([#224](https://github.com/ohstr/ncli/pull/224))
+- Changes the relay to serve gift wraps (kind 1059) only to a reader logged in (NIP-42) as their recipient, so a signer policy must allow kind 22242 for its key to read them. `recipientOnlyKinds: []` restores the old behaviour. ([#224](https://github.com/ohstr/ncli/pull/224))
+
+### Fixed
+
+- Fixes `ncli blossom` signing tokens with no `server` tag, which servers that check it refuse. ([#224](https://github.com/ohstr/ncli/pull/224))
+- Fixes the Docker Compose stacks never turning on profile search: they set variables the relay doesn't read. ([#224](https://github.com/ohstr/ncli/pull/224))
+
+## [0.8.0-rc.48]
+
+### Added
+
 - Adds `dm react` and `dm unreact`: NIP-25 reactions and their NIP-09 retractions inside NIP-17 gift wraps, to the conversation's participants and a copy to yourself. `dm read` shows them as `reaction` / `delete` entries, and `--fold` applies the deletions (each only to its own author's events) and folds reactions into the messages they react to. ([#209](https://github.com/ohstr/ncli/pull/209))
 - Adds the signer's `nipoa_attest` method and `attest` rule (`subordinates`, a required `max_until`, `kinds`): an attestation is signed only when such a rule allows it, so existing policies refuse every one. `signer check --method nipoa_attest --subordinate --conditions` decides one offline. ([#208](https://github.com/ohstr/ncli/pull/208))
 - Adds `ncli id attest`, which signs a NIP-OA owner attestation with `--identity` or through `--signer` and prints the `auth` tag, verified. ([#208](https://github.com/ohstr/ncli/pull/208))
@@ -21,14 +36,10 @@
 
 ### Changed
 
-- Changes `build/relay/` to `deploy/`: one Helm chart with optional Meilisearch and MinIO, and a ready-to-run stack per kind of relay (`dev`, `personal`, `public-search`, `community`). Secrets reach the relay as `NCLI_*` variables. ([#224](https://github.com/ohstr/ncli/pull/224))
-- Changes the relay to serve gift wraps (kind 1059) only to a reader logged in (NIP-42) as their recipient, so a signer policy must allow kind 22242 for its key to read them. `recipientOnlyKinds: []` restores the old behaviour. ([#224](https://github.com/ohstr/ncli/pull/224))
 - Changes subjects, titles and message lines to print a non-ASCII letter that sits beside ASCII letters as an escape (look-alikes such as a Cyrillic `е`), collapse padding, and cap titles at 200 runes. ([#218](https://github.com/ohstr/ncli/pull/218))
 
 ### Fixed
 
-- Fixes `ncli blossom` signing tokens with no `server` tag, which servers that check it refuse. ([#224](https://github.com/ohstr/ncli/pull/224))
-- Fixes the Docker Compose stacks never turning on profile search: they set variables the relay doesn't read. ([#224](https://github.com/ohstr/ncli/pull/224))
 - Fixes ncli's own NIP-98 headers (relay admin, huddle) tagging their anti-replay value `nonce`, which NIP-13 reads as a proof-of-work claim, so a socket signer's client refused them. They tag `salt`, as nmilat's `nip98.Sign` does; verifiers never read it, so old and new headers interoperate. ([#207](https://github.com/ohstr/ncli/pull/207))
 - Fixes the signer charging an `unwrap_from` rule's rate before it knew the seal's author, so gift wraps from anyone could use up a listed sender's rate. The rate is charged only for a wrap the rule releases; refused wraps are remembered and refused again without decryption; `dm read` retries a wrap refused for rate instead of skipping it. ([#214](https://github.com/ohstr/ncli/pull/214))
 - Fixes text output printing fields a relay or another author controls (message content and subject, reactions, group, space and profile fields, decoded NIP-19/token identifiers, relay hints and labels, identity relays, NIP-85 stat values, every relay publish result, and Blossom server responses and blob listings) raw: control, separator and format characters (bidi, zero-width, tags) and invalid UTF-8 now print as Go escapes, and multi-line content stays indented, so remote text can't forge a line, move the cursor or reorder what the terminal shows. `--json` is unchanged. ([#213](https://github.com/ohstr/ncli/pull/213))

@@ -95,6 +95,9 @@ func promptResponse(w io.Writer, in *bufio.Reader, f *nippf.Form, labels []strin
 					p("  (say why: a note is required)")
 				}
 				p("\n")
+				if o.Detail != "" {
+					p("     %s\n", esc(o.Detail))
+				}
 			}
 			if q.Why != "" {
 				p("  why recommended: %s\n", esc(q.Why))
@@ -268,6 +271,9 @@ func promptSpec(w io.Writer, in *bufio.Reader) (*Spec, error) {
 				}
 				o := SpecOption{ID: id}
 				if o.Label, err = ask("    label: "); err != nil {
+					return nil, err
+				}
+				if o.Detail, err = ask("    detail (what choosing it does; Enter for none): "); err != nil {
 					return nil, err
 				}
 				if o.Rec, err = yes(w, in, "    recommended? [y/N] ", false); err != nil {

@@ -185,7 +185,7 @@ func specFile(t *testing.T, responders []string, extra string) string {
    "why": "The revert brings back what ran for 3 days.",
    "options": [
     {"id": "revert", "label": "Merge my revert PR", "rec": true},
-    {"id": "forward", "label": "Fix forward in a new PR"},
+    {"id": "forward", "label": "Fix forward in a new PR", "detail": "Keeps 9c1e0f2; hello stays down until the fix lands."},
     {"id": "other", "label": "Other (say what)", "noteRequired": true}]},
   {"text": "Raise hello's memory limit to (MiB)", "type": "number", "optional": true,
    "min": "256", "max": 2048},
@@ -537,6 +537,37 @@ func TestPublicForm(t *testing.T) {
 	}
 }
 
+// An option's detail travels as its detail tag and prints on the line under
+// the option, in form show and in respond's prompts; --json carries it.
+func TestOptionDetail(t *testing.T) {
+	n := setup(t)
+	alice, bob := newActor(t, 1), newActor(t, 2)
+	sent := decode[deliveryJSON](t, mustOK(t, "", "create", "--spec", specFile(t, []string{bob.pub}, ""), "-s", relay, "--json", "--signer", alice.priv))
+	detail := "Keeps 9c1e0f2; hello stays down until the fix lands."
+	if ev := n.relays[relay][0]; !slices.ContainsFunc(ev.Tags, func(t []string) bool {
+		return len(t) == 3 && t[0] == "detail" && t[1] == "forward" && t[2] == detail
+	}) {
+		t.Fatalf("no detail tag: %v", ev.Tags)
+	}
+	out := mustOK(t, "", "show", sent.ID, "-s", relay, "--signer", bob.priv).out
+	if !strings.Contains(out, "    - forward: Fix forward in a new PR  — 0\n      "+detail+"\n") {
+		t.Fatalf("show:\n%s", out)
+	}
+	var v struct {
+		Form *nippf.Form `json:"form"`
+	}
+	if err := json.Unmarshal([]byte(mustOK(t, "", "show", sent.ID, "-s", relay, "--json", "--signer", bob.priv).out), &v); err != nil {
+		t.Fatal(err)
+	}
+	if o := v.Form.Questions[0].Options; o[1].Detail != detail || o[0].Detail != "" {
+		t.Fatalf("--json options %+v", o)
+	}
+	r := mustOK(t, "2\n\n\n\ny\n", "respond", sent.ID, "-s", relay, "--signer", bob.priv)
+	if !strings.Contains(r.errOut, "  2) Fix forward in a new PR\n     "+detail+"\n") {
+		t.Fatalf("prompts:\n%s", r.errOut)
+	}
+}
+
 func TestReadOnlyForm(t *testing.T) {
 	n := setup(t)
 	alice, bob := newActor(t, 1), newActor(t, 2)
@@ -672,8 +703,8 @@ func TestInteractiveCreate(t *testing.T) {
 	in := strings.Join([]string{
 		"Retire neuron claude-3?", "It refused every login since 10-28.",
 		"What should happen to claude-3?", "", // singlechoice
-		"retire", "Retire it", "y", "n",
-		"wait", "Keep it two more days", "n", "n",
+		"retire", "Retire it", "Stops it for good.", "y", "n",
+		"wait", "Keep it two more days", "", "n", "n",
 		"", "y", // finish options; add Other
 		"Two days of refused logins.", "n", "",
 		"Retire by", "date", "", "n", "2026-11-01", "2026-12-31", "", // a date question
@@ -690,6 +721,7 @@ func TestInteractiveCreate(t *testing.T) {
 	}
 	f := out.Form
 	if f.Title != "Retire neuron claude-3?" || len(f.Questions) != 2 || len(f.Questions[0].Options) != 3 || !f.Questions[0].Options[0].Rec ||
+		f.Questions[0].Options[0].Detail != "Stops it for good." || f.Questions[0].Options[1].Detail != "" ||
 		!f.Questions[0].Options[2].NoteRequired || f.Questions[1].Min != "2026-11-01" || f.Quorum != 1 || f.EndsAt == 0 ||
 		!slices.Equal(f.Responders(), []string{bob.pub}) {
 		t.Fatalf("form %+v", f)

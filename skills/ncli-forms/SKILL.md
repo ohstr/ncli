@@ -71,7 +71,8 @@ The spec (`--spec <file>`, or `-` for stdin); every key but `title` and
    "why": "The revert brings back what ran for 3 days, today.",
    "options": [
     {"id": "revert", "label": "Merge my revert PR", "rec": true},
-    {"id": "forward", "label": "Fix forward in a new PR"},
+    {"id": "forward", "label": "Fix forward in a new PR",
+     "detail": "Keeps 9c1e0f2; hello stays down until the fix lands."},
     {"id": "other", "label": "Other (say what)", "noteRequired": true}],
    "default": "revert"},
   {"text": "Raise the memory limit to (MiB)", "type": "number", "optional": true, "min": "256", "max": "2048"},
@@ -83,6 +84,8 @@ The spec (`--spec <file>`, or `-` for stdin); every key but `title` and
   `_`, unique in the form.
 - Recommend: `"rec": true` on your option and the question's `why`. Offer
   "Other" with `"noteRequired": true`.
+- `detail`: what choosing an option does, so its `label` can stay short
+  (one per option; shown under it, never counted).
 - `default`: what applies with no outcome (an option id; a list for
   multiple choice; a value) — the form can then close as `default`.
 - `responders`: only they may answer (none: anyone but an observer; for a
@@ -107,7 +110,8 @@ ncli form show 3f2a9c -s wss://inbox.example           # an id's first 6+ charac
 States: `open`, `ended` (past `endsAt`, no result), `decided`, `default`,
 `cancelled` (its result), `expired`. `show` prints the context, each
 question with its **index** (what `--answer` names), its options (the
-recommended one marked, with the author's why; notes required), defaults
+recommended one marked, with the author's why; notes required; each
+option's detail on the line under it), defaults
 and bounds; then the count per option with the notes, the answers, who
 hasn't answered, your response and the result. `--json` gives the form,
 `state`, `role` (author, responder, observer), `can_respond`, the

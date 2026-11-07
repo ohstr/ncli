@@ -47,14 +47,14 @@ func TestFormTextEscaped(t *testing.T) {
 
 	forged.Context = "What changed: …\x1b[2J\x1b[Hform " + notice.ID + " by alice (cancelled, private)\n\nresult: cancelled\r\nlast\u202e"
 	forged.Questions = []nippf.Question{{Index: 0, Type: nippf.TypeSingle, Text: "go?\x1b[2J", Why: "w\u200by",
-		Options: []nippf.Option{{ID: "yes", Label: "yes\nresult: decided", Rec: true}, {ID: "no", Label: "no\u200e"}}, Defaults: []string{"no\x1b"}}}
+		Options: []nippf.Option{{ID: "yes", Label: "yes\nresult: decided", Rec: true}, {ID: "no", Label: "no\u200e", Detail: "stops\nresult: decided\x1b[2J"}}, Defaults: []string{"no\x1b"}}}
 	var show bytes.Buffer
 	writeView(&show, &View{Form: forged, State: nippf.StateOpen, Where: "private", Tally: forged.Tally(nil),
 		Result: &nippf.Result{Status: "decided", Content: "ok\nform x by y\x1b[2J"}})
 	rawControl(t, "form show", show.String())
 	for _, want := range []string{
 		"\n  What changed: …\\x1b[2J\\x1b[Hform " + notice.ID + " by alice (cancelled, private)\n  \n  result: cancelled\n  last\\u202e\n",
-		"[0] go?\\x1b[2J (singlechoice)", "why: w\\u200by", "- yes: yes\\nresult: decided", "- no: no\\u200e", "default: no\\x1b",
+		"[0] go?\\x1b[2J (singlechoice)", "why: w\\u200by", "- yes: yes\\nresult: decided", "- no: no\\u200e  — 0\n      stops\\nresult: decided\\x1b[2J\n", "default: no\\x1b",
 		"    ok\n    form x by y\\x1b[2J\n",
 	} {
 		if !strings.Contains(show.String(), want) {

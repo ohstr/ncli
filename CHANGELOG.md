@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.8.0-rc.50]
+
+### Added
+
+- Adds option details to `ncli form` (NIP-PF `detail` tags): a spec option's `detail`, or the `form create` prompt, says what choosing it does. `form show` and `form respond` print it under the option, and `--json` includes it.
+
 ## [0.8.0-rc.49]
 
 ### Added

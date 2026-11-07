@@ -47,6 +47,7 @@ type SpecOption struct {
 	Label        string `json:"label"`
 	Rec          bool   `json:"rec,omitempty"`
 	NoteRequired bool   `json:"noteRequired,omitempty"`
+	Detail       string `json:"detail,omitempty"`
 }
 
 // stringList reads a string or a list of strings (numbers kept as written).
@@ -153,7 +154,7 @@ func (s *Spec) Form(resolve func(string) (string, error)) (*nippf.Form, error) {
 		fq := nippf.Question{Index: i, Text: q.Text, Type: q.Type, Why: q.Why, Optional: q.Optional,
 			Min: string(q.Min), Max: string(q.Max), Defaults: []string(q.Default)}
 		for _, o := range q.Options {
-			fq.Options = append(fq.Options, nippf.Option{ID: o.ID, Label: o.Label, Rec: o.Rec, NoteRequired: o.NoteRequired})
+			fq.Options = append(fq.Options, nippf.Option{ID: o.ID, Label: o.Label, Rec: o.Rec, NoteRequired: o.NoteRequired, Detail: o.Detail})
 		}
 		f.Questions = append(f.Questions, fq)
 	}

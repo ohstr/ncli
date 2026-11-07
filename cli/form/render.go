@@ -214,6 +214,9 @@ func writeView(w io.Writer, v *View) {
 				p("  — %d", qt.Counts[o.ID])
 			}
 			p("\n")
+			if o.Detail != "" {
+				p("      %s\n", esc(o.Detail))
+			}
 			if qt != nil {
 				for _, n := range qt.Notes[o.ID] {
 					p("        %s: %s\n", short(n.PubKey), esc(n.Text))

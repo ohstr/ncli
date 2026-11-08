@@ -380,6 +380,13 @@ func StartRelay(t *testing.T, base string, overrides map[string]any) *Relay {
 // StartRelayArgs is StartRelay with extra `ncli relay` flags (e.g. --json).
 func StartRelayArgs(t *testing.T, base string, overrides map[string]any, args ...string) *Relay {
 	t.Helper()
+	return StartRelayEnv(t, base, overrides, nil, args...)
+}
+
+// StartRelayEnv is StartRelayArgs with extra environment variables for the
+// relay process (e.g. NCLI_* settings kept out of relay.yaml).
+func StartRelayEnv(t *testing.T, base string, overrides map[string]any, env map[string]string, args ...string) *Relay {
+	t.Helper()
 	cfg := map[string]any{}
 	if base != "" {
 		if err := yaml.Unmarshal([]byte(base), &cfg); err != nil {
@@ -434,6 +441,9 @@ func StartRelayArgs(t *testing.T, base string, overrides map[string]any, args ..
 		LogPath:    filepath.Join(dir, "relay.out"),
 		args:       args,
 		env:        NewEnv(t)}
+	for k, v := range env {
+		r.env.Setenv(k, v)
+	}
 	if err := os.WriteFile(r.ConfigPath, b, 0o600); err != nil {
 		t.Fatal(err)
 	}

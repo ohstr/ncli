@@ -1,0 +1,275 @@
+package climatrix
+
+import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
+)
+
+// minioImage is pinned by digest: MinIO no longer publishes images on
+// Docker Hub, and Chainguard's free tier only tags :latest.
+const minioImage = "cgr.dev/chainguard/minio@sha256:a1ac4589a5f8136b616e667b48a0bea9719bb10bd45799ea946f24bbedfafde4"
+
+// MinIO is an S3-compatible store running in Docker, with one bucket.
+type MinIO struct {
+	Endpoint  string // host:port
+	AccessKey string
+	SecretKey string
+	Bucket    string
+	client    *minio.Client
+}
+
+// skipS3 skips a test that needs MinIO, or fails it when
+// CLIMATRIX_REQUIRE_S3=1 (set in CI, where a skip would hide that the S3
+// storage went untested).
+func skipS3(t *testing.T, format string, args ...any) {
+	t.Helper()
+	if os.Getenv("CLIMATRIX_REQUIRE_S3") == "1" {
+		t.Fatalf("CLIMATRIX_REQUIRE_S3=1: "+format, args...)
+	}
+	t.Skipf(format, args...)
+}
+
+// StartMinIO runs MinIO in Docker and creates a bucket; skips when Docker
+// isn't available or the container doesn't start (fails instead under
+// CLIMATRIX_REQUIRE_S3=1).
+func StartMinIO(t *testing.T) *MinIO {
+	t.Helper()
+	if _, err := exec.LookPath("docker"); err != nil {
+		skipS3(t, "docker not available")
+	}
+	m := &MinIO{AccessKey: "climatrix", SecretKey: "climatrix-secret", Bucket: "ncli-media"}
+	port := allocPort(t)
+	name := fmt.Sprintf("climatrix-minio-%d-%d", os.Getpid(), port)
+	// Removed whatever happens below: a run that was cut short, or a
+	// container created but never started (a port collision), isn't
+	// removed by --rm.
+	t.Cleanup(func() { _ = exec.Command("docker", "rm", "-f", name).Run() })
+	// Bounded, so a stuck pull ends as a skip (or failure) of this test
+	// rather than the package timeout, which runs no cleanup.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "docker", "run", "-d", "--rm", "--name", name,
+		"-p", fmt.Sprintf("%d:9000", port),
+		"-e", "MINIO_ROOT_USER="+m.AccessKey, "-e", "MINIO_ROOT_PASSWORD="+m.SecretKey,
+		minioImage, "server", "/data").CombinedOutput()
+	if err != nil {
+		skipS3(t, "can't start %s: %v\n%s", minioImage, err, out)
+	}
+
+	m.Endpoint = fmt.Sprintf("%s:%d", dockerHost(), port)
+	m.client, err = minio.New(m.Endpoint, &minio.Options{Creds: credentials.NewStaticV4(m.AccessKey, m.SecretKey, "")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var lastErr error
+	for deadline := time.Now().Add(30 * time.Second); time.Now().Before(deadline); time.Sleep(200 * time.Millisecond) {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		lastErr = m.client.MakeBucket(ctx, m.Bucket, minio.MakeBucketOptions{})
+		cancel()
+		if lastErr == nil {
+			return m
+		}
+	}
+	t.Fatalf("minio at %s never created bucket %s: %v (set CLIMATRIX_DOCKER_HOST if docker ports aren't on localhost)", m.Endpoint, m.Bucket, lastErr)
+	return nil
+}
+
+// Has reports whether the bucket holds key.
+func (m *MinIO) Has(t *testing.T, key string) bool {
+	t.Helper()
+	_, err := m.client.StatObject(context.Background(), m.Bucket, key, minio.StatObjectOptions{})
+	if err == nil {
+		return true
+	}
+	if minio.ToErrorResponse(err).Code == "NoSuchKey" {
+		return false
+	}
+	t.Fatalf("stat %s: %v", key, err)
+	return false
+}
+
+// TestBlossomRelay drives `ncli blossom` against Blossom served by a real
+// `ncli relay` process, once with blobs in a directory and once in MinIO.
+func TestBlossomRelay(t *testing.T) {
+	needsRelay(t)
+
+	t.Run("dir", func(t *testing.T) {
+		dir := filepath.Join(t.TempDir(), "blobs")
+		testBlossomRelay(t, map[string]any{"kind": "dir", "dir": dir}, nil, func(t *testing.T, sha string) bool {
+			_, err := os.Stat(filepath.Join(dir, sha[:2], sha))
+			return err == nil
+		})
+	})
+
+	t.Run("s3", func(t *testing.T) {
+		m := StartMinIO(t)
+		storage := map[string]any{"kind": "s3", "s3": map[string]any{
+			"endpoint": m.Endpoint, "bucket": m.Bucket,
+			// The keys come from the environment; a NCLI_* variable only
+			// overrides a key the file already has.
+			"accessKey": "", "secretKey": "",
+		}}
+		env := map[string]string{
+			"NCLI_BLOSSOM_STORAGE_S3_ACCESSKEY": m.AccessKey,
+			"NCLI_BLOSSOM_STORAGE_S3_SECRETKEY": m.SecretKey,
+		}
+		testBlossomRelay(t, storage, env, func(t *testing.T, sha string) bool { return m.Has(t, sha) })
+	})
+}
+
+// testBlossomRelay runs the scenario on a relay storing blobs in storage;
+// stored reports whether the store holds a blob.
+func testBlossomRelay(t *testing.T, storage map[string]any, env map[string]string, stored func(*testing.T, string) bool) {
+	t.Helper()
+	const maxBlob = 1024
+	r := StartRelayEnv(t, "", map[string]any{
+		"membership": map[string]any{"enabled": true},
+		"blossom": map[string]any{
+			"enabled":      true,
+			"maxBlobBytes": maxBlob,
+			"membersOnly":  map[string]any{"upload": true},
+			"storage":      storage,
+		},
+	}, env)
+	// Every command names the relay's origin (BUD-01 serves all endpoints
+	// at the root); blob URLs are under its blob prefix, which also works
+	// as a server for download.
+	srv := "http" + strings.TrimPrefix(r.URL, "ws")
+	media := srv + "/media"
+	var blobURL string
+	alice, eve := A(t, "alice"), A(t, "eve")
+	addMember(t, r, alice.PubHex)
+
+	e := NewEnv(t)
+	content := "hello from the relay's own origin\n"
+	file := e.WriteFile("hello.txt", content)
+	sum := sha256.Sum256([]byte(content))
+	hash := hex.EncodeToString(sum[:])
+
+	t.Run("upload returns a URL on the relay origin", func(t *testing.T) {
+		var rep struct {
+			Succeeded int
+			Results   []struct {
+				SHA256 string `json:"sha256"`
+				URL    string `json:"url"`
+			}
+		}
+		e.MustOK(t, "blossom", "upload", file, "--identity", alice.Nsec, "--server", srv, "--json").JSON(t, &rep)
+		if rep.Succeeded != 1 || len(rep.Results) != 1 || rep.Results[0].SHA256 != hash {
+			t.Fatalf("upload: %+v", rep)
+		}
+		if want := srv + "/media/" + hash; !strings.HasPrefix(rep.Results[0].URL, want) {
+			t.Errorf("url = %q, want %s[.ext]", rep.Results[0].URL, want)
+		}
+		blobURL = rep.Results[0].URL
+		if !stored(t, hash) {
+			t.Errorf("blob %s is not in the configured store", hash)
+		}
+	})
+
+	t.Run("download round-trips the bytes", func(t *testing.T) {
+		out := filepath.Join(e.Dir, "got.txt")
+		e.MustOK(t, "blossom", "download", hash, "-o", out, "--server", srv, "--json")
+		if got, _ := os.ReadFile(out); string(got) != content {
+			t.Errorf("downloaded %q", got)
+		}
+		if res := e.MustOK(t, "blossom", "download", hash, "-o", "-", "--server", srv); res.Stdout != content {
+			t.Errorf("-o - wrote %q", res.Stdout)
+		}
+		// The blob prefix still works as a server.
+		if res := e.MustOK(t, "blossom", "download", hash, "-o", "-", "--server", media); res.Stdout != content {
+			t.Errorf("--server %s wrote %q", media, res.Stdout)
+		}
+		for _, u := range []string{srv + "/" + hash + ".txt", media + "/" + hash + ".txt"} {
+			resp, err := http.Get(u)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var body bytes.Buffer
+			_, _ = body.ReadFrom(resp.Body)
+			_ = resp.Body.Close()
+			if resp.StatusCode != http.StatusOK || body.String() != content {
+				t.Errorf("GET %s: %d %q", u, resp.StatusCode, body.String())
+			}
+		}
+	})
+
+	t.Run("download by the descriptor URL needs no server", func(t *testing.T) {
+		if blobURL == "" {
+			t.Skip("upload failed")
+		}
+		var rep struct{ Server string }
+		out := filepath.Join(e.Dir, "by-url.txt")
+		e.MustOK(t, "blossom", "download", blobURL, "-o", out, "--json").JSON(t, &rep)
+		if got, _ := os.ReadFile(out); string(got) != content {
+			t.Errorf("downloaded %q", got)
+		}
+		if rep.Server != blobURL {
+			t.Errorf("served by %q, want the URL itself", rep.Server)
+		}
+	})
+
+	t.Run("list is unsupported: the relay serves no BUD-12 list", func(t *testing.T) {
+		for _, server := range []string{srv, media} {
+			e.Run(t, "blossom", "list", "--identity", alice.Nsec, "--server", server, "--json").ExpectErr(t, "unsupported")
+		}
+	})
+
+	t.Run("upload --optimize is unsupported: no BUD-05 media", func(t *testing.T) {
+		er := e.Run(t, "blossom", "upload", file, "--optimize", "--identity", alice.Nsec, "--server", srv, "--json").expectErr(t, "unsupported", true)
+		if !strings.Contains(er.Error, "media optimization is not supported") {
+			t.Errorf("error doesn't carry the relay's reason: %q", er.Error)
+		}
+	})
+
+	t.Run("mirror is unsupported: no BUD-04 mirror", func(t *testing.T) {
+		er := e.Run(t, "blossom", "mirror", srv+"/"+hash, "--identity", alice.Nsec, "--server", srv, "--json").expectErr(t, "unsupported", true)
+		if !strings.Contains(er.Error, "mirror is not supported") {
+			t.Errorf("error doesn't carry the relay's reason: %q", er.Error)
+		}
+	})
+
+	t.Run("over maxBlobBytes is invalid_input", func(t *testing.T) {
+		big := e.WriteFile("big.bin", strings.Repeat("x", maxBlob+1))
+		er := e.Run(t, "blossom", "upload", big, "--identity", alice.Nsec, "--server", srv, "--json").expectErr(t, "invalid_input", true)
+		if !strings.Contains(er.Error, "413") {
+			t.Errorf("error doesn't carry the relay's 413: %q", er.Error)
+		}
+	})
+
+	t.Run("a non-member's upload is auth", func(t *testing.T) {
+		other := e.WriteFile("eve.txt", "not a member\n")
+		er := e.Run(t, "blossom", "upload", other, "--identity", eve.Nsec, "--server", srv, "--json").expectErr(t, "auth", true)
+		if !strings.Contains(er.Error, "403") {
+			t.Errorf("error doesn't carry the relay's 403: %q", er.Error)
+		}
+	})
+
+	t.Run("someone else can't delete it", func(t *testing.T) {
+		e.Run(t, "blossom", "rm", hash, "--identity", eve.Nsec, "--server", srv, "--yes", "--json").expectErr(t, "auth", true)
+		if !stored(t, hash) {
+			t.Errorf("a refused delete removed the blob")
+		}
+	})
+
+	t.Run("the uploader deletes it", func(t *testing.T) {
+		e.MustOK(t, "blossom", "rm", hash, "--identity", alice.Nsec, "--server", srv, "--yes", "--json")
+		e.Run(t, "blossom", "download", hash, "--server", srv, "--json").ExpectErr(t, "not_found")
+		if stored(t, hash) {
+			t.Errorf("blob %s is still in the store after rm", hash)
+		}
+	})
+}

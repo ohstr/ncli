@@ -7,7 +7,8 @@ of writing. Update by hand if the Go types change. -->
 
 | Field | Type | Default | Notes |
 |---|---|---|---|
-| `port` | int | `5500` | |
+| `port` | int | `5500` | Binds every interface; `NCLI_PORT` applies even with no `port` key |
+| `listen` | `host:port` | unset | The one address the relay binds; wins over `port`, and the admin listener defaults to `127.0.0.1:<its port + 1>` (set `admin.listen` on port 65535). Prefer an IP literal: a hostname with several addresses binds only one. `--check` rejects stray whitespace or a host that doesn't resolve. `NCLI_LISTEN` applies even with no `listen` key |
 | `nip11` | object | required | See below |
 | `store` | string | required | Path to the bbolt event store |
 | `logdir` | string | cwd if unset | Also read by `logs:` block's own default filename |
@@ -16,11 +17,12 @@ of writing. Update by hand if the Go types change. -->
 | `pow` | object | no requirement | NIP-13 proof-of-work gate (`pow.strict`, `pow.min`) — see below |
 | `membership` | object | disabled | NIP-43 relay membership (`membership.enabled`, invite/join/leave flow) |
 | `agent_auth` | object | disabled | NIP-AA agent authentication (`agent_auth.enabled`); requires `membership` above |
-| `groups` | object | only `admin` moderates | NIP-29 group hosting. `roles` maps a role name to the moderation kinds (9000-9020) it may send, e.g. `moderator: [9005, 9010]`; must define `admin` (a group's creator holds it); names are lowercase. `roleDescriptions` (role -> text) fills each group's kind 39003. `admins` (npub/hex) moderate every group, as the relay's own key always does. `moderationLog: true` keeps accepted moderation events for members (invites for admins). `pendingJoins: true` makes a closed group keep a codeless join for its admins instead of refusing it. `membershipNotices: {enabled, added: 44100, removed: 44101}` signs a seat notice (`p` member, `h` group, `e` cause) whenever a pubkey gains or loses a seat, by any path, readable only by that member and relay admins; needs `nip11.privkey`. A bad entry fails startup with `invalid_input` |
+| `groups` | object | only `admin` moderates | NIP-29 group hosting. `roles` maps a role name to the moderation kinds (9000-9020) it may send, e.g. `moderator: [9005, 9010]`; must define `admin` (a group's creator holds it); names are lowercase. `roleDescriptions` (role -> text) fills each group's kind 39003. `admins` (npub/hex) moderate every group, as the relay's own key always does. `moderationLog: true` keeps accepted moderation events for members (invites for admins). `pendingJoins: true` makes a closed group keep a codeless join for its admins instead of refusing it. `membershipNotices: {enabled, added: 44100, removed: 44101}` signs a seat notice (`p` member, `h` group, `e` cause) whenever a pubkey gains or loses a seat, by any path, readable only by that member and relay admins; needs `nip11.privkey`. `create` (`everyone`, `members` or NIP-43 role ids; omitted = everyone) says who may create a group (kind 9007); `[]` leaves it to admins and roles whose tasks list `group.create`. `grantCeiling` stops a member granting a role that may send a kind they may not; unset, it is on exactly when `membership.roles`/`members` carry a `group:<kind>` task, else off (an explicit `false` with such tasks is a `--check` warning). A bad entry fails startup with `invalid_input` |
 | `recipientOnlyKinds` | int list | `[1059]` | Kinds served only to a reader authenticated as a pubkey in the event's `p` tags (REQ, COUNT, `/query`, `/count`); `[]` serves every kind to anyone |
 | `httpBridge` | object | all off | NIP-98 HTTP endpoints: `query.enabled` (`POST /query`), `events.enabled` (`POST /events`), `count.enabled` (`POST /count`, NIP-45: the same request and access rules as `/query`, answered `{"count": n}`) |
 | `presence` | object | off | `enabled`, `kind` (default 40902): `POST /query` for `{"kinds":[40902],"authors":[...]}` answers one relay-signed kind 20001 per author (`online` while connected, its own latest kind 20001 status, else `offline`), never stored. Needs `nip11.privkey` and `httpBridge.query.enabled` |
 | `blossom` | object | off | Blossom (BUD-01/02) on the relay's origin: `enabled`, `publicURL` (default from `nip11.url`), `uploadPaths` (`[/upload, /media/upload]`), `blobPrefix` (`/media`), `maxBlobBytes` (100 MiB), `maxUploadsPerSigner` (2), `maxConcurrentUploads` (8), `membersOnly.upload` (default `limitation.membership_required`), `membersOnly.download` (`false`), `storage.kind` `dir` (`storage.dir`, default `<store>.blobs`) or `s3` (`storage.s3.endpoint/bucket/region/prefix/accessKey/secretKey/useSSL`, e.g. MinIO) |
+| `limits` | object | no limits | Rate limits — see `## limits` below. A limit that isn't set is no limit |
 | `handshakeTimeout` | Go duration string | relay-client default | |
 | `pingInterval` | Go duration string | relay-client default | |
 | `pongTimeout` | Go duration string | relay-client default | |
@@ -66,6 +68,31 @@ defaults shown here)
 
 The file is JSON lines (`jq` reads it); stderr stays human-readable unless `--json`.
 
+## `limits`
+
+Every limit is off until set; without the block nothing is limited. Each
+rate is `{events, per, burst}`: `events` per `per` (Go duration), up to
+`burst` at once (default `events`). `events` needs `per` and the other way
+round; a negative number, bad duration, bad CIDR, a rate under 1ns an event
+or a `burst` whose window overflows fails `--check` with `invalid_input`
+naming it. `--check` and startup warn about a public relay with no limits
+and about a per-pubkey limit that never applies (see each row).
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `events.perPubkey` / `events.perIP` | rate | none | EVENT over the WebSocket and `POST /events`, by author / client IP. Over the WebSocket the author's budget counts only on a connection NIP-42-authenticated as the author, for an event the relay doesn't have yet. Refused: `OK false "rate-limited: ..."` (429 over HTTP). With `exempt: members` and `limitation.membership_required` (no `agent_auth`), `perPubkey` never applies and is warned about |
+| `reads.perPubkey` / `reads.perIP` | rate | none | REQ, COUNT and NEG-OPEN by NIP-42 pubkey / client IP; each AUTH also takes one from `perIP`. Refused: `CLOSED "rate-limited: ..."` (AUTH: `OK false`, NEG-OPEN: `NEG-ERR`) |
+| `http.perPubkey` / `http.perIP` | rate | none | `POST /query`, `/count`, `/events`, by NIP-98 signer / client IP. Refused: 429 with `Retry-After` |
+| `blossom.uploads.perPubkey` / `.perIP` | rate | none | Blossom uploads, by token signer / client IP. 429 with `Retry-After`. With `exempt: members` while only members may upload, `perPubkey` never applies and is warned about |
+| `blossom.downloads.perPubkey` / `.perIP` | rate | none | Every other Blossom request (GET, HEAD, DELETE). While downloads are public (`blossom.membersOnly.download: false`) a GET or HEAD has no signer, so `perPubkey` counts only DELETEs and is warned about |
+| `connectionsPerIP` | int | `0` (no cap) | Open WebSocket connections from one IP, the relay's and huddles' (`/huddle/{id}/audio`, `/rtc`) together; one more is refused 429 before the upgrade |
+| `exempt` | `none`/`members` | `none` | `members`: NIP-43 members and admins (relay key, `nip86.admins`), unless banned, skip the per-pubkey limits. Per-IP limits apply to everyone |
+| `trustedProxies` | CIDR/IP list | `[]` | Reverse proxies whose `X-Forwarded-For` names the client: the rightmost hop that isn't a trusted proxy, so the proxy must set or append `X-Forwarded-For` (passing a client's own through lets it pick its key). `X-Real-IP` is read only when there is no `X-Forwarded-For`; a client hop that isn't an address falls back to the remote address. List the proxy's own address (e.g. `[127.0.0.1]`): trusting a pod network trusts every in-cluster client to name itself. Without one, everyone behind a proxy shares its IP. IPv6 clients are keyed by their /64 |
+
+Refusals are counted in `ncli_relay_rate_limited_total{action,by}` on
+`/metrics`. `blossom.maxBlobBytes`/`maxUploadsPerSigner`/`maxConcurrentUploads` are not
+part of `limits` and keep their defaults (100 MiB, 2, 8) either way.
+
 ## `pow`
 
 | Field | Type | Default | Notes |
@@ -74,9 +101,9 @@ The file is JSON lines (`jq` reads it); stderr stays human-readable unless `--js
 | `min` | int | `0` | Required NIP-13 leading-zero-bit difficulty. `0` means no requirement regardless of `strict` |
 
 `min` always flows into the advertised `nip11.limitation.min_pow_difficulty`,
-whether or not `strict` is on — `nip11.limitation.min_pow_difficulty` set
-directly in YAML is ignored; `pow.min` is the only way to set it, so there's
-one source of truth. Omitting the whole `pow:` block is identical to `{strict:
+whether or not `strict` is on. `nip11.limitation.min_pow_difficulty` is not
+a config key: `--check` reports it as unknown (a start warns and ignores
+it); `pow.min` is the only way to set it, so there's one source of truth. Omitting the whole `pow:` block is identical to `{strict:
 false, min: 0}` — fully backward compatible with configs that predate it.
 
 ## `cache`
@@ -166,5 +193,10 @@ Omitting the whole `membership:` block is identical to `{enabled: false}`
 |---|---|---|---|
 | `enabled` | bool | `false` | Requires `nip11.privkey`; fatal at config load if `true` without it |
 | `inviteTTL` | Go duration string | `24h` | How long an issued invite claim (kind 28935) stays valid; unset/unparseable falls back to the default |
-| `inviteMaxUses` | int | `0` (unlimited) | How many times a single invite claim may be consumed via a Join Request; must be `>= 0` |
+| `inviteMaxUses` | int | `0` (unlimited) | How many times a single invite claim may be consumed via a Join Request; must be `>= 0`. `0` means a code admits joins until it expires, so set it (often `1`) |
+| `inviteMaxTTL` | Go duration string | `720h` (30 days) | Ceiling on an explicit expiry requested through `createclaimwithlimits`; must be positive and `<= 10` years |
+| `inviteAllowNoExpiry` | bool | `false` | Lets `createclaimwithlimits` mint a code that never expires (`expires_at: 0`) |
+| `memberClaims` | bool | `false` when `nip11.limitation.membership_required` is true, else `true` | Lets a plain member (not only an admin) mint a code through NIP-86 `createclaim` or a NIP-43 invite request (REQ kind 28935); an explicit value wins. With `members.can` set it must agree with whether that list gives `createclaim` |
+| `roles` | map: role id -> `{can: [task...]}` | none | What each NIP-43 role (kind 33534 `d` tag) may do: NIP-86 method names, `@claims`/`@members`/`@bans`/`@roles`/`@relayinfo`/`@policy`, `group:<9000-9020>` (not `9007`: that is `group.create`)/`group:*`, `blossom.upload`/`blossom.download`/`blossom.delete`, `huddle.join`, `group.create`, `*` (every task except `group:` ones). Ids are lowercase and match case-insensitively; `Host` and `host` together, an id with a dot, and `everyone`/`members` are refused. Needs `enabled`; an unknown task is `invalid_input`. See "Roles and tasks" in SKILL.md |
+| `members` | `{can: [task...]}` | unset | What every enrolled member may do. Set, it replaces what `memberClaims`, `blossom.membersOnly` and `huddle.requireMembership` give members (those then only say whether a task is restricted) |
 | `publishAddRemoveEvents` | bool | `false` | Also publish a signed kind:8000/8001 event on membership changes, in addition to the relay's own internal membership store |

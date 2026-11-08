@@ -151,7 +151,8 @@ default, commented: [`examples/relay/full.yaml`](examples/relay/full.yaml)
 
 ```yaml
 # examples/relay/full.yaml
-port: 5500
+port: 5500                 # every interface
+# listen: 127.0.0.1:5500   # one address instead; wins over port
 
 nip11:
   name: ncli-dev-relay
@@ -259,6 +260,13 @@ logdir: ./data/logs
 ncli relay --config examples/relay/minimal.yaml
 ```
 
+A key the relay doesn't know, such as a typo, is logged as a warning and
+ignored. `--check` fails on it, naming every such key:
+
+```sh
+ncli relay --config relay.yaml --check
+```
+
 Once running, operate it from its admin listener (see
 [relay monitoring](#relay-monitoring)):
 
@@ -337,8 +345,10 @@ More config blocks, each documented in
 - `recipientOnlyKinds` — gift wraps (kind 1059) go only to the pubkey in their `p` tag; default `[1059]`, `[]` turns it off.
 - `httpBridge.count` — `POST /count` (NIP-45), same rules as `/query`.
 - `groups.membershipNotices` — a relay-signed notice (kinds 44100/44101) to a member who gains or loses a seat in a group.
+- `membership.roles` — what each NIP-43 role may do, e.g. `greeter: {can: [createclaim]}`; `groups.create` says who may create a group.
 - `presence` — `POST /query` for kind 40902 answers who is online.
 - `blossom` — Blossom uploads and downloads on the relay's own origin, stored in a directory or S3/MinIO.
+- `limits` — opt-in rate limits per pubkey and per IP (EVENT, REQ/COUNT, the HTTP bridge, Blossom) and connections per IP. Unset means no limit; a public relay without any gets a warning.
 
 ### Example configs
 
@@ -457,7 +467,7 @@ and [`full.yaml`](examples/relay/full.yaml).
 ## `relay status`/`index`/`jobs`/`verify`/`dashboard`
 
 Monitor and maintain a running relay through its admin listener
-(default `127.0.0.1:<port+1>`), signed with `nip11.privkey`:
+(default `127.0.0.1:<port+1>`, from `listen`'s port when set), signed with `nip11.privkey`:
 
 ```sh
 # health and live metrics

@@ -1,6 +1,7 @@
 package blossom
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -227,6 +228,10 @@ func TestClassifyHTTPError_MapsStatusToCode(t *testing.T) {
 		{"429 -> network", &bclient.HTTPError{StatusCode: http.StatusTooManyRequests}, common.CodeNetwork},
 		{"500 -> network", &bclient.HTTPError{StatusCode: http.StatusInternalServerError}, common.CodeNetwork},
 		{"402 payment required -> network", &bclient.PaymentRequiredError{HTTPError: bclient.HTTPError{StatusCode: http.StatusPaymentRequired}}, common.CodeNetwork},
+		{"307 -> unsupported, not network", &bclient.HTTPError{StatusCode: http.StatusTemporaryRedirect}, common.CodeUnsupported},
+		{"301 -> unsupported", &bclient.HTTPError{StatusCode: http.StatusMovedPermanently}, common.CodeUnsupported},
+		{"405 -> unsupported", &bclient.HTTPError{StatusCode: http.StatusMethodNotAllowed}, common.CodeUnsupported},
+		{"501 -> unsupported, not network", &bclient.HTTPError{StatusCode: http.StatusNotImplemented}, common.CodeUnsupported},
 	}
 
 	for _, tc := range cases {
@@ -241,6 +246,70 @@ func TestClassifyHTTPError_MapsStatusToCode(t *testing.T) {
 				t.Errorf("code = %q, want %q", ce.Code, tc.wantCode)
 			}
 		})
+	}
+}
+
+// TestClassifyOptionalEndpointError: list, mirror and media (upload
+// --optimize) are optional endpoints with no 404 of their own, so a 404 as
+// well as a redirect, 405 or 501 means the server doesn't have them --
+// unsupported, never network (an agent would retry it forever) and never
+// not_found. Their real refusals keep their usual codes.
+func TestClassifyOptionalEndpointError(t *testing.T) {
+	cases := []struct {
+		status   int
+		wantCode common.ErrorCode
+	}{
+		{http.StatusNotFound, common.CodeUnsupported},
+		{http.StatusMethodNotAllowed, common.CodeUnsupported},
+		{http.StatusNotImplemented, common.CodeUnsupported},
+		{http.StatusTemporaryRedirect, common.CodeUnsupported},
+		{http.StatusPermanentRedirect, common.CodeUnsupported},
+		{http.StatusUnauthorized, common.CodeAuth},
+		{http.StatusForbidden, common.CodeAuth},
+		{http.StatusBadRequest, common.CodeInvalidInput},
+		{http.StatusInternalServerError, common.CodeNetwork},
+		{http.StatusServiceUnavailable, common.CodeNetwork},
+	}
+	for _, endpoint := range []string{"list", "mirror", "media"} {
+		for _, tc := range cases {
+			t.Run(fmt.Sprintf("%s %d", endpoint, tc.status), func(t *testing.T) {
+				cmd := &cobra.Command{Use: "test"}
+				raw := &bclient.HTTPError{Server: "https://s.example", StatusCode: tc.status}
+				var got error
+				if endpoint == "list" {
+					got = classifyListError(cmd, "input", raw)
+				} else {
+					// mirror and upload --optimize mark the error, then a
+					// fan-out report wraps it before classifying.
+					got = classifyHTTPError(cmd, "input", fmt.Errorf("1 of 1 %ss failed: %w", endpoint, optionalEndpointError(raw)))
+				}
+				ce, ok := got.(*common.CLIError)
+				if !ok {
+					t.Fatalf("returned %T, want *common.CLIError", got)
+				}
+				if ce.Code != tc.wantCode {
+					t.Errorf("code = %q, want %q", ce.Code, tc.wantCode)
+				}
+			})
+		}
+	}
+
+	// A download's 404 is one missing blob, not a missing endpoint.
+	cmd := &cobra.Command{Use: "test"}
+	got := classifyHTTPError(cmd, "input", &bclient.HTTPError{StatusCode: http.StatusNotFound})
+	if ce, _ := got.(*common.CLIError); ce == nil || ce.Code != common.CodeNotFound {
+		t.Errorf("download 404 = %v, want not_found", got)
+	}
+}
+
+func TestUploadFailure_NoHintForMissingEndpoint(t *testing.T) {
+	for _, status := range []int{http.StatusTemporaryRedirect, http.StatusNotImplemented, http.StatusNotFound} {
+		if got := uploadFailure(optionalEndpointError(&bclient.HTTPError{StatusCode: status})); strings.Contains(got, uploadErrorHint) {
+			t.Errorf("status %d: %q carries the may-exist hint, but nothing was stored", status, got)
+		}
+	}
+	if got := uploadFailure(&bclient.HTTPError{StatusCode: http.StatusBadGateway}); !strings.Contains(got, uploadErrorHint) {
+		t.Errorf("502: %q is missing the may-exist hint", got)
 	}
 }
 

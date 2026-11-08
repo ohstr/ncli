@@ -15,6 +15,7 @@ import (
 	"github.com/ohstr/nmilat/huddle/room"
 	"github.com/ohstr/nmilat/huddle/wsaudio"
 	"github.com/ohstr/nmilat/relay"
+	"github.com/ohstr/nmilat/relay/ratelimit"
 	"github.com/pion/webrtc/v4"
 	"github.com/rs/zerolog/log"
 )
@@ -102,7 +103,12 @@ func huddleEnabled(cfg *HuddleConfig) bool {
 //
 // The path wildcard is read by the SDK handler via Request.PathValue, the same
 // mechanism the membership admin routes use.
-func registerHuddleRoutes(mux *http.ServeMux, wsHandler *relay.SessionHandler, cfg *HuddleConfig, relayURL string) *room.Manager {
+//
+// auth, when set, decides joins under requireMembership by the huddle.join
+// task; nil keeps the plain membership check. limiter, when set, counts
+// each huddle WebSocket against limits.connectionsPerIP alongside the
+// relay's own connections.
+func registerHuddleRoutes(mux *http.ServeMux, wsHandler *relay.SessionHandler, cfg *HuddleConfig, relayURL string, auth *taskAuthority, limiter *ratelimit.Limiter) *room.Manager {
 	if !huddleEnabled(cfg) {
 		return nil
 	}
@@ -134,6 +140,15 @@ func registerHuddleRoutes(mux *http.ServeMux, wsHandler *relay.SessionHandler, c
 				// to ask: fail closed rather than silently let everyone in.
 				return errors.New("membership is required but not configured")
 			}
+			if auth != nil {
+				// The task model: members hold huddle.join (unless
+				// membership.members.can leaves it out), so do the admins
+				// and any role that lists it; a banned key does not.
+				if !auth.can(pubkey, taskHuddleJoin) {
+					return errors.New("not allowed to join calls on this relay")
+				}
+				return nil
+			}
 			if !membership.IsMember(pubkey) {
 				return errors.New("not a relay member")
 			}
@@ -141,7 +156,7 @@ func registerHuddleRoutes(mux *http.ServeMux, wsHandler *relay.SessionHandler, c
 		}
 	}
 
-	mux.Handle("/huddle/{id}/audio", wsaudio.NewHandler(handlerConfig))
+	mux.Handle("/huddle/{id}/audio", limitConns(limiter, wsaudio.NewHandler(handlerConfig)))
 
 	// Discovery for `ncli huddle list`. A room id is otherwise pure
 	// out-of-band knowledge, and a typo silently opens an empty room rather
@@ -160,7 +175,7 @@ func registerHuddleRoutes(mux *http.ServeMux, wsHandler *relay.SessionHandler, c
 
 		// The same rooms manager on purpose: a browser and a WebSocket client
 		// using one room id must end up in one call, not two.
-		mux.Handle("/huddle/{id}/rtc", sfu.NewHandler(sfu.Config{
+		mux.Handle("/huddle/{id}/rtc", limitConns(limiter, sfu.NewHandler(sfu.Config{
 			Enabled:        true,
 			RelayURL:       relayURL,
 			Rooms:          rooms,
@@ -171,7 +186,7 @@ func registerHuddleRoutes(mux *http.ServeMux, wsHandler *relay.SessionHandler, c
 			UDPPortMax:     udpMax,
 			AuthTimeout:    handlerConfig.AuthTimeout,
 			Logger:         log.Logger,
-		}))
+		})))
 		log.Info().
 			Int("iceServers", len(cfg.ICEServers)).
 			Str("udpPortRange", cfg.UDPPortRange).
@@ -179,6 +194,25 @@ func registerHuddleRoutes(mux *http.ServeMux, wsHandler *relay.SessionHandler, c
 	}
 
 	return rooms
+}
+
+// limitConns counts each request to h, a WebSocket handler that returns
+// only once its connection ends, as one of its client's open connections:
+// one over limits.connectionsPerIP is refused 429 before the upgrade, as
+// the relay's own WebSocket is. A nil limiter counts nothing.
+func limitConns(limiter *ratelimit.Limiter, h http.Handler) http.Handler {
+	if limiter == nil {
+		return h
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		release, ok := limiter.OpenConn(limiter.ClientIP(r))
+		if !ok {
+			http.Error(w, ratelimit.ConnMessage, http.StatusTooManyRequests)
+			return
+		}
+		defer release()
+		h.ServeHTTP(w, r)
+	})
 }
 
 // iceServers converts the config shape into pion's.

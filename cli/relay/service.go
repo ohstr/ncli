@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"sync/atomic"
@@ -109,7 +108,7 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 		sessionConfig.ControlWriteTimeout = d
 	}
 
-	log.Info().Str("pubkey", config.Nip11.PubKey).Int("port", config.Port).Msg("server config check")
+	log.Info().Str("pubkey", config.Nip11.PubKey).Int("port", config.Port).Str("listen", config.listenAddr()).Msg("server config check")
 	sessionConfig.PrivKey = config.Nip11.PrivKey
 	sessionConfig.EnableProfileStats = config.profileStatsEnabled()
 	if sessionConfig.EnableProfileStats {
@@ -143,10 +142,30 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to load NIP-86 moderation state")
 	}
-	sessionConfig.EventPolicy = moderation.eventPolicy
+	// The task model (tasks.go): its membership view is filled in once the
+	// session handler exists, before anything is served. The event policy
+	// gates kind 9007 by group.create after the moderation checks; a NIP-43
+	// invite request (REQ 28935) needs createclaim, as NIP-86 does.
+	tasks := newTaskAuthority(&config, nil, moderation)
+	eventPolicy := tasks.gateGroupCreate(config.groupCreateRestricted(), moderation.eventPolicy)
+	sessionConfig.EventPolicy = eventPolicy
+	sessionConfig.InviteRequestAuthorizer = func(_ context.Context, s *relay.Session) error {
+		return tasks.inviteRequestAllowed(s.Identities())
+	}
 	sessionConfig.RecipientOnlyKinds = config.recipientOnlyKinds()
 	sessionConfig.RelayAuthoredKinds = config.relayAuthoredKinds()
 	sessionConfig.PresenceQueryKind = config.presenceKind()
+
+	// One limiter for the WebSocket, the HTTP bridge, Blossom and huddles,
+	// so a client is counted once across them. Its member check reads the
+	// membership service, which exists only once wsHandler does.
+	access := newRelayAccess(nil, moderation)
+	limiter, err := newRateLimiter(&config, access.isMember, m.RateLimited)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to build the rate limiter")
+	}
+	config.logConfigWarnings()
+	sessionConfig.RateLimiter = limiter
 
 	wsHandler := relay.NewSessionHandler(
 		store,
@@ -154,6 +173,19 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 		searcher,
 		relay.WithSessionConfig(sessionConfig),
 	)
+	tasks.membership = wsHandler.Membership()
+	access.membership = wsHandler.Membership()
+	if membershipOn() {
+		if roles, err := (membershipAdmin{ws: wsHandler, store: store}).listRoles(context.Background()); err == nil {
+			ids := make([]string, 0, len(roles))
+			for _, r := range roles {
+				ids = append(ids, r.ID)
+			}
+			warnUndefinedRoles(&config, ids)
+		}
+	}
+	// group:<kind> role tasks and groups.grantCeiling (see applyGroupTasks).
+	applyGroupTasks(wsHandler.Groups(), tasks, &config)
 
 	// Profile checks and social scores serve only search and stats.
 	if config.searchEnabled() || config.profileStatsEnabled() {
@@ -226,9 +258,28 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 		return md
 	})
 
+	// Built before "/" so that handler can reach it: BUD-01 serves every
+	// blob at the root of the domain, /<sha256>[.ext], and ServeMux can't
+	// take a "GET /{blob}" pattern beside the method-less /query, /events
+	// and /count, so "/" hands those paths over itself.
+	var blossomHandler http.Handler
+	if blossomEnabled() {
+		blossom, err := newBlossomServer(&config, wsHandler.Membership(), moderation, limiter)
+		if err != nil {
+			log.Fatal().Err(err).Msg("failed to start Blossom")
+		}
+		blossomMux := http.NewServeMux()
+		blossom.Register(blossomMux)
+		blossomHandler = m.HTTP("blossom", blossomMux)
+	}
+
 	mux := http.NewServeMux()
 	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
+			if blossomHandler != nil && isRootBlobRequest(r) {
+				blossomHandler.ServeHTTP(w, atBlobPrefix(r, config.Blossom.blobPrefix()))
+				return
+			}
 			http.NotFound(w, r)
 			return
 		}
@@ -272,7 +323,8 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 		// reason /query shares it -- one live membership view, not a
 		// second cache.
 		mux.Handle("/events", m.HTTP("events", relay.NewEventsHandler(store, &cfg.Nip11.Limitation, wsHandler.Membership(), config.Nip11.Self,
-			relay.WithEventsPolicy(moderation.eventPolicy), relay.WithEventsRelayAuthoredKinds(config.relayAuthoredKinds()...))))
+			relay.WithEventsPolicy(eventPolicy), relay.WithEventsRelayAuthoredKinds(config.relayAuthoredKinds()...),
+			relay.WithEventsRateLimiter(limiter), relay.WithEventsGroups(wsHandler.Groups()))))
 	}
 
 	if countEnabled() {
@@ -281,17 +333,14 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 		mux.Handle("/count", m.HTTP("count", wsHandler.CountHandler()))
 	}
 
-	if blossomEnabled() {
-		blossom, err := newBlossomServer(&config, wsHandler.Membership(), moderation)
-		if err != nil {
-			log.Fatal().Err(err).Msg("failed to start Blossom")
-		}
-		blossomMux := http.NewServeMux()
-		blossom.Register(blossomMux)
+	if blossomHandler != nil {
 		for _, p := range config.Blossom.uploadPaths() {
-			mux.Handle(p, m.HTTP("blossom", blossomMux))
+			mux.Handle(p, blossomHandler)
 		}
-		mux.Handle(config.Blossom.blobPrefix()+"/", m.HTTP("blossom", blossomMux))
+		mux.Handle(config.Blossom.blobPrefix()+"/", blossomHandler)
+		for _, u := range config.Blossom.unsupportedRoutes() {
+			mux.Handle(u.pattern, m.HTTP("blossom", blossomUnsupported(u.reason)))
+		}
 	}
 
 	// ADMIN ENDPOINTS
@@ -332,7 +381,7 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 
 	// Huddle first: both the membership admin routes and NIP-86 need the rooms
 	// manager so removing a member ends that member's live calls.
-	huddleRooms := registerHuddleRoutes(mux, wsHandler, config.Huddle, config.Nip11.URL)
+	huddleRooms := registerHuddleRoutes(mux, wsHandler, config.Huddle, config.Nip11.URL, tasks, limiter)
 
 	registerMembershipAdminRoutes(mux, wsHandler, store, huddleRooms, adminAuth)
 
@@ -402,7 +451,7 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 		publisherDone:      publisherDone,
 		server: &http.Server{
 			Handler: moderation.ipGate(mux),
-			Addr:    fmt.Sprintf(":%d", config.Port),
+			Addr:    config.listenAddr(),
 		},
 	}
 

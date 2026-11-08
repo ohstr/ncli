@@ -1,18 +1,24 @@
 package blossom
 
 import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"regexp"
 	"syscall"
+	"time"
 
 	"github.com/ohstr/ncli/cli/common"
 	"github.com/ohstr/nmilat/nip01"
 	"github.com/ohstr/nmilat/nipB7"
 	bclient "github.com/ohstr/nmilat/nipB7/client"
+	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )
 
@@ -30,9 +36,14 @@ func newDownloadCommand() *cobra.Command {
 		Use:   "download <hash|blossom-uri|url>",
 		Short: "Download a blob by hash, blossom: URI, or server URL",
 		Long: `Writes to --output, or to "<hash>.<ext>" in the current directory. Use
-"-o -" to stream to stdout.`,
+"-o -" to stream to stdout.
+
+A full http(s) URL is fetched as is first, and its bytes must hash to the
+sha256 in its path (up to 1 GiB, buffered to check it); if that fails, the hash is asked of --server or the
+configured servers, when there are any.`,
 		Example: `  ncli blossom download <hash>
-  ncli blossom download <hash> -o -`,
+  ncli blossom download <hash> -o -
+  ncli blossom download https://relay.example.com/media/<hash>.png`,
 		Args: common.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, cancel := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
@@ -45,19 +56,26 @@ func newDownloadCommand() *cobra.Command {
 				return common.InvalidInputError(cmd, args[0], err)
 			}
 
+			// A full URL names where the blob is: try it as is first, and
+			// the servers by hash only when it fails. Without one, the
+			// servers are all there is.
+			directURL := directDownloadURL(args[0])
 			servers, err := resolveServers(cmd)
 			if err != nil {
-				return common.NotFoundError(cmd, "", err)
+				if directURL == "" {
+					return common.NotFoundError(cmd, "", err)
+				}
+				servers = nil
 			}
 
-			var auth *nip01.Event
+			var directAuth, auth *nip01.Event
 			if identity, _ := cmd.Flags().GetString("identity"); identity != "" {
 				privKeyHex, pubKeyHex, err := resolveIdentity(cmd, jsonMode, identity)
 				if err != nil {
 					return err
 				}
 				ttl, _ := cmd.Flags().GetDuration("auth-ttl")
-				auth, err = buildAuth(privKeyHex, pubKeyHex, nipB7.VerbGet, []string{hash}, ttl, servers...)
+				directAuth, auth, err = downloadAuths(privKeyHex, pubKeyHex, hash, ttl, directURL, servers)
 				if err != nil {
 					return common.RuntimeError(cmd, err)
 				}
@@ -66,17 +84,31 @@ func newDownloadCommand() *cobra.Command {
 			timeout, _ := cmd.Flags().GetDuration("timeout")
 			hc := newHTTPClient(timeout)
 
-			var resp *http.Response
+			var body io.ReadCloser
 			var usedServer string
 			err = common.WithSpinner(cmd, fmt.Sprintf("downloading %s", shortHash(hash)), func() error {
-				var gErr error
-				resp, usedServer, gErr = hc.GetFromServers(ctx, servers, hash, bclient.GetOptions{Ext: ext, Auth: auth})
-				return gErr
+				if directURL != "" {
+					f, dErr := fetchVerified(ctx, hc.HTTPClient, directURL, hash, directAuth, maxDirectDownloadBytes)
+					if dErr == nil {
+						body, usedServer = f, directURL
+						return nil
+					}
+					if len(servers) == 0 || ctx.Err() != nil {
+						return dErr
+					}
+					log.Warn().Err(dErr).Str("url", directURL).Msg("falling back to the servers by hash")
+				}
+				resp, server, gErr := hc.GetFromServers(ctx, servers, hash, bclient.GetOptions{Ext: ext, Auth: auth})
+				if gErr != nil {
+					return gErr
+				}
+				body, usedServer = resp.Body, server
+				return nil
 			})
 			if err != nil {
 				return classifyHTTPError(cmd, hash, err)
 			}
-			defer func() { _ = resp.Body.Close() }()
+			defer func() { _ = body.Close() }()
 
 			outPath, _ := cmd.Flags().GetString("output")
 			toStdout := outPath == "-"
@@ -100,7 +132,7 @@ func newDownloadCommand() *cobra.Command {
 				createdPath = outPath
 			}
 
-			written, err := io.Copy(out, resp.Body)
+			written, err := io.Copy(out, body)
 			if err != nil {
 				if createdPath != "" {
 					// Best-effort cleanup: don't leave a truncated,
@@ -144,6 +176,127 @@ func normalizeDownloadTarget(raw string) (hash, ext string, err error) {
 		return raw, "", nil
 	}
 	return "", "", fmt.Errorf("%q is not a valid sha256 hash, blossom: URI, or hash-shaped URL", raw)
+}
+
+// directDownloadURL returns raw when it is an http(s) URL naming a blob,
+// which download fetches as is before asking any server by hash: the URL
+// says where the blob is, and its host may be on no server list at all.
+func directDownloadURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return ""
+	}
+	if _, _, ok := nipB7.ExtractHashFromURL(raw); !ok {
+		return ""
+	}
+	return raw
+}
+
+// downloadAuths signs download's get tokens: direct for the URL's host
+// alone, byHash for the configured servers. Separate, so a URL host that
+// is on no server list never holds a token it could replay against the
+// user's servers. direct is nil without a URL; byHash is nil when only the
+// URL will be asked.
+func downloadAuths(privKeyHex, pubKeyHex, hash string, ttl time.Duration, directURL string, servers []string) (direct, byHash *nip01.Event, err error) {
+	if directURL != "" {
+		if direct, err = buildAuth(privKeyHex, pubKeyHex, nipB7.VerbGet, []string{hash}, ttl, directURL); err != nil {
+			return nil, nil, err
+		}
+	}
+	if directURL == "" || len(servers) > 0 {
+		if byHash, err = buildAuth(privKeyHex, pubKeyHex, nipB7.VerbGet, []string{hash}, ttl, servers...); err != nil {
+			return nil, nil, err
+		}
+	}
+	return direct, byHash, nil
+}
+
+// maxDirectDownloadBytes caps the body fetchVerified buffers to a
+// temporary file for a download by URL.
+const maxDirectDownloadBytes int64 = 1 << 30
+
+// fetchVerified GETs rawURL with auth (if any) as its BUD-11 header and
+// returns the body in a temporary file, removed on Close, once its sha256
+// matches hash. Buffered rather than streamed so a URL that serves the
+// wrong bytes can still fall back to the servers without anything having
+// reached the output; hashed while it is written, and abandoned past max
+// bytes.
+func fetchVerified(ctx context.Context, hc *http.Client, rawURL, hash string, auth *nip01.Event, max int64) (io.ReadCloser, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	if auth != nil {
+		header, err := nipB7.EncodeAuthHeader(auth)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", header)
+	}
+	resp, err := hc.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return nil, &bclient.HTTPError{Server: rawURL, StatusCode: resp.StatusCode, Reason: nipB7.ReasonFromResponse(resp.Header)}
+	}
+
+	f, err := os.CreateTemp("", "ncli-blossom-download-*")
+	if err != nil {
+		return nil, err
+	}
+	tmp := &tempFile{File: f}
+	h := sha256.New()
+	n, err := io.Copy(io.MultiWriter(f, h), io.LimitReader(resp.Body, max+1))
+	if err != nil {
+		_ = tmp.Close()
+		return nil, err
+	}
+	if n > max {
+		_ = tmp.Close()
+		return nil, &tooLargeError{url: rawURL, max: max}
+	}
+	if got := hex.EncodeToString(h.Sum(nil)); got != hash {
+		_ = tmp.Close()
+		return nil, &hashMismatchError{url: rawURL, got: got, want: hash}
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		_ = tmp.Close()
+		return nil, err
+	}
+	return tmp, nil
+}
+
+// hashMismatchError is a URL that answered with bytes that are not the
+// blob its path names. classifyHTTPError reports it as not_found: no
+// source served a blob with that hash, the same outcome as a server's 404
+// for it, and retrying the same URL serves the same wrong bytes.
+type hashMismatchError struct{ url, got, want string }
+
+func (e *hashMismatchError) Error() string {
+	return fmt.Sprintf("%s served a blob whose sha256 is %s, not %s", e.url, e.got, e.want)
+}
+
+// tooLargeError is a URL whose body runs past what a download by URL
+// buffers. classifyHTTPError reports it as invalid_input: the same URL is
+// as large on a retry.
+type tooLargeError struct {
+	url string
+	max int64
+}
+
+func (e *tooLargeError) Error() string {
+	return fmt.Sprintf("%s served more than %d bytes, the most a download by URL buffers; download it by hash from a server instead", e.url, e.max)
+}
+
+// tempFile is a temporary file that removes itself on Close.
+type tempFile struct{ *os.File }
+
+func (t *tempFile) Close() error {
+	err := t.File.Close()
+	_ = os.Remove(t.Name())
+	return err
 }
 
 // sanitizeExt returns ext unchanged if it's a bare letters/digits

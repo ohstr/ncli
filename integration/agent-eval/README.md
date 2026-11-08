@@ -12,8 +12,9 @@ docs drifting from what's actually shipped.
 
 `compose.yaml` runs three services:
 
-- **`relay`** -- published `ghcr.io/ohstr/ncli:latest`, admin enabled
-  (so R3 has something real to administer).
+- **`relay`** -- published `ghcr.io/ohstr/ncli` at the latest release
+  (`NCLI_VERSION` picks another), admin enabled (so R3 has something real
+  to administer).
 - **`blossom`** -- reference Blossom server, for R7.
 - **`agent`** -- the agent-under-test's machine (`agent/Dockerfile`): no
   Go/`ncli`/repo copy, just curl/bash/Node + Claude Code, plus a

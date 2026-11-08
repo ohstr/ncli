@@ -29,3 +29,28 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- define "ncli-relay.minioEndpoint" -}}
 {{- printf "%s-minio:9000" (include "ncli-relay.fullname" .) -}}
 {{- end -}}
+
+{{/*
+The digests the chart pins its default images to, by "repository:tag".
+Chainguard tags MinIO only `latest`, so the tag alone pins nothing. To bump
+one, take the Digest line from `docker buildx imagetools inspect <ref>`.
+*/}}
+{{- define "ncli-relay.imageDigests" -}}
+"cgr.dev/chainguard/minio:latest": sha256:a1ac4589a5f8136b616e667b48a0bea9719bb10bd45799ea946f24bbedfafde4
+"cgr.dev/chainguard/minio-client:latest": sha256:10388d580a724f356b94c9b2631b5a179039cabe8c76e9b37d86ed007d569b05
+{{- end -}}
+
+{{/*
+An image reference: the repository, ":tag" (".default" when the tag is
+empty) and "@digest". The digest is the image's own, else the pinned one
+for exactly that repository and tag, so another repository or tag never
+gets a default image's digest. Call with
+(dict "image" .Values.x.image "default" "").
+*/}}
+{{- define "ncli-relay.image" -}}
+{{- $ref := .image.repository -}}
+{{- with (default .default .image.tag) }}{{ $ref = printf "%s:%s" $ref . }}{{ end -}}
+{{- $pinned := include "ncli-relay.imageDigests" . | fromYaml -}}
+{{- $ref -}}
+{{- with (default (get $pinned $ref) .image.digest) }}@{{ . }}{{ end -}}
+{{- end -}}

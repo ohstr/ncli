@@ -3,15 +3,19 @@ package relay
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"net/url"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/ohstr/ncli/cli/common"
+	"github.com/ohstr/nmilat/nipB7"
 	"github.com/ohstr/nmilat/nipB7/server"
 	"github.com/ohstr/nmilat/relay"
+	"github.com/ohstr/nmilat/relay/ratelimit"
 )
 
 // CountConfig configures POST /count (NIP-45) on the HTTP bridge: the same
@@ -151,6 +155,15 @@ func blossomEnabled() bool {
 	return config.Blossom != nil && config.Blossom.Enabled
 }
 
+// blossomUploadMembersOnly reports whether only members may upload:
+// blossom.membersOnly.upload, or, unset, nip11.limitation.membership_required.
+func (c *RelayConfig) blossomUploadMembersOnly() bool {
+	if c.Blossom != nil && c.Blossom.MembersOnly.Upload != nil {
+		return *c.Blossom.MembersOnly.Upload
+	}
+	return c.Nip11.Limitation.MembershipRequired
+}
+
 // blossomPublicURL is the origin blobs are served from.
 func (c *RelayConfig) blossomPublicURL() string {
 	if c.Blossom != nil && c.Blossom.PublicURL != "" {
@@ -181,6 +194,62 @@ func (b *BlossomConfig) blobPrefix() string {
 		return "/media"
 	}
 	return strings.TrimSuffix(b.BlobPrefix, "/")
+}
+
+// rootBlobPath is a blob named at the root of the relay's origin,
+// /<sha256>[.ext]: where BUD-01 says every endpoint is served, and where
+// a client that only knows the server and the hash asks for it.
+var rootBlobPath = regexp.MustCompile(`^/[0-9a-f]{64}(\.[a-z0-9]{1,8})?$`)
+
+// rootBlobMethods are the methods a blob answers at the root, the same
+// ones it answers under the blob prefix.
+var rootBlobMethods = []string{http.MethodGet, http.MethodHead, http.MethodDelete, http.MethodOptions}
+
+// isRootBlobRequest reports whether r names a blob at the root.
+func isRootBlobRequest(r *http.Request) bool {
+	return slices.Contains(rootBlobMethods, r.Method) && rootBlobPath.MatchString(r.URL.Path)
+}
+
+// atBlobPrefix is r with its path moved under prefix, so the Blossom
+// server, which serves blobs under the prefix, answers a root blob path.
+func atBlobPrefix(r *http.Request, prefix string) *http.Request {
+	r2 := r.Clone(r.Context())
+	r2.URL.Path = prefix + r.URL.Path
+	r2.URL.RawPath = ""
+	return r2
+}
+
+// unsupportedBlossomRoute is a Blossom endpoint the relay doesn't serve,
+// answered 404 with a reason so a client can tell "not here at all" from
+// a missing blob or a redirect.
+type unsupportedBlossomRoute struct {
+	pattern string
+	reason  string
+}
+
+// unsupportedRoutes are BUD-12 list, BUD-04 mirror and BUD-05 media,
+// minus any pattern the configured Blossom paths already take.
+func (b *BlossomConfig) unsupportedRoutes() []unsupportedBlossomRoute {
+	taken := append([]string{b.blobPrefix() + "/"}, b.uploadPaths()...)
+	var routes []unsupportedBlossomRoute
+	for _, u := range []unsupportedBlossomRoute{
+		{"/list/", "list is not supported on this server"},
+		{"/mirror", "mirror is not supported on this server"},
+		{"/media", "media optimization is not supported"},
+	} {
+		if !slices.Contains(taken, u.pattern) {
+			routes = append(routes, u)
+		}
+	}
+	return routes
+}
+
+// blossomUnsupported answers every request with 404 and reason.
+func blossomUnsupported(reason string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		nipB7.WriteError(w, http.StatusNotFound, reason)
+	})
 }
 
 // reservedPaths are the relay's own HTTP routes, which Blossom may not
@@ -263,42 +332,67 @@ func newBlobStore(c *RelayConfig) (server.Store, error) {
 	return server.NewDirStore(dir)
 }
 
-// newBlossomServer builds the Blossom server for c. Members are NIP-43
-// members; admins (the relay key, nip86.admins) count as members and may
-// delete any blob; a banned key may do neither.
-func newBlossomServer(c *RelayConfig, membership *relay.MembershipService, moderation *relayModeration) (*server.Server, error) {
+// relayAccess answers who is an admin (the relay key, nip86.admins) and who
+// is a member (a NIP-43 member or an admin); a banned key is neither.
+// membership may be set after the relayAccess is built, as long as it is
+// before the relay serves its first request.
+type relayAccess struct {
+	admins     []string
+	membership *relay.MembershipService
+	moderation *relayModeration
+}
+
+func newRelayAccess(membership *relay.MembershipService, moderation *relayModeration) *relayAccess {
+	return &relayAccess{admins: nip86Admins(), membership: membership, moderation: moderation}
+}
+
+func (a *relayAccess) isAdmin(pk string) bool {
+	return slices.ContainsFunc(a.admins, func(admin string) bool { return strings.EqualFold(admin, pk) })
+}
+
+func (a *relayAccess) isMember(pk string) bool {
+	if a.moderation.bannedPubkey(pk) {
+		return false
+	}
+	return a.isAdmin(pk) || (a.membership != nil && a.membership.IsMember(pk))
+}
+
+// newBlossomServer builds the Blossom server for c. Who may upload, download
+// and delete any blob are the tasks blossom.upload, blossom.download and
+// blossom.delete (tasks.go): the admins (the relay key, nip86.admins) hold all
+// three; blossom.membersOnly gives members the first two, and roles may carry
+// any of them. A banned key may neither upload nor download, admin or not.
+// limiter, when set, counts each request against limits.blossom.
+func newBlossomServer(c *RelayConfig, membership *relay.MembershipService, moderation *relayModeration, limiter *ratelimit.Limiter) (*server.Server, error) {
 	store, err := newBlobStore(c)
 	if err != nil {
 		return nil, err
 	}
-	admins := nip86Admins()
-	isAdmin := func(pk string) bool {
-		return slices.ContainsFunc(admins, func(a string) bool { return strings.EqualFold(a, pk) })
+	auth := newTaskAuthority(c, membership, moderation)
+	may := func(task string) func(string) bool {
+		return func(pk string) bool { return !moderation.bannedPubkey(pk) && auth.can(pk, task) }
 	}
-	member := func(pk string) bool {
-		return !moderation.bannedPubkey(pk) && (isAdmin(pk) || membership.IsMember(pk))
-	}
-	anyone := func(pk string) bool { return !moderation.bannedPubkey(pk) }
 
 	b := c.Blossom
-	mayUpload := anyone
-	if up := b.MembersOnly.Upload; (up == nil && c.Nip11.Limitation.MembershipRequired) || (up != nil && *up) {
-		mayUpload = member
-	}
 	var mayDownload func(string) bool
 	if b.MembersOnly.Download {
-		mayDownload = member
+		mayDownload = may(taskBlossomDownload)
+	}
+	var rateLimit func(*http.Request, bool, string) (time.Duration, bool)
+	if limiter != nil {
+		rateLimit = limiter.AllowBlossom
 	}
 	return server.New(server.Options{
 		Store:               store,
 		PublicURL:           c.blossomPublicURL(),
 		UploadPaths:         b.uploadPaths(),
 		BlobPrefix:          b.blobPrefix(),
-		MayUpload:           mayUpload,
+		MayUpload:           may(taskBlossomUpload),
 		MayDownload:         mayDownload,
-		IsAdmin:             isAdmin,
+		IsAdmin:             func(pk string) bool { return auth.can(pk, taskBlossomDelete) },
 		MaxBlobBytes:        b.MaxBlobBytes,
 		MaxUploadsPerSigner: b.MaxUploadsPerSigner,
 		MaxUploads:          b.MaxConcurrentUploads,
+		RateLimit:           rateLimit,
 	})
 }

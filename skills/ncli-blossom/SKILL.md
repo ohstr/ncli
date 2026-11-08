@@ -104,14 +104,20 @@ ncli blossom download <hash> -o photo.jpg
 ncli blossom download <hash> -o -
 # BUD-10 URI
 ncli blossom download "blossom:<hash>.jpg"
-# a full server URL also works
-ncli blossom download "https://server/<hash>.jpg"
+# a full URL is fetched as is first, e.g. a descriptor's url
+ncli blossom download "https://relay.example.com/media/<hash>.jpg"
 ```
 
-Any of a bare hash, a `blossom:` URI, or a hash-shaped URL is accepted
-and normalized to a hash before trying your configured servers in
-order. Most servers don't require auth for a plain `GET`; pass
-`--identity` only if a server gates private blobs.
+A bare hash or a `blossom:` URI is tried on your configured servers in
+order, as `<server>/<hash>`. A full http(s) URL is fetched as is first
+and kept only if its bytes hash to the sha256 in its path (a body over
+1 GiB is refused as `invalid_input`); if that
+fails, the hash is tried on `--server` or the configured servers (none
+are needed when the URL works). With nothing to fall back to, a URL
+serving other bytes is `not_found` (not retryable), while an unreachable
+one is `network`. Most servers don't require auth for a
+plain `GET`; pass `--identity` only if a server gates private blobs (the
+URL's host gets its own token, naming that host alone).
 
 ## Listing
 
@@ -169,6 +175,11 @@ a NIP-56-style report type (`spam`, `malware`, `illegal`, `nudity`, ...).
   JSON on stdout, same as the rest of `ncli` -- see AGENTS.md for the
   shared error-code table (`invalid_input`, `not_found`, `network`,
   `auth`, ...).
+- `unsupported` (exit 8) means the server has no such endpoint: `list`
+  answered 404 (BUD-12 list never 404s a pubkey, it returns `[]`),
+  `upload --optimize` or `mirror` answered 404, or any command got a
+  redirect, 405 or 501. Don't retry it against that server. A
+  `download`'s 404 is still `not_found`: that one blob isn't there.
 - Nothing here blocks on a prompt an agent can't answer: `rm` requires
   `--yes` non-interactively instead of hanging, and every other command
   either succeeds, fails fast, or needs an explicit flag.

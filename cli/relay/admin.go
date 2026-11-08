@@ -148,7 +148,7 @@ one.`,
 // stats/reindex/clear have no PreRunE of their own to do it -- cobra only
 // runs a command's own (non-persistent) PreRunE, and a PersistentPreRunE
 // here would shadow rootCmd's own (which does the actual config loading).
-func getAdminConfig() (string, int, string, error) {
+func getAdminConfig() (string, string, string, error) {
 	used := viper.ConfigFileUsed()
 	if used != "" {
 		ev := log.Info().Str("config", used)
@@ -158,17 +158,14 @@ func getAdminConfig() (string, int, string, error) {
 		ev.Msg("using config file")
 	}
 
-	port := viper.GetInt("port")
-	if port == 0 {
-		port = 5500
-	}
+	addr, _ := relayDialAddr()
 
 	privKey := viper.GetString("nip11.privkey")
 	if privKey == "" {
 		if used == "" {
-			return "", 0, "", errNoRelayConfig
+			return "", "", "", errNoRelayConfig
 		}
-		return "", 0, "", fmt.Errorf("nip11.privkey is required to sign these requests (config: %s)", used)
+		return "", "", "", fmt.Errorf("nip11.privkey is required to sign these requests (config: %s)", used)
 	}
 
 	pubKey := viper.GetString("nip11.pubkey")
@@ -180,7 +177,7 @@ func getAdminConfig() (string, int, string, error) {
 		}
 	}
 
-	return privKey, port, pubKey, nil
+	return privKey, addr, pubKey, nil
 }
 
 // adminRequest issues a NIP-98-authenticated membership admin request with
@@ -196,7 +193,7 @@ func adminRequest(cmd *cobra.Command, method, path string) (map[string]interface
 // without a body, shares the same signing/timeout/error-classification
 // path.
 func adminRequestBody(cmd *cobra.Command, method, path string, body interface{}) (map[string]interface{}, error) {
-	privKey, port, _, err := getAdminConfig()
+	privKey, addr, _, err := getAdminConfig()
 	if err != nil {
 		// nip11.privkey missing from config -- a missing-required-config
 		// mistake, classified here rather than at each command's RunE,
@@ -206,7 +203,7 @@ func adminRequestBody(cmd *cobra.Command, method, path string, body interface{})
 		return nil, &common.CLIError{Err: err, Code: common.CodeUsage, Help: common.HelpAfterError}
 	}
 
-	url := fmt.Sprintf("http://localhost:%d%s", port, path)
+	url := "http://" + addr + path
 
 	// Encode before signing: the payload tag hashes the body, so the bytes
 	// have to exist first and be the same ones that go on the wire.
@@ -241,15 +238,15 @@ func adminRequestBody(cmd *cobra.Command, method, path string, body interface{})
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	var resp *http.Response
-	err = common.WithSpinner(cmd, fmt.Sprintf("contacting relay on port %d", port), func() error {
+	err = common.WithSpinner(cmd, "contacting relay at "+addr, func() error {
 		var dErr error
 		resp, dErr = client.Do(req)
 		return dErr
 	})
 	if err != nil {
-		hint := fmt.Sprintf("is the relay running on port %d?", port)
+		hint := fmt.Sprintf("is the relay running at %s?", addr)
 		if droppedByServer(err) {
-			hint = fmt.Sprintf("the relay on port %d closed the connection without answering; check its log for an error", port)
+			hint = fmt.Sprintf("the relay at %s closed the connection without answering; check its log for an error", addr)
 		}
 		return nil, &common.CLIError{
 			Err:   fmt.Errorf("request failed (%s): %w", hint, err),

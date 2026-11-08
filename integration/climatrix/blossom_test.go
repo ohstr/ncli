@@ -13,7 +13,9 @@ import (
 	"time"
 )
 
-const blossomImage = "ghcr.io/hzrd149/blossom-server:latest"
+// blossomImage is pinned by digest, the same image integration/agent-eval
+// runs.
+const blossomImage = "ghcr.io/hzrd149/blossom-server:latest@sha256:446fa6c4b0ca529a1fbceabf5ea75839b5b76dfb0d0e1d150f3bae5f9a52b3b8"
 
 // dockerHost is where a published container port is reachable: localhost
 // normally, the docker gateway (e.g. 172.17.0.1) when this test itself

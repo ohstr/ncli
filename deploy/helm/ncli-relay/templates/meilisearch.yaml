@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
         - name: meilisearch
-          image: "{{ .Values.meilisearch.image.repository }}:{{ .Values.meilisearch.image.tag }}"
+          image: {{ include "ncli-relay.image" (dict "image" .Values.meilisearch.image "default" "") | quote }}
           env:
             - name: MEILI_ENV
               value: production

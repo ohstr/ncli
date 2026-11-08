@@ -51,6 +51,20 @@ type GroupsConfig struct {
 	// MembershipNotices signs a seat notice for each member gained or lost;
 	// see MembershipNoticesConfig.
 	MembershipNotices *MembershipNoticesConfig `mapstructure:"membershipNotices"`
+
+	// Create says who may create a group (kind 9007): everyone, members, or
+	// a NIP-43 role id, any number of them. Omitted, everyone may. An empty
+	// list leaves it to the relay's admins and the roles whose
+	// membership.roles tasks list group.create.
+	Create []string `mapstructure:"create"`
+
+	// GrantCeiling stops a member from granting a role that may send a
+	// moderation kind it may not send itself (put-user with roles, kind
+	// 9000): no handing out more power than you hold. Unset, it is on
+	// exactly when membership roles (or members) carry a group:<kind> task,
+	// and off otherwise, since it refuses grants existing groups may rely on.
+	// An explicit value wins; false with group tasks delegated is a warning.
+	GrantCeiling *bool `mapstructure:"grantCeiling"`
 }
 
 // groupModerationPolicy is the moderation policy groups.roles describes, or

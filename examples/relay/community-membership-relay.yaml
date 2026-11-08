@@ -4,9 +4,10 @@
 # reading) needs an invite first.
 #
 # Mechanism: NIP-43 relay membership. An outsider gets an invite claim from
-# an admin (`ncli relay invites create`, or NIP-86 createclaim) or an existing
-# member (REQ kind:28935) -- with membership_required, a non-member can't
-# request one -- then joins with it (EVENT kind:28934) and is enrolled from
+# an admin (`ncli relay invites create`, or NIP-86 createclaim), or from an
+# existing member when membership.memberClaims is true (NIP-86 createclaim
+# or REQ kind:28935; it is off by default here, as membership_required is
+# set) -- then joins with it (EVENT kind:28934) and is enrolled from
 # then on. membership.enabled requires nip11.privkey: the relay signs its
 # kind:13534 member list and add/remove/invite events with it. See examples/relay/full.yaml for the complete set of nip11 fields
 # and which ones `ncli relay` actually honors from config vs. always

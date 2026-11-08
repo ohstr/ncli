@@ -2,7 +2,14 @@
 # field RelayConfig understands. For a minimal working config, see
 # examples/relay/minimal.yaml (that's the one `just dev relay` actually uses).
 
+# Binds every interface on this port. To bind one address instead, set
+# listen (host:port); it wins over port, and the admin listener's default
+# port follows it (port + 1). Prefer an IP literal: a hostname with
+# several addresses binds only one. On loopback behind a local proxy, list
+# that address in limits.trustedProxies, or every client shares one per-IP
+# limit (--check warns).
 port: 5500
+# listen: 127.0.0.1:5500
 
 nip11:
   name: ncli-dev-relay
@@ -23,7 +30,8 @@ nip11:
   # privkey: ""
 
   # A few more NIP-11 document fields exist but aren't config-settable, so
-  # they're omitted above rather than shown as live fields:
+  # they're omitted above rather than shown as live fields (--check reports
+  # supported_nips and self as unknown keys):
   #   software/version -- always filled in from ncli's own build info at
   #     startup, overwriting anything set here.
   #   supported_nips -- always derived from what this build actually
@@ -49,8 +57,9 @@ nip11:
     max_indexable_tags: 5
 
     # min_pow_difficulty/strict_pow also exist under limitation in the
-    # NIP-11 document, but aren't settable here -- the top-level pow: block
-    # below is their single source of truth and fills these in internally.
+    # NIP-11 document, but aren't settable here (--check reports them as
+    # unknown keys) -- the top-level pow: block below is their single
+    # source of truth and fills these in internally.
 
 store: ./data/db/notes.db
 logdir: ./data/logs
@@ -170,6 +179,30 @@ membership:
   # Request. 0 means unlimited.
   inviteMaxUses: 1
 
+  # If true, a plain member -- not only an admin -- may mint an invite via
+  # the NIP-86 createclaim method (nip86.enabled) or a NIP-43 invite request
+  # (REQ kind 28935), with no per-member cap.
+  # Unset follows nip11.limitation.membership_required: false on a
+  # members-only relay, true otherwise. An explicit value always wins.
+  # memberClaims: false
+
+  # What each NIP-43 role (the d tag of its kind 33534) may do: NIP-86
+  # method names (aliases @claims, @members, @bans, @roles, @relayinfo,
+  # @policy), group:<kind> (a NIP-29 moderation kind in every group;
+  # group:* all), blossom.upload/download/delete, huddle.join, group.create,
+  # or * for everything but group kinds (list those). A banned pubkey gets
+  # nothing. Role ids are case-insensitive, may not contain a dot, and may
+  # not be everyone or members. Needs enabled: true.
+  # roles:
+  #   host:     { can: ["@claims", "@members", banpubkey, banevent, "group:9005"] }
+  #   greeter:  { can: [createclaim] }
+  #   uploader: { can: [blossom.upload] }
+
+  # What every member may do. Set, it replaces what memberClaims,
+  # blossom.membersOnly and huddle.requireMembership give members; those
+  # then only say whether a task is restricted.
+  # members: { can: [createclaim] }
+
   # If true, the relay also publishes a signed kind:8000/8001 event
   # whenever membership changes via Join/Leave Request, in addition to
   # updating its own internal membership store (authoritative either way).
@@ -226,6 +259,17 @@ groups:
   # admins to accept (members add) or decline (members remove), instead of
   # refusing it. Off by default.
   pendingJoins: false
+
+  # Who may create a group (kind 9007): everyone, members, or NIP-43 role
+  # ids (membership.roles). Omitted, everyone may; [] leaves it to the
+  # admins and roles whose tasks list group.create.
+  # create: [members]
+
+  # Refuse a grant of a role that may send a moderation kind the granter
+  # may not send itself. Unset, it is on when membership.roles (or
+  # members) carry a group:<kind> task and off otherwise; false while
+  # roles carry one is a warning at --check.
+  # grantCeiling: true
 
   # A relay-signed seat notice to each pubkey that gains (added) or loses
   # (removed) a seat in a hosted group, by any path: tags p (member),
@@ -333,6 +377,45 @@ blossom:
       accessKey: ""
       secretKey: ""
       useSSL: false
+
+# limits (optional): rate limits, per pubkey and per client IP. A limit that
+# isn't set is no limit, and without this block the relay limits nothing
+# (blossom's maxBlobBytes/maxUploadsPerSigner/maxConcurrentUploads above are
+# separate and keep their defaults). A public relay (auth_required false)
+# without limits is warned about by --check and at startup. Each rate is
+# `events` per `per` (a Go duration), up to `burst` at once (default
+# `events`); a refused EVENT is OK false and a refused REQ is CLOSED, both
+# "rate-limited:", and HTTP gets 429 with Retry-After. Commented out, so it
+# applies nothing; these are suggested values for a public relay.
+# limits:
+#   events:                     # EVENT, over the WebSocket and POST /events
+#     # Over the WebSocket, counted against the author only on a connection
+#     # logged in (NIP-42) as the author.
+#     perPubkey: {events: 30, per: 1m, burst: 60}
+#     perIP: {events: 120, per: 1m}
+#   reads:                      # REQ, COUNT, NEG-OPEN, and AUTH (per IP)
+#     perIP: {events: 60, per: 1m, burst: 120}
+#   http:                       # POST /query, /count, /events
+#     perIP: {events: 60, per: 1m}
+#   blossom:
+#     uploads:
+#       perPubkey: {events: 20, per: 1h}
+#       perIP: {events: 40, per: 1h}
+#     downloads:                # GET, HEAD, DELETE
+#       perIP: {events: 600, per: 1m}
+#   connectionsPerIP: 20        # open WebSockets from one IP, huddles' included
+#   # none (default) or members: NIP-43 members and admins (the relay key,
+#   # nip86.admins) skip the per-pubkey limits; per-IP limits still apply.
+#   exempt: members
+#   # Reverse proxies whose X-Forwarded-For names the client. Without one,
+#   # every client behind the proxy shares its IP's limits. The proxy must
+#   # set or append X-Forwarded-For: the client is the rightmost hop that
+#   # isn't a trusted proxy, so one passing a client's header through lets
+#   # the client pick its own key. X-Real-IP is read only when there is no
+#   # X-Forwarded-For, and a client hop that isn't an address falls back to
+#   # the proxy's own. List the proxy's own address, not its network:
+#   # trusting a pod network (10.0.0.0/8) trusts every in-cluster client.
+#   trustedProxies: [127.0.0.1]
 
 # WebSocket connection tuning (optional, Go duration strings).
 handshakeTimeout: 5s

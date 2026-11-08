@@ -15,7 +15,7 @@ flags/schemas change. -->
 One config file (`--config relay.yaml`), read by both `ncli relay` and the
 commands that administer it (`status`, `index`, `jobs`, `members`, ...) —
 those need `nip11.privkey` from it to sign NIP-98 requests, and
-`admin.listen`/`port` to find the relay.
+`admin.listen`/`listen`/`port` to find the relay.
 
 ## Minimal config to start
 
@@ -35,6 +35,23 @@ logdir: ./data/logs
 want `cache.zaps.enabled`, `cache.profiles.stats.enabled`,
 `cache.relay.stats.enabled` or the admin commands (`status`, `index`,
 `jobs`, `verify`, `members`, ...).
+
+`port` binds every interface. To bind one address, set `listen:
+127.0.0.1:5500` (host:port): it wins over `port`, and the admin listener's
+default becomes `127.0.0.1:<its port + 1>`. `relay members`/`invites`/
+`roles` dial `listen`'s host (`localhost` when it is `0.0.0.0`, `::` or
+empty); `status`/`index`/`jobs`/`verify`/`dashboard` dial the admin
+listener. Prefer an IP literal: a hostname with several addresses binds
+only one. `--check` rejects (`invalid_input`) a `listen` that isn't
+host:port with a port 1-65535, has stray whitespace, or names a host that
+doesn't resolve. On port 65535 set `admin.listen` (port + 1 doesn't
+exist). `NCLI_LISTEN`/`NCLI_PORT` apply even when the file has no
+`listen`/`port` key, to the relay and its admin commands alike; a
+Docker-link value (`tcp://ip:port`, which Kubernetes sets as `NCLI_PORT`
+for a Service named `ncli`) is ignored. A loopback `listen` with per-IP
+`limits` warns unless `limits.trustedProxies` covers that address
+(`localhost` binds 127.0.0.1): behind a local proxy every client shares
+one per-IP limit.
 
 ## Scenario examples
 
@@ -58,10 +75,10 @@ closest to what you're building and adapt its name/port/store.
 | `tracked-membership-relay.yaml` | A community wanting a visible roster/roles without gating anything | `membership.enabled` with `membership_required` **left off** -- membership is a label (`members list`, `roles`) for display/moderation tooling, not an admission check |
 
 `examples/relay/full.yaml` documents every field at its default, commented:
-`description`, `limitation.*`, `pow.*`, `cache.profiles.*` (search,
+`port`/`listen`, `description`, `limitation.*`, `pow.*`, `cache.profiles.*` (search,
 stats, checks, scoring), `cache.zaps.*`, `cache.relay.stats.*`,
 `membership.*`, `nip86.*`, `agent_auth.*`, `httpBridge.*`, `presence.*`,
-`blossom.*`, `recipientOnlyKinds`,
+`blossom.*`, `recipientOnlyKinds`, `limits.*` (commented out),
 `handshakeTimeout`/`pingInterval`/`pongTimeout`/`writeTimeout`,
 `outgoingBufferSize`/`maxConcurrentStoreTasks`, `logs.*` rotation and
 `huddle.*`.
@@ -77,10 +94,92 @@ ncli relay --config relay.yaml
 ncli relay --config relay.yaml --check
 ```
 
+A key the relay doesn't know (`htpBridge:`, `httpBridge.qurey`) only logs
+a warning at startup and is ignored, so its setting stays off. `--check`
+fails on it (`invalid_input`, exit 3), naming every unknown key by its
+dotted path; run it after every config edit. A key with no value
+(`bogus:`) counts too. `NCLI_*` env vars and the exact keys other commands
+read (`vault.password`, `signer`, `groups.identity`, ...) are not
+reported; anything else beside them (`query: {enabled: true}`) is.
+
 Foreground process; stops cleanly on SIGINT/SIGTERM. Logs go to stderr and
 to `<logdir>/nrelay.log` as JSON lines (or a custom `logs:` rotation block).
 `logs.level: debug` adds per-connection lines; `logs.file: false` keeps
 stderr only.
+
+## `limits:` — rate limits, opt-in
+
+**A limit that isn't set is no limit.** There are no defaults: without a
+`limits:` block the relay limits nothing, exactly as before. The one
+exception is Blossom's own caps (`blossom.maxBlobBytes` 100 MiB,
+`maxUploadsPerSigner` 2, `maxConcurrentUploads` 8), which are separate and
+keep their defaults.
+
+A public relay (`nip11.limitation.auth_required: false`) with no limits is
+warned about, never refused: `--check` exits 0 but logs `no rate limits
+configured (limits:)` on stderr (and lists it in `--json`'s `warnings`),
+and startup logs the same line. An `auth_required` relay isn't warned.
+A per-pubkey limit that never applies is warned about the same way:
+`blossom.downloads.perPubkey` while downloads are public (a GET or HEAD has
+no signer, so only DELETEs count), and `blossom.uploads.perPubkey` or
+`events.perPubkey` with `exempt: members` while only members may upload or
+write (every limited key is exempt).
+
+Recommended block for a public relay:
+
+```yaml
+limits:
+  events:                    # EVENT, WebSocket and POST /events
+    perPubkey: {events: 30, per: 1m, burst: 60}
+    perIP: {events: 120, per: 1m}
+  reads:                     # REQ, COUNT, NEG-OPEN and AUTH
+    perIP: {events: 60, per: 1m, burst: 120}
+  http:                      # POST /query, /count, /events
+    perIP: {events: 60, per: 1m}
+  blossom:
+    uploads: {perPubkey: {events: 20, per: 1h}, perIP: {events: 40, per: 1h}}
+    downloads: {perIP: {events: 600, per: 1m}}
+  connectionsPerIP: 20
+  exempt: members            # members and admins skip the per-pubkey limits
+  trustedProxies: [127.0.0.1]   # only your reverse proxy's own address
+```
+
+- Each rate is `events` per `per`, up to `burst` at once (default
+  `events`). Set only the ones you want; each counts on its own.
+- A refused EVENT or AUTH is `OK false "rate-limited: ..."`, a refused
+  REQ/COUNT is `CLOSED "rate-limited: ..."` (NEG-OPEN: `NEG-ERR`), HTTP and
+  Blossom get 429 with `Retry-After`, and a connection over
+  `connectionsPerIP` is refused 429 before the WebSocket upgrade.
+- `events.perPubkey` counts an EVENT against its author only on a
+  connection logged in (NIP-42) as that author, and only for an event the
+  relay doesn't already have; anything else is counted per IP alone. Over
+  `POST /events` the NIP-98 signer is the author, so it always counts.
+- `reads` counts REQ, COUNT and NEG-OPEN, and each AUTH takes one from the
+  IP's `reads.perIP`: a `reads.perIP` of 1 is spent by the login itself.
+- One limiter is shared: an author's EVENTs over the WebSocket and over
+  `POST /events` draw from the same budget, and `connectionsPerIP` counts
+  the relay's WebSocket and huddle ones (`/huddle/{id}/audio`, `/rtc`)
+  together.
+- `exempt: members` lifts only per-pubkey limits (never for a banned key);
+  per-IP limits still apply to members.
+- Behind a reverse proxy, list it in `trustedProxies`, or every client is
+  counted as the proxy's IP. The proxy must set or append
+  `X-Forwarded-For` (the client is the rightmost hop that isn't a trusted
+  proxy; one that passes a client's header through untouched lets the
+  client pick its own key). `X-Real-IP` is read only when there is no
+  `X-Forwarded-For`, and a client hop that isn't an address (`unknown`)
+  falls back to the proxy's own address. List the proxy's own address, not
+  its network: trusting a pod or cluster network (`10.0.0.0/8`) trusts
+  every in-cluster client to name itself. IPv6 clients are counted by
+  their /64.
+- `--check` rejects (`invalid_input`, `input` = the key or value) negative
+  numbers, `events` without `per` or the reverse, a bad duration, a rate
+  under 1ns an event (`input` = its `events`), a `burst` whose window
+  overflows (`input` = its `burst`), a bad CIDR and an `exempt` other than
+  `none`/`members`.
+- Refusals are counted in `ncli_relay_rate_limited_total{action,by}`
+  (`action`: event, read, http, upload, download, connection; `by`: ip or
+  pubkey) on `/metrics`.
 
 ## `ncli relay context` — stop repeating `--config`
 
@@ -243,10 +342,14 @@ Both proposed methods are detectable via `supportedmethods`, which a client
 MUST call with the **same key** it will use before offering per-invite limits.
 The set is scoped to the calling key: an admin's `supportedmethods` lists every
 method, whereas a plain member's lists only `createclaim` and
-`supportedmethods` (see member claims below).
+`supportedmethods` (see member claims below), plus whatever its NIP-43 roles
+give (see "Roles and tasks").
 
-**Member claims (`membership.memberClaims`, bool, default true).** When
-membership is on and this is true, a plain member -- not only an admin -- may
+**Member claims (`membership.memberClaims`, bool).** Unset, it follows
+`nip11.limitation.membership_required`: **false on a members-only relay, true
+otherwise** (the same trigger as `blossom.membersOnly.upload`, with the
+opposite effect); an explicit
+`true`/`false` always wins. When membership is on and this is true, a plain member -- not only an admin -- may
 mint an invite via `createclaim`, per NIP-43. The member's NIP-98 key is
 accepted even though it is not an admin, and the Relay Management API then
 scopes it to exactly `createclaim` + `supportedmethods`; calling any other
@@ -258,20 +361,125 @@ A member's code uses the relay's configured defaults and carries no roles.
   **401**, exactly as before.
 - **Risk / escape hatch:** there is **no per-member cap** on how many codes a
   member may mint -- the invite record has no creator field to count against.
-  An operator who does not want members minting codes sets
-  `membership.memberClaims: false`; a member then gets a **401** from the
-  management API (admin-only, as it was before this feature) while invite
+  That is why a members-only relay leaves it off unless set. With it false, a
+  member gets a **401** from the management API (admin-only), while invite
   redemption on join (kind 28934) is unaffected. With membership off,
   `memberClaims` has no effect.
+- A NIP-43 invite request (REQ kind 28935) needs `createclaim` too, so
+  `memberClaims` decides it the same way: with it false, a member's request
+  is closed `restricted: ...` (an unauthenticated one `auth-required: ...`).
+  Older relays answered any connection allowed to read.
 
 **`unallowpubkey` ends the member's live huddle calls**, not just their next
 join — the other participants stay connected. `ncli relay members remove`
 does the same.
 
+## Roles and tasks — what a NIP-43 role may do
+
+NIP-29, NIP-43 and NIP-86 define roles but leave what a role may do to the
+relay. `membership.roles` is where this relay says it: each NIP-43 role id
+(the `d` tag of its kind 33534, as `relay roles create`/`createrole` make
+it) maps to a list of **tasks**, named after the protocol verb that does
+them. A member's tasks are the union of its roles' lists plus
+`membership.members` (every enrolled member). A **banned** pubkey holds
+none.
+
+`nip11.pubkey` and `nip86.admins` hold `*`: every task except `group:`
+ones. Banning one of them doesn't remove their NIP-86 access or huddle
+joins. Their events are still refused (the relay's own key is never
+banned), and Blossom refuses their uploads, and their downloads where
+`blossom.membersOnly.download` is on. Moderating every hosted group is for `groups.admins`
+(and the relay's own key) only, never `nip86.admins`.
+
+```yaml
+membership:
+  enabled: true
+  roles:
+    host:     { can: ["@claims", "@members", banpubkey, banevent, "group:9005"] }
+    greeter:  { can: [createclaim] }        # greeters may invite
+    uploader: { can: [blossom.upload] }
+  members:  { can: [createclaim] }          # every member
+groups:
+  create: [members]                         # who may create a group (kind 9007)
+```
+
+| task | what it allows |
+|---|---|
+| a NIP-86 method name | that method: `createclaim`, `banpubkey`, `changerelayname`, ... (incl. `createclaimwithlimits`, `getclaim`) |
+| `@claims` | `createclaim`, `createclaimwithlimits`, `getclaim`, `listclaims`, `deleteclaim` |
+| `@members` | `allowpubkey`, `unallowpubkey`, `listallowedpubkeys` |
+| `@bans` | `banpubkey`, `unbanpubkey`, `listbannedpubkeys`, `banevent`, `allowevent`, `listbannedevents`, `listeventsneedingmoderation` |
+| `@roles` | `createrole`, `editrole`, `deleterole`, `assignrole`, `unassignrole` |
+| `@relayinfo` | `changerelayname`, `changerelaydescription`, `changerelayicon` |
+| `@policy` | `allowkind`, `disallowkind`, `listallowedkinds`, `listdisallowedkinds`, `blockip`, `unblockip`, `listblockedips` |
+| `group:<kind>` | that NIP-29 moderation kind (9000-9020) in **every** hosted group, e.g. `group:9005` (delete an event); `group:*` all of them. `group:9007` is refused: creating a group is `group.create` |
+| `blossom.upload` / `blossom.download` | upload / download blobs where `blossom.membersOnly` restricts them |
+| `blossom.delete` | delete **any** blob, not only your own |
+| `huddle.join` | join calls where `huddle.requireMembership` restricts them |
+| `group.create` | create a group (kind 9007) where `groups.create` restricts it |
+| `*` | every task except `group:` ones, which a role must list (`group:*` or a kind) |
+
+- **How a client learns its tasks:** NIP-86 `supportedmethods`, signed with
+  the key it will use, lists exactly the methods that key holds (the spec
+  allows a per-caller answer). A key holding no method is a 401; a method it
+  doesn't hold is refused as an unknown method.
+- **Existing settings map on:**
+  `memberClaims` = members get `createclaim`; `blossom.membersOnly.upload/
+  download` = members get `blossom.upload/download` (off: everyone may);
+  `huddle.requireMembership` = members get `huddle.join` (off: anyone may);
+  `groups.create` omitted = everyone may create a group. Admins count as
+  members everywhere (they already did for Blossom; a huddle with
+  `requireMembership` now admits them too). A banned member now loses
+  `createclaim` and huddle joins, as it already lost Blossom uploads.
+- **`membership.members.can` wins.** Set, it is the whole members grant: the
+  old switches then only say whether a task is restricted. So with
+  `blossom.membersOnly.upload: true` and `members: {can: [createclaim]}`, only
+  admins and roles listing `blossom.upload` (the `uploader` above) may upload;
+  `--check` warns for each restricted task `members.can` leaves out (listed
+  in `--check --json`'s `"warnings"`).
+  An explicit `memberClaims` must agree with whether `members.can` gives
+  `createclaim`, or `--check` fails.
+- **`groups.create`** entries are `everyone`, `members` or a role id, in
+  any case; `[]` leaves group creation to the admins and roles whose tasks
+  list `group.create`. Refused creation is `OK false` `restricted: ...`.
+- **Role ids are lowercase.** `assignrole`, `unassignrole`, enrolling and
+  invites store them lowercase and match in any case, so `unassignrole
+  host` also removes a `Host`. In `membership.roles`, `Host` and `host`
+  together, an id with a dot (a config key can't hold one) and the
+  keywords `everyone`/`members` fail `--check`. A kind 33534 role named
+  `everyone` or `members` is only a startup warning: `groups.create` reads
+  the keyword, never the role.
+- **Validated at `--check`** (`invalid_input`, exit 3, `input` = the bad
+  value): an unknown task, a `group:` kind outside 9000-9020 or `group:9007`, `roles`/`members`
+  without `membership.enabled`, a `groups.create` entry other than
+  `everyone` without membership. A role id with no kind 33534 yet is only a
+  warning at startup: roles can be created at runtime.
+- **`@roles` is as good as `*`** in practice: whoever can assign roles can
+  give themselves any task a role in the config carries. `@members` only
+  admits pubkeys (`allowpubkey` on a member keeps its roles), so it hands out
+  what `membership.members` gives, not more.
+- **Tasks come from the config, not the role event.** `deleterole` removes
+  the kind 33534 definition but not the tasks: members still holding that
+  id keep them until `unassignrole` or a config edit.
+- **Losing `huddle.join` doesn't end a live call.** A role being unassigned,
+  or a ban, only stops the next join. Removing the member
+  (`unallowpubkey`, `relay members remove`) ends their calls.
+- **`groups.grantCeiling`** stops a group member from handing out a role
+  that can send a moderation kind they can't send themselves (put-user with
+  roles). Unset, it is **on exactly when a role (or `members`) carries a
+  `group:<kind>` task**. Without it, a `group:9000` role could seat its
+  holder as a group `admin` that outlives the role. With it, `group:9000`
+  adds plain members but can't grant `admin`. With no `group:` tasks it stays
+  off, so existing groups keep working. An explicit `false` still wins, with
+  a `--check` warning.
+- A NIP-43 invite request (REQ kind 28935) is the `createclaim` task, like
+  NIP-86 `createclaim`: a greeter role can hand out codes either way.
+- The `ncli relay members/invites/roles` admin HTTP routes stay admin-only.
+
 ## Monitoring and index jobs — relay must be running
 
 Every running relay has an **admin listener** separate from its public
-port: `admin.listen`, default `127.0.0.1:<port+1>` (`off` disables it).
+port: `admin.listen`, default `127.0.0.1:<port+1>` (`listen`'s port when set; `off` disables it).
 `status`/`index`/`jobs` sign each request (NIP-98) with `nip11.privkey`,
 which must be the relay's key or in `nip86.admins`. `--admin-url` overrides
 where they connect.
@@ -578,11 +786,16 @@ Full route, metric and config reference: `references/admin-plane-reference.md`.
   `inviteAllowNoExpiry` (bool, default false) gates whether a never-expiring
   code (`expires_at: 0`) is allowed at all. An unparseable or non-positive
   `inviteMaxTTL` is a config-load-time error. A requested limit outside
-  policy is refused, never silently clamped. `memberClaims` (bool, default
-  true) lets a plain member mint a code via `createclaim` when membership is
-  on; set it false to keep the management API admin-only. See "Member claims"
+  policy is refused, never silently clamped. `memberClaims` (bool; unset,
+  false on a members-only relay and true otherwise) lets a plain member mint a
+  code via `createclaim` when membership is on; false keeps the management API
+  admin-only. See "Member claims"
   under the Relay Management API section above, including the no-per-member-cap
   note.
+- `inviteMaxUses` (int) is how many joins one code admits when the request
+  sets no limit of its own. It defaults to `0`, which means **unlimited**: a
+  default code keeps admitting people until it expires. Set it (often `1`)
+  on any relay that hands out codes.
 - Turning on `nip11.limitation.membership_required` is a real behavior
   change, not just a new knob: EVENT publishing now checks that the
   *specific pubkey that signed the event* is authenticated on the
@@ -626,10 +839,13 @@ Full route, metric and config reference: `references/admin-plane-reference.md`.
   (5) when each is left at zero.
 - POST /query and POST /events live under a nested `httpBridge:` key
   (`httpBridge.query.enabled`/`httpBridge.events.enabled`), not bare
-  top-level `query:`/`events:` keys -- viper silently drops an unknown
-  top-level key rather than erroring, so a config using the old flat shape
-  loads with no complaint and simply never mounts either endpoint. See
-  `examples/relay/app-backend-relay.yaml`.
+  top-level `query:`/`events:` keys. The old flat shape mounts neither
+  endpoint: startup only warns about the unknown keys, `--check` fails on
+  them. See `examples/relay/app-backend-relay.yaml`.
+- POST /events applies a hosted group's rules: a non-member's event tagged
+  into a private, closed or restricted group is 403, and group moderation
+  kinds and requests (9000-9022) are 400 `restricted:` -- send those over a
+  WebSocket.
 - Gift wraps (kind 1059) are served only to the pubkey their `p` tag names,
   over REQ, COUNT and `/query`, unless `recipientOnlyKinds` says otherwise
   (omitted means `[1059]`; `[]` turns it off). An anonymous REQ for 1059 is
@@ -643,7 +859,17 @@ Full route, metric and config reference: `references/admin-plane-reference.md`.
 - Blossom on the relay takes uploads whose kind 24242 token names the
   relay's host in a `server` tag and the blob's hash in an `x` tag; a
   token with no `server` tag is refused. `ncli blossom upload --server
-  https://<relay>` signs exactly that. Keep S3 keys out of `relay.yaml`:
+  https://<relay>` signs exactly that. The relay origin is the Blossom
+  server for every command it serves: upload, download, HEAD and `rm`
+  all work at the root (`/<sha256>[.ext]`), and the URL an upload returns
+  is `/<blobPrefix>/<sha256>.<ext>` (`/media` by default), which also
+  serves the blob. It has no `list`, `mirror` or `upload --optimize`:
+  those answer 404 with a "not supported" reason, which `ncli blossom`
+  reports as `unsupported` (exit 8). A blob is served with `nosniff` and a
+  sandboxing CSP; an untyped one is `application/octet-stream`, and any type
+  but image, audio, video or plain text is a `Content-Disposition:
+  attachment`, so a link to it downloads rather than renders on the relay's
+  origin. Keep S3 keys out of `relay.yaml`:
   leave `accessKey: ""`/`secretKey: ""` and set
   `NCLI_BLOSSOM_STORAGE_S3_ACCESSKEY`/`_SECRETKEY` (an `NCLI_*` variable
   only overrides a key the file already has).
@@ -661,8 +887,9 @@ Full route, metric and config reference: `references/admin-plane-reference.md`.
   unless `pow.strict: true` — with `strict` unset/false, `min` only shows up
   in the relay's advertised `nip11.limitation.min_pow_difficulty` (a heads-up
   to clients), while every event is still accepted regardless of its actual
-  difficulty. Setting `nip11.limitation.min_pow_difficulty` directly in YAML
-  does nothing — `pow.min` is the only field that reaches it.
+  difficulty. `nip11.limitation.min_pow_difficulty` (like
+  `nip11.supported_nips`) is not a config key: a start warns that it is
+  unknown and ignores it, `--check` fails on it. Set `pow.min` instead.
 - Both `store` and `logdir`'s parent directories are auto-created on `ncli
   relay` startup, but a missing `store` value is caught at config-load time
   (before either directory is touched), same as a missing `nip11.pubkey`.

@@ -70,6 +70,11 @@ const (
 var (
 	config RelayConfig
 
+	// unknownConfigKeys are the keys initConfig warned about on stderr.
+	// It runs before the log file is attached, so RunRelay writes the
+	// same warnings to the file once it is.
+	unknownConfigKeys []string
+
 	// adminSettings is config.Admin validated by initConfig; nil when the
 	// admin listener is off.
 	adminSettings *adminplane.Settings
@@ -89,6 +94,9 @@ type RelayConfig struct {
 	LogDir       string `mapstructure:"logdir"`
 	RelayNotesDb string `mapstructure:"store"`
 	Port         int    `mapstructure:"port"`
+	// Listen, as host:port, is the address the relay binds; it wins over
+	// Port, which alone binds every interface.
+	Listen string `mapstructure:"listen"`
 
 	Logs       *LogConfig         `mapstructure:"logs"`
 	Cache      *CacheConfig       `mapstructure:"cache"`
@@ -102,6 +110,11 @@ type RelayConfig struct {
 	Presence   *PresenceConfig    `mapstructure:"presence"`
 	Blossom    *BlossomConfig     `mapstructure:"blossom"`
 	Admin      *adminplane.Config `mapstructure:"admin"`
+	// Limits is the relay's rate limits; nil limits nothing.
+	Limits *LimitsConfig `mapstructure:"limits"`
+
+	// warnings are the config warnings initConfig recorded (see warn).
+	warnings []string
 
 	HandshakeTimeout string `mapstructure:"handshakeTimeout"`
 	PingInterval     string `mapstructure:"pingInterval"`
@@ -209,12 +222,26 @@ type MembershipConfig struct {
 	// expiry is refused, never clamped. Validated at startup (parses, > 0).
 	InviteMaxTTL string `mapstructure:"inviteMaxTTL"`
 
-	// MemberClaims, if true (the default), lets a plain member -- not only an
-	// admin -- mint an invite via the NIP-86 createclaim method. The
-	// integration pass (section B) wires this to the nip86 Authorize/Visible
-	// gate; it has no effect until that wiring lands. A nil pointer means
-	// unset, which defaults to true.
+	// MemberClaims, if true, lets a plain member -- not only an admin -- mint
+	// an invite via the NIP-86 createclaim method: members then hold the
+	// createclaim task (tasks.go), which admits them to NIP-86 and shows them
+	// createclaim + supportedmethods. A nil pointer means unset, which follows
+	// nip11.limitation.membership_required: false on a members-only relay,
+	// where an invite is the way in, true otherwise. An explicit value wins.
 	MemberClaims *bool `mapstructure:"memberClaims"`
+
+	// Roles maps a NIP-43 role id (a kind 33534 d tag) to the tasks a member
+	// holding it may do; see tasks.go for the vocabulary. Role ids are
+	// canonical lowercase (config keys are lowercased on load); one written
+	// twice in different case, one with a dot (a config key path) and the
+	// groups.create keywords everyone and members are refused at --check.
+	Roles map[string]RoleTasks `mapstructure:"roles"`
+
+	// Members, when set, is what every enrolled member may do, replacing what
+	// memberClaims, blossom.membersOnly and huddle.requireMembership would
+	// otherwise give members (those then only say whether a task is
+	// restricted). An explicit memberClaims must agree with it.
+	Members *RoleTasks `mapstructure:"members"`
 
 	// PublishAddRemoveEvents, if true, makes the relay also publish a
 	// signed kind:8000/8001 event whenever membership changes via
@@ -224,7 +251,8 @@ type MembershipConfig struct {
 }
 
 // checkAndDefaultMembership validates the membership block's standalone
-// invariants and fills in its defaults (memberClaims -> true when unset).
+// invariants and fills in its defaults (memberClaims, when unset, from
+// memberClaimsDefault).
 // Split out of initConfig so a test can exercise the real guards without
 // standing up the rest of config loading.
 func (c *RelayConfig) checkAndDefaultMembership() error {
@@ -249,13 +277,24 @@ func (c *RelayConfig) checkAndDefaultMembership() error {
 			return &common.CLIError{Err: errors.New("membership.inviteMaxTTL must be <= 10 years"), Code: common.CodeUsage}
 		}
 	}
-	// Default memberClaims to true when unset, so the resolved config is
-	// concrete for the integration pass (section B) that will read it.
+	// Resolve an unset memberClaims now, so the config newNip86Handler reads
+	// is concrete.
 	if c.Membership.MemberClaims == nil {
-		enabled := true
+		enabled := c.memberClaimsDefault()
 		c.Membership.MemberClaims = &enabled
 	}
 	return nil
+}
+
+// memberClaimsDefault is memberClaims when unset: off on a members-only relay
+// (nip11.limitation.membership_required), where letting every member mint
+// uncapped invites should be an explicit choice, and on otherwise. It covers
+// NIP-86 createclaim and a NIP-43 invite request (REQ kind 28935) alike: both
+// need the createclaim task. It has
+// the same trigger as blossom.membersOnly.upload (membership_required) but the
+// opposite effect: that one turns on, this one turns off.
+func (c *RelayConfig) memberClaimsDefault() bool {
+	return !c.Nip11.Limitation.MembershipRequired
 }
 
 // Nip86Config configures NIP-86, the Relay Management API: membership
@@ -365,9 +404,10 @@ type EventsConfig struct {
 	// Enabled mounts the handler at /events. The NIP-98 signer must match
 	// the submitted event's own pubkey (stricter than the WS EVENT path,
 	// which has no such blanket requirement) -- see
-	// relay.NewEventsHandler's doc comment. membership_required and the
-	// relay's own self-authored-kind guard are enforced exactly as they
-	// would be over WS.
+	// relay.NewEventsHandler's doc comment. membership_required, the
+	// relay's own self-authored-kind guard and NIP-29 group membership are
+	// enforced exactly as they would be over WS; group moderation kinds and
+	// requests (9000-9022) are refused, they need a WebSocket.
 	Enabled bool `mapstructure:"enabled"`
 }
 
@@ -407,7 +447,8 @@ func NewRelayCommand() *cobra.Command {
 					return err
 				}
 			}
-			if err := initConfig(); err != nil {
+			check, _ := cmd.Flags().GetBool("check")
+			if err := initConfig(check); err != nil {
 				return common.RuntimeError(cmd, err)
 			}
 			return nil
@@ -416,8 +457,9 @@ func NewRelayCommand() *cobra.Command {
 			jsonMode, _ := cmd.Flags().GetBool("json")
 			if check, _ := cmd.Flags().GetBool("check"); check {
 				// initConfig, in PreRunE, already validated everything.
+				warnings := config.logConfigWarnings()
 				if jsonMode {
-					common.PrintJSON(map[string]any{"ok": true, "config": viper.ConfigFileUsed()})
+					common.PrintJSON(map[string]any{"ok": true, "config": viper.ConfigFileUsed(), "warnings": warnings})
 				} else {
 					fmt.Printf("%s is valid\n", viper.ConfigFileUsed())
 				}
@@ -451,7 +493,10 @@ func NewRelayCommand() *cobra.Command {
 // (rather than at PreRunE's own common.RuntimeError call) -- wrapCLIError
 // keeps an already-classified error's code as-is when a caller re-wraps it,
 // so this one classification covers the single call site for free.
-func initConfig() error {
+//
+// A config key RelayConfig doesn't know (a typo turns a setting off) fails
+// with check (--check) and is a warning otherwise.
+func initConfig(check bool) error {
 	used := viper.ConfigFileUsed()
 	if used != "" {
 		ev := log.Info().Str("config", used)
@@ -466,8 +511,20 @@ func initConfig() error {
 	if err := checkRenamedKeys(viper.GetViper()); err != nil {
 		return err
 	}
-	if err := viper.Unmarshal(&config); err != nil {
+	bindAddrEnv(viper.GetViper())
+	config.warnings = nil
+	unknown, err := decodeRelayConfig(viper.GetViper(), &config)
+	unknownConfigKeys = unknown
+	if err != nil {
 		return &common.CLIError{Err: fmt.Errorf("unable to decode config: %w", err), Code: common.CodeInvalidInput}
+	}
+	if len(unknown) > 0 {
+		if check {
+			return unknownKeysError(unknown)
+		}
+		for _, k := range unknown {
+			log.Warn().Str("key", k).Msg("unknown config key, ignored")
+		}
 	}
 
 	if config.Nip11.PrivKey != "" {
@@ -539,7 +596,7 @@ func initConfig() error {
 			return &common.CLIError{Err: errors.New("pow.min must be >= 0"), Code: common.CodeInvalidInput}
 		}
 		if config.Pow.Strict && config.Pow.Min == 0 {
-			log.Warn().Msg("pow.strict is true but pow.min is 0 -- there is no difficulty requirement to enforce")
+			config.warn(powStrictWithoutMinWarning)
 		}
 		if config.Pow.Min > 0 {
 			mode := "advisory (advertised via NIP-11, not enforced)"
@@ -550,6 +607,12 @@ func initConfig() error {
 		}
 	}
 
+	if err := checkRoleKeysInFile(viper.ConfigFileUsed()); err != nil {
+		return err
+	}
+	if err := config.checkRoleTasks(); err != nil {
+		return err
+	}
 	if err := config.checkAndDefaultMembership(); err != nil {
 		return err
 	}
@@ -571,6 +634,15 @@ func initConfig() error {
 	}
 
 	if err := checkCommunityConfig(&config); err != nil {
+		return err
+	}
+	config.warnRoleTasks()
+
+	if err := checkListen(&config); err != nil {
+		return err
+	}
+
+	if err := checkLimits(&config); err != nil {
 		return err
 	}
 
@@ -730,6 +802,7 @@ func RunRelay(jsonMode bool) error {
 	} else {
 		log.Info().Str("log_level", level.String()).Str("file", "off").Msg("logging initialized")
 	}
+	logUnknownKeysToFile(level)
 
 	// nip11.pubkey and store are both already validated by initConfig,
 	// which PreRunE guarantees ran successfully before Run (this function)
@@ -771,6 +844,20 @@ func RunRelay(jsonMode bool) error {
 	<-stopCh
 	s.Stop()
 	return nil
+}
+
+// logUnknownKeysToFile writes initConfig's unknown-key warnings to the log
+// file alone: initConfig ran before the file was attached and already
+// printed them on stderr.
+func logUnknownKeysToFile(level zerolog.Level) {
+	fl := common.FileLogger()
+	if fl == nil {
+		return
+	}
+	l := fl.Level(level)
+	for _, k := range unknownConfigKeys {
+		l.Warn().Str("key", k).Msg("unknown config key, ignored")
+	}
 }
 
 // redirectStdLog sends the standard library's log package to l at debug.

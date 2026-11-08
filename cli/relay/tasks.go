@@ -1,8 +1,10 @@
 package relay
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"os"
 	"slices"
 	"sort"
 	"strconv"
@@ -14,6 +16,7 @@ import (
 	"github.com/ohstr/nmilat/nip86"
 	"github.com/ohstr/nmilat/relay"
 	"github.com/rs/zerolog/log"
+	"gopkg.in/yaml.v3"
 )
 
 // Roles and tasks. NIP-29, NIP-43 and NIP-86 leave what a role may do to the
@@ -26,13 +29,17 @@ import (
 //     group:* for all of them;
 //   - an ncli name where no protocol verb exists: blossom.upload,
 //     blossom.download, blossom.delete (any blob), huddle.join, group.create;
-//   - * for everything.
+//   - * for every task except group:<kind>: those must be listed (group:*
+//     or a kind), so no role moderates other people's groups by accident.
 //
 // A pubkey's tasks are the union of what its NIP-43 roles carry, plus the
-// members grant when it is enrolled. A banned pubkey holds none. The keys the
-// config file names (nip11.pubkey and nip86.admins: everything; groups.admins:
-// group:*) keep them regardless of a ban: only an edit of the file takes them
-// away, so a relay can never lock its own operator out.
+// members grant when it is enrolled. A banned pubkey holds none.
+//
+// nip11.pubkey and nip86.admins hold * and keep it through a ban, so the
+// relay can't lock its own operator out of NIP-86. They hold no group:<kind>:
+// moderating the groups the relay hosts belongs to groups.admins (and the
+// relay key), which nmilat answers itself (SetRelayAdmins), never through
+// this authority. Role ids are canonical lowercase (canonicalRole).
 
 // Task names that are not NIP-86 methods.
 const (
@@ -122,10 +129,35 @@ func (s *taskSet) has(task string) bool {
 	if s == nil {
 		return false
 	}
-	if s.all || s.tasks[task] {
+	if s.tasks[task] {
 		return true
 	}
-	return s.groupAll && strings.HasPrefix(task, taskGroupPrefix)
+	if isGroupKindTask(task) {
+		return s.groupAll
+	}
+	return s.all
+}
+
+// isGroupKindTask reports whether task is group:<kind> or group:*, which *
+// does not cover.
+func isGroupKindTask(task string) bool {
+	return strings.HasPrefix(task, taskGroupPrefix)
+}
+
+// delegatesGroupTasks reports whether s holds any group:<kind>.
+func (s *taskSet) delegatesGroupTasks() bool {
+	if s == nil {
+		return false
+	}
+	if s.groupAll {
+		return true
+	}
+	for t := range s.tasks {
+		if isGroupKindTask(t) {
+			return true
+		}
+	}
+	return false
 }
 
 // anyNip86 reports whether s holds at least one NIP-86 method.
@@ -157,6 +189,11 @@ func checkTask(task string) error {
 		if err != nil || !nip29.IsModerationKind(kind) {
 			return fmt.Errorf("%q is not a NIP-29 moderation kind: want group:<9000-9020> or group:*", task)
 		}
+		if kind == nip29.KindCreateGroup {
+			// Creating a group acts on no existing group, so nmilat never
+			// asks the authorizer about it.
+			return fmt.Errorf("%q would never apply: creating a group is the group.create task (see groups.create)", task)
+		}
 		return nil
 	}
 	return fmt.Errorf("unknown task %q: want a NIP-86 method, an alias (@claims, @members, @bans, @roles, @relayinfo, @policy), group:<kind>, group:*, blossom.upload, blossom.download, blossom.delete, huddle.join, group.create or *", task)
@@ -180,11 +217,28 @@ func (c *RelayConfig) checkRoleTasks() error {
 			return taskConfigError("membership.members", errors.New("membership.members requires membership.enabled"))
 		}
 	}
+	if m != nil && m.Roles != nil {
+		// Role ids are canonical lowercase. Viper already lowercases config
+		// keys (checkRoleKeysInFile catches what that merges); this covers a
+		// config built in code.
+		roles := make(map[string]RoleTasks, len(m.Roles))
+		for _, id := range sortedKeys(m.Roles) {
+			canon := canonicalRole(id)
+			switch {
+			case canon == "":
+				return taskConfigError("membership.roles", errors.New("membership.roles has an empty role id"))
+			case isReservedRoleID(canon):
+				return taskConfigError(id, fmt.Errorf("membership.roles.%s: %q is reserved (a groups.create keyword); name the role something else", id, canon))
+			}
+			if _, dup := roles[canon]; dup {
+				return taskConfigError(id, fmt.Errorf("membership.roles names role %q twice, in different case: role ids are case-insensitive", canon))
+			}
+			roles[canon] = m.Roles[id]
+		}
+		m.Roles = roles
+	}
 	if m != nil {
 		for _, id := range sortedKeys(m.Roles) {
-			if strings.TrimSpace(id) == "" {
-				return taskConfigError("membership.roles", errors.New("membership.roles has an empty role id"))
-			}
 			for _, task := range m.Roles[id].Can {
 				if err := checkTask(task); err != nil {
 					return taskConfigError(task, fmt.Errorf("membership.roles.%s: %w", id, err))
@@ -213,9 +267,12 @@ func (c *RelayConfig) checkRoleTasks() error {
 		}
 	}
 	if c.Groups != nil {
-		for _, entry := range c.Groups.Create {
+		for i, entry := range c.Groups.Create {
+			// Keywords and role ids alike are case-insensitive.
+			entry = canonicalRole(entry)
+			c.Groups.Create[i] = entry
 			switch {
-			case strings.TrimSpace(entry) == "":
+			case entry == "":
 				return taskConfigError("groups.create", errors.New("groups.create has an empty entry"))
 			case entry == groupCreateEveryone:
 			case !enabled:
@@ -226,11 +283,97 @@ func (c *RelayConfig) checkRoleTasks() error {
 	return nil
 }
 
+// isReservedRoleID reports whether id is a groups.create keyword, which a
+// NIP-43 role may not be named: groups.create could not tell them apart.
+func isReservedRoleID(id string) bool {
+	id = canonicalRole(id)
+	return id == groupCreateEveryone || id == groupCreateMembers
+}
+
+// checkRoleKeysInFile reads membership.roles from the config file as
+// written, since viper has already lowercased (and so merged) its keys and
+// split any key holding a dot: a role id written twice in different case
+// (Host and host), or one with a dot, is refused rather than half-applied.
+func checkRoleKeysInFile(path string) error {
+	if path == "" {
+		return nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil // reading the config already reported it
+	}
+	var doc struct {
+		Membership struct {
+			Roles yaml.Node `yaml:"roles"`
+		} `yaml:"membership"`
+	}
+	if yaml.Unmarshal(data, &doc) != nil || doc.Membership.Roles.Kind != yaml.MappingNode {
+		return nil
+	}
+	seen := map[string]string{}
+	content := doc.Membership.Roles.Content
+	for i := 0; i+1 < len(content); i += 2 {
+		id := content[i].Value
+		if strings.Contains(id, ".") {
+			return taskConfigError(id, fmt.Errorf("membership.roles: role id %q contains a dot, which a config key cannot hold: name the role without one", id))
+		}
+		canon := canonicalRole(id)
+		if prev, dup := seen[canon]; dup {
+			return taskConfigError(id, fmt.Errorf("membership.roles names role %q twice (%q and %q): role ids are case-insensitive", canon, prev, id))
+		}
+		seen[canon] = id
+	}
+	return nil
+}
+
+// delegatesGroupTasks reports whether membership.roles or
+// membership.members gives anyone a group:<kind> task.
+func (c *RelayConfig) delegatesGroupTasks() bool {
+	m := c.Membership
+	if m == nil || !m.Enabled {
+		return false
+	}
+	var sets []RoleTasks
+	for _, rt := range m.Roles {
+		sets = append(sets, rt)
+	}
+	if m.Members != nil {
+		sets = append(sets, *m.Members)
+	}
+	for _, rt := range sets {
+		var s taskSet
+		for _, task := range rt.Can {
+			s.add(task)
+		}
+		if s.delegatesGroupTasks() {
+			return true
+		}
+	}
+	return false
+}
+
+// grantCeiling is groups.grantCeiling as applied: an explicit value wins;
+// unset, it is on exactly when relay roles carry group:<kind> tasks, so a
+// key that holds a group kind only through its relay role cannot make
+// itself a group admin that outlives the role.
+func (c *RelayConfig) grantCeiling() bool {
+	if c.Groups != nil && c.Groups.GrantCeiling != nil {
+		return *c.Groups.GrantCeiling
+	}
+	return c.delegatesGroupTasks()
+}
+
 // warnRoleTasks logs what a valid config still probably doesn't mean: with
 // membership.members.can set, a member gets only what it lists, so a feature
 // restricted to members (blossom.membersOnly, huddle.requireMembership) that
 // it leaves out is now restricted to the admins and the roles that list it.
+// It also warns when groups.grantCeiling is turned off although roles carry
+// group:<kind> tasks.
 func (c *RelayConfig) warnRoleTasks() {
+	if c.Groups != nil && c.Groups.GrantCeiling != nil && !*c.Groups.GrantCeiling && c.delegatesGroupTasks() {
+		log.Warn().Str("setting", "groups.grantCeiling").
+			Msg("groups.grantCeiling is false while membership roles carry group:<kind> tasks: a role holding group:9000 can make its holder a group admin who keeps that seat after the role is revoked")
+	}
 	m := c.Membership
 	if m == nil || !m.Enabled || m.Members == nil {
 		return
@@ -269,16 +412,15 @@ func (c *RelayConfig) blossomUploadRestricted() bool {
 // groupCreateRestricted reports whether kind 9007 needs group.create:
 // groups.create is set and does not say everyone.
 func (c *RelayConfig) groupCreateRestricted() bool {
-	return c.Groups != nil && c.Groups.Create != nil && !slices.Contains(c.Groups.Create, groupCreateEveryone)
+	return c.Groups != nil && c.Groups.Create != nil && !slices.ContainsFunc(c.Groups.Create, func(e string) bool { return canonicalRole(e) == groupCreateEveryone })
 }
 
 // taskGrants is the config resolved into who holds what, independent of the
 // live membership state.
 type taskGrants struct {
-	// admins hold every task: nip11.pubkey and nip86.admins.
+	// admins hold * (every task but group:<kind>): nip11.pubkey and
+	// nip86.admins. groups.admins are nmilat's relay admins, not here.
 	admins map[string]bool
-	// groupAdmins hold group:*: groups.admins.
-	groupAdmins map[string]bool
 	// everyone holds these unless banned: what the old switches leave open.
 	everyone taskSet
 	// members is what every enrolled member holds.
@@ -290,7 +432,7 @@ type taskGrants struct {
 // resolveTaskGrants maps the config, old switches included, onto grants.
 // With only the old switches set it reproduces their behaviour exactly:
 //
-//   - nip11.pubkey, nip86.admins: *; groups.admins: group:*
+//   - nip11.pubkey, nip86.admins: *
 //   - memberClaims: members get createclaim
 //   - blossom.membersOnly.upload/download: members get blossom.upload/download
 //     (off: everyone does)
@@ -300,18 +442,13 @@ type taskGrants struct {
 // membership.members.can, when set, is the members grant on its own: the old
 // switches then only decide whether a task is restricted.
 func resolveTaskGrants(c *RelayConfig) taskGrants {
-	g := taskGrants{admins: map[string]bool{}, groupAdmins: map[string]bool{}, roles: map[string]*taskSet{}}
+	g := taskGrants{admins: map[string]bool{}, roles: map[string]*taskSet{}}
 	if c.Nip11.PubKey != "" {
 		g.admins[strings.ToLower(c.Nip11.PubKey)] = true
 	}
 	if c.Nip86 != nil {
 		for _, a := range c.Nip86.Admins {
 			g.admins[strings.ToLower(a)] = true
-		}
-	}
-	if admins, err := groupAdmins(c); err == nil {
-		for _, a := range admins {
-			g.groupAdmins[strings.ToLower(a)] = true
 		}
 	}
 
@@ -360,7 +497,7 @@ func resolveTaskGrants(c *RelayConfig) taskGrants {
 	}
 	if c.groupCreateRestricted() {
 		for _, entry := range c.Groups.Create {
-			if entry == groupCreateMembers {
+			if canonicalRole(entry) == groupCreateMembers {
 				g.members.add(taskGroupCreate)
 			} else {
 				g.role(entry).add(taskGroupCreate)
@@ -371,7 +508,7 @@ func resolveTaskGrants(c *RelayConfig) taskGrants {
 }
 
 func (g *taskGrants) role(id string) *taskSet {
-	id = strings.ToLower(id)
+	id = canonicalRole(id)
 	set := g.roles[id]
 	if set == nil {
 		set = &taskSet{}
@@ -392,59 +529,109 @@ func newTaskAuthority(c *RelayConfig, membership *relay.MembershipService, moder
 	return &taskAuthority{grants: resolveTaskGrants(c), membership: membership, moderation: moderation}
 }
 
-// can reports whether pubkey may do task.
-func (a *taskAuthority) can(pubkey, task string) bool {
+// holder is one pubkey's standing, read once: the membership record is
+// fetched at most once however many tasks are asked about (supportedmethods
+// asks about every method).
+type holder struct {
+	a             *taskAuthority
+	pk            string
+	admin, banned bool
+	loaded        bool
+	sets          []*taskSet // the members grant and its roles' sets, once loaded
+}
+
+func (a *taskAuthority) holderFor(pubkey string) *holder {
 	pk := strings.ToLower(pubkey)
-	if a.grants.admins[pk] {
+	return &holder{a: a, pk: pk, admin: a.grants.admins[pk], banned: a.moderation.bannedPubkey(pk)}
+}
+
+// load reads pk's membership: nothing when not enrolled, else the members
+// grant plus each NIP-43 role's set.
+func (h *holder) load() {
+	if h.loaded {
+		return
+	}
+	h.loaded = true
+	m := h.a.membership
+	if m == nil || !m.IsMember(h.pk) {
+		return
+	}
+	h.sets = append(h.sets, &h.a.grants.members)
+	if len(h.a.grants.roles) == 0 {
+		return
+	}
+	rec, err := m.Get(h.pk)
+	if err != nil || rec == nil {
+		return
+	}
+	for _, id := range rec.Roles {
+		if set := h.a.grants.roles[canonicalRole(id)]; set != nil {
+			h.sets = append(h.sets, set)
+		}
+	}
+}
+
+// has reports whether the pubkey may do task.
+func (h *holder) has(task string) bool {
+	if h.admin && !isGroupKindTask(task) {
 		return true
 	}
-	if a.grants.groupAdmins[pk] && strings.HasPrefix(task, taskGroupPrefix) {
-		return true
-	}
-	if a.moderation.bannedPubkey(pk) {
+	if h.banned {
 		return false
 	}
-	if a.grants.everyone.has(task) {
+	if h.a.grants.everyone.has(task) {
 		return true
 	}
-	return a.memberCan(pk, func(s *taskSet) bool { return s.has(task) })
+	h.load()
+	for _, s := range h.sets {
+		if s.has(task) {
+			return true
+		}
+	}
+	return false
+}
+
+// anyNip86 reports whether the pubkey holds at least one NIP-86 method.
+func (h *holder) anyNip86() bool {
+	if h.admin {
+		return true
+	}
+	if h.banned {
+		return false
+	}
+	h.load()
+	for _, s := range h.sets {
+		if s.anyNip86() {
+			return true
+		}
+	}
+	return false
+}
+
+// can reports whether pubkey may do task.
+func (a *taskAuthority) can(pubkey, task string) bool {
+	return a.holderFor(pubkey).has(task)
 }
 
 // mayUseNip86 reports whether pubkey holds any NIP-86 method, which is what
 // admits it to the management API (Router.Visible then confines it).
 func (a *taskAuthority) mayUseNip86(pubkey string) bool {
-	pk := strings.ToLower(pubkey)
-	if a.grants.admins[pk] {
-		return true
-	}
-	if a.moderation.bannedPubkey(pk) {
-		return false
-	}
-	return a.memberCan(pk, (*taskSet).anyNip86)
+	return a.holderFor(pubkey).anyNip86()
 }
 
-// memberCan reports whether pk is enrolled and the members grant, or one of
-// its NIP-43 roles, satisfies ok.
-func (a *taskAuthority) memberCan(pk string, ok func(*taskSet) bool) bool {
-	if a.membership == nil || !a.membership.IsMember(pk) {
-		return false
-	}
-	if ok(&a.grants.members) {
-		return true
-	}
-	if len(a.grants.roles) == 0 {
-		return false
-	}
-	rec, err := a.membership.Get(pk)
-	if err != nil || rec == nil {
-		return false
-	}
-	for _, id := range rec.Roles {
-		if set := a.grants.roles[strings.ToLower(id)]; set != nil && ok(set) {
-			return true
+// supportedMethods answers NIP-86 supportedmethods for caller: of every
+// registered method (all), those it holds, read with one membership lookup.
+func (a *taskAuthority) supportedMethods(all []string) nip86.Method {
+	return func(_ context.Context, caller string, _ nip86.Request) (any, error) {
+		h := a.holderFor(caller)
+		out := []string{}
+		for _, m := range all {
+			if m == nip86.MethodSupportedMethods || h.has(m) {
+				out = append(out, m)
+			}
 		}
+		return out, nil
 	}
-	return false
 }
 
 // nip86Visible is Router.Visible: supportedmethods to anyone admitted, and
@@ -472,8 +659,10 @@ func (a *taskAuthority) gateGroupCreate(restricted bool, next relay.EventPolicy)
 }
 
 // groupAuthorizer is the GroupsService authorizer for group:<kind> tasks: it
-// lets a pubkey send NIP-29 moderation kind in any hosted group when it holds
-// group:<kind> (or group:*, or *). It can only add power: nmilat ORs it with
+// lets a pubkey send NIP-29 moderation kind in any hosted group when one of
+// its NIP-43 roles (or the members grant) lists group:<kind> or group:*. *
+// does not count, and nor does being in nip86.admins: group-wide power is
+// groups.admins' (SetRelayAdmins). It can only add power: nmilat ORs it with
 // the group's own roles.
 func (a *taskAuthority) groupAuthorizer(_, pubkey string, kind int) bool {
 	return nip29.IsModerationKind(kind) && a.can(pubkey, taskGroupPrefix+strconv.Itoa(kind))
@@ -483,7 +672,7 @@ func (a *taskAuthority) groupAuthorizer(_, pubkey string, kind int) bool {
 // groups service.
 func applyGroupTasks(groups *relay.GroupsService, a *taskAuthority, c *RelayConfig) {
 	groups.SetAuthorizer(a.groupAuthorizer)
-	groups.SetGrantCeiling(c.Groups != nil && c.Groups.GrantCeiling)
+	groups.SetGrantCeiling(c.grantCeiling())
 }
 
 // inviteRequestAllowed decides a NIP-43 invite request (REQ kind 28935): the
@@ -501,17 +690,21 @@ func (a *taskAuthority) inviteRequestAllowed(ids []relay.AuthedIdentity) error {
 }
 
 // warnUndefinedRoles logs each membership.roles id with no kind 33534
-// definition in store. Not an error: a role can be created at runtime.
+// definition in store, and each defined role named like a groups.create
+// keyword. Neither is an error: roles are created at runtime.
 func warnUndefinedRoles(c *RelayConfig, defined []string) {
-	if c.Membership == nil || len(c.Membership.Roles) == 0 {
-		return
-	}
 	known := map[string]bool{}
 	for _, id := range defined {
-		known[strings.ToLower(id)] = true
+		known[canonicalRole(id)] = true
+		if isReservedRoleID(id) {
+			log.Warn().Str("role", id).Msg("a kind 33534 role is named like a groups.create keyword (everyone, members): groups.create reads the keyword, never this role")
+		}
+	}
+	if c.Membership == nil {
+		return
 	}
 	for _, id := range sortedKeys(c.Membership.Roles) {
-		if !known[strings.ToLower(id)] {
+		if !known[canonicalRole(id)] {
 			log.Warn().Str("role", id).Msg("membership.roles names a role with no kind 33534 definition yet; its tasks apply once a member holds it")
 		}
 	}

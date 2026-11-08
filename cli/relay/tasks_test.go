@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -118,6 +119,11 @@ func TestRoleTasks_Validation(t *testing.T) {
 		{"an unknown task", RelayConfig{Membership: &MembershipConfig{Enabled: true, Roles: map[string]RoleTasks{"r": {Can: []string{"banhammer"}}}}}, "banhammer"},
 		{"an unknown alias", RelayConfig{Membership: &MembershipConfig{Enabled: true, Roles: map[string]RoleTasks{"r": {Can: []string{"@everything"}}}}}, "@everything"},
 		{"a kind outside 9000-9020", RelayConfig{Membership: &MembershipConfig{Enabled: true, Roles: map[string]RoleTasks{"r": {Can: []string{"group:9021"}}}}}, "group:9021"},
+		{"create-group, which no authorizer is asked about", RelayConfig{Membership: &MembershipConfig{Enabled: true, Roles: map[string]RoleTasks{"r": {Can: []string{"group:9007"}}}}}, "group:9007"},
+		{"a role named everyone", RelayConfig{Membership: &MembershipConfig{Enabled: true, Roles: map[string]RoleTasks{"everyone": {Can: []string{"createclaim"}}}}}, "everyone"},
+		{"a role named Members", RelayConfig{Membership: &MembershipConfig{Enabled: true, Roles: map[string]RoleTasks{"Members": {Can: []string{"createclaim"}}}}}, "Members"},
+		{"one role id in two cases", RelayConfig{Membership: &MembershipConfig{Enabled: true, Roles: map[string]RoleTasks{"Host": {Can: []string{"createclaim"}}, "host": {Can: []string{"banpubkey"}}}}}, "host"},
+		{"groups.create Everyone without membership", RelayConfig{Groups: &GroupsConfig{Create: []string{"Everyone"}}}, ""},
 		{"a kind that is not a number", RelayConfig{Membership: &MembershipConfig{Enabled: true, Roles: map[string]RoleTasks{"r": {Can: []string{"group:ban"}}}}}, "group:ban"},
 		{"a bad members task", RelayConfig{Membership: &MembershipConfig{Enabled: true, Members: &RoleTasks{Can: []string{"blossom.uplaod"}}}}, "blossom.uplaod"},
 		{"roles without membership", RelayConfig{Membership: &MembershipConfig{Roles: map[string]RoleTasks{"r": {Can: []string{"createclaim"}}}}}, "membership.roles"},
@@ -171,9 +177,12 @@ func TestTaskAuthority_Can(t *testing.T) {
 		want bool
 	}{
 		{testPubKey, "changerelayname", true},
-		{testPubKey, "group:9000", true},
+		// The config's admins hold * but no group:<kind>: groups.admins (and
+		// the relay key) moderate groups through nmilat, not through here.
+		{testPubKey, "group:9000", false},
 		{nip86Admin, "blossom.delete", true},
-		{groupAdmin, "group:9001", true},
+		{nip86Admin, "group:9000", false},
+		{groupAdmin, "group:9001", false},
 		{groupAdmin, "createclaim", false},
 		{host, "createclaim", true},        // @claims
 		{host, "getclaim", true},           // @claims, an ncli extra
@@ -217,12 +226,15 @@ func TestTaskAuthority_Can(t *testing.T) {
 		require.True(t, auth.mayUseNip86(nip86Admin))
 	})
 
-	t.Run("star covers everything", func(t *testing.T) {
+	t.Run("star covers every task but group kinds", func(t *testing.T) {
 		var s taskSet
 		s.add("*")
-		for _, task := range []string{"createclaim", "group:9009", "blossom.delete", "group.create"} {
+		for _, task := range []string{"createclaim", "blossom.delete", "group.create"} {
 			require.True(t, s.has(task), task)
 		}
+		require.False(t, s.has("group:9009"), "group kinds must be listed")
+		s.add("group:*")
+		require.True(t, s.has("group:9009"))
 	})
 
 	t.Run("a lost membership takes the roles with it", func(t *testing.T) {
@@ -273,7 +285,9 @@ func TestTaskAuthority_OldSwitchesMapOn(t *testing.T) {
 			auth, _ := newAuthority(t, cfg, map[string][]string{plainPriv: nil})
 			require.Equal(t, c.want.member, auth.can(pubkeyOf(t, plainPriv), c.task), "member")
 			require.Equal(t, c.want.outsider, auth.can(pubkeyOf(t, outsiderPriv), c.task), "outsider")
-			require.True(t, auth.can(testPubKey, c.task), "the relay key holds every task")
+			// The relay key holds * : every task but group:<kind>, which
+			// nmilat gives it as a relay admin instead.
+			require.Equal(t, !isGroupKindTask(c.task), auth.can(testPubKey, c.task), "the relay key holds *")
 		})
 	}
 }
@@ -306,6 +320,14 @@ func TestTaskAuthority_MembersCanWins(t *testing.T) {
 
 func newRoleNip86Handler(t *testing.T, membership *MembershipConfig, members map[string][]string) (*nip86.Handler, *relayModeration) {
 	t.Helper()
+	h, moderation, _ := newRoleNip86HandlerWS(t, membership, members)
+	return h, moderation
+}
+
+// newRoleNip86HandlerWS is newRoleNip86Handler, also returning the session
+// handler so a test can read the membership records.
+func newRoleNip86HandlerWS(t *testing.T, membership *MembershipConfig, members map[string][]string) (*nip86.Handler, *relayModeration, *relay.SessionHandler) {
+	t.Helper()
 	wsHandler, store := newTestWSHandler(t)
 	for priv, roles := range members {
 		require.NoError(t, wsHandler.Membership().Join(pubkeyOf(t, priv), roles))
@@ -322,7 +344,7 @@ func newRoleNip86Handler(t *testing.T, membership *MembershipConfig, members map
 	require.NoError(t, err)
 	h, err := newNip86Handler(wsHandler, store, nil, moderation)
 	require.NoError(t, err)
-	return h, moderation
+	return h, moderation, wsHandler
 }
 
 func supportedFor(t *testing.T, h *nip86.Handler, priv string) []string {
@@ -565,8 +587,12 @@ func TestGroupAuthorizer(t *testing.T) {
 	require.True(t, auth.groupAuthorizer("any", pubkeyOf(t, hostPriv), 9005))
 	require.False(t, auth.groupAuthorizer("any", pubkeyOf(t, hostPriv), 9000))
 	require.False(t, auth.groupAuthorizer("any", pubkeyOf(t, plainPriv), 9005))
-	require.True(t, auth.groupAuthorizer("any", testPubKey, 9009))
-	require.False(t, auth.groupAuthorizer("any", testPubKey, 1), "only moderation kinds")
+	require.False(t, auth.groupAuthorizer("any", testPubKey, 9009), "the config's admins get no group power from here")
+
+	cfg.Membership.Roles["warden"] = RoleTasks{Can: []string{"group:*"}}
+	auth, _ = newAuthority(t, cfg, map[string][]string{hostPriv: {"warden"}})
+	require.True(t, auth.groupAuthorizer("any", pubkeyOf(t, hostPriv), 9009))
+	require.False(t, auth.groupAuthorizer("any", pubkeyOf(t, hostPriv), 1), "only moderation kinds")
 }
 
 func TestScenario_GroupKindTasks(t *testing.T) {
@@ -591,7 +617,7 @@ func TestScenario_GroupGrantCeiling(t *testing.T) {
 		t.Run(map[bool]string{false: "off", true: "on"}[ceiling], func(t *testing.T) {
 			cfg := communityRelayConfig(t)
 			cfg.Groups.Roles = map[string][]int{"admin": {9000, 9001, 9002, 9005, 9008, 9009}, "inviter": {9000}}
-			cfg.Groups.GrantCeiling = ceiling
+			cfg.Groups.GrantCeiling = &ceiling
 			ts := bootScenario(t, cfg)
 			creatorPub, inviterPub := pubkeyOf(t, plainPriv), pubkeyOf(t, hostPriv)
 
@@ -605,4 +631,183 @@ func TestScenario_GroupGrantCeiling(t *testing.T) {
 			require.Equal(t, !ceiling, ok.Accepted, ok.Message)
 		})
 	}
+}
+
+/////////////////////////////////////////////////////////////////////
+// Review fixes: group power, role id case, the grant ceiling default
+/////////////////////////////////////////////////////////////////////
+
+// A nip86.admins key is no group admin: it may not moderate a group it
+// does not belong to. groups.admins still may, and so may a relay role
+// that lists the kind.
+func TestScenario_Nip86AdminIsNoGroupAdmin(t *testing.T) {
+	const nip86AdminPriv = "000000000000000000000000000000000000000000000000000000000000000e"
+	const groupAdminPriv = "000000000000000000000000000000000000000000000000000000000000000f"
+	cfg := communityRelayConfig(t)
+	cfg.Nip86 = &Nip86Config{Enabled: true, Admins: []string{pubkeyOf(t, nip86AdminPriv)}}
+	cfg.Groups.Admins = []string{pubkeyOf(t, groupAdminPriv)}
+	cfg.Membership = &MembershipConfig{Enabled: true, Roles: map[string]RoleTasks{
+		"janitor": {Can: []string{"group:9005"}},
+		"boss":    {Can: []string{"*"}},
+	}}
+	ts := bootScenario(t, cfg)
+	owner, janitor, boss := pubkeyOf(t, plainPriv), pubkeyOf(t, hostPriv), pubkeyOf(t, greeterPriv)
+	enrollWithRoles(t, ts.URL, owner)
+	enrollWithRoles(t, ts.URL, janitor, "janitor")
+	enrollWithRoles(t, ts.URL, boss, "boss")
+
+	creator := connectAs(t, ts, plainPriv)
+	require.True(t, publishAs(t, creator, nip29.NewCreateGroup(owner, "owned"), plainPriv).Accepted)
+
+	nip86Admin := pubkeyOf(t, nip86AdminPriv)
+	adminConn := connectAs(t, ts, nip86AdminPriv)
+	ok := publishAs(t, adminConn, nip29.NewPutUser(nip86Admin, "owned", nip86Admin, "admin"), nip86AdminPriv)
+	require.False(t, ok.Accepted, "a nip86 admin may not seat itself in someone's group: %s", ok.Message)
+
+	bossConn := connectAs(t, ts, greeterPriv)
+	require.False(t, publishAs(t, bossConn, nip29.NewPutUser(boss, "owned", boss), greeterPriv).Accepted,
+		"* in a relay role does not cover group kinds")
+
+	groupAdmin := pubkeyOf(t, groupAdminPriv)
+	gaConn := connectAs(t, ts, groupAdminPriv)
+	require.True(t, publishAs(t, gaConn, nip29.NewPutUser(groupAdmin, "owned", pubkeyOf(t, outsiderPriv)), groupAdminPriv).Accepted,
+		"groups.admins moderate every group")
+
+	msg := nip01.NewUnsignedEvent(9, owner, "hello", []string{"h", "owned"})
+	require.True(t, publishAs(t, creator, msg, plainPriv).Accepted)
+	janitorConn := connectAs(t, ts, hostPriv)
+	ok = publishAs(t, janitorConn, nip29.NewDeleteEvent(janitor, "owned", msg.ID), hostPriv)
+	require.True(t, ok.Accepted, "a role listing group:9005 deletes events: %s", ok.Message)
+}
+
+// With relay roles carrying a group kind and grantCeiling unset, the ceiling
+// is on: a group:9000 role may add members but may not make anyone (itself
+// included) a group admin, which would outlive the role. An explicit false
+// still turns it off.
+func TestScenario_GrantCeilingDefaultsOnWithGroupTasks(t *testing.T) {
+	for _, c := range []struct {
+		name     string
+		ceiling  *bool
+		admitted bool
+	}{
+		{"unset", nil, false},
+		{"explicit false", new(bool), true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			cfg := communityRelayConfig(t)
+			cfg.Groups.GrantCeiling = c.ceiling
+			cfg.Membership = &MembershipConfig{Enabled: true, Roles: map[string]RoleTasks{"steward": {Can: []string{"group:9000"}}}}
+			ts := bootScenario(t, cfg)
+			owner, steward := pubkeyOf(t, plainPriv), pubkeyOf(t, hostPriv)
+			enrollWithRoles(t, ts.URL, owner)
+			enrollWithRoles(t, ts.URL, steward, "steward")
+
+			creator := connectAs(t, ts, plainPriv)
+			require.True(t, publishAs(t, creator, nip29.NewCreateGroup(owner, "stewarded"), plainPriv).Accepted)
+
+			stewardConn := connectAs(t, ts, hostPriv)
+			require.True(t, publishAs(t, stewardConn, nip29.NewPutUser(steward, "stewarded", pubkeyOf(t, outsiderPriv)), hostPriv).Accepted,
+				"a plain seat is within group:9000")
+			ok := publishAs(t, stewardConn, nip29.NewPutUser(steward, "stewarded", steward, "admin"), hostPriv)
+			require.Equal(t, c.admitted, ok.Accepted, ok.Message)
+		})
+	}
+}
+
+func TestGrantCeilingDefault(t *testing.T) {
+	yes, no := true, false
+	withRoles := func(tasks ...string) *MembershipConfig {
+		return &MembershipConfig{Enabled: true, Roles: map[string]RoleTasks{"r": {Can: tasks}}}
+	}
+	cases := []struct {
+		name string
+		cfg  RelayConfig
+		want bool
+	}{
+		{"no membership", RelayConfig{}, false},
+		{"roles without group tasks", RelayConfig{Membership: withRoles("createclaim", "*")}, false},
+		{"a role with group:9000", RelayConfig{Membership: withRoles("group:9000")}, true},
+		{"a role with group:*", RelayConfig{Membership: withRoles("group:*")}, true},
+		{"members with a group kind", RelayConfig{Membership: &MembershipConfig{Enabled: true, Members: &RoleTasks{Can: []string{"group:9005"}}}}, true},
+		{"explicit false wins", RelayConfig{Membership: withRoles("group:9000"), Groups: &GroupsConfig{GrantCeiling: &no}}, false},
+		{"explicit true", RelayConfig{Groups: &GroupsConfig{GrantCeiling: &yes}}, true},
+	}
+	for _, c := range cases {
+		require.Equal(t, c.want, c.cfg.grantCeiling(), c.name)
+	}
+}
+
+// Role ids are canonical lowercase: assigning "HOST" stores "host", and
+// unassigning "host" removes a "Host" written before ids were canonical.
+func TestNip86_RoleIDsAreCaseInsensitive(t *testing.T) {
+	h, _, ws := newRoleNip86HandlerWS(t, rolesConfig(), map[string][]string{
+		hostPriv:  {"Host"},
+		plainPriv: nil,
+	})
+	host, plain := pubkeyOf(t, hostPriv), pubkeyOf(t, plainPriv)
+	roles := func(pk string) []string {
+		rec, err := ws.Membership().Get(pk)
+		require.NoError(t, err)
+		require.NotNil(t, rec)
+		return rec.Roles
+	}
+
+	got := callHandler(t, h, testPrivKey, nip86.MethodUnassignRole, `"`+host+`"`, `"host"`)
+	require.Empty(t, got.resp.Error)
+	require.Empty(t, roles(host), "unassign host removes Host")
+
+	got = callHandler(t, h, testPrivKey, nip86.MethodAssignRole, `"`+plain+`"`, `"HOST"`)
+	require.Empty(t, got.resp.Error)
+	require.Equal(t, []string{"host"}, roles(plain))
+	got = callHandler(t, h, testPrivKey, nip86.MethodAssignRole, `"`+plain+`"`, `"Host"`)
+	require.Empty(t, got.resp.Error)
+	require.Equal(t, []string{"host"}, roles(plain), "assigning it again in another case is no second role")
+	require.Contains(t, supportedFor(t, h, plainPriv), "banpubkey", "the canonical id carries the host tasks")
+}
+
+// allowpubkey on a member already enrolled keeps its roles.
+func TestNip86_AllowpubkeyKeepsRoles(t *testing.T) {
+	h, _, ws := newRoleNip86HandlerWS(t, rolesConfig(), map[string][]string{hostPriv: {"host"}})
+	host := pubkeyOf(t, hostPriv)
+	got := callHandler(t, h, testPrivKey, nip86.MethodAllowPubkey, `"`+host+`"`)
+	require.Empty(t, got.resp.Error)
+	rec, err := ws.Membership().Get(host)
+	require.NoError(t, err)
+	require.Equal(t, []string{"host"}, rec.Roles)
+}
+
+// The config file is read as written: Host and host are one role written
+// twice, and a dotted id cannot be a config key.
+func TestCheckRoleKeysInFile(t *testing.T) {
+	write := func(body string) string {
+		path := filepath.Join(t.TempDir(), "relay.yaml")
+		require.NoError(t, os.WriteFile(path, []byte(body), 0o600))
+		return path
+	}
+	require.NoError(t, checkRoleKeysInFile(""))
+	require.NoError(t, checkRoleKeysInFile(write("membership:\n  roles:\n    host: {can: [createclaim]}\n    greeter: {can: [createclaim]}\n")))
+
+	var ce *common.CLIError
+	err := checkRoleKeysInFile(write("membership:\n  roles:\n    Host: {can: [createclaim]}\n    host: {can: [banpubkey]}\n"))
+	require.True(t, errors.As(err, &ce), "%v", err)
+	require.Equal(t, common.CodeInvalidInput, ce.Code)
+	require.Equal(t, "host", ce.Input)
+
+	err = checkRoleKeysInFile(write("membership:\n  roles:\n    team.lead: {can: [createclaim]}\n"))
+	require.True(t, errors.As(err, &ce), "%v", err)
+	require.Equal(t, "team.lead", ce.Input)
+}
+
+// groups.create keywords match in any case, so Everyone is the keyword,
+// not a role id, and Members is every member.
+func TestGroupCreateKeywordsAnyCase(t *testing.T) {
+	cfg := RelayConfig{Groups: &GroupsConfig{Create: []string{"Everyone"}}}
+	require.False(t, cfg.groupCreateRestricted())
+
+	cfg = RelayConfig{Nip11: nip11.Metadata{PubKey: testPubKey}, Membership: &MembershipConfig{Enabled: true}, Groups: &GroupsConfig{Create: []string{"Members"}}}
+	require.NoError(t, cfg.checkRoleTasks())
+	require.Equal(t, []string{"members"}, cfg.Groups.Create)
+	auth, _ := newAuthority(t, cfg, map[string][]string{plainPriv: nil})
+	require.True(t, auth.can(pubkeyOf(t, plainPriv), "group.create"))
+	require.False(t, auth.can(pubkeyOf(t, outsiderPriv), "group.create"))
 }

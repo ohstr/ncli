@@ -60,9 +60,11 @@ type GroupsConfig struct {
 
 	// GrantCeiling stops a member from granting a role that may send a
 	// moderation kind it may not send itself (put-user with roles, kind
-	// 9000): no handing out more power than you hold. Off by default, since
-	// it refuses grants existing groups may rely on.
-	GrantCeiling bool `mapstructure:"grantCeiling"`
+	// 9000): no handing out more power than you hold. Unset, it is on
+	// exactly when membership roles (or members) carry a group:<kind> task,
+	// and off otherwise, since it refuses grants existing groups may rely on.
+	// An explicit value wins; false with group tasks delegated is a warning.
+	GrantCeiling *bool `mapstructure:"grantCeiling"`
 }
 
 // groupModerationPolicy is the moderation policy groups.roles describes, or

@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"errors"
 	"net/netip"
 	"strings"
 
@@ -46,7 +47,9 @@ const loopbackProxyWarning = "listen is on loopback, so clients probably arrive 
 
 // loopbackProxyUncounted reports whether c binds a loopback address, limits
 // per IP, and trusts no loopback proxy: then a local reverse proxy is every
-// client's IP, and they all share one per-IP bucket.
+// client's IP, and they all share one per-IP bucket. listen: localhost
+// binds 127.0.0.1 only (Go listens on one address of a hostname, IPv4
+// first), so trusting ::1 alone does not count for it.
 func (c *RelayConfig) loopbackProxyUncounted() bool {
 	l := c.Limits
 	if l == nil || !l.perIPSet() || c.Listen == "" {
@@ -56,31 +59,51 @@ func (c *RelayConfig) loopbackProxyUncounted() bool {
 	if err != nil {
 		return false
 	}
-	var loopback []netip.Addr
+	var loopback netip.Addr
 	if strings.EqualFold(host, "localhost") {
-		loopback = []netip.Addr{netip.MustParseAddr("127.0.0.1"), netip.MustParseAddr("::1")}
+		loopback = netip.MustParseAddr("127.0.0.1")
 	} else if addr, err := netip.ParseAddr(host); err == nil && addr.Unmap().IsLoopback() {
-		loopback = []netip.Addr{addr.Unmap()}
+		loopback = addr.Unmap().WithZone("")
 	} else {
 		return false
 	}
 	for _, p := range l.TrustedProxies {
-		prefix, err := netip.ParsePrefix(p)
-		if err != nil {
-			addr, err := netip.ParseAddr(p)
-			if err != nil {
-				continue
-			}
-			addr = addr.Unmap()
-			prefix = netip.PrefixFrom(addr, addr.BitLen())
-		}
-		for _, a := range loopback {
-			if prefix.Contains(a) {
-				return false
-			}
+		prefix, err := parseTrustedProxy(p)
+		if err == nil && prefix.Contains(loopback) {
+			return false
 		}
 	}
 	return true
+}
+
+// parseTrustedProxy reads a limits.trustedProxies entry the way nmilat's
+// rate limiter does (ratelimit.parsePrefix, unexported): trimmed, without a
+// zone, and unmapped, so "::ffff:127.0.0.0/104" is 127.0.0.0/8.
+func parseTrustedProxy(s string) (netip.Prefix, error) {
+	s = strings.TrimSpace(s)
+	addr, bits, hasBits := strings.Cut(s, "/")
+	if host, _, zoned := strings.Cut(addr, "%"); zoned {
+		addr = host
+	}
+	a, err := netip.ParseAddr(addr)
+	if err != nil {
+		return netip.Prefix{}, err
+	}
+	if !hasBits {
+		a = a.Unmap()
+		return netip.PrefixFrom(a, a.BitLen()), nil
+	}
+	p, err := netip.ParsePrefix(addr + "/" + bits)
+	if err != nil {
+		return netip.Prefix{}, err
+	}
+	if a.Is4In6() {
+		if p.Bits() < 96 {
+			return netip.Prefix{}, errors.New("an IPv4-mapped prefix needs at least 96 bits")
+		}
+		p = netip.PrefixFrom(a.Unmap(), p.Bits()-96)
+	}
+	return p.Masked(), nil
 }
 
 // perIPSet reports whether l limits anything per IP.

@@ -6,12 +6,14 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -347,41 +349,91 @@ func TestScenario_RelayBlossomPolicy(t *testing.T) {
 type stalledUpload struct {
 	pw   *io.PipeWriter
 	rest []byte
-	done chan *http.Response
+	tr   *http.Transport
+
+	// answered is closed once code/err hold the relay's answer.
+	answered chan struct{}
+	code     int
+	err      error
+
+	once   sync.Once
+	result int
+	failed error
 }
 
+var errUploadAborted = errors.New("held upload aborted")
+
+// startStalledUpload starts an upload as privKey that sends the first
+// bytes of blob and then waits for finish. It asks for 100-continue, so
+// the body is only sent once the relay holds a slot for it and reads it;
+// an upload refused a slot gets its 429 at once instead of the relay
+// blocking on a body nobody sends. Its cleanup, registered after
+// bootScenario's, runs before the server's Close and ends the upload, so
+// a failing test never leaves Close waiting on it.
 func startStalledUpload(t *testing.T, ts *httptest.Server, privKey string, blob []byte) *stalledUpload {
 	t.Helper()
 	pr, pw := io.Pipe()
-	s := &stalledUpload{pw: pw, rest: blob[4:], done: make(chan *http.Response, 1)}
-	auth := blossomToken(t, privKey, nipB7.VerbUpload, sha256Hex(blob))
+	s := &stalledUpload{
+		pw:       pw,
+		rest:     blob[4:],
+		tr:       &http.Transport{ExpectContinueTimeout: time.Minute},
+		answered: make(chan struct{}),
+	}
+	// Closing the body closes the pipe, so a write to an upload the
+	// client gave up on fails instead of blocking.
+	body := struct {
+		io.Reader
+		io.Closer
+	}{io.MultiReader(bytes.NewReader(blob[:4]), pr), pr}
+	req, err := http.NewRequest(http.MethodPut, ts.URL+"/upload", body)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", blossomToken(t, privKey, nipB7.VerbUpload, sha256Hex(blob)))
+	req.Header.Set("Expect", "100-continue")
+	t.Cleanup(func() { _, _ = s.end(true) })
 	go func() {
-		req, err := http.NewRequest(http.MethodPut, ts.URL+"/upload", pr)
+		defer close(s.answered)
+		resp, err := (&http.Client{Transport: s.tr}).Do(req)
 		if err != nil {
-			s.done <- nil
+			s.err = err
 			return
 		}
-		req.Header.Set("Authorization", auth)
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			s.done <- nil
-			return
-		}
-		s.done <- resp
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+		s.code = resp.StatusCode
 	}()
-	_, _ = pw.Write(blob[:4])
 	return s
+}
+
+// end sends the rest of the body (or, with abort, fails it) and waits for
+// the relay's answer. Only the first call does anything.
+func (s *stalledUpload) end(abort bool) (int, error) {
+	s.once.Do(func() {
+		if abort {
+			_ = s.pw.CloseWithError(errUploadAborted)
+		} else {
+			go func() {
+				_, _ = s.pw.Write(s.rest)
+				_ = s.pw.Close()
+			}()
+		}
+		select {
+		case <-s.answered:
+			s.result, s.failed = s.code, s.err
+		case <-time.After(10 * time.Second):
+			_ = s.pw.CloseWithError(errUploadAborted)
+			s.failed = errors.New("the relay never answered the held upload")
+		}
+		s.tr.CloseIdleConnections()
+	})
+	return s.result, s.failed
 }
 
 // finish sends the rest of the body and returns the relay's answer.
 func (s *stalledUpload) finish(t *testing.T) int {
 	t.Helper()
-	_, _ = s.pw.Write(s.rest)
-	_ = s.pw.Close()
-	resp := <-s.done
-	require.NotNil(t, resp, "the held upload failed")
-	_ = resp.Body.Close()
-	return resp.StatusCode
+	code, err := s.end(false)
+	require.NoError(t, err, "the held upload failed")
+	return code
 }
 
 // probeUpload uploads as privKey with a token for other bytes than it
@@ -395,20 +447,20 @@ func probeUpload(t *testing.T, ts *httptest.Server, privKey string) int {
 
 // holdUpload starts an upload as holder and returns once the relay counts
 // it in flight, which is when a probe as prober is first turned away
-// with a 429. A probe that raced the holder for the one slot makes the
-// holder fail with a 429 instead; that holder is simply started again.
+// with a 429. A probe that raced the holder for the one slot gets the
+// holder a 429 instead; that holder is ended and started again.
 func holdUpload(t *testing.T, ts *httptest.Server, holder, prober string, blob []byte) *stalledUpload {
 	t.Helper()
-	for range 5 {
+	for range 10 {
 		s := startStalledUpload(t, ts, holder, blob)
+	probe:
 		for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); {
 			select {
-			case resp := <-s.done:
-				require.NotNil(t, resp, "the held upload failed")
-				_ = resp.Body.Close()
-				require.Equal(t, http.StatusTooManyRequests, resp.StatusCode, "the held upload ended early")
-				deadline = time.Time{}
-				continue
+			case <-s.answered:
+				code, err := s.end(true)
+				require.NoError(t, err, "the held upload failed")
+				require.Equal(t, http.StatusTooManyRequests, code, "the held upload ended early")
+				break probe
 			default:
 			}
 			code := probeUpload(t, ts, prober)

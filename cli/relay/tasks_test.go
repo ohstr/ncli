@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -446,6 +447,50 @@ func TestHuddle_RoleCarriesJoin(t *testing.T) {
 
 	_, msg = handshake(t, ts, "room-1", huddleRelayPriv)
 	require.Equal(t, "joined", msg.Type, "the relay key holds every task: %+v", msg)
+}
+
+// A banned key holds no task, so it joins no call, whether or not
+// huddle.requireMembership is on.
+func TestHuddle_BannedKeyIsRefused(t *testing.T) {
+	for _, requireMembership := range []bool{false, true} {
+		t.Run(fmt.Sprintf("requireMembership=%v", requireMembership), func(t *testing.T) {
+			store := newHuddleStore(t)
+			t.Cleanup(store.Close)
+			metadata := &nip11.Metadata{PubKey: huddleRelayPub, PrivKey: huddleRelayPriv, URL: huddleRelayURL}
+			wsHandler := relay.NewSessionHandler(store, metadata, nil)
+			alice, bob := pubkeyOf(t, alicePriv), pubkeyOf(t, bobPriv)
+			require.NoError(t, wsHandler.Membership().Join(alice, nil))
+			require.NoError(t, wsHandler.Membership().Join(bob, nil))
+
+			huddle := &HuddleConfig{Enabled: true, RequireMembership: requireMembership}
+			cfg := RelayConfig{Nip11: *metadata, Huddle: huddle, Membership: &MembershipConfig{Enabled: true}}
+			moderation, err := loadModeration(filepath.Join(t.TempDir(), "moderation.json"), huddleRelayPub)
+			require.NoError(t, err)
+			ban(t, moderation, bobPriv)
+			auth := newTaskAuthority(&cfg, wsHandler.Membership(), moderation)
+
+			mux := http.NewServeMux()
+			rooms := registerHuddleRoutes(mux, wsHandler, huddle, huddleRelayURL, auth, nil)
+			t.Cleanup(func() { endHuddleRooms(rooms) })
+			ts := httptest.NewServer(mux)
+			t.Cleanup(ts.Close)
+
+			_, msg := handshake(t, ts, "room-1", alicePriv)
+			require.Equal(t, "joined", msg.Type, "a member joins: %+v", msg)
+			_, msg = handshake(t, ts, "room-1", bobPriv)
+			require.Equal(t, "join_rejected", msg.Code, "a banned member does not: %+v", msg)
+
+			// Listing live rooms needs a login only under requireMembership.
+			resp, err := http.Get(ts.URL + "/huddle/rooms")
+			require.NoError(t, err)
+			_ = resp.Body.Close()
+			if requireMembership {
+				require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+			} else {
+				require.Equal(t, http.StatusOK, resp.StatusCode)
+			}
+		})
+	}
 }
 
 /////////////////////////////////////////////////////////////////////

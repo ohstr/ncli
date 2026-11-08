@@ -104,6 +104,38 @@ cache:
 	require.Empty(t, loadUnknownKeys(t, p))
 }
 
+// Only the exact shared leaf keys are exempt: the rest of the same section
+// (the old flat query: block, a stray event: setting) is still reported.
+func TestDecodeRelayConfigSharedKeysAreExactLeaves(t *testing.T) {
+	const head = `
+nip11:
+  pubkey: bb50e2d89a4ed70663d080659fe0ad4b9bc3e06c17a227433966cb59ceee020d
+store: test.db
+`
+	for _, tc := range []struct {
+		body string
+		want []string
+	}{
+		{"query:\n  enabled: true\n", []string{"query"}},
+		{"query:\n  identity: alice\n", nil},
+		{"query:\n  identity: alice\n  enabled: true\n", []string{"query.enabled"}},
+		{"event:\n  enabled: true\n", []string{"event"}},
+		{"event:\n  identity: alice\n", nil},
+		{"vault:\n  password: x\n  path: y\n", []string{"vault.path"}},
+		{"delegate:\n  issuer: alice\n", nil},
+		{"signer:\n  identity: alice\n", nil},
+	} {
+		t.Run(tc.body, func(t *testing.T) {
+			got := loadUnknownKeys(t, writeRelayYAML(t, head+tc.body))
+			if tc.want == nil {
+				require.Empty(t, got)
+			} else {
+				require.Equal(t, tc.want, got)
+			}
+		})
+	}
+}
+
 func TestDecodeRelayConfigIgnoresEnv(t *testing.T) {
 	t.Setenv("NCLI_HTTPBRIDGE_QUREY", "1")
 	t.Setenv("NCLI_BOGUS", "1")

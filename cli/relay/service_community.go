@@ -3,13 +3,16 @@ package relay
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"net/url"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/ohstr/ncli/cli/common"
+	"github.com/ohstr/nmilat/nipB7"
 	"github.com/ohstr/nmilat/nipB7/server"
 	"github.com/ohstr/nmilat/relay"
 )
@@ -181,6 +184,62 @@ func (b *BlossomConfig) blobPrefix() string {
 		return "/media"
 	}
 	return strings.TrimSuffix(b.BlobPrefix, "/")
+}
+
+// rootBlobPath is a blob named at the root of the relay's origin,
+// /<sha256>[.ext]: where BUD-01 says every endpoint is served, and where
+// a client that only knows the server and the hash asks for it.
+var rootBlobPath = regexp.MustCompile(`^/[0-9a-f]{64}(\.[a-z0-9]{1,8})?$`)
+
+// rootBlobMethods are the methods a blob answers at the root, the same
+// ones it answers under the blob prefix.
+var rootBlobMethods = []string{http.MethodGet, http.MethodHead, http.MethodDelete, http.MethodOptions}
+
+// isRootBlobRequest reports whether r names a blob at the root.
+func isRootBlobRequest(r *http.Request) bool {
+	return slices.Contains(rootBlobMethods, r.Method) && rootBlobPath.MatchString(r.URL.Path)
+}
+
+// atBlobPrefix is r with its path moved under prefix, so the Blossom
+// server, which serves blobs under the prefix, answers a root blob path.
+func atBlobPrefix(r *http.Request, prefix string) *http.Request {
+	r2 := r.Clone(r.Context())
+	r2.URL.Path = prefix + r.URL.Path
+	r2.URL.RawPath = ""
+	return r2
+}
+
+// unsupportedBlossomRoute is a Blossom endpoint the relay doesn't serve,
+// answered 404 with a reason so a client can tell "not here at all" from
+// a missing blob or a redirect.
+type unsupportedBlossomRoute struct {
+	pattern string
+	reason  string
+}
+
+// unsupportedRoutes are BUD-12 list, BUD-04 mirror and BUD-05 media,
+// minus any pattern the configured Blossom paths already take.
+func (b *BlossomConfig) unsupportedRoutes() []unsupportedBlossomRoute {
+	taken := append([]string{b.blobPrefix() + "/"}, b.uploadPaths()...)
+	var routes []unsupportedBlossomRoute
+	for _, u := range []unsupportedBlossomRoute{
+		{"/list/", "list is not supported on this server"},
+		{"/mirror", "mirror is not supported on this server"},
+		{"/media", "media optimization is not supported"},
+	} {
+		if !slices.Contains(taken, u.pattern) {
+			routes = append(routes, u)
+		}
+	}
+	return routes
+}
+
+// blossomUnsupported answers every request with 404 and reason.
+func blossomUnsupported(reason string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		nipB7.WriteError(w, http.StatusNotFound, reason)
+	})
 }
 
 // reservedPaths are the relay's own HTTP routes, which Blossom may not

@@ -11,9 +11,11 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/ohstr/ncli/client"
 	"github.com/ohstr/nmilat/nipB7"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDirectDownloadURL(t *testing.T) {
@@ -201,4 +203,35 @@ func TestBlossomDownload_FullURLFirst(t *testing.T) {
 			t.Errorf("exit %d, want 4 (not_found)\nstderr: %s", code, stderr)
 		}
 	})
+}
+
+// TestDownloadAuths_PerHost: the token sent to a download URL's host names
+// that host alone, so it can't be replayed against the configured servers,
+// and the servers' token doesn't name the URL's host.
+func TestDownloadAuths_PerHost(t *testing.T) {
+	const priv = "0000000000000000000000000000000000000000000000000000000000000001"
+	const pub = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+	hash := strings.Repeat("c", 64)
+	servers := []string{"https://cdn.example.com", "http://relay:5500/"}
+
+	direct, byHash, err := downloadAuths(priv, pub, hash, time.Minute, "https://untrusted.example/media/"+hash+".png", servers)
+	require.NoError(t, err)
+	d, err := nipB7.ParseAuthorization(direct)
+	require.NoError(t, err)
+	require.Equal(t, []string{"untrusted.example"}, d.Servers)
+	b, err := nipB7.ParseAuthorization(byHash)
+	require.NoError(t, err)
+	require.Equal(t, []string{"cdn.example.com", "relay:5500"}, b.Servers)
+
+	direct, byHash, err = downloadAuths(priv, pub, hash, time.Minute, "https://untrusted.example/"+hash, nil)
+	require.NoError(t, err)
+	require.NotNil(t, direct)
+	require.Nil(t, byHash, "no servers to ask by hash")
+
+	direct, byHash, err = downloadAuths(priv, pub, hash, time.Minute, "", servers)
+	require.NoError(t, err)
+	require.Nil(t, direct)
+	b, err = nipB7.ParseAuthorization(byHash)
+	require.NoError(t, err)
+	require.Equal(t, []string{"cdn.example.com", "relay:5500"}, b.Servers)
 }

@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"regexp"
 	"syscall"
+	"time"
 
 	"github.com/ohstr/ncli/cli/common"
 	"github.com/ohstr/nmilat/nip01"
@@ -67,18 +68,14 @@ configured servers, when there are any.`,
 				servers = nil
 			}
 
-			var auth *nip01.Event
+			var directAuth, auth *nip01.Event
 			if identity, _ := cmd.Flags().GetString("identity"); identity != "" {
 				privKeyHex, pubKeyHex, err := resolveIdentity(cmd, jsonMode, identity)
 				if err != nil {
 					return err
 				}
 				ttl, _ := cmd.Flags().GetDuration("auth-ttl")
-				authServers := servers
-				if directURL != "" {
-					authServers = append([]string{directURL}, servers...)
-				}
-				auth, err = buildAuth(privKeyHex, pubKeyHex, nipB7.VerbGet, []string{hash}, ttl, authServers...)
+				directAuth, auth, err = downloadAuths(privKeyHex, pubKeyHex, hash, ttl, directURL, servers)
 				if err != nil {
 					return common.RuntimeError(cmd, err)
 				}
@@ -91,7 +88,7 @@ configured servers, when there are any.`,
 			var usedServer string
 			err = common.WithSpinner(cmd, fmt.Sprintf("downloading %s", shortHash(hash)), func() error {
 				if directURL != "" {
-					f, dErr := fetchVerified(ctx, hc.HTTPClient, directURL, hash, auth)
+					f, dErr := fetchVerified(ctx, hc.HTTPClient, directURL, hash, directAuth)
 					if dErr == nil {
 						body, usedServer = f, directURL
 						return nil
@@ -193,6 +190,25 @@ func directDownloadURL(raw string) string {
 		return ""
 	}
 	return raw
+}
+
+// downloadAuths signs download's get tokens: direct for the URL's host
+// alone, byHash for the configured servers. Separate, so a URL host that
+// is on no server list never holds a token it could replay against the
+// user's servers. direct is nil without a URL; byHash is nil when only the
+// URL will be asked.
+func downloadAuths(privKeyHex, pubKeyHex, hash string, ttl time.Duration, directURL string, servers []string) (direct, byHash *nip01.Event, err error) {
+	if directURL != "" {
+		if direct, err = buildAuth(privKeyHex, pubKeyHex, nipB7.VerbGet, []string{hash}, ttl, directURL); err != nil {
+			return nil, nil, err
+		}
+	}
+	if directURL == "" || len(servers) > 0 {
+		if byHash, err = buildAuth(privKeyHex, pubKeyHex, nipB7.VerbGet, []string{hash}, ttl, servers...); err != nil {
+			return nil, nil, err
+		}
+	}
+	return direct, byHash, nil
 }
 
 // fetchVerified GETs rawURL with auth (if any) as its BUD-11 header and

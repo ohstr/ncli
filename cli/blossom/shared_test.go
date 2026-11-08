@@ -302,6 +302,35 @@ func TestClassifyOptionalEndpointError(t *testing.T) {
 	}
 }
 
+// A mirror's 404 that says the source blob is missing is not_found; a bare
+// 404, or one saying mirror is off, is a server without mirror.
+func TestMirrorError_SourceMissingIsNotFound(t *testing.T) {
+	cases := []struct {
+		reason string
+		want   common.ErrorCode
+	}{
+		{"", common.CodeUnsupported},
+		{"Not Found", common.CodeUnsupported},
+		{"mirror is not supported on this server", common.CodeUnsupported},
+		{"Mirror endpoint is disabled on this server", common.CodeUnsupported},
+		{"source blob not found", common.CodeNotFound},
+		{"Failed to fetch https://cdn.example/x.png: 404", common.CodeNotFound},
+		{"upstream returned 404 for the URL", common.CodeNotFound},
+	}
+	for _, tc := range cases {
+		raw := &bclient.HTTPError{Server: "https://s.example", StatusCode: http.StatusNotFound, Reason: tc.reason}
+		got := classifyHTTPError(&cobra.Command{Use: "test"}, "input", fmt.Errorf("1 of 1 mirrors failed: %w", mirrorError(raw)))
+		if ce, _ := got.(*common.CLIError); ce == nil || ce.Code != tc.want {
+			t.Errorf("reason %q: %v, want %s", tc.reason, got, tc.want)
+		}
+	}
+	// Other statuses keep optionalEndpointError's reading.
+	got := classifyHTTPError(&cobra.Command{Use: "test"}, "input", mirrorError(&bclient.HTTPError{StatusCode: http.StatusNotImplemented, Reason: "source"}))
+	if ce, _ := got.(*common.CLIError); ce == nil || ce.Code != common.CodeUnsupported {
+		t.Errorf("501 = %v, want unsupported", got)
+	}
+}
+
 func TestUploadFailure_NoHintForMissingEndpoint(t *testing.T) {
 	for _, status := range []int{http.StatusTemporaryRedirect, http.StatusNotImplemented, http.StatusNotFound} {
 		if got := uploadFailure(optionalEndpointError(&bclient.HTTPError{StatusCode: status})); strings.Contains(got, uploadErrorHint) {

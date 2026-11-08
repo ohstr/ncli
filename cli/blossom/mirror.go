@@ -1,12 +1,16 @@
 package blossom
 
 import (
+	"errors"
 	"fmt"
+	"net/http"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/ohstr/ncli/cli/common"
 	"github.com/ohstr/nmilat/nipB7"
+	bclient "github.com/ohstr/nmilat/nipB7/client"
 	"github.com/spf13/cobra"
 )
 
@@ -78,7 +82,7 @@ func newMirrorCommand() *cobra.Command {
 
 					descriptor, err := hc.Mirror(ctx, server, sourceURL, auth)
 					if err != nil {
-						err = optionalEndpointError(err)
+						err = mirrorError(err)
 						res.Error = uploadFailure(err)
 						res.err = err
 					} else {
@@ -104,4 +108,32 @@ func newMirrorCommand() *cobra.Command {
 	cmd.Flags().Duration("auth-ttl", defaultAuthTTL, "How long the signed authorization token stays valid")
 
 	return cmd
+}
+
+// mirrorError marks a mirror failure for classifying. BUD-04 gives no
+// status for a source the server could not fetch, and some servers answer
+// 404 for it, so a 404 is a missing source blob (not_found) when its
+// X-Reason talks about the source, the blob or its URL and does not say
+// the endpoint is off. Any other 404, a bare one included, is a server
+// without mirror (unsupported), as optionalEndpointError has it.
+func mirrorError(err error) error {
+	if httpErr, ok := errors.AsType[*bclient.HTTPError](err); ok && httpErr.StatusCode == http.StatusNotFound && sourceMissingReason(httpErr.Reason) {
+		return err
+	}
+	return optionalEndpointError(err)
+}
+
+func sourceMissingReason(reason string) bool {
+	r := strings.ToLower(reason)
+	for _, off := range []string{"not supported", "unsupported", "disabled", "not implemented", "not enabled"} {
+		if strings.Contains(r, off) {
+			return false
+		}
+	}
+	for _, about := range []string{"source", "blob", "url", "upstream", "fetch", "download"} {
+		if strings.Contains(r, about) {
+			return true
+		}
+	}
+	return false
 }

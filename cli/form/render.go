@@ -1,12 +1,12 @@
 package form
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
 	"time"
 
+	"github.com/ohstr/ncli/cli/common"
 	"github.com/ohstr/ncli/cli/social"
 	"github.com/ohstr/nmilat/nippf"
 	"github.com/spf13/cobra"
@@ -14,7 +14,7 @@ import (
 
 // printJSON writes v as indented JSON to the command's output.
 func printJSON(cmd *cobra.Command, v any) {
-	b, err := json.MarshalIndent(v, "", "  ")
+	b, err := common.MarshalJSON(v, "  ")
 	if err != nil {
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), `{"error":"failed to encode JSON output"}`)
 		return

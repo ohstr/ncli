@@ -1,6 +1,7 @@
 package common
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -104,10 +105,27 @@ func wrapCLIError(code ErrorCode, input string, err error) error {
 	return &CLIError{Err: err, Code: code, Input: input}
 }
 
+// MarshalJSON is json.Marshal without HTML escaping: what a command prints
+// is read by people and scripts, not embedded in a page, so "<", ">" and
+// "&" stay as written instead of becoming backslash-u escapes.
+// indent, when not "", indents each level by it, as json.MarshalIndent.
+func MarshalJSON(v any, indent string) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if indent != "" {
+		enc.SetIndent("", indent)
+	}
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	return bytes.TrimSuffix(buf.Bytes(), []byte("\n")), nil
+}
+
 // PrintJSON marshals v as indented JSON to stdout -- the shared success-
 // output path for every command's --json mode.
 func PrintJSON(v any) {
-	data, err := json.MarshalIndent(v, "", "  ")
+	data, err := MarshalJSON(v, "  ")
 	if err != nil {
 		fmt.Println(`{"error":"failed to encode JSON output"}`)
 		return
@@ -118,7 +136,7 @@ func PrintJSON(v any) {
 // PrintJSONLine writes v as one compact JSON line to stdout -- for a
 // command that streams events (NDJSON) rather than printing one result.
 func PrintJSONLine(v any) {
-	data, err := json.Marshal(v)
+	data, err := MarshalJSON(v, "")
 	if err != nil {
 		fmt.Println(`{"error":"failed to encode JSON output"}`)
 		return
@@ -160,7 +178,7 @@ func EmitError(cmd *cobra.Command, err error) {
 			payload.Reason = ce.Reason
 			payload.Detail = ce.Detail
 		}
-		data, mErr := json.Marshal(payload)
+		data, mErr := MarshalJSON(payload, "")
 		if mErr != nil {
 			data = []byte(`{"error":"failed to encode error output"}`)
 		}

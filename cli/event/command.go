@@ -6,7 +6,6 @@
 package event
 
 import (
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -77,7 +76,7 @@ func jsonMode(cmd *cobra.Command) bool {
 
 // printJSON writes v as indented JSON to the command's stdout.
 func printJSON(cmd *cobra.Command, v any) error {
-	data, err := json.MarshalIndent(v, "", "  ")
+	data, err := common.MarshalJSON(v, "  ")
 	if err != nil {
 		return common.RuntimeError(cmd, err)
 	}

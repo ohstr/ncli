@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ohstr/ncli/cli/common"
 	"github.com/ohstr/nmilat/nip01"
 	"github.com/ohstr/nmilat/nip13"
 	"github.com/rs/zerolog/log"
@@ -116,7 +117,7 @@ func WriteDraftEvents(outPath string, events []*nip01.Event, wasArray bool) erro
 // WriteDraftEventsJSON is WriteDraftEvents to a writer, always as JSON --
 // for "-o -".
 func WriteDraftEventsJSON(w io.Writer, events []*nip01.Event, wasArray bool) error {
-	data, err := json.MarshalIndent(draftShape(events, wasArray), "", "    ")
+	data, err := common.MarshalJSON(draftShape(events, wasArray), "    ")
 	if err != nil {
 		return err
 	}

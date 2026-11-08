@@ -101,7 +101,7 @@ require (
 	github.com/ebitengine/oto/v3 v3.3.3
 	github.com/go-viper/mapstructure/v2 v2.5.0
 	github.com/minio/minio-go/v7 v7.4.1
-	github.com/ohstr/nmilat v0.5.0-rc.50.0.20261108135346-65c3b45b57f0
+	github.com/ohstr/nmilat v0.5.0-rc.50.0.20261108142515-d8add355d5f3
 	github.com/pion/opus v0.1.0
 	github.com/pion/rtcp v1.2.18
 	github.com/pion/rtp v1.10.5

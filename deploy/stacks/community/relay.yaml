@@ -56,7 +56,8 @@ presence:
   enabled: true
 
 # Blossom on the relay's origin: PUT /upload (and /media/upload), GET
-# /media/<sha256>. Only members upload; anyone with the URL downloads.
+# /<sha256> (or /media/<sha256>). Only members upload; anyone with the URL
+# downloads.
 blossom:
   enabled: true
   maxBlobBytes: 104857600

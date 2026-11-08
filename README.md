@@ -1291,7 +1291,8 @@ ncli blossom servers remove https://blossom.example
 ```
 
 `upload`/`rm`/`mirror` go to every configured server and report each
-(item, server) result; `download` tries servers in order until one answers.
+(item, server) result; `download` of a full URL fetches that URL first, then
+asks the servers in order by hash until one answers.
 Commands that take an identity also accept someone else's:
 
 ```sh

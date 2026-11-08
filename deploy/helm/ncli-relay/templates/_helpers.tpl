@@ -29,3 +29,14 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- define "ncli-relay.minioEndpoint" -}}
 {{- printf "%s-minio:9000" (include "ncli-relay.fullname" .) -}}
 {{- end -}}
+
+{{/*
+An image reference: the repository, ":tag" (".default" when the tag is
+empty) and, when a digest is set, "@digest", which then decides the image
+pulled. Call with (dict "image" .Values.x.image "default" "").
+*/}}
+{{- define "ncli-relay.image" -}}
+{{- .image.repository -}}
+{{- with (default .default .image.tag) }}:{{ . }}{{ end -}}
+{{- with .image.digest }}@{{ . }}{{ end -}}
+{{- end -}}

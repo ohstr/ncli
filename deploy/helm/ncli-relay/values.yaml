@@ -12,6 +12,9 @@ image:
   repository: ghcr.io/ohstr/ncli
   # Defaults to the chart's appVersion.
   tag: ""
+  # Optional sha256:... digest; when set it decides the image pulled (the
+  # minio images below have one).
+  digest: ""
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []

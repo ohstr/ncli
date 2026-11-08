@@ -128,6 +128,9 @@ func testBlossomRelay(t *testing.T, storage map[string]any, env map[string]strin
 	// Uploads go to the relay's origin (PUT /upload); blobs are served,
 	// deleted and looked up under its blob prefix, so download and rm
 	// name that as the server.
+	// ohstr/ncli#239: download and rm against srv 404 today (the client
+	// asks for /<sha> at the root). Once fixed, use srv for them and drop
+	// media.
 	srv := "http" + strings.TrimPrefix(r.URL, "ws")
 	media := srv + "/media"
 	alice, eve := A(t, "alice"), A(t, "eve")
@@ -180,6 +183,9 @@ func testBlossomRelay(t *testing.T, storage map[string]any, env map[string]strin
 		}
 	})
 
+	// ohstr/ncli#240: the relay answers list with a plain 404, which the
+	// client reports as not_found. Once fixed, expect
+	// expectErr(t, "unsupported", ...) here instead of the 404.
 	t.Run("list fails: the relay serves no BUD-02 list", func(t *testing.T) {
 		for _, server := range []string{srv, media} {
 			res := e.Run(t, "blossom", "list", "--identity", alice.Nsec, "--server", server, "--json")

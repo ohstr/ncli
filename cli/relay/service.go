@@ -205,7 +205,16 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 	// variable and reads it per request, so the order here does not matter.
 	var nip86Handler *nip86.Handler
 	nip86Replay := adminplane.NewReplayGuard()
-	nip86Metered := m.HTTP("nip86", limitNip86(limiter, config.Limits != nil && config.Limits.HTTP.PerPubkey.Events > 0,
+	var nip86Origins []string
+	if config.Nip86 != nil {
+		nip86Origins = config.Nip86.AllowedOrigins
+	}
+	nip86Metered := m.HTTP("nip86", limitNip86(limiter, nip86Limit{
+		perPubkey: config.Limits != nil && config.Limits.HTTP.PerPubkey.Events > 0,
+		admins:    nip86Admins(),
+		origins:   nip86Origins,
+		replay:    nip86Replay,
+	},
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			adminplane.ServeOnce(nip86Replay, nip86Handler, w, r)
 		})))

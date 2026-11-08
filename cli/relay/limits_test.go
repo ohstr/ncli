@@ -451,17 +451,103 @@ func TestRateLimits_Relay(t *testing.T) {
 	t.Run("nip86: the http limit counts per IP before NIP-98", func(t *testing.T) {
 		cfg := communityRelayConfig(t)
 		cfg.Nip86 = &Nip86Config{Enabled: true}
+		cfg.Membership.MemberClaims = new(true)
 		cfg.Limits = &LimitsConfig{HTTP: LimitConfig{PerIP: RateConfig{Events: 2, Per: "1h"}}}
 		ts := bootScenario(t, cfg)
+		enrollMember(t, ts.URL, scenarioMemberPub)
 		// Unsigned requests spend the IP's budget too: a 401 each, then 429.
 		for range 2 {
 			require.Equal(t, http.StatusUnauthorized, nip86Raw(t, ts, "", nip86.MethodSupportedMethods).StatusCode)
 		}
-		resp := nip86Raw(t, ts, testPrivKey, nip86.MethodSupportedMethods)
+		resp := nip86Raw(t, ts, scenarioMemberPriv, nip86.MethodSupportedMethods)
 		require.Equal(t, http.StatusTooManyRequests, resp.StatusCode)
 		require.NotEmpty(t, resp.Header.Get("Retry-After"))
+		require.Equal(t, http.StatusTooManyRequests, nip86Raw(t, ts, "", nip86.MethodSupportedMethods).StatusCode)
 		// The bridge shares the budget.
 		require.Equal(t, http.StatusTooManyRequests, postNIP98(t, ts, "/query", scenarioAgentPriv, []byte(`[{"kinds":[1]}]`)).StatusCode)
+	})
+
+	t.Run("nip86: a flood sharing an admin's IP does not lock the admin out", func(t *testing.T) {
+		cfg := communityRelayConfig(t)
+		cfg.Nip86 = &Nip86Config{Enabled: true, Admins: []string{scenarioAgentPub}}
+		cfg.Limits = &LimitsConfig{HTTP: LimitConfig{
+			PerIP:     RateConfig{Events: 1, Per: "1h"},
+			PerPubkey: RateConfig{Events: 1, Per: "1h"},
+		}}
+		ts := bootScenario(t, cfg)
+		require.Equal(t, http.StatusUnauthorized, nip86Raw(t, ts, "", nip86.MethodSupportedMethods).StatusCode)
+		require.Equal(t, http.StatusTooManyRequests, nip86Raw(t, ts, "", nip86.MethodSupportedMethods).StatusCode)
+		// The relay key and a nip86.admins entry are never charged.
+		for range 3 {
+			require.Equal(t, http.StatusOK, nip86Raw(t, ts, testPrivKey, nip86.MethodSupportedMethods).StatusCode)
+			require.Equal(t, http.StatusOK, nip86Raw(t, ts, scenarioAgentPriv, nip86.MethodSupportedMethods).StatusCode)
+		}
+		// A bad signature is charged per IP like no header at all.
+		bad := nip86Request(t, ts, scenarioMemberPriv, nip86.MethodSupportedMethods)
+		bad.Header.Set("Authorization", "Nostr bm90IGFuIGV2ZW50")
+		require.Equal(t, http.StatusTooManyRequests, nip86Do(t, bad).StatusCode)
+	})
+
+	t.Run("nip86: a replayed header does not spend its signer's budget", func(t *testing.T) {
+		cfg := communityRelayConfig(t)
+		cfg.Nip86 = &Nip86Config{Enabled: true}
+		cfg.Membership.MemberClaims = new(true)
+		cfg.Limits = &LimitsConfig{HTTP: LimitConfig{PerPubkey: RateConfig{Events: 2, Per: "1h"}}}
+		ts := bootScenario(t, cfg)
+		enrollMember(t, ts.URL, scenarioMemberPub)
+
+		first := nip86Request(t, ts, scenarioMemberPriv, nip86.MethodCreateClaim)
+		header := first.Header.Get("Authorization")
+		require.Equal(t, http.StatusOK, nip86Do(t, first).StatusCode)
+		for range 3 {
+			replay := nip86Request(t, ts, "", nip86.MethodCreateClaim)
+			replay.Header.Set("Authorization", header)
+			require.Equal(t, http.StatusUnauthorized, nip86Do(t, replay).StatusCode, "the replay guard refuses it")
+		}
+		// The replays took nothing: the signer's second token is still there.
+		require.Equal(t, http.StatusOK, nip86Raw(t, ts, scenarioMemberPriv, nip86.MethodCreateClaim).StatusCode)
+		require.Equal(t, http.StatusTooManyRequests, nip86Raw(t, ts, scenarioMemberPriv, nip86.MethodCreateClaim).StatusCode)
+	})
+
+	t.Run("nip86: a refusal carries the handler's CORS headers", func(t *testing.T) {
+		const origin = "https://app.example"
+		cfg := communityRelayConfig(t)
+		cfg.Nip86 = &Nip86Config{Enabled: true, AllowedOrigins: []string{origin}}
+		cfg.Membership.MemberClaims = new(true)
+		cfg.Limits = &LimitsConfig{HTTP: LimitConfig{PerIP: RateConfig{Events: 2, Per: "1h"}}}
+		ts := bootScenario(t, cfg)
+		enrollMember(t, ts.URL, scenarioMemberPub)
+		send := func(privKey, from string, mutate func(*http.Request)) *http.Response {
+			req := nip86Request(t, ts, privKey, nip86.MethodSupportedMethods)
+			req.Header.Set("Origin", from)
+			if mutate != nil {
+				mutate(req)
+			}
+			return nip86Do(t, req)
+		}
+		cors := func(resp *http.Response, want string) {
+			t.Helper()
+			assert.Equal(t, want, resp.Header.Get("Access-Control-Allow-Origin"))
+			if want != "" {
+				assert.Contains(t, resp.Header.Values("Vary"), "Origin")
+			}
+		}
+
+		// A signature the limiter can't verify: its own 401.
+		resp := send(scenarioMemberPriv, origin, func(r *http.Request) { r.Header.Set("Authorization", "Nostr bm90IGFuIGV2ZW50") })
+		require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+		cors(resp, origin)
+		require.Equal(t, http.StatusOK, send(scenarioMemberPriv, origin, nil).StatusCode)
+		// Over the IP's budget: a 429, readable by the allowed origin only.
+		resp = send(scenarioMemberPriv, origin, nil)
+		require.Equal(t, http.StatusTooManyRequests, resp.StatusCode)
+		cors(resp, origin)
+		resp = send("", origin, nil)
+		require.Equal(t, http.StatusTooManyRequests, resp.StatusCode)
+		cors(resp, origin)
+		resp = send("", "https://other.example", nil)
+		require.Equal(t, http.StatusTooManyRequests, resp.StatusCode)
+		cors(resp, "")
 	})
 
 	t.Run("nip86: the http limit counts per signer after NIP-98", func(t *testing.T) {
@@ -666,6 +752,13 @@ func must2[T any](v T, err error) T {
 // Authorization), and returns the response whatever its status.
 func nip86Raw(t *testing.T, ts *httptest.Server, privKey, method string) *http.Response {
 	t.Helper()
+	return nip86Do(t, nip86Request(t, ts, privKey, method))
+}
+
+// nip86Request builds a NIP-86 call of method to ts, signed as privKey (""
+// sends no Authorization).
+func nip86Request(t *testing.T, ts *httptest.Server, privKey, method string) *http.Request {
+	t.Helper()
 	body, err := json.Marshal(nip86.Request{Method: method, Params: []json.RawMessage{}})
 	require.NoError(t, err)
 	req, err := http.NewRequest(http.MethodPost, ts.URL+"/", bytes.NewReader(body))
@@ -676,6 +769,12 @@ func nip86Raw(t *testing.T, ts *httptest.Server, privKey, method string) *http.R
 		require.NoError(t, err)
 		req.Header.Set("Authorization", header)
 	}
+	return req
+}
+
+// nip86Do sends req and returns the response whatever its status.
+func nip86Do(t *testing.T, req *http.Request) *http.Response {
+	t.Helper()
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = resp.Body.Close() })

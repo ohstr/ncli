@@ -72,7 +72,7 @@ row); an admin rebuild or drop clears it.
 | Events | `events_total{result}` (accepted, duplicate, rejected, command), `events_rejected_total{reason}`, `events_by_class_total{class}`, `event_ok_seconds` |
 | Reads | `req_eose_seconds`, `req_events_returned`, `count_seconds`, `reads_refused_total{reason}`, `scan_busy_total`, `scans_inflight`, `scan_slots` |
 | Store | `store_batch_seconds`, `store_batch_size`, `store_batch_errors_total`, `store_task_queue_depth`, `store_task_queue_capacity`, `store_read_txs_open`, `store_size_bytes` (sampled every 30s) |
-| Access | `nip42_auth_accepted_total`, `nip42_auth_rejected_total{reason}`, `admin_denied_total{reason}` |
+| Access | `nip42_auth_accepted_total`, `nip42_auth_rejected_total{reason}`, `admin_denied_total{reason}`, `rate_limited_total{action,by}` (refusals by `limits:`; `action` event, read, http, upload, download or connection; `by` ip or pubkey, the bucket that was empty) |
 | Workers | `verify_queue_depth`, `verify_processed_total`, `verify_errors_total` |
 | Indexes | `index_state{index,state}` (1 for the state it is in), `index_entries{index}`, `index_behind{index}`, `index_queued{index}`, `index_txn_seconds{index}` (how long an index job held the store writer, per transaction) |
 | Features | `members`, `groups`, `huddle_rooms`, `huddle_peers`, `http_requests_total{route,code}`, `http_request_seconds{route}` |

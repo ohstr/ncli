@@ -1,7 +1,8 @@
 # Isolated environment for the ncli agent-capability eval. Three services:
 #
-#   relay   - the PUBLISHED image (ghcr.io/ohstr/ncli:latest), not a local
-#             build -- this rig only ever exercises what's actually shipped.
+#   relay   - the PUBLISHED image (ghcr.io/ohstr/ncli at the latest release;
+#             NCLI_VERSION picks another), not a local build -- this rig
+#             only ever exercises what's actually shipped.
 #   blossom - a reference Blossom media server (BUD-01/02/04/06/09/11) for
 #             the R7 upload/download/mirror round.
 #   agent   - the agent-under-test's machine (see agent/Dockerfile). Shares
@@ -17,7 +18,7 @@
 
 services:
   relay:
-    image: ghcr.io/ohstr/ncli:latest
+    image: ghcr.io/ohstr/ncli:${NCLI_VERSION:-0.8.0-rc.50}
     command: ["relay", "--config", "/config/relay.yaml"]
     volumes:
       - ./relay/relay.yaml:/config/relay.yaml:ro
@@ -25,7 +26,7 @@ services:
     restart: unless-stopped
 
   blossom:
-    image: ghcr.io/hzrd149/blossom-server:latest
+    image: ghcr.io/hzrd149/blossom-server:latest@sha256:446fa6c4b0ca529a1fbceabf5ea75839b5b76dfb0d0e1d150f3bae5f9a52b3b8
     volumes:
       - blossom-data:/app/data
     restart: unless-stopped

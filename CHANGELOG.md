@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0-rc.51]
+
+### Changed
+
+- Changes the Helm chart (now 0.2.0) and Compose stacks to pin their images: MinIO by digest, and the relay to the release candidate `0.8.0-rc.50` instead of `latest`, which was the 0.6.0 release. The relay pin moves to each new release. ([#235](https://github.com/ohstr/ncli/pull/235))
+- Lets a chart image take an optional `digest`, and adds the pinned MinIO digest only to the default image: pin a mirror or another tag with an exact `tag` or its own `digest`. `helm upgrade --reuse-values` keeps an older chart's images, so use `--reset-then-reuse-values`. ([#235](https://github.com/ohstr/ncli/pull/235))
+
 ## [0.8.0-rc.50]
 
 ### Added

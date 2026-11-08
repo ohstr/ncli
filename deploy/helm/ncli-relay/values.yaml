@@ -12,6 +12,8 @@ image:
   repository: ghcr.io/ohstr/ncli
   # Defaults to the chart's appVersion.
   tag: ""
+  # Optional sha256:... digest; when set it decides the image pulled.
+  digest: ""
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []
@@ -63,13 +65,18 @@ meilisearch:
 
 minio:
   enabled: false
-  # MinIO no longer publishes images on Docker Hub; Chainguard builds them.
+  # MinIO no longer publishes images on Docker Hub; Chainguard builds them,
+  # tagged only `latest`. The chart pins these two defaults by digest
+  # (templates/_helpers.tpl). Another repository or tag, such as a mirror,
+  # gets no digest: pin it with an exact tag, or set `digest` to its own.
   image:
     repository: cgr.dev/chainguard/minio
     tag: latest
+    digest: ""
   clientImage:
     repository: cgr.dev/chainguard/minio-client
     tag: latest
+    digest: ""
   bucket: ncli-media
   persistence:
     size: 20Gi

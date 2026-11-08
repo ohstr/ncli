@@ -435,7 +435,8 @@ groups:
   old switches then only say whether a task is restricted. So with
   `blossom.membersOnly.upload: true` and `members: {can: [createclaim]}`, only
   admins and roles listing `blossom.upload` (the `uploader` above) may upload;
-  `--check` logs a warning for each restricted task `members.can` leaves out.
+  `--check` warns for each restricted task `members.can` leaves out (listed
+  in `--check --json`'s `"warnings"`).
   An explicit `memberClaims` must agree with whether `members.can` gives
   `createclaim`, or `--check` fails.
 - **`groups.create`** entries are `everyone`, `members` or a role id, in

@@ -231,8 +231,10 @@ type MembershipConfig struct {
 	MemberClaims *bool `mapstructure:"memberClaims"`
 
 	// Roles maps a NIP-43 role id (a kind 33534 d tag) to the tasks a member
-	// holding it may do; see tasks.go for the vocabulary. Role ids are matched
-	// case-insensitively, since config keys are lowercased.
+	// holding it may do; see tasks.go for the vocabulary. Role ids are
+	// canonical lowercase (config keys are lowercased on load); one written
+	// twice in different case, one with a dot (a config key path) and the
+	// groups.create keywords everyone and members are refused at --check.
 	Roles map[string]RoleTasks `mapstructure:"roles"`
 
 	// Members, when set, is what every enrolled member may do, replacing what
@@ -604,6 +606,9 @@ func initConfig(check bool) error {
 		}
 	}
 
+	if err := checkRoleKeysInFile(viper.ConfigFileUsed()); err != nil {
+		return err
+	}
 	if err := config.checkRoleTasks(); err != nil {
 		return err
 	}

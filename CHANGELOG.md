@@ -4,7 +4,7 @@
 
 ### Added
 
-- Adds roles that carry tasks (`membership.roles`): each NIP-43 role lists what its members may do, such as NIP-86 methods (`createclaim`, `banpubkey`), Blossom uploads, joining calls or creating groups (`groups.create`), and NIP-86 `supportedmethods` tells each caller its own set. Existing settings keep working unchanged. ([#243](https://github.com/ohstr/ncli/pull/243))
+- Adds roles that carry tasks (`membership.roles`): each NIP-43 role lists what its members may do, such as NIP-86 methods (`createclaim`, `banpubkey`), Blossom uploads, joining calls or creating groups (`groups.create`), and NIP-86 `supportedmethods` tells each caller its own set. Without `membership.roles` or `membership.members`, existing settings behave as before except for the changes listed under Changed. ([#243](https://github.com/ohstr/ncli/pull/243))
 - Adds unknown-key reporting to the relay config: `ncli relay --check` fails (`invalid_input`) naming every key the relay doesn't know, such as a typo, and a normal start logs a warning for each, on stderr and in the log file; a key left with no value counts too. ([#236](https://github.com/ohstr/ncli/pull/236))
 - Adds `listen` (host:port) to the relay config, to bind one address instead of every interface on `port`. When set it wins over `port`, the admin listener's default port and the admin commands follow it, and `--check` rejects a host that does not resolve; `NCLI_LISTEN`/`NCLI_PORT` now reach the relay even with no such key in the file. ([#237](https://github.com/ohstr/ncli/pull/237))
 - Adds opt-in rate limits to the relay (`limits`): EVENT, REQ/COUNT, the HTTP bridge and Blossom per pubkey and per IP, plus connections per IP, with members optionally exempt and refusals counted in `ncli_relay_rate_limited_total`. A limit left unset is no limit, and a public relay without any, or a per-pubkey limit that never applies, gets a warning, also listed in `relay --check --json`'s `"warnings"`. ([#241](https://github.com/ohstr/ncli/pull/241))
@@ -16,6 +16,9 @@
 - Lets a chart image take an optional `digest`, and adds the pinned MinIO digest only to the default image: pin a mirror or another tag with an exact `tag` or its own `digest`. `helm upgrade --reuse-values` keeps an older chart's images, so use `--reset-then-reuse-values`. ([#235](https://github.com/ohstr/ncli/pull/235))
 - Changes `membership.memberClaims`, when unset, to follow `nip11.limitation.membership_required`: on a relay with `membership_required` and NIP-86 enabled, a member's `createclaim` is now refused (401) and only admins mint invites. Set `memberClaims: true` to keep the old behaviour. ([#234](https://github.com/ohstr/ncli/pull/234))
 - Changes a NIP-43 invite request (REQ kind 28935) to need `createclaim`, as NIP-86 `createclaim` does: it now gives a code only to admins, members when `memberClaims` is on, and roles that list it. Before, any connection allowed to read got one. ([#243](https://github.com/ohstr/ncli/pull/243))
+- Changes `huddle.requireMembership` to admit the relay's admins (`nip11.pubkey`, `nip86.admins`) even when they are not members. ([#243](https://github.com/ohstr/ncli/pull/243))
+- Changes a banned member to lose `createclaim` (NIP-86 and invite requests) and joins to calls under `huddle.requireMembership`. Before, the ban only stopped its events and Blossom uploads. ([#243](https://github.com/ohstr/ncli/pull/243))
+- Changes NIP-43 role ids to be stored lowercase: `createrole`, `assignrole`, enrolling and invites lowercase them, and `unassignrole host` also removes `Host`. ([#243](https://github.com/ohstr/ncli/pull/243))
 
 ### Fixed
 
@@ -23,6 +26,7 @@
 - Fixes `ncli blossom list`, `upload --optimize` and `mirror` reporting a server without that endpoint as `not_found` or a retryable `network` error; they now report `unsupported` (exit 8), and the relay says those endpoints are not supported. A 3xx, 405 or 501 from any Blossom endpoint is now `unsupported` too, where it was `network` or `invalid_input`. ([#244](https://github.com/ohstr/ncli/pull/244))
 - Fixes `relay --check --json` listing `"warnings": []` while logging that `port` is ignored because `listen` is set (or that `pow.strict` has no `pow.min`); it now lists every config warning, and startup logs each once. ([#245](https://github.com/ohstr/ncli/pull/245))
 - Fixes the Blossom blob URLs the relay returns having no file extension, which BUD-02 requires: they now end in one for the blob's type, or `.bin` when it is unknown (nmilat v0.5.0-rc.51). ([#243](https://github.com/ohstr/ncli/pull/243))
+- Fixes NIP-86 `allowpubkey` on someone already a member, which re-enrolled them and dropped their roles: it now leaves the member unchanged. ([#243](https://github.com/ohstr/ncli/pull/243))
 
 ## [0.8.0-rc.50]
 

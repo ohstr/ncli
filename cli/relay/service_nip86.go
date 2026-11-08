@@ -95,15 +95,11 @@ func membershipInviteAllowNoExpiry() bool {
 	return config.Membership != nil && config.Membership.InviteAllowNoExpiry
 }
 
-// membershipMemberClaims reports whether a plain member (not an admin) may mint
-// an invite via createclaim: resolveTaskGrants gives members createclaim when
-// it is on (unless membership.members.can is set). Unset, it follows
+// memberClaims reports whether a plain member (not an admin) may mint an
+// invite via createclaim: resolveTaskGrants gives members createclaim when it
+// is on (unless membership.members.can is set). Unset, it follows
 // memberClaimsDefault: off on a members-only relay, on otherwise. initConfig
 // normally resolves it already; the fallback covers a config built without it.
-func membershipMemberClaims() bool {
-	return config.memberClaims()
-}
-
 func (c *RelayConfig) memberClaims() bool {
 	if c.Membership == nil || c.Membership.MemberClaims == nil {
 		return c.memberClaimsDefault()
@@ -121,6 +117,13 @@ func newNip86Router(admin membershipAdmin) *nip86.Router {
 		pubkey, err := req.StringParam(0)
 		if err != nil {
 			return nil, err
+		}
+		// Already a member: nothing to do. Joining again would replace the
+		// record and drop the roles it holds.
+		if rec, err := admin.getMember(pubkey); err != nil {
+			return nil, err
+		} else if rec != nil {
+			return true, nil
 		}
 		if _, err := admin.addMember(ctx, pubkey, nil); err != nil {
 			return nil, err
@@ -353,6 +356,10 @@ func newNip86Handler(wsHandler *relay.SessionHandler, store *relay.EventStore, r
 	// off, nobody but the admins holds a method: Authorize stays nil and only
 	// AllowedPubkeys pass, as before.
 	auth := newTaskAuthority(&config, wsHandler.Membership(), moderation)
+	// Every registered method, read before Visible is set; supportedmethods
+	// then filters this list with one membership lookup per call rather
+	// than one per method.
+	router.Handle(nip86.MethodSupportedMethods, auth.supportedMethods(router.MethodsFor("")))
 	router.Visible = auth.nip86Visible
 	if membershipOn() {
 		cfg.Authorize = auth.mayUseNip86

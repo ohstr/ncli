@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/ohstr/nmilat/huddle/room"
@@ -87,7 +89,7 @@ func (a membershipAdmin) addMember(ctx context.Context, pubkey string, roles []s
 	if err := checkPubkey(pubkey); err != nil {
 		return nil, err
 	}
-	if err := a.ws.Membership().Join(pubkey, roles); err != nil {
+	if err := a.ws.Membership().Join(pubkey, canonicalRoles(roles)); err != nil {
 		return nil, err
 	}
 	if config.Membership.PublishAddRemoveEvents {
@@ -131,7 +133,7 @@ func (a membershipAdmin) issueInvite(ttl time.Duration, maxUses int, roles []str
 	if maxUses < 0 {
 		return nil, badInput("max_uses must be >= 0")
 	}
-	return a.ws.Membership().IssueInvite(ttl, maxUses, roles)
+	return a.ws.Membership().IssueInvite(ttl, maxUses, canonicalRoles(roles))
 }
 
 // issueInviteCode issues an invite under a caller-chosen code, which is what
@@ -161,7 +163,7 @@ func (a membershipAdmin) issueInviteCode(code string, ttl time.Duration, maxUses
 		CreatedAt: now.Unix(),
 		ExpiresAt: now.Add(ttl).Unix(),
 		MaxUses:   maxUses,
-		Roles:     roles,
+		Roles:     canonicalRoles(roles),
 	}
 	if err := a.store.PutInviteClaim(claim); err != nil {
 		return nil, err
@@ -194,7 +196,7 @@ func (a membershipAdmin) issueInviteWithLimits(code string, expiresAt int64, max
 		CreatedAt: time.Now().Unix(),
 		ExpiresAt: expiresAt,
 		MaxUses:   maxUses,
-		Roles:     roles,
+		Roles:     canonicalRoles(roles),
 	}
 	if err := a.store.PutInviteClaim(claim); err != nil {
 		return nil, err
@@ -219,7 +221,7 @@ func (a membershipAdmin) issueInviteGenerated(expiresAt int64, maxUses int, role
 		CreatedAt: time.Now().Unix(),
 		ExpiresAt: expiresAt,
 		MaxUses:   maxUses,
-		Roles:     roles,
+		Roles:     canonicalRoles(roles),
 	}
 	if err := a.store.PutInviteClaim(claim); err != nil {
 		return nil, err
@@ -409,7 +411,7 @@ func (a membershipAdmin) listRoles(ctx context.Context) ([]roleJSON, error) {
 // putRole creates or edits a role. Kind 33534 is parameterized-replaceable, so
 // publishing the same id again is the edit.
 func (a membershipAdmin) putRole(ctx context.Context, role roleJSON) error {
-	if role.ID == "" {
+	if canonicalRole(role.ID) == "" {
 		return badInput("id is required")
 	}
 	if role.Color != nil && (*role.Color < 0 || *role.Color > 360) {
@@ -421,7 +423,7 @@ func (a membershipAdmin) putRole(ctx context.Context, role roleJSON) error {
 
 	ev := nip43.NewRoleDefinition(nip43.RoleParams{
 		SelfPubkey:  config.Nip11.PubKey,
-		ID:          role.ID,
+		ID:          canonicalRole(role.ID),
 		Label:       role.Label,
 		Description: role.Description,
 		Color:       role.Color,
@@ -454,7 +456,7 @@ func (a membershipAdmin) deleteRole(ctx context.Context, id string) error {
 	tags := [][]string{}
 	for _, ev := range events {
 		role, err := nip43.ParseRole(ev)
-		if err != nil || role.ID != id {
+		if err != nil || !strings.EqualFold(role.ID, id) {
 			continue
 		}
 		tags = append(tags, []string{"e", ev.ID})
@@ -476,7 +478,7 @@ func (a membershipAdmin) setMemberRoles(ctx context.Context, pubkey, roleID stri
 	if err := checkPubkey(pubkey); err != nil {
 		return nil, err
 	}
-	if roleID == "" {
+	if canonicalRole(roleID) == "" {
 		return nil, badInput("role id is required")
 	}
 
@@ -488,10 +490,13 @@ func (a membershipAdmin) setMemberRoles(ctx context.Context, pubkey, roleID stri
 		return nil, badInput("pubkey is not a member of this relay")
 	}
 
+	roleID = canonicalRole(roleID)
 	roles := make([]string, 0, len(rec.Roles)+1)
 	found := false
 	for _, existing := range rec.Roles {
-		if existing == roleID {
+		// EqualFold: a record written before role ids were canonical may
+		// still hold "Host"; unassigning "host" must remove it.
+		if strings.EqualFold(existing, roleID) {
 			found = true
 			if !assign {
 				continue
@@ -507,4 +512,26 @@ func (a membershipAdmin) setMemberRoles(ctx context.Context, pubkey, roleID stri
 		return nil, err
 	}
 	return a.ws.Membership().Get(pubkey)
+}
+
+// canonicalRole is a NIP-43 role id as this relay stores it: trimmed and
+// lowercase. Config keys are lowercased on load, so membership.roles can
+// only ever name a lowercase id; storing every id the same way keeps
+// assign, unassign and the tasks a role carries in agreement.
+func canonicalRole(id string) string {
+	return strings.ToLower(strings.TrimSpace(id))
+}
+
+// canonicalRoles canonicalises each id and drops empties and duplicates.
+func canonicalRoles(roles []string) []string {
+	if roles == nil {
+		return nil
+	}
+	out := make([]string, 0, len(roles))
+	for _, r := range roles {
+		if r = canonicalRole(r); r != "" && !slices.Contains(out, r) {
+			out = append(out, r)
+		}
+	}
+	return out
 }

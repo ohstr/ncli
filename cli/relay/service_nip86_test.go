@@ -561,7 +561,7 @@ func newMemberClaimHandler(t *testing.T, memberClaims bool) (*nip86.Handler, *re
 // newMemberClaimHandlerOn is newMemberClaimHandler with memberClaims possibly
 // unset (nil) and the relay members-only (nip11.limitation.membership_required)
 // or open. The config is not run through checkAndDefaultMembership, so an unset
-// memberClaims exercises membershipMemberClaims' own default.
+// memberClaims exercises RelayConfig.memberClaims' own default.
 func newMemberClaimHandlerOn(t *testing.T, memberClaims *bool, membershipRequired bool) (*nip86.Handler, *relay.EventStore) {
 	t.Helper()
 	wsHandler, store := newTestWSHandler(t)
@@ -919,19 +919,16 @@ membership:
 		require.False(t, *open.Membership.MemberClaims)
 	})
 
-	t.Run("membershipMemberClaims follows membership_required when unset", func(t *testing.T) {
-		prev := config
-		t.Cleanup(func() { config = prev })
-
-		config = RelayConfig{Membership: &MembershipConfig{Enabled: true}}
-		require.True(t, membershipMemberClaims(), "open relay")
+	t.Run("memberClaims follows membership_required when unset", func(t *testing.T) {
+		config := RelayConfig{Membership: &MembershipConfig{Enabled: true}}
+		require.True(t, config.memberClaims(), "open relay")
 
 		config.Nip11.Limitation.MembershipRequired = true
-		require.False(t, membershipMemberClaims(), "members-only relay")
+		require.False(t, config.memberClaims(), "members-only relay")
 
 		yes := true
 		config.Membership.MemberClaims = &yes
-		require.True(t, membershipMemberClaims(), "explicit true wins")
+		require.True(t, config.memberClaims(), "explicit true wins")
 	})
 }
 

@@ -175,7 +175,7 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 	)
 	tasks.membership = wsHandler.Membership()
 	access.membership = wsHandler.Membership()
-	if membershipOn() && config.Membership != nil && len(config.Membership.Roles) > 0 {
+	if membershipOn() {
 		if roles, err := (membershipAdmin{ws: wsHandler, store: store}).listRoles(context.Background()); err == nil {
 			ids := make([]string, 0, len(roles))
 			for _, r := range roles {

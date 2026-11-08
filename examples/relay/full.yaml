@@ -190,7 +190,9 @@ membership:
   # method names (aliases @claims, @members, @bans, @roles, @relayinfo,
   # @policy), group:<kind> (a NIP-29 moderation kind in every group;
   # group:* all), blossom.upload/download/delete, huddle.join, group.create,
-  # or * for everything. A banned pubkey gets nothing. Needs enabled: true.
+  # or * for everything but group kinds (list those). A banned pubkey gets
+  # nothing. Role ids are case-insensitive, may not contain a dot, and may
+  # not be everyone or members. Needs enabled: true.
   # roles:
   #   host:     { can: ["@claims", "@members", banpubkey, banevent, "group:9005"] }
   #   greeter:  { can: [createclaim] }
@@ -264,8 +266,10 @@ groups:
   # create: [members]
 
   # Refuse a grant of a role that may send a moderation kind the granter
-  # may not send itself. Off by default.
-  grantCeiling: false
+  # may not send itself. Unset, it is on when membership.roles (or
+  # members) carry a group:<kind> task and off otherwise; false while
+  # roles carry one is a warning at --check.
+  # grantCeiling: true
 
   # A relay-signed seat notice to each pubkey that gains (added) or loses
   # (removed) a seat in a hosted group, by any path: tags p (member),

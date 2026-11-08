@@ -426,7 +426,7 @@ groups:
 - **Existing settings map on:**
   `memberClaims` = members get `createclaim`; `blossom.membersOnly.upload/
   download` = members get `blossom.upload/download` (off: everyone may);
-  `huddle.requireMembership` = members get `huddle.join` (off: anyone may);
+  `huddle.requireMembership` = members get `huddle.join` (off: anyone not banned may);
   `groups.create` omitted = everyone may create a group. Admins count as
   members everywhere (they already did for Blossom; a huddle with
   `requireMembership` now admits them too). A banned member now loses

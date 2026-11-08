@@ -153,6 +153,15 @@ func blossomEnabled() bool {
 	return config.Blossom != nil && config.Blossom.Enabled
 }
 
+// blossomUploadMembersOnly reports whether only members may upload:
+// blossom.membersOnly.upload, or, unset, nip11.limitation.membership_required.
+func (c *RelayConfig) blossomUploadMembersOnly() bool {
+	if c.Blossom != nil && c.Blossom.MembersOnly.Upload != nil {
+		return *c.Blossom.MembersOnly.Upload
+	}
+	return c.Nip11.Limitation.MembershipRequired
+}
+
 // blossomPublicURL is the origin blobs are served from.
 func (c *RelayConfig) blossomPublicURL() string {
 	if c.Blossom != nil && c.Blossom.PublicURL != "" {
@@ -304,7 +313,7 @@ func newBlossomServer(c *RelayConfig, access *relayAccess, limiter *ratelimit.Li
 
 	b := c.Blossom
 	mayUpload := anyone
-	if up := b.MembersOnly.Upload; (up == nil && c.Nip11.Limitation.MembershipRequired) || (up != nil && *up) {
+	if c.blossomUploadMembersOnly() {
 		mayUpload = member
 	}
 	var mayDownload func(string) bool

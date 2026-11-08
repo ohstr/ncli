@@ -65,12 +65,33 @@ func TestRelayCheckLimits(t *testing.T) {
 		}
 	})
 
+	t.Run("a per-pubkey limit that never applies warns", func(t *testing.T) {
+		path := e.WriteFile("unused.yaml", base()+`  url: wss://relay.example.com
+blossom:
+  enabled: true
+limits:
+  blossom:
+    downloads: {perPubkey: {events: 60, per: 1m}}
+`)
+		res := e.MustOK(t, "relay", "--config", path, "--check", "--json")
+		var got checked
+		res.JSON(t, &got)
+		if !got.OK || len(got.Warnings) != 1 || !strings.HasPrefix(got.Warnings[0], "limits.blossom.downloads.perPubkey counts only DELETEs") {
+			t.Errorf("--check = %s", res.Stdout)
+		}
+		if !strings.Contains(res.Stderr, "limits.blossom.downloads.perPubkey") {
+			t.Errorf("no warning on stderr:\n%s", res)
+		}
+	})
+
 	for name, c := range map[string]struct{ yaml, input string }{
 		"negative events":    {"events: {perIP: {events: -1, per: 1m}}", "limits.events.perIP.events"},
 		"events without per": {"reads: {perPubkey: {events: 5}}", "limits.reads.perPubkey.per"},
 		"bad duration":       {"http: {perIP: {events: 5, per: soon}}", "soon"},
 		"bad CIDR":           {"trustedProxies: [10.0.0.0/40]", "10.0.0.0/40"},
 		"unknown exempt":     {"exempt: everyone", "everyone"},
+		"burst overflows":    {"events: {perIP: {events: 1, per: 1h, burst: 3000000}}", "limits.events.perIP.burst"},
+		"under 1ns an event": {"reads: {perIP: {events: 2000, per: 1us}}", "limits.reads.perIP.events"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			path := e.WriteFile(strings.ReplaceAll(name, " ", "-")+".yaml", base()+"limits:\n  "+c.yaml+"\n")

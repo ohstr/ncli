@@ -148,16 +148,16 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 	sessionConfig.RelayAuthoredKinds = config.relayAuthoredKinds()
 	sessionConfig.PresenceQueryKind = config.presenceKind()
 
-	// One limiter for the WebSocket, the HTTP bridge and Blossom, so a
-	// client is counted once across them. Its member check reads the
+	// One limiter for the WebSocket, the HTTP bridge, Blossom and huddles,
+	// so a client is counted once across them. Its member check reads the
 	// membership service, which exists only once wsHandler does.
 	access := newRelayAccess(nil, moderation)
-	limiter, err := newRateLimiter(&config, access.isMember)
+	limiter, err := newRateLimiter(&config, access.isMember, m.RateLimited)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to build the rate limiter")
 	}
-	if limiter == nil && !config.Nip11.Limitation.AuthRequired {
-		log.Warn().Msg(noLimitsWarning)
+	for _, w := range config.limitsWarnings() {
+		log.Warn().Msg(w)
 	}
 	sessionConfig.RateLimiter = limiter
 
@@ -347,7 +347,7 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 
 	// Huddle first: both the membership admin routes and NIP-86 need the rooms
 	// manager so removing a member ends that member's live calls.
-	huddleRooms := registerHuddleRoutes(mux, wsHandler, config.Huddle, config.Nip11.URL)
+	huddleRooms := registerHuddleRoutes(mux, wsHandler, config.Huddle, config.Nip11.URL, limiter)
 
 	registerMembershipAdminRoutes(mux, wsHandler, store, huddleRooms, adminAuth)
 

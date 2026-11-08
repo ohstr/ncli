@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -15,11 +16,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gorilla/websocket"
 	"github.com/ohstr/ncli/cli/common"
+	"github.com/ohstr/ncli/cli/relay/metrics"
 	"github.com/ohstr/nmilat/nip01"
+	"github.com/ohstr/nmilat/nip11"
 	"github.com/ohstr/nmilat/nipB7"
 	relayclient "github.com/ohstr/nmilat/relay/client"
 	"github.com/ohstr/nmilat/relay/ratelimit"
+	"github.com/ohstr/nmilat/wire"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -72,6 +77,10 @@ func TestCheckLimits(t *testing.T) {
 		"unknown exempt":        {"exempt: admins", "admins"},
 		"bad CIDR":              {"trustedProxies: [10.0.0.0/33]", "10.0.0.0/33"},
 		"bad proxy IP":          {"trustedProxies: [10.0.0.1, proxy.local]", "proxy.local"},
+		// Each passes the field checks, and the limiter can't count it.
+		"burst overflows":            {"events: {perIP: {events: 1, per: 1h, burst: 3000000}}", "limits.events.perIP.burst"},
+		"burst overflows a long per": {"blossom: {uploads: {perPubkey: {events: 1, per: 2562047h, burst: 3}}}", "limits.blossom.uploads.perPubkey.burst"},
+		"under 1ns per event":        {"reads: {perIP: {events: 2000, per: 1us}}", "limits.reads.perIP.events"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			cfg := loadRelayConfigFromYAML(t, "store: test.db\nlimits:\n  "+c.yaml+"\n")
@@ -89,6 +98,9 @@ func TestCheckLimits(t *testing.T) {
 		"zero is unset":       "events: {perIP: {events: 0}}\n  connectionsPerIP: 0",
 		"burst below events":  "events: {perIP: {events: 10, per: 1m, burst: 2}}",
 		"fractional duration": "reads: {perIP: {events: 3, per: 1.5s}}",
+		"1ns per event":       "reads: {perIP: {events: 1000, per: 1us}}",
+		"a long per":          "events: {perPubkey: {events: 1, per: 87600h}}",
+		"the largest burst":   "events: {perIP: {events: 1, per: 1h, burst: 2562047}}",
 	} {
 		t.Run(name, func(t *testing.T) {
 			cfg := loadRelayConfigFromYAML(t, "store: test.db\nlimits:\n  "+yaml+"\n")
@@ -100,16 +112,16 @@ func TestCheckLimits(t *testing.T) {
 func TestRateLimitConfigMapping(t *testing.T) {
 	t.Run("no block is no limiter", func(t *testing.T) {
 		c := &RelayConfig{}
-		_, ok := c.rateLimitConfig(nil)
+		_, ok := c.rateLimitConfig(nil, nil)
 		assert.False(t, ok)
-		l, err := newRateLimiter(c, nil)
+		l, err := newRateLimiter(c, nil, nil)
 		require.NoError(t, err)
 		assert.Nil(t, l)
 	})
 
 	t.Run("a block that sets no limit is no limiter", func(t *testing.T) {
 		c := &RelayConfig{Limits: &LimitsConfig{Exempt: "members", TrustedProxies: []string{"10.0.0.0/8"}}}
-		l, err := newRateLimiter(c, func(string) bool { return true })
+		l, err := newRateLimiter(c, func(string) bool { return true }, nil)
 		require.NoError(t, err)
 		assert.Nil(t, l)
 	})
@@ -127,7 +139,7 @@ func TestRateLimitConfigMapping(t *testing.T) {
 	}
 
 	t.Run("every limit maps across, durations parsed", func(t *testing.T) {
-		got, ok := (&RelayConfig{Limits: full}).rateLimitConfig(func(string) bool { return true })
+		got, ok := (&RelayConfig{Limits: full}).rateLimitConfig(func(string) bool { return true }, nil)
 		require.True(t, ok)
 		assert.Nil(t, got.Exempt, "exempt unset is none")
 		assert.Equal(t, ratelimit.Config{
@@ -144,19 +156,49 @@ func TestRateLimitConfigMapping(t *testing.T) {
 	t.Run("exempt members uses the member check", func(t *testing.T) {
 		l := *full
 		l.Exempt = "members"
-		got, ok := (&RelayConfig{Limits: &l}).rateLimitConfig(func(pk string) bool { return pk == "member" })
+		got, ok := (&RelayConfig{Limits: &l}).rateLimitConfig(func(pk string) bool { return pk == "member" }, nil)
 		require.True(t, ok)
 		require.NotNil(t, got.Exempt)
 		assert.True(t, got.Exempt("member"))
 		assert.False(t, got.Exempt("stranger"))
 
 		l.Exempt = "none"
-		got, _ = (&RelayConfig{Limits: &l}).rateLimitConfig(func(string) bool { return true })
+		got, _ = (&RelayConfig{Limits: &l}).rateLimitConfig(func(string) bool { return true }, nil)
 		assert.Nil(t, got.Exempt)
 	})
 
+	t.Run("refusals reach the metrics", func(t *testing.T) {
+		m := metrics.New("test")
+		l, err := newRateLimiter(&RelayConfig{Limits: &LimitsConfig{
+			Events:           LimitConfig{PerPubkey: RateConfig{Events: 1, Per: "1h"}},
+			ConnectionsPerIP: 1,
+		}}, nil, m.RateLimited)
+		require.NoError(t, err)
+		_, ok := l.Allow(ratelimit.Event, "", "author")
+		require.True(t, ok)
+		_, ok = l.Allow(ratelimit.Event, "", "author")
+		require.False(t, ok)
+		_, ok = l.OpenConn("192.0.2.1")
+		require.True(t, ok)
+		_, ok = l.OpenConn("192.0.2.1")
+		require.False(t, ok)
+
+		var out strings.Builder
+		for _, mf := range must2(m.Registry.Gather()) {
+			if mf.GetName() != "ncli_relay_rate_limited_total" {
+				continue
+			}
+			for _, s := range mf.GetMetric() {
+				if v := s.GetCounter().GetValue(); v > 0 {
+					fmt.Fprintf(&out, "%s/%s=%v ", s.GetLabel()[0].GetValue(), s.GetLabel()[1].GetValue(), v)
+				}
+			}
+		}
+		assert.Equal(t, "connection/ip=1 event/pubkey=1 ", out.String())
+	})
+
 	t.Run("connectionsPerIP alone builds a limiter", func(t *testing.T) {
-		l, err := newRateLimiter(&RelayConfig{Limits: &LimitsConfig{ConnectionsPerIP: 1}}, nil)
+		l, err := newRateLimiter(&RelayConfig{Limits: &LimitsConfig{ConnectionsPerIP: 1}}, nil, nil)
 		require.NoError(t, err)
 		assert.NotNil(t, l)
 	})
@@ -175,6 +217,67 @@ func TestLimitsWarnings(t *testing.T) {
 	authRequired := &RelayConfig{}
 	authRequired.Nip11.Limitation.AuthRequired = true
 	assert.Equal(t, []string{}, authRequired.limitsWarnings())
+
+	yes, no := true, false
+	perPubkey := LimitConfig{PerPubkey: RateConfig{Events: 5, Per: "1m"}}
+	for name, c := range map[string]struct {
+		cfg  RelayConfig
+		want []string
+	}{
+		"downloads per pubkey, public downloads": {
+			RelayConfig{Blossom: &BlossomConfig{Enabled: true}, Limits: &LimitsConfig{Blossom: BlossomLimitConfig{Downloads: perPubkey}}},
+			[]string{downloadsPerPubkeyWarning},
+		},
+		"downloads per pubkey, members-only downloads": {
+			RelayConfig{Blossom: &BlossomConfig{Enabled: true, MembersOnly: BlossomMembersOnly{Download: true}}, Limits: &LimitsConfig{Blossom: BlossomLimitConfig{Downloads: perPubkey}}},
+			[]string{},
+		},
+		"downloads per pubkey, blossom off": {
+			RelayConfig{Limits: &LimitsConfig{Blossom: BlossomLimitConfig{Downloads: perPubkey}}},
+			[]string{},
+		},
+		"uploads per pubkey, members-only uploads, members exempt": {
+			RelayConfig{Blossom: &BlossomConfig{Enabled: true, MembersOnly: BlossomMembersOnly{Upload: &yes}}, Limits: &LimitsConfig{Exempt: "members", Blossom: BlossomLimitConfig{Uploads: perPubkey}}},
+			[]string{uploadsPerPubkeyWarning},
+		},
+		"uploads per pubkey, members-only by membership_required": {
+			RelayConfig{
+				Nip11:   nip11.Metadata{Limitation: nip11.Limitation{MembershipRequired: true}},
+				Blossom: &BlossomConfig{Enabled: true}, Limits: &LimitsConfig{Exempt: "members", Blossom: BlossomLimitConfig{Uploads: perPubkey}},
+			},
+			[]string{uploadsPerPubkeyWarning},
+		},
+		"uploads per pubkey, open uploads": {
+			RelayConfig{
+				Nip11:   nip11.Metadata{Limitation: nip11.Limitation{MembershipRequired: true}},
+				Blossom: &BlossomConfig{Enabled: true, MembersOnly: BlossomMembersOnly{Upload: &no}}, Limits: &LimitsConfig{Exempt: "members", Blossom: BlossomLimitConfig{Uploads: perPubkey}},
+			},
+			[]string{},
+		},
+		"uploads per pubkey, nobody exempt": {
+			RelayConfig{Blossom: &BlossomConfig{Enabled: true, MembersOnly: BlossomMembersOnly{Upload: &yes}}, Limits: &LimitsConfig{Blossom: BlossomLimitConfig{Uploads: perPubkey}}},
+			[]string{},
+		},
+		"events per pubkey, members-only writes, members exempt": {
+			RelayConfig{Nip11: nip11.Metadata{Limitation: nip11.Limitation{MembershipRequired: true}}, Limits: &LimitsConfig{Exempt: "members", Events: perPubkey}},
+			[]string{eventsPerPubkeyWarning},
+		},
+		"events per pubkey, agents write too": {
+			RelayConfig{
+				Nip11:     nip11.Metadata{Limitation: nip11.Limitation{MembershipRequired: true}},
+				AgentAuth: &AgentAuthConfig{Enabled: true}, Limits: &LimitsConfig{Exempt: "members", Events: perPubkey},
+			},
+			[]string{},
+		},
+		"events per pubkey, anyone writes": {
+			RelayConfig{Limits: &LimitsConfig{Exempt: "members", Events: perPubkey}},
+			[]string{},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, c.want, c.cfg.limitsWarnings())
+		})
+	}
 }
 
 // limitedRelay boots the community relay with limits.
@@ -203,6 +306,23 @@ func TestRateLimits_Relay(t *testing.T) {
 		// Another author has a bucket of its own.
 		other := connectAs(t, ts, scenarioMemberPriv)
 		require.True(t, publishAs(t, other, note(4), scenarioMemberPriv).Accepted)
+	})
+
+	t.Run("events: the author's limit counts only a connection logged in as the author", func(t *testing.T) {
+		ts := limitedRelay(t, &LimitsConfig{Events: LimitConfig{PerPubkey: RateConfig{Events: 1, Per: "1h"}}})
+		u, err := url.Parse("ws" + strings.TrimPrefix(ts.URL, "http"))
+		require.NoError(t, err)
+		anon, err := relayclient.Connect(context.Background(), u)
+		require.NoError(t, err)
+		t.Cleanup(anon.Close)
+		for i := range 3 {
+			ok := publishAs(t, anon, note(i), scenarioAgentPriv)
+			require.True(t, ok.Accepted, "event %d: %s", i, ok.Message)
+		}
+		// Logged in as the author, its budget applies.
+		conn := connectAs(t, ts, scenarioAgentPriv)
+		require.True(t, publishAs(t, conn, note(10), scenarioAgentPriv).Accepted)
+		require.False(t, publishAs(t, conn, note(11), scenarioAgentPriv).Accepted)
 	})
 
 	t.Run("no limits: 300 events accepted", func(t *testing.T) {
@@ -246,6 +366,162 @@ func TestRateLimits_Relay(t *testing.T) {
 		require.NotEmpty(t, resp.Header.Get("Retry-After"))
 		// /count and /events share the http limit.
 		require.Equal(t, http.StatusTooManyRequests, postNIP98(t, ts, "/count", scenarioAgentPriv, body).StatusCode)
+		ev := note(0)
+		require.NoError(t, ev.Sign(scenarioAgentPriv))
+		evBody, err := json.Marshal(ev)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusTooManyRequests, postNIP98(t, ts, "/events", scenarioAgentPriv, evBody).StatusCode)
+	})
+
+	t.Run("events: one author budget across the WebSocket and POST /events", func(t *testing.T) {
+		ts := limitedRelay(t, &LimitsConfig{Events: LimitConfig{PerPubkey: RateConfig{Events: 2, Per: "1h"}}})
+		conn := connectAs(t, ts, scenarioAgentPriv)
+		post := func(i int) *http.Response {
+			ev := note(i)
+			require.NoError(t, ev.Sign(scenarioAgentPriv))
+			body, err := json.Marshal(ev)
+			require.NoError(t, err)
+			return postNIP98(t, ts, "/events", scenarioAgentPriv, body)
+		}
+
+		require.True(t, publishAs(t, conn, note(0), scenarioAgentPriv).Accepted)
+		require.Equal(t, http.StatusOK, post(1).StatusCode)
+
+		ok := publishAs(t, conn, note(2), scenarioAgentPriv)
+		require.False(t, ok.Accepted, "the WebSocket sees the event POSTed")
+		require.True(t, strings.HasPrefix(ok.Message, "rate-limited:"), "message %q", ok.Message)
+		resp := post(3)
+		require.Equal(t, http.StatusTooManyRequests, resp.StatusCode)
+		require.NotEmpty(t, resp.Header.Get("Retry-After"))
+	})
+
+	t.Run("reads: AUTH spends the IP's read budget", func(t *testing.T) {
+		ts := limitedRelay(t, &LimitsConfig{Reads: LimitConfig{PerIP: RateConfig{Events: 1, Per: "1h"}}})
+		conn := connectAs(t, ts, scenarioAgentPriv) // the AUTH takes the one token
+		conn.Outgoing() <- wire.NewRequestPacket("q", nip01.NewSubscriptionFilterGroup(&nip01.SubscriptionFilter{Kinds: []int{1}}))
+		deadline := time.After(5 * time.Second)
+		for {
+			select {
+			case res := <-conn.Read():
+				switch r := res.(type) {
+				case *wire.ClosedSubscriptionResponse:
+					require.True(t, strings.HasPrefix(r.Message, "rate-limited:"), "message %q", r.Message)
+					return
+				case *wire.EOSESubscriptionResponse:
+					t.Fatal("REQ served: AUTH did not take a read token")
+				}
+			case <-deadline:
+				t.Fatal("timed out waiting for CLOSED")
+			}
+		}
+	})
+
+	t.Run("trustedProxies: a trusted proxy's X-Forwarded-For names the client", func(t *testing.T) {
+		ts := limitedRelay(t, &LimitsConfig{
+			HTTP:           LimitConfig{PerIP: RateConfig{Events: 1, Per: "1h"}},
+			TrustedProxies: []string{"127.0.0.1"}, // the test server's client is the proxy
+		})
+		body := []byte(`[{"kinds":[1],"limit":1}]`)
+		query := func(headers map[string]string) int {
+			return postNIP98With(t, ts, "/query", scenarioAgentPriv, body, headers).StatusCode
+		}
+		xff := func(v string) map[string]string { return map[string]string{"X-Forwarded-For": v} }
+
+		require.Equal(t, http.StatusOK, query(xff("203.0.113.1")))
+		require.Equal(t, http.StatusTooManyRequests, query(xff("203.0.113.1")), "one client, one bucket")
+		require.Equal(t, http.StatusOK, query(xff("203.0.113.2")), "another client behind the proxy has its own")
+		// The rightmost hop that isn't a trusted proxy is the client.
+		require.Equal(t, http.StatusOK, query(xff("198.51.100.7, 127.0.0.1")))
+		// X-Real-IP is read only without X-Forwarded-For.
+		require.Equal(t, http.StatusTooManyRequests, query(map[string]string{"X-Forwarded-For": "203.0.113.1", "X-Real-IP": "198.51.100.99"}))
+		require.Equal(t, http.StatusOK, query(map[string]string{"X-Real-IP": "198.51.100.8"}))
+		// A hop that isn't an address falls back to the proxy's own.
+		require.Equal(t, http.StatusOK, query(xff("unknown")))
+		require.Equal(t, http.StatusTooManyRequests, query(nil), "the proxy's own address, spent by the line above")
+	})
+
+	t.Run("trustedProxies unset: X-Forwarded-For is ignored", func(t *testing.T) {
+		ts := limitedRelay(t, &LimitsConfig{HTTP: LimitConfig{PerIP: RateConfig{Events: 1, Per: "1h"}}})
+		body := []byte(`[{"kinds":[1],"limit":1}]`)
+		require.Equal(t, http.StatusOK, postNIP98With(t, ts, "/query", scenarioAgentPriv, body, map[string]string{"X-Forwarded-For": "203.0.113.1"}).StatusCode)
+		require.Equal(t, http.StatusTooManyRequests, postNIP98With(t, ts, "/query", scenarioAgentPriv, body, map[string]string{"X-Forwarded-For": "203.0.113.2"}).StatusCode)
+	})
+
+	t.Run("blossom: uploads per IP", func(t *testing.T) {
+		ts := limitedRelay(t, &LimitsConfig{Blossom: BlossomLimitConfig{Uploads: LimitConfig{PerIP: RateConfig{Events: 1, Per: "1h"}}}})
+		enrollMember(t, ts.URL, scenarioMemberPub)
+		upload := func(blob []byte) (int, string) {
+			sum := sha256.Sum256(blob)
+			req, err := http.NewRequest(http.MethodPut, ts.URL+"/upload", bytes.NewReader(blob))
+			require.NoError(t, err)
+			req.Header.Set("Authorization", blossomToken(t, scenarioMemberPriv, nipB7.VerbUpload, hex.EncodeToString(sum[:])))
+			resp, err := http.DefaultClient.Do(req)
+			require.NoError(t, err)
+			defer func() { _ = resp.Body.Close() }()
+			b, _ := io.ReadAll(resp.Body)
+			return resp.StatusCode, string(b) + resp.Header.Get("X-Reason")
+		}
+		code, msg := upload([]byte("first"))
+		require.Equal(t, http.StatusOK, code, msg)
+		code, msg = upload([]byte("second"))
+		require.Equal(t, http.StatusTooManyRequests, code)
+		require.Contains(t, msg, "rate-limited")
+	})
+
+	t.Run("blossom: downloads per IP", func(t *testing.T) {
+		ts := limitedRelay(t, &LimitsConfig{Blossom: BlossomLimitConfig{Downloads: LimitConfig{PerIP: RateConfig{Events: 2, Per: "1h"}}}})
+		sum := sha256.Sum256([]byte("absent"))
+		get := func() *http.Response {
+			resp, err := http.Get(ts.URL + "/media/" + hex.EncodeToString(sum[:]))
+			require.NoError(t, err)
+			_ = resp.Body.Close()
+			return resp
+		}
+		for range 2 {
+			require.Equal(t, http.StatusNotFound, get().StatusCode)
+		}
+		resp := get()
+		require.Equal(t, http.StatusTooManyRequests, resp.StatusCode)
+		require.NotEmpty(t, resp.Header.Get("Retry-After"))
+	})
+
+	t.Run("connectionsPerIP counts huddle WebSockets", func(t *testing.T) {
+		cfg := communityRelayConfig(t)
+		cfg.Huddle = &HuddleConfig{Enabled: true, RTC: true}
+		cfg.Limits = &LimitsConfig{ConnectionsPerIP: 2}
+		ts := bootScenario(t, cfg)
+		base := "ws" + strings.TrimPrefix(ts.URL, "http")
+		dial := func(path string) (*websocket.Conn, *http.Response, error) {
+			c, resp, err := websocket.DefaultDialer.Dial(base+path, nil)
+			if c != nil {
+				t.Cleanup(func() { _ = c.Close() })
+			}
+			return c, resp, err
+		}
+
+		audio, _, err := dial("/huddle/room-1/audio")
+		require.NoError(t, err)
+		_, _, err = dial("/huddle/room-1/rtc")
+		require.NoError(t, err)
+
+		// Both slots are huddles': the relay's own WebSocket and a third
+		// huddle are refused.
+		_, resp, err := dial("/")
+		require.Error(t, err)
+		require.NotNil(t, resp)
+		require.Equal(t, http.StatusTooManyRequests, resp.StatusCode)
+		_, resp, err = dial("/huddle/room-2/audio")
+		require.Error(t, err)
+		require.NotNil(t, resp)
+		require.Equal(t, http.StatusTooManyRequests, resp.StatusCode)
+		b, _ := io.ReadAll(resp.Body)
+		require.Contains(t, string(b), ratelimit.ConnMessage)
+
+		require.NoError(t, audio.Close())
+		require.Eventually(t, func() bool {
+			_, _, err := dial("/")
+			return err == nil
+		}, 5*time.Second, 50*time.Millisecond, "a closed huddle frees its slot")
 	})
 
 	t.Run("blossom: the upload rate and the default in-flight cap both apply", func(t *testing.T) {
@@ -343,3 +619,28 @@ func TestRateLimits_Relay(t *testing.T) {
 }
 
 func must(req *http.Request, _ string) *http.Request { return req }
+
+func must2[T any](v T, err error) T {
+	if err != nil {
+		panic(err)
+	}
+	return v
+}
+
+// postNIP98With is postNIP98 with extra request headers.
+func postNIP98With(t *testing.T, ts *httptest.Server, path, privKey string, body []byte, headers map[string]string) *http.Response {
+	t.Helper()
+	target := ts.URL + path
+	header, err := common.GenerateNIP98Header(privKey, target, http.MethodPost, body)
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodPost, target, bytes.NewReader(body))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", header)
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = resp.Body.Close() })
+	return resp
+}

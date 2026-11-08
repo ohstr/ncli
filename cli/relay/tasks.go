@@ -384,7 +384,7 @@ func (c *RelayConfig) warnRoleTasks() {
 	}
 	restricted := map[string]string{}
 	if c.Blossom != nil && c.Blossom.Enabled {
-		if c.blossomUploadRestricted() {
+		if c.blossomUploadMembersOnly() {
 			restricted[taskBlossomUpload] = "blossom.membersOnly.upload"
 		}
 		if c.Blossom.MembersOnly.Download {
@@ -400,13 +400,6 @@ func (c *RelayConfig) warnRoleTasks() {
 				Msg("membership.members.can does not list this task: only admins and roles that list it may do it")
 		}
 	}
-}
-
-// blossomUploadRestricted reports whether Blossom uploads are limited to
-// holders of blossom.upload. Unset, it follows membership_required.
-func (c *RelayConfig) blossomUploadRestricted() bool {
-	up := c.Blossom.MembersOnly.Upload
-	return (up == nil && c.Nip11.Limitation.MembershipRequired) || (up != nil && *up)
 }
 
 // groupCreateRestricted reports whether kind 9007 needs group.create:
@@ -452,7 +445,7 @@ func resolveTaskGrants(c *RelayConfig) taskGrants {
 		}
 	}
 
-	if c.Blossom == nil || !c.blossomUploadRestricted() {
+	if c.Blossom == nil || !c.blossomUploadMembersOnly() {
 		g.everyone.add(taskBlossomUpload)
 	}
 	if c.Blossom == nil || !c.Blossom.MembersOnly.Download {
@@ -478,7 +471,7 @@ func resolveTaskGrants(c *RelayConfig) taskGrants {
 			g.members.add(nip86.MethodCreateClaim)
 		}
 		if c.Blossom != nil {
-			if c.blossomUploadRestricted() {
+			if c.blossomUploadMembersOnly() {
 				g.members.add(taskBlossomUpload)
 			}
 			if c.Blossom.MembersOnly.Download {

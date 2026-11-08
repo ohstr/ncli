@@ -200,10 +200,13 @@ func (m *relayModeration) ipBlocked(r *http.Request) bool {
 }
 
 // ipGate refuses every request from a blocked IP except NIP-86 management
-// calls, so an admin can never lock themselves out.
+// calls, so an admin can never lock themselves out. NIP-86 is served only at
+// "/": its content type on any other path (/query, /events, /count, Blossom)
+// is refused like any other request.
 func (m *relayModeration) ipGate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !nip86.IsManagementRequest(r) && r.Method != http.MethodOptions && m.ipBlocked(r) {
+		management := r.URL.Path == "/" && nip86.IsManagementRequest(r)
+		if !management && r.Method != http.MethodOptions && m.ipBlocked(r) {
 			http.Error(w, "blocked: your IP is blocked from this relay", http.StatusForbidden)
 			return
 		}

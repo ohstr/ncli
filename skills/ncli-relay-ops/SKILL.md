@@ -247,7 +247,8 @@ method, whereas a plain member's lists only `createclaim` and
 
 **Member claims (`membership.memberClaims`, bool).** Unset, it follows
 `nip11.limitation.membership_required`: **false on a members-only relay, true
-otherwise** (the same rule as `blossom.membersOnly.upload`); an explicit
+otherwise** (the same trigger as `blossom.membersOnly.upload`, with the
+opposite effect); an explicit
 `true`/`false` always wins. When membership is on and this is true, a plain member -- not only an admin -- may
 mint an invite via `createclaim`, per NIP-43. The member's NIP-98 key is
 accepted even though it is not an admin, and the Relay Management API then
@@ -588,6 +589,10 @@ Full route, metric and config reference: `references/admin-plane-reference.md`.
   admin-only. See "Member claims"
   under the Relay Management API section above, including the no-per-member-cap
   note.
+- `inviteMaxUses` (int) is how many joins one code admits when the request
+  sets no limit of its own. It defaults to `0`, which means **unlimited**: a
+  default code keeps admitting people until it expires. Set it (often `1`)
+  on any relay that hands out codes.
 - Turning on `nip11.limitation.membership_required` is a real behavior
   change, not just a new knob: EVENT publishing now checks that the
   *specific pubkey that signed the event* is authenticated on the

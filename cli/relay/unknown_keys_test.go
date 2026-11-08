@@ -228,12 +228,13 @@ func TestRelayContextUnknownKeys(t *testing.T) {
 	bin := buildTestBinary(t)
 	env, xdgHome := relayContextRunTestEnv(t)
 	cwd := t.TempDir()
+	logDir := t.TempDir()
 
 	cfg := writeRelayYAML(t, `
 nip11:
   pubkey: bb50e2d89a4ed70663d080659fe0ad4b9bc3e06c17a227433966cb59ceee020d
 store: `+filepath.Join(t.TempDir(), "store.db")+`
-logdir: `+t.TempDir()+`
+logdir: `+logDir+`
 httpBridge:
   qurey:
     enabled: true
@@ -256,7 +257,11 @@ httpBridge:
 	require.Equal(t, "httpBridge.qurey", payload.Input)
 
 	r := startRelay(t, bin, env, cwd, "-c", "typo", "--json")
-	require.Contains(t, r.Stderr.String(), `"key":"httpBridge.qurey"`)
 	r.stop()
 	waitPortFree(t, "localhost:5500", 5*time.Second)
+	// Warned once on stderr, and in the log file too.
+	require.Equal(t, 1, strings.Count(r.Stderr.String(), `"key":"httpBridge.qurey"`), "%s", r.Stderr.String())
+	logged, err := os.ReadFile(filepath.Join(logDir, logFileName))
+	require.NoError(t, err)
+	require.Contains(t, string(logged), `"level":"warn","key":"httpBridge.qurey"`)
 }

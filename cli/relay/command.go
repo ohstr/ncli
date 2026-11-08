@@ -70,6 +70,11 @@ const (
 var (
 	config RelayConfig
 
+	// unknownConfigKeys are the keys initConfig warned about on stderr.
+	// It runs before the log file is attached, so RunRelay writes the
+	// same warnings to the file once it is.
+	unknownConfigKeys []string
+
 	// adminSettings is config.Admin validated by initConfig; nil when the
 	// admin listener is off.
 	adminSettings *adminplane.Settings
@@ -471,6 +476,7 @@ func initConfig(check bool) error {
 		return err
 	}
 	unknown, err := decodeRelayConfig(viper.GetViper(), &config)
+	unknownConfigKeys = unknown
 	if err != nil {
 		return &common.CLIError{Err: fmt.Errorf("unable to decode config: %w", err), Code: common.CodeInvalidInput}
 	}
@@ -743,6 +749,7 @@ func RunRelay(jsonMode bool) error {
 	} else {
 		log.Info().Str("log_level", level.String()).Str("file", "off").Msg("logging initialized")
 	}
+	logUnknownKeysToFile(level)
 
 	// nip11.pubkey and store are both already validated by initConfig,
 	// which PreRunE guarantees ran successfully before Run (this function)
@@ -784,6 +791,20 @@ func RunRelay(jsonMode bool) error {
 	<-stopCh
 	s.Stop()
 	return nil
+}
+
+// logUnknownKeysToFile writes initConfig's unknown-key warnings to the log
+// file alone: initConfig ran before the file was attached and already
+// printed them on stderr.
+func logUnknownKeysToFile(level zerolog.Level) {
+	fl := common.FileLogger()
+	if fl == nil {
+		return
+	}
+	l := fl.Level(level)
+	for _, k := range unknownConfigKeys {
+		l.Warn().Str("key", k).Msg("unknown config key, ignored")
+	}
 }
 
 // redirectStdLog sends the standard library's log package to l at debug.

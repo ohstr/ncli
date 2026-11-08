@@ -138,6 +138,9 @@ func classifyHTTPError(cmd *cobra.Command, input string, err error) error {
 	if _, ok := errors.AsType[*hashMismatchError](err); ok {
 		return common.NotFoundError(cmd, input, err)
 	}
+	if _, ok := errors.AsType[*tooLargeError](err); ok {
+		return common.InvalidInputError(cmd, input, err)
+	}
 	if _, ok := errors.AsType[*bclient.PaymentRequiredError](err); ok {
 		return common.NetworkError(cmd, input, errors.New(describeError(err)))
 	}

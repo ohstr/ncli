@@ -1,9 +1,11 @@
 package blossom
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -234,4 +236,24 @@ func TestDownloadAuths_PerHost(t *testing.T) {
 	b, err = nipB7.ParseAuthorization(byHash)
 	require.NoError(t, err)
 	require.Equal(t, []string{"cdn.example.com", "relay:5500"}, b.Servers)
+}
+
+// TestFetchVerified_Cap: a body past the cap is abandoned with an error
+// naming the limit; one at the cap is accepted.
+func TestFetchVerified_Cap(t *testing.T) {
+	blob := []byte("0123456789")
+	hash := sumHex(blob)
+	host, _ := pathServer(t, "/"+hash, blob)
+
+	_, err := fetchVerified(context.Background(), http.DefaultClient, host.URL+"/"+hash, hash, nil, int64(len(blob))-1)
+	var tl *tooLargeError
+	require.ErrorAs(t, err, &tl)
+	require.Contains(t, err.Error(), "9 bytes")
+
+	f, err := fetchVerified(context.Background(), http.DefaultClient, host.URL+"/"+hash, hash, nil, int64(len(blob)))
+	require.NoError(t, err)
+	got, err := io.ReadAll(f)
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+	require.Equal(t, blob, got)
 }

@@ -39,7 +39,7 @@ func newDownloadCommand() *cobra.Command {
 "-o -" to stream to stdout.
 
 A full http(s) URL is fetched as is first, and its bytes must hash to the
-sha256 in its path; if that fails, the hash is asked of --server or the
+sha256 in its path (up to 1 GiB, buffered to check it); if that fails, the hash is asked of --server or the
 configured servers, when there are any.`,
 		Example: `  ncli blossom download <hash>
   ncli blossom download <hash> -o -
@@ -88,7 +88,7 @@ configured servers, when there are any.`,
 			var usedServer string
 			err = common.WithSpinner(cmd, fmt.Sprintf("downloading %s", shortHash(hash)), func() error {
 				if directURL != "" {
-					f, dErr := fetchVerified(ctx, hc.HTTPClient, directURL, hash, directAuth)
+					f, dErr := fetchVerified(ctx, hc.HTTPClient, directURL, hash, directAuth, maxDirectDownloadBytes)
 					if dErr == nil {
 						body, usedServer = f, directURL
 						return nil
@@ -211,12 +211,17 @@ func downloadAuths(privKeyHex, pubKeyHex, hash string, ttl time.Duration, direct
 	return direct, byHash, nil
 }
 
+// maxDirectDownloadBytes caps the body fetchVerified buffers to a
+// temporary file for a download by URL.
+const maxDirectDownloadBytes int64 = 1 << 30
+
 // fetchVerified GETs rawURL with auth (if any) as its BUD-11 header and
 // returns the body in a temporary file, removed on Close, once its sha256
 // matches hash. Buffered rather than streamed so a URL that serves the
 // wrong bytes can still fall back to the servers without anything having
-// reached the output.
-func fetchVerified(ctx context.Context, hc *http.Client, rawURL, hash string, auth *nip01.Event) (io.ReadCloser, error) {
+// reached the output; hashed while it is written, and abandoned past max
+// bytes.
+func fetchVerified(ctx context.Context, hc *http.Client, rawURL, hash string, auth *nip01.Event, max int64) (io.ReadCloser, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return nil, err
@@ -243,9 +248,14 @@ func fetchVerified(ctx context.Context, hc *http.Client, rawURL, hash string, au
 	}
 	tmp := &tempFile{File: f}
 	h := sha256.New()
-	if _, err := io.Copy(io.MultiWriter(f, h), resp.Body); err != nil {
+	n, err := io.Copy(io.MultiWriter(f, h), io.LimitReader(resp.Body, max+1))
+	if err != nil {
 		_ = tmp.Close()
 		return nil, err
+	}
+	if n > max {
+		_ = tmp.Close()
+		return nil, &tooLargeError{url: rawURL, max: max}
 	}
 	if got := hex.EncodeToString(h.Sum(nil)); got != hash {
 		_ = tmp.Close()
@@ -266,6 +276,18 @@ type hashMismatchError struct{ url, got, want string }
 
 func (e *hashMismatchError) Error() string {
 	return fmt.Sprintf("%s served a blob whose sha256 is %s, not %s", e.url, e.got, e.want)
+}
+
+// tooLargeError is a URL whose body runs past what a download by URL
+// buffers. classifyHTTPError reports it as invalid_input: the same URL is
+// as large on a retry.
+type tooLargeError struct {
+	url string
+	max int64
+}
+
+func (e *tooLargeError) Error() string {
+	return fmt.Sprintf("%s served more than %d bytes, the most a download by URL buffers; download it by hash from a server instead", e.url, e.max)
 }
 
 // tempFile is a temporary file that removes itself on Close.

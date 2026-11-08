@@ -31,7 +31,7 @@ func TestCheckListen(t *testing.T) {
 		{":7000", 0, 7000, ":7000"},
 		{"[::1]:7000", 0, 7000, "[::1]:7000"},
 		{"localhost:443", 0, 443, "localhost:443"},
-		{"0.0.0.0:65535", 0, 65535, "0.0.0.0:65535"},
+		{"0.0.0.0:65534", 0, 65534, "0.0.0.0:65534"},
 	}
 	for _, g := range good {
 		c := &RelayConfig{Listen: g.listen, Port: g.port}
@@ -178,6 +178,25 @@ nip11:
   pubkey: bb50e2d89a4ed70663d080659fe0ad4b9bc3e06c17a227433966cb59ceee020d
 store: test.db
 `
+
+// On port 65535 the admin listener has no default (port + 1): the error
+// names listen/port, not an admin.listen port the operator never set.
+func TestListenTopPortNeedsAdminListen(t *testing.T) {
+	err := loadRelayEnvConfig(t, envRelayYAML+"listen: 0.0.0.0:65535\n")
+	var ce *common.CLIError
+	if !errors.As(err, &ce) || ce.Code != common.CodeUsage {
+		t.Fatalf("err %v, want usage", err)
+	}
+	if msg := ce.Error(); !strings.Contains(msg, "listen or port") || strings.Contains(msg, "65536") {
+		t.Errorf("error %q should name listen/port and not port 65536", msg)
+	}
+
+	for _, admin := range []string{"127.0.0.1:9000", "off"} {
+		if err := loadRelayEnvConfig(t, envRelayYAML+"listen: 0.0.0.0:65535\nadmin:\n  listen: "+admin+"\n"); err != nil {
+			t.Errorf("admin.listen %s: %v", admin, err)
+		}
+	}
+}
 
 // NCLI_LISTEN / NCLI_PORT with no listen/port in the file move the server
 // and its clients together.

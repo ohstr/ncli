@@ -125,6 +125,11 @@ func Resolve(c *Config, relayPort int, admins []string) (*Settings, error) {
 
 	s := &Settings{Addr: c.Listen, SessionTTL: defaultSessionTTL, ScrapeTTL: defaultScrapeTTL}
 	if s.Addr == "" {
+		if relayPort >= 65535 {
+			// port + 1 doesn't exist; naming admin.listen's bad port would
+			// blame a key the operator never set.
+			return nil, usageErr("the relay's port (listen or port) is %d, so admin.listen has no default (port + 1): set admin.listen, or admin.listen: off", relayPort)
+		}
 		s.Addr = net.JoinHostPort("127.0.0.1", strconv.Itoa(relayPort+1))
 		s.Defaulted = true
 	}

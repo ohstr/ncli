@@ -15,7 +15,7 @@ flags/schemas change. -->
 One config file (`--config relay.yaml`), read by both `ncli relay` and the
 commands that administer it (`status`, `index`, `jobs`, `members`, ...) —
 those need `nip11.privkey` from it to sign NIP-98 requests, and
-`admin.listen`/`port` to find the relay.
+`admin.listen`/`listen`/`port` to find the relay.
 
 ## Minimal config to start
 
@@ -35,6 +35,12 @@ logdir: ./data/logs
 want `cache.zaps.enabled`, `cache.profiles.stats.enabled`,
 `cache.relay.stats.enabled` or the admin commands (`status`, `index`,
 `jobs`, `verify`, `members`, ...).
+
+`port` binds every interface. To bind one address, set `listen:
+127.0.0.1:5500` (host:port): it wins over `port`, the admin listener's
+default becomes its port + 1, and the admin commands dial that host
+(`localhost` when it is `0.0.0.0`, `::` or empty). `--check` rejects a
+`listen` that isn't host:port with a port 1-65535 (`invalid_input`).
 
 ## Scenario examples
 
@@ -271,7 +277,7 @@ does the same.
 ## Monitoring and index jobs — relay must be running
 
 Every running relay has an **admin listener** separate from its public
-port: `admin.listen`, default `127.0.0.1:<port+1>` (`off` disables it).
+port: `admin.listen`, default `127.0.0.1:<port+1>` (`listen`'s port when set; `off` disables it).
 `status`/`index`/`jobs` sign each request (NIP-98) with `nip11.privkey`,
 which must be the relay's key or in `nip86.admins`. `--admin-url` overrides
 where they connect.

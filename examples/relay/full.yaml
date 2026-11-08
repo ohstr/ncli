@@ -2,7 +2,11 @@
 # field RelayConfig understands. For a minimal working config, see
 # examples/relay/minimal.yaml (that's the one `just dev relay` actually uses).
 
+# Binds every interface on this port. To bind one address instead, set
+# listen (host:port); it wins over port, and the admin listener's default
+# port follows it (port + 1).
 port: 5500
+# listen: 127.0.0.1:5500
 
 nip11:
   name: ncli-dev-relay

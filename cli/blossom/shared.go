@@ -31,9 +31,9 @@ const (
 const uploadErrorHint = " (if the file was already sent to the server, it may exist there despite this error -- check the server for its hash before retrying)"
 
 // uploadFailure renders an upload/mirror error, with uploadErrorHint unless
-// the server definitely refused it.
+// the server definitely refused it or has no such endpoint.
 func uploadFailure(err error) string {
-	if httpErr, ok := errors.AsType[*bclient.HTTPError](err); ok && httpErr.StatusCode >= 400 && httpErr.StatusCode < 500 {
+	if httpErr, ok := errors.AsType[*bclient.HTTPError](err); ok && ((httpErr.StatusCode >= 400 && httpErr.StatusCode < 500) || endpointMissing(httpErr.StatusCode)) {
 		return describeError(err)
 	}
 	return describeError(err) + uploadErrorHint
@@ -126,11 +126,22 @@ func buildAuth(privKeyHex, pubKeyHex, verb string, hashes []string, ttl time.Dur
 // better than any other existing code. A payment-required error is
 // rewrapped so its Cashu/Lightning details survive into the final message
 // (see describeError).
+//
+// Two cases come first: an error from an optional endpoint the server
+// doesn't serve (see optionalEndpointError) is UnsupportedError, and so
+// is a 3xx, 405 or 501 from any endpoint -- the server answered, but not
+// with this endpoint, and retrying changes nothing.
 func classifyHTTPError(cmd *cobra.Command, input string, err error) error {
+	if _, ok := errors.AsType[*unsupportedEndpointError](err); ok {
+		return common.UnsupportedError(cmd, input, err)
+	}
 	if _, ok := errors.AsType[*bclient.PaymentRequiredError](err); ok {
 		return common.NetworkError(cmd, input, errors.New(describeError(err)))
 	}
 	if httpErr, ok := errors.AsType[*bclient.HTTPError](err); ok {
+		if endpointMissing(httpErr.StatusCode) {
+			return common.UnsupportedError(cmd, input, err)
+		}
 		switch httpErr.StatusCode {
 		case http.StatusUnauthorized, http.StatusForbidden:
 			return common.AuthError(cmd, err)
@@ -146,6 +157,35 @@ func classifyHTTPError(cmd *cobra.Command, input string, err error) error {
 		}
 	}
 	return common.NetworkError(cmd, input, err)
+}
+
+// endpointMissing reports whether status says the server has no such
+// endpoint, whichever one was asked: a redirect the client did not follow
+// (Go only replays a PUT body it can rewind, so an upload's 307 comes
+// back as is), 405 Method Not Allowed or 501 Not Implemented.
+func endpointMissing(status int) bool {
+	return (status >= 300 && status < 400) || status == http.StatusMethodNotAllowed || status == http.StatusNotImplemented
+}
+
+// unsupportedEndpointError marks an error from an optional endpoint (BUD-12
+// list, BUD-04 mirror, BUD-05 media) that the server does not serve.
+type unsupportedEndpointError struct{ err error }
+
+func (e *unsupportedEndpointError) Error() string { return e.err.Error() }
+func (e *unsupportedEndpointError) Unwrap() error { return e.err }
+
+// optionalEndpointError marks err as unsupportedEndpointError when its
+// status says the optional endpoint isn't there: 404 as well as
+// endpointMissing's statuses, since none of these endpoints answers 404 for
+// anything it serves -- list returns [] for an unknown pubkey, and
+// mirror/media answer for the body they were sent.
+func optionalEndpointError(err error) error {
+	if httpErr, ok := errors.AsType[*bclient.HTTPError](err); ok {
+		if httpErr.StatusCode == http.StatusNotFound || endpointMissing(httpErr.StatusCode) {
+			return &unsupportedEndpointError{err: err}
+		}
+	}
+	return err
 }
 
 // describeError renders err for a report/error message, surfacing

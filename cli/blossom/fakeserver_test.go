@@ -66,8 +66,7 @@ type fakeServerHooks struct {
 	// hzrd149/blossom-server's "List endpoint is disabled on this
 	// server") -- distinct from the generic FailStatus hook (which uses a
 	// reason of "injected failure", not shaped like a real disabled-
-	// capability message) so a test can exercise classifyListError's own
-	// disabled-capability detection specifically.
+	// capability message) so a test can check both read as unsupported.
 	ListDisabled bool
 }
 

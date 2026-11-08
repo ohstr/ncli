@@ -146,6 +146,7 @@ func uploadOne(ctx context.Context, hc *bclient.Client, server, path, contentTyp
 	var descriptor *nipB7.BlobDescriptor
 	if optimize {
 		descriptor, err = hc.Media(ctx, server, req)
+		err = optionalEndpointError(err)
 	} else {
 		descriptor, err = hc.Upload(ctx, server, req)
 	}

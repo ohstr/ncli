@@ -174,9 +174,7 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 		}
 	}
 	// group:<kind> role tasks and groups.grantCeiling (see applyGroupTasks).
-	if !applyGroupTasks(wsHandler.Groups(), tasks, &config) && config.Groups != nil && config.Groups.GrantCeiling {
-		log.Warn().Msg("groups.grantCeiling needs a newer nmilat; it has no effect in this build")
-	}
+	applyGroupTasks(wsHandler.Groups(), tasks, &config)
 
 	// Profile checks and social scores serve only search and stats.
 	if config.searchEnabled() || config.profileStatsEnabled() {

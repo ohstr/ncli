@@ -502,7 +502,7 @@ func TestScenario_GroupCreateOpenByDefault(t *testing.T) {
 }
 
 /////////////////////////////////////////////////////////////////////
-// Waiting on nmilat
+// Invite requests and NIP-29 group tasks
 /////////////////////////////////////////////////////////////////////
 
 func TestInviteRequestAllowed(t *testing.T) {
@@ -569,17 +569,7 @@ func TestGroupAuthorizer(t *testing.T) {
 	require.False(t, auth.groupAuthorizer("any", testPubKey, 1), "only moderation kinds")
 }
 
-// groupsHooksOrSkip skips a test that needs nmilat#238's GroupsService hooks
-// when the pinned nmilat lacks them.
-func groupsHooksOrSkip(t *testing.T) {
-	t.Helper()
-	if _, ok := any((*relay.GroupsService)(nil)).(groupsHooks); !ok {
-		t.Skip("TODO(nmilat#238): needs an nmilat with GroupsService.SetAuthorizer and SetGrantCeiling")
-	}
-}
-
 func TestScenario_GroupKindTasks(t *testing.T) {
-	groupsHooksOrSkip(t)
 	cfg := communityRelayConfig(t)
 	cfg.Membership = &MembershipConfig{Enabled: true, Roles: map[string]RoleTasks{"steward": {Can: []string{"group:9000"}}}}
 	ts := bootScenario(t, cfg)
@@ -597,7 +587,6 @@ func TestScenario_GroupKindTasks(t *testing.T) {
 }
 
 func TestScenario_GroupGrantCeiling(t *testing.T) {
-	groupsHooksOrSkip(t)
 	for _, ceiling := range []bool{false, true} {
 		t.Run(map[bool]string{false: "off", true: "on"}[ceiling], func(t *testing.T) {
 			cfg := communityRelayConfig(t)

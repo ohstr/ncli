@@ -479,27 +479,11 @@ func (a *taskAuthority) groupAuthorizer(_, pubkey string, kind int) bool {
 	return nip29.IsModerationKind(kind) && a.can(pubkey, taskGroupPrefix+strconv.Itoa(kind))
 }
 
-// groupsHooks is what nmilat#238 adds to relay.GroupsService.
-type groupsHooks interface {
-	SetAuthorizer(func(groupID, pubkey string, kind int) bool)
-	SetGrantCeiling(bool)
-}
-
 // applyGroupTasks installs groupAuthorizer and groups.grantCeiling on the
-// groups service. It reports whether the service has the hooks.
-//
-// TODO(nmilat#238): call groups.SetAuthorizer/SetGrantCeiling directly once
-// go.mod pins an nmilat that has them; until then the pinned version lacks
-// them, group:<kind> role tasks are not enforced (groups.admins, group:*,
-// still is, through SetRelayAdmins) and groups.grantCeiling has no effect.
-func applyGroupTasks(groups any, a *taskAuthority, c *RelayConfig) bool {
-	h, ok := groups.(groupsHooks)
-	if !ok {
-		return false
-	}
-	h.SetAuthorizer(a.groupAuthorizer)
-	h.SetGrantCeiling(c.Groups != nil && c.Groups.GrantCeiling)
-	return true
+// groups service.
+func applyGroupTasks(groups *relay.GroupsService, a *taskAuthority, c *RelayConfig) {
+	groups.SetAuthorizer(a.groupAuthorizer)
+	groups.SetGrantCeiling(c.Groups != nil && c.Groups.GrantCeiling)
 }
 
 // inviteRequestAllowed decides a NIP-43 invite request (REQ kind 28935): the

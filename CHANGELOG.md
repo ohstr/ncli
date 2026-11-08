@@ -4,7 +4,7 @@
 
 ### Added
 
-- Adds opt-in rate limits to the relay (`limits`): EVENT, REQ/COUNT, the HTTP bridge and Blossom per pubkey and per IP, plus connections per IP, with members optionally exempt. A limit left unset is no limit, and a public relay without any gets a warning. ([#241](https://github.com/ohstr/ncli/pull/241))
+- Adds opt-in rate limits to the relay (`limits`): EVENT, REQ/COUNT, the HTTP bridge and Blossom per pubkey and per IP, plus connections per IP, with members optionally exempt and refusals counted in `ncli_relay_rate_limited_total`. A limit left unset is no limit, and a public relay without any, or a per-pubkey limit that never applies, gets a warning, also listed in `relay --check --json`'s `"warnings"`. ([#241](https://github.com/ohstr/ncli/pull/241))
 
 ## [0.8.0-rc.50]
 

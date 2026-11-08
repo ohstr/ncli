@@ -122,8 +122,8 @@ github.com/muesli/termenv v0.16.0 h1:S5AlUN9dENB57rsbnkPyfdGuWIlkmzJjbFf0Tf5FWUc
 github.com/muesli/termenv v0.16.0/go.mod h1:ZRfOIKPFDYQoDFF4Olj7/QJbW60Ol/kL1pU3VfY/Cnk=
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 h1:C3w9PqII01/Oq1c1nUAm88MOHcQC9l5mIlSMApZMrHA=
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822/go.mod h1:+n7T8mK8HuQTcFwEeznm/DIxMOiR9yIdICNftLE1DvQ=
-github.com/ohstr/nmilat v0.5.0-rc.50.0.20261108165935-acfaa4cf59f1 h1:FOxrkqSVkRWexgQ0EcY15h4KKNvzYUwTqFwW8CKgGWs=
-github.com/ohstr/nmilat v0.5.0-rc.50.0.20261108165935-acfaa4cf59f1/go.mod h1:6zZpAGg0SOT8ra6EcWL25MirNTokqDCQc0OKipl9Oaw=
+github.com/ohstr/nmilat v0.5.0-rc.51 h1:HcKKRui6jLG8RQdwYLB1A5A+uygJqeYG8qNd6wvd9Jg=
+github.com/ohstr/nmilat v0.5.0-rc.51/go.mod h1:6zZpAGg0SOT8ra6EcWL25MirNTokqDCQc0OKipl9Oaw=
 github.com/pelletier/go-toml/v2 v2.4.3 h1:GTRvJQutkOSftxIFD5xw9aepkYNuPWmVJpffdDPYVpY=
 github.com/pelletier/go-toml/v2 v2.4.3/go.mod h1:2gIqNv+qfxSVS7cM2xJQKtLSTLUE9V8t9Stt+h56mCY=
 github.com/philhofer/fwd v1.2.0 h1:e6DnBTl7vGY+Gz322/ASL4Gyp1FspeMvx1RNDoToZuM=

@@ -23,7 +23,8 @@ nip11:
   # privkey: ""
 
   # A few more NIP-11 document fields exist but aren't config-settable, so
-  # they're omitted above rather than shown as live fields:
+  # they're omitted above rather than shown as live fields (--check reports
+  # supported_nips and self as unknown keys):
   #   software/version -- always filled in from ncli's own build info at
   #     startup, overwriting anything set here.
   #   supported_nips -- always derived from what this build actually
@@ -49,8 +50,9 @@ nip11:
     max_indexable_tags: 5
 
     # min_pow_difficulty/strict_pow also exist under limitation in the
-    # NIP-11 document, but aren't settable here -- the top-level pow: block
-    # below is their single source of truth and fills these in internally.
+    # NIP-11 document, but aren't settable here (--check reports them as
+    # unknown keys) -- the top-level pow: block below is their single
+    # source of truth and fills these in internally.
 
 store: ./data/db/notes.db
 logdir: ./data/logs

@@ -80,9 +80,10 @@ ncli relay --config relay.yaml --check
 A key the relay doesn't know (`htpBridge:`, `httpBridge.qurey`) only logs
 a warning at startup and is ignored, so its setting stays off. `--check`
 fails on it (`invalid_input`, exit 3), naming every unknown key by its
-dotted path; run it after every config edit. `NCLI_*` env vars and keys
-other commands read (`vault`, `signer`, `groups.identity`, ...) are not
-reported.
+dotted path; run it after every config edit. A key with no value
+(`bogus:`) counts too. `NCLI_*` env vars and the exact keys other commands
+read (`vault.password`, `signer`, `groups.identity`, ...) are not
+reported; anything else beside them (`query: {enabled: true}`) is.
 
 Foreground process; stops cleanly on SIGINT/SIGTERM. Logs go to stderr and
 to `<logdir>/nrelay.log` as JSON lines (or a custom `logs:` rotation block).
@@ -667,8 +668,9 @@ Full route, metric and config reference: `references/admin-plane-reference.md`.
   unless `pow.strict: true` — with `strict` unset/false, `min` only shows up
   in the relay's advertised `nip11.limitation.min_pow_difficulty` (a heads-up
   to clients), while every event is still accepted regardless of its actual
-  difficulty. Setting `nip11.limitation.min_pow_difficulty` directly in YAML
-  does nothing — `pow.min` is the only field that reaches it.
+  difficulty. `nip11.limitation.min_pow_difficulty` (like
+  `nip11.supported_nips`) is not a config key: a start warns that it is
+  unknown and ignores it, `--check` fails on it. Set `pow.min` instead.
 - Both `store` and `logdir`'s parent directories are auto-created on `ncli
   relay` startup, but a missing `store` value is caught at config-load time
   (before either directory is touched), same as a missing `nip11.pubkey`.

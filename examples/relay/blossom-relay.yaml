@@ -23,7 +23,8 @@ membership:
 
 blossom:
   enabled: true
-  # PUT /upload (and /media/upload); GET or HEAD /media/<sha256>[.ext].
+  # PUT /upload (and /media/upload); GET, HEAD or DELETE /<sha256>[.ext]
+  # at the root or under /media. No list, mirror or /media optimization.
   uploadPaths: [/upload, /media/upload]
   blobPrefix: /media
   maxBlobBytes: 104857600   # 100 MiB per file

@@ -643,7 +643,13 @@ Full route, metric and config reference: `references/admin-plane-reference.md`.
 - Blossom on the relay takes uploads whose kind 24242 token names the
   relay's host in a `server` tag and the blob's hash in an `x` tag; a
   token with no `server` tag is refused. `ncli blossom upload --server
-  https://<relay>` signs exactly that. Keep S3 keys out of `relay.yaml`:
+  https://<relay>` signs exactly that. The relay origin is the Blossom
+  server for every command it serves: upload, download, HEAD and `rm`
+  all work at the root (`/<sha256>[.ext]`), and the URL an upload returns
+  is `/<blobPrefix>/<sha256>.<ext>` (`/media` by default), which also
+  serves the blob. It has no `list`, `mirror` or `upload --optimize`:
+  those answer 404 with a "not supported" reason, which `ncli blossom`
+  reports as `unsupported` (exit 8). Keep S3 keys out of `relay.yaml`:
   leave `accessKey: ""`/`secretKey: ""` and set
   `NCLI_BLOSSOM_STORAGE_S3_ACCESSKEY`/`_SECRETKEY` (an `NCLI_*` variable
   only overrides a key the file already has).

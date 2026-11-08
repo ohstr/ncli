@@ -235,6 +235,26 @@ func TestListenEnvReachesServerAndClients(t *testing.T) {
 			t.Errorf("err %v, want invalid_input naming garbage", err)
 		}
 	})
+	// Kubernetes sets NCLI_PORT=tcp://ip:port for a Service named ncli; it
+	// is not a port and must not break the config, with or without a port
+	// key in the file.
+	for _, name := range []string{"NCLI_PORT", "NCLI_LISTEN"} {
+		t.Run(name+" docker link ignored", func(t *testing.T) {
+			for _, body := range []string{envRelayYAML, envRelayYAML + "port: 7500\n"} {
+				t.Setenv(name, "tcp://10.43.0.12:7000")
+				if err := loadRelayEnvConfig(t, body); err != nil {
+					t.Fatalf("config with %s=tcp://...: %v", name, err)
+				}
+				want := ":7500"
+				if !strings.Contains(body, "port:") {
+					want = ":" + strconv.Itoa(defaultPort)
+				}
+				if got := config.listenAddr(); got != want {
+					t.Errorf("server binds %q, want %q", got, want)
+				}
+			}
+		})
+	}
 	t.Run("garbage port fails", func(t *testing.T) {
 		t.Setenv("NCLI_PORT", "garbage")
 		var ce *common.CLIError

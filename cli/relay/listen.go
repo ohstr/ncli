@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/ohstr/ncli/cli/common"
+	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 )
 
@@ -44,9 +46,30 @@ func splitListen(listen string) (string, int, error) {
 // overrides keys the file already has, while the admin commands read
 // viper.GetString("listen") and see the variable either way. Bound, the
 // relay binds the same address its clients dial.
+//
+// A value in the Docker-link form (tcp://10.0.0.1:7000) is not ours:
+// Kubernetes injects NCLI_PORT=tcp://... for a Service named ncli. Such a
+// variable is dropped, so it neither binds nor overrides a key in the file.
 func bindAddrEnv(v *viper.Viper) {
-	_ = v.BindEnv("listen")
-	_ = v.BindEnv("port")
+	for _, key := range []string{"listen", "port"} {
+		name := strings.ToUpper(key)
+		if prefix := v.GetEnvPrefix(); prefix != "" {
+			name = strings.ToUpper(prefix) + "_" + name
+		}
+		if val, ok := os.LookupEnv(name); ok && isDockerLinkAddr(val) {
+			log.Debug().Str("env", name).Msg("ignoring Docker-link style address variable")
+			_ = os.Unsetenv(name)
+			continue
+		}
+		_ = v.BindEnv(key)
+	}
+}
+
+// isDockerLinkAddr reports whether val is a Docker-link service address
+// (tcp://host:port or udp://host:port), never a listen or port value.
+func isDockerLinkAddr(val string) bool {
+	val = strings.ToLower(strings.TrimSpace(val))
+	return strings.HasPrefix(val, "tcp://") || strings.HasPrefix(val, "udp://")
 }
 
 // checkListen validates listen and, when it is set, makes its port the

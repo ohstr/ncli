@@ -404,9 +404,10 @@ type EventsConfig struct {
 	// Enabled mounts the handler at /events. The NIP-98 signer must match
 	// the submitted event's own pubkey (stricter than the WS EVENT path,
 	// which has no such blanket requirement) -- see
-	// relay.NewEventsHandler's doc comment. membership_required and the
-	// relay's own self-authored-kind guard are enforced exactly as they
-	// would be over WS.
+	// relay.NewEventsHandler's doc comment. membership_required, the
+	// relay's own self-authored-kind guard and NIP-29 group membership are
+	// enforced exactly as they would be over WS; group moderation kinds and
+	// requests (9000-9022) are refused, they need a WebSocket.
 	Enabled bool `mapstructure:"enabled"`
 }
 

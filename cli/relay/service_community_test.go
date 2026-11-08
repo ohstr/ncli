@@ -168,6 +168,33 @@ func TestScenario_CommunityRelay(t *testing.T) {
 		require.Equal(t, http.StatusForbidden, postNIP98(t, ts, "/events", scenarioMemberPriv, body).StatusCode)
 	})
 
+	t.Run("POST /events applies the group's rules", func(t *testing.T) {
+		post := func(privKey string, ev *nip01.Event) *http.Response {
+			t.Helper()
+			require.NoError(t, ev.Sign(privKey))
+			body, err := json.Marshal(ev)
+			require.NoError(t, err)
+			return postNIP98(t, ts, "/events", privKey, body)
+		}
+		chat := func() *nip01.Event {
+			return &nip01.Event{Kind: 9, Content: "hi", CreatedAt: uint64(time.Now().Unix()), Tags: [][]string{{"h", groupID}}}
+		}
+
+		resp := post(blossomBannedPriv, chat())
+		require.Equal(t, http.StatusForbidden, resp.StatusCode, "a non-member must not post into a closed group")
+
+		resp = post(scenarioMemberPriv, nip29.NewPutUser(scenarioMemberPub, groupID, scenarioAgentPub))
+		require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		msg, _ := io.ReadAll(resp.Body)
+		require.Contains(t, string(msg), "restricted:", "moderation goes over a WebSocket")
+
+		ev := chat()
+		resp = post(scenarioAgentPriv, ev)
+		require.Equal(t, http.StatusOK, resp.StatusCode, "a member posts to its own group")
+		got := reqEvents(t, member, &nip01.SubscriptionFilter{IDs: []string{ev.ID}})
+		require.Len(t, got, 1)
+	})
+
 	t.Run("presence over /query", func(t *testing.T) {
 		const absent = "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee6"
 		resp := postNIP98(t, ts, "/query", scenarioMemberPriv, []byte(`[{"kinds":[40902],"authors":["`+scenarioAgentPub+`","`+absent+`"]}]`))

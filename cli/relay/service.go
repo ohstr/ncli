@@ -324,7 +324,7 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 		// second cache.
 		mux.Handle("/events", m.HTTP("events", relay.NewEventsHandler(store, &cfg.Nip11.Limitation, wsHandler.Membership(), config.Nip11.Self,
 			relay.WithEventsPolicy(eventPolicy), relay.WithEventsRelayAuthoredKinds(config.relayAuthoredKinds()...),
-			relay.WithEventsRateLimiter(limiter))))
+			relay.WithEventsRateLimiter(limiter), relay.WithEventsGroups(wsHandler.Groups()))))
 	}
 
 	if countEnabled() {

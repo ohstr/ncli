@@ -15,7 +15,7 @@ flags/schemas change. -->
 One config file (`--config relay.yaml`), read by both `ncli relay` and the
 commands that administer it (`status`, `index`, `jobs`, `members`, ...) —
 those need `nip11.privkey` from it to sign NIP-98 requests, and
-`admin.listen`/`port` to find the relay.
+`admin.listen`/`listen`/`port` to find the relay.
 
 ## Minimal config to start
 
@@ -35,6 +35,18 @@ logdir: ./data/logs
 want `cache.zaps.enabled`, `cache.profiles.stats.enabled`,
 `cache.relay.stats.enabled` or the admin commands (`status`, `index`,
 `jobs`, `verify`, `members`, ...).
+
+`port` binds every interface. To bind one address, set `listen:
+127.0.0.1:5500` (host:port): it wins over `port`, and the admin listener's
+default becomes `127.0.0.1:<its port + 1>`. `relay members`/`invites`/
+`roles` dial `listen`'s host (`localhost` when it is `0.0.0.0`, `::` or
+empty); `status`/`index`/`jobs`/`verify`/`dashboard` dial the admin
+listener. Prefer an IP literal: a hostname with several addresses binds
+only one. `--check` rejects (`invalid_input`) a `listen` that isn't
+host:port with a port 1-65535, has stray whitespace, or names a host that
+doesn't resolve. On port 65535 set `admin.listen` (port + 1 doesn't
+exist). `NCLI_LISTEN`/`NCLI_PORT` apply even when the file has no
+`listen`/`port` key, to the relay and its admin commands alike.
 
 ## Scenario examples
 
@@ -58,7 +70,7 @@ closest to what you're building and adapt its name/port/store.
 | `tracked-membership-relay.yaml` | A community wanting a visible roster/roles without gating anything | `membership.enabled` with `membership_required` **left off** -- membership is a label (`members list`, `roles`) for display/moderation tooling, not an admission check |
 
 `examples/relay/full.yaml` documents every field at its default, commented:
-`description`, `limitation.*`, `pow.*`, `cache.profiles.*` (search,
+`port`/`listen`, `description`, `limitation.*`, `pow.*`, `cache.profiles.*` (search,
 stats, checks, scoring), `cache.zaps.*`, `cache.relay.stats.*`,
 `membership.*`, `nip86.*`, `agent_auth.*`, `httpBridge.*`, `presence.*`,
 `blossom.*`, `recipientOnlyKinds`, `limits.*` (commented out),
@@ -345,7 +357,7 @@ does the same.
 ## Monitoring and index jobs — relay must be running
 
 Every running relay has an **admin listener** separate from its public
-port: `admin.listen`, default `127.0.0.1:<port+1>` (`off` disables it).
+port: `admin.listen`, default `127.0.0.1:<port+1>` (`listen`'s port when set; `off` disables it).
 `status`/`index`/`jobs` sign each request (NIP-98) with `nip11.privkey`,
 which must be the relay's key or in `nip86.admins`. `--admin-url` overrides
 where they connect.

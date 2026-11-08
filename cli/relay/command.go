@@ -89,6 +89,9 @@ type RelayConfig struct {
 	LogDir       string `mapstructure:"logdir"`
 	RelayNotesDb string `mapstructure:"store"`
 	Port         int    `mapstructure:"port"`
+	// Listen, as host:port, is the address the relay binds; it wins over
+	// Port, which alone binds every interface.
+	Listen string `mapstructure:"listen"`
 
 	Logs       *LogConfig         `mapstructure:"logs"`
 	Cache      *CacheConfig       `mapstructure:"cache"`
@@ -472,6 +475,7 @@ func initConfig() error {
 	if err := checkRenamedKeys(viper.GetViper()); err != nil {
 		return err
 	}
+	bindAddrEnv(viper.GetViper())
 	if err := viper.Unmarshal(&config); err != nil {
 		return &common.CLIError{Err: fmt.Errorf("unable to decode config: %w", err), Code: common.CodeInvalidInput}
 	}
@@ -577,6 +581,10 @@ func initConfig() error {
 	}
 
 	if err := checkCommunityConfig(&config); err != nil {
+		return err
+	}
+
+	if err := checkListen(&config); err != nil {
 		return err
 	}
 

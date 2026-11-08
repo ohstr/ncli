@@ -68,3 +68,14 @@ helm install community deploy/helm/ncli-relay \
 - MinIO images (Compose and chart) are Chainguard's
   `cgr.dev/chainguard/minio` and `minio-client`; MinIO no longer publishes
   to Docker Hub.
+
+## Images
+
+Every image is pinned, and `go test ./deploy/` fails on one that isn't:
+
+- The relay is `ghcr.io/ohstr/ncli` at a release: the chart's `appVersion`
+  and the stacks' `NCLI_VERSION` default. Move both to each new release.
+- Chainguard tags MinIO only `latest`, so it is pinned by digest. To bump
+  it, put the `Digest:` from `docker buildx imagetools inspect
+  cgr.dev/chainguard/minio:latest` (and `minio-client`) in the chart's
+  `values.yaml` and the community `compose.yaml`.

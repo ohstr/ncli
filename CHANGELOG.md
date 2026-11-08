@@ -4,7 +4,7 @@
 
 ### Added
 
-- Adds `listen` (host:port) to the relay config, to bind one address instead of every interface on `port`. When set it wins over `port`, and the admin listener's default port and the admin commands follow it. ([#237](https://github.com/ohstr/ncli/pull/237))
+- Adds `listen` (host:port) to the relay config, to bind one address instead of every interface on `port`. When set it wins over `port`, the admin listener's default port and the admin commands follow it, and `--check` rejects a host that does not resolve; `NCLI_LISTEN`/`NCLI_PORT` now reach the relay even with no such key in the file. ([#237](https://github.com/ohstr/ncli/pull/237))
 
 ## [0.8.0-rc.50]
 

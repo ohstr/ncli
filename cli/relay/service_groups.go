@@ -57,6 +57,12 @@ type GroupsConfig struct {
 	// list leaves it to the relay's admins and the roles whose
 	// membership.roles tasks list group.create.
 	Create []string `mapstructure:"create"`
+
+	// GrantCeiling stops a member from granting a role that may send a
+	// moderation kind it may not send itself (put-user with roles, kind
+	// 9000): no handing out more power than you hold. Off by default, since
+	// it refuses grants existing groups may rely on.
+	GrantCeiling bool `mapstructure:"grantCeiling"`
 }
 
 // groupModerationPolicy is the moderation policy groups.roles describes, or

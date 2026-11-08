@@ -171,10 +171,10 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 			warnUndefinedRoles(&config, ids)
 		}
 	}
-	// TODO(nmilat#238): enforce group:<kind> role tasks through
-	// GroupsService.SetAuthorizer (with the grant ceiling) once go.mod pins an
-	// nmilat that has it. Until then only groups.admins (group:*) and each
-	// group's own NIP-29 roles moderate.
+	// group:<kind> role tasks and groups.grantCeiling (see applyGroupTasks).
+	if !applyGroupTasks(wsHandler.Groups(), tasks, &config) && config.Groups != nil && config.Groups.GrantCeiling {
+		log.Warn().Msg("groups.grantCeiling needs a newer nmilat; it has no effect in this build")
+	}
 
 	// Profile checks and social scores serve only search and stats.
 	if config.searchEnabled() || config.profileStatsEnabled() {

@@ -46,6 +46,10 @@ const (
 	taskGroupCreate     = "group.create"
 )
 
+// inviteRequestGated reports whether REQ 28935 is decided by createclaim
+// (inviteRequestAllowed). TODO(nmilat#236): true once it is wired.
+const inviteRequestGated = false
+
 // groups.create entries other than a role id.
 const (
 	groupCreateEveryone = "everyone"
@@ -471,6 +475,37 @@ func (a *taskAuthority) gateGroupCreate(restricted bool, next relay.EventPolicy)
 	}
 }
 
+// groupAuthorizer is the GroupsService authorizer for group:<kind> tasks: it
+// lets a pubkey send NIP-29 moderation kind in any hosted group when it holds
+// group:<kind> (or group:*, or *). It can only add power: nmilat ORs it with
+// the group's own roles.
+func (a *taskAuthority) groupAuthorizer(_, pubkey string, kind int) bool {
+	return nip29.IsModerationKind(kind) && a.can(pubkey, taskGroupPrefix+strconv.Itoa(kind))
+}
+
+// groupsHooks is what nmilat#238 adds to relay.GroupsService.
+type groupsHooks interface {
+	SetAuthorizer(func(groupID, pubkey string, kind int) bool)
+	SetGrantCeiling(bool)
+}
+
+// applyGroupTasks installs groupAuthorizer and groups.grantCeiling on the
+// groups service. It reports whether the service has the hooks.
+//
+// TODO(nmilat#238): call groups.SetAuthorizer/SetGrantCeiling directly once
+// go.mod pins an nmilat that has them; until then the pinned version lacks
+// them, group:<kind> role tasks are not enforced (groups.admins, group:*,
+// still is, through SetRelayAdmins) and groups.grantCeiling has no effect.
+func applyGroupTasks(groups any, a *taskAuthority, c *RelayConfig) bool {
+	h, ok := groups.(groupsHooks)
+	if !ok {
+		return false
+	}
+	h.SetAuthorizer(a.groupAuthorizer)
+	h.SetGrantCeiling(c.Groups != nil && c.Groups.GrantCeiling)
+	return true
+}
+
 // inviteRequestAllowed decides a NIP-43 invite request (REQ kind 28935): the
 // same task as NIP-86 createclaim, held by any of the session's identities.
 // A NIP-AA virtual identity counts only for what its own key holds, as with
@@ -483,7 +518,8 @@ func (a *taskAuthority) gateGroupCreate(restricted bool, next relay.EventPolicy)
 //		return auth.inviteRequestAllowed(s.Identities())
 //	}
 //
-// Until then any member may still request an invite over REQ 28935.
+// Until then any member may still request an invite over REQ 28935, and
+// inviteRequestGated stays false.
 func (a *taskAuthority) inviteRequestAllowed(ids []relay.AuthedIdentity) error {
 	for _, id := range ids {
 		if a.can(id.Pubkey, nip86.MethodCreateClaim) {

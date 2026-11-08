@@ -11,13 +11,16 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ohstr/ncli/cli/common"
+	"github.com/ohstr/nmilat/nip01"
 	"github.com/ohstr/nmilat/nip11"
 	"github.com/ohstr/nmilat/nip29"
 	"github.com/ohstr/nmilat/nip86"
 	"github.com/ohstr/nmilat/nipB7"
 	"github.com/ohstr/nmilat/relay"
+	"github.com/ohstr/nmilat/wire"
 	"github.com/stretchr/testify/require"
 )
 
@@ -520,9 +523,100 @@ func TestInviteRequestAllowed(t *testing.T) {
 }
 
 func TestScenario_InviteRequestNeedsCreateclaim(t *testing.T) {
-	t.Skip("TODO(nmilat#236): REQ 28935 is gated by createclaim once go.mod pins an nmilat with relay.WithInviteRequestAuthorizer")
+	if !inviteRequestGated {
+		t.Skip("TODO(nmilat#236): REQ 28935 is gated by createclaim once go.mod pins an nmilat with relay.WithInviteRequestAuthorizer")
+	}
+	no := false
+	cfg := communityRelayConfig(t)
+	cfg.Membership = rolesConfig()
+	cfg.Membership.MemberClaims = &no
+	ts := bootScenario(t, cfg)
+	enrollWithRoles(t, ts.URL, pubkeyOf(t, greeterPriv), "greeter")
+	enrollWithRoles(t, ts.URL, pubkeyOf(t, plainPriv))
+
+	request := func(priv string) (got bool, closed string) {
+		conn := connectAs(t, ts, priv)
+		conn.Outgoing() <- wire.NewRequestPacket("inv", nip01.NewSubscriptionFilterGroup(&nip01.SubscriptionFilter{Kinds: []int{28935}}))
+		deadline := time.After(5 * time.Second)
+		for {
+			select {
+			case res := <-conn.Read():
+				switch r := res.(type) {
+				case *wire.EventSubscriptionResponse:
+					got = true
+				case *wire.EOSESubscriptionResponse:
+					return got, ""
+				case *wire.ClosedSubscriptionResponse:
+					return got, r.Message
+				}
+			case <-deadline:
+				t.Fatal("timed out waiting for the invite answer")
+			}
+		}
+	}
+
+	got, closed := request(greeterPriv)
+	require.True(t, got, "a greeter gets a code (closed: %q)", closed)
+	got, closed = request(plainPriv)
+	require.False(t, got)
+	require.True(t, strings.HasPrefix(closed, "restricted:"), closed)
+}
+
+func TestGroupAuthorizer(t *testing.T) {
+	cfg := RelayConfig{Nip11: nip11.Metadata{PubKey: testPubKey}, Membership: rolesConfig()}
+	auth, _ := newAuthority(t, cfg, map[string][]string{hostPriv: {"host"}, plainPriv: nil})
+	require.True(t, auth.groupAuthorizer("any", pubkeyOf(t, hostPriv), 9005))
+	require.False(t, auth.groupAuthorizer("any", pubkeyOf(t, hostPriv), 9000))
+	require.False(t, auth.groupAuthorizer("any", pubkeyOf(t, plainPriv), 9005))
+	require.True(t, auth.groupAuthorizer("any", testPubKey, 9009))
+	require.False(t, auth.groupAuthorizer("any", testPubKey, 1), "only moderation kinds")
+}
+
+// groupsHooksOrSkip skips a test that needs nmilat#238's GroupsService hooks
+// when the pinned nmilat lacks them.
+func groupsHooksOrSkip(t *testing.T) {
+	t.Helper()
+	if _, ok := any((*relay.GroupsService)(nil)).(groupsHooks); !ok {
+		t.Skip("TODO(nmilat#238): needs an nmilat with GroupsService.SetAuthorizer and SetGrantCeiling")
+	}
 }
 
 func TestScenario_GroupKindTasks(t *testing.T) {
-	t.Skip("TODO(nmilat#238): group:<kind> role tasks are enforced once go.mod pins an nmilat with GroupsService.SetAuthorizer and the grant ceiling")
+	groupsHooksOrSkip(t)
+	cfg := communityRelayConfig(t)
+	cfg.Membership = &MembershipConfig{Enabled: true, Roles: map[string]RoleTasks{"steward": {Can: []string{"group:9000"}}}}
+	ts := bootScenario(t, cfg)
+	steward, plain := pubkeyOf(t, hostPriv), pubkeyOf(t, plainPriv)
+	enrollWithRoles(t, ts.URL, steward, "steward")
+	enrollWithRoles(t, ts.URL, plain)
+
+	creator := connectAs(t, ts, plainPriv)
+	require.True(t, publishAs(t, creator, nip29.NewCreateGroup(plain, "stewarded"), plainPriv).Accepted)
+
+	// The steward is no member of the group, yet may add one; not so delete.
+	stewardConn := connectAs(t, ts, hostPriv)
+	require.True(t, publishAs(t, stewardConn, nip29.NewPutUser(steward, "stewarded", pubkeyOf(t, outsiderPriv)), hostPriv).Accepted)
+	require.False(t, publishAs(t, stewardConn, nip29.NewDeleteEvent(steward, "stewarded", strings.Repeat("ab", 32)), hostPriv).Accepted)
+}
+
+func TestScenario_GroupGrantCeiling(t *testing.T) {
+	groupsHooksOrSkip(t)
+	for _, ceiling := range []bool{false, true} {
+		t.Run(map[bool]string{false: "off", true: "on"}[ceiling], func(t *testing.T) {
+			cfg := communityRelayConfig(t)
+			cfg.Groups.Roles = map[string][]int{"admin": {9000, 9001, 9002, 9005, 9008, 9009}, "inviter": {9000}}
+			cfg.Groups.GrantCeiling = ceiling
+			ts := bootScenario(t, cfg)
+			creatorPub, inviterPub := pubkeyOf(t, plainPriv), pubkeyOf(t, hostPriv)
+
+			creator := connectAs(t, ts, plainPriv)
+			require.True(t, publishAs(t, creator, nip29.NewCreateGroup(creatorPub, "ceiling"), plainPriv).Accepted)
+			require.True(t, publishAs(t, creator, nip29.NewPutUser(creatorPub, "ceiling", inviterPub, "inviter"), plainPriv).Accepted)
+
+			// An inviter (9000 only) hands out admin: more than it holds.
+			inviter := connectAs(t, ts, hostPriv)
+			ok := publishAs(t, inviter, nip29.NewPutUser(inviterPub, "ceiling", pubkeyOf(t, outsiderPriv), "admin"), hostPriv)
+			require.Equal(t, !ceiling, ok.Accepted, ok.Message)
+		})
+	}
 }

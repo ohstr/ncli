@@ -326,7 +326,7 @@ nip86:
 	viper.Reset()
 	config = RelayConfig{}
 	require.NoError(t, common.LoadViperConfig(yamlPath))
-	require.NoError(t, initConfig())
+	require.NoError(t, initConfig(false))
 	require.NotNil(t, config.Membership.MemberClaims, "initConfig resolves an unset memberClaims")
 	require.False(t, *config.Membership.MemberClaims, "members-only relay defaults memberClaims to false")
 

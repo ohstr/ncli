@@ -74,9 +74,9 @@ The file is JSON lines (`jq` reads it); stderr stays human-readable unless `--js
 | `min` | int | `0` | Required NIP-13 leading-zero-bit difficulty. `0` means no requirement regardless of `strict` |
 
 `min` always flows into the advertised `nip11.limitation.min_pow_difficulty`,
-whether or not `strict` is on — `nip11.limitation.min_pow_difficulty` set
-directly in YAML is ignored; `pow.min` is the only way to set it, so there's
-one source of truth. Omitting the whole `pow:` block is identical to `{strict:
+whether or not `strict` is on. `nip11.limitation.min_pow_difficulty` is not
+a config key: `--check` reports it as unknown (a start warns and ignores
+it); `pow.min` is the only way to set it, so there's one source of truth. Omitting the whole `pow:` block is identical to `{strict:
 false, min: 0}` — fully backward compatible with configs that predate it.
 
 ## `cache`

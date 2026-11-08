@@ -259,6 +259,13 @@ logdir: ./data/logs
 ncli relay --config examples/relay/minimal.yaml
 ```
 
+A key the relay doesn't know, such as a typo, is logged as a warning and
+ignored. `--check` fails on it, naming every such key:
+
+```sh
+ncli relay --config relay.yaml --check
+```
+
 Once running, operate it from its admin listener (see
 [relay monitoring](#relay-monitoring)):
 

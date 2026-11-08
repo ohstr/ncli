@@ -185,6 +185,12 @@ func apply(cfg loggingConfig) {
 	}
 }
 
+// FileLogger returns a logger writing to the configured file writer alone,
+// bypassing the console, or nil when no file writer is configured.
+func FileLogger() *zerolog.Logger {
+	return fileOnly
+}
+
 // LogFailureToFile records msg at error level in the log file only, printing
 // nothing to the console. A no-op when no file writer is configured.
 func LogFailureToFile(msg string) {

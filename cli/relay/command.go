@@ -70,6 +70,11 @@ const (
 var (
 	config RelayConfig
 
+	// unknownConfigKeys are the keys initConfig warned about on stderr.
+	// It runs before the log file is attached, so RunRelay writes the
+	// same warnings to the file once it is.
+	unknownConfigKeys []string
+
 	// adminSettings is config.Admin validated by initConfig; nil when the
 	// admin listener is off.
 	adminSettings *adminplane.Settings
@@ -431,7 +436,8 @@ func NewRelayCommand() *cobra.Command {
 					return err
 				}
 			}
-			if err := initConfig(); err != nil {
+			check, _ := cmd.Flags().GetBool("check")
+			if err := initConfig(check); err != nil {
 				return common.RuntimeError(cmd, err)
 			}
 			return nil
@@ -475,7 +481,10 @@ func NewRelayCommand() *cobra.Command {
 // (rather than at PreRunE's own common.RuntimeError call) -- wrapCLIError
 // keeps an already-classified error's code as-is when a caller re-wraps it,
 // so this one classification covers the single call site for free.
-func initConfig() error {
+//
+// A config key RelayConfig doesn't know (a typo turns a setting off) fails
+// with check (--check) and is a warning otherwise.
+func initConfig(check bool) error {
 	used := viper.ConfigFileUsed()
 	if used != "" {
 		ev := log.Info().Str("config", used)
@@ -490,8 +499,18 @@ func initConfig() error {
 	if err := checkRenamedKeys(viper.GetViper()); err != nil {
 		return err
 	}
-	if err := viper.Unmarshal(&config); err != nil {
+	unknown, err := decodeRelayConfig(viper.GetViper(), &config)
+	unknownConfigKeys = unknown
+	if err != nil {
 		return &common.CLIError{Err: fmt.Errorf("unable to decode config: %w", err), Code: common.CodeInvalidInput}
+	}
+	if len(unknown) > 0 {
+		if check {
+			return unknownKeysError(unknown)
+		}
+		for _, k := range unknown {
+			log.Warn().Str("key", k).Msg("unknown config key, ignored")
+		}
 	}
 
 	if config.Nip11.PrivKey != "" {
@@ -758,6 +777,7 @@ func RunRelay(jsonMode bool) error {
 	} else {
 		log.Info().Str("log_level", level.String()).Str("file", "off").Msg("logging initialized")
 	}
+	logUnknownKeysToFile(level)
 
 	// nip11.pubkey and store are both already validated by initConfig,
 	// which PreRunE guarantees ran successfully before Run (this function)
@@ -799,6 +819,20 @@ func RunRelay(jsonMode bool) error {
 	<-stopCh
 	s.Stop()
 	return nil
+}
+
+// logUnknownKeysToFile writes initConfig's unknown-key warnings to the log
+// file alone: initConfig ran before the file was attached and already
+// printed them on stderr.
+func logUnknownKeysToFile(level zerolog.Level) {
+	fl := common.FileLogger()
+	if fl == nil {
+		return
+	}
+	l := fl.Level(level)
+	for _, k := range unknownConfigKeys {
+		l.Warn().Str("key", k).Msg("unknown config key, ignored")
+	}
 }
 
 // redirectStdLog sends the standard library's log package to l at debug.

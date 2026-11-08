@@ -77,6 +77,14 @@ ncli relay --config relay.yaml
 ncli relay --config relay.yaml --check
 ```
 
+A key the relay doesn't know (`htpBridge:`, `httpBridge.qurey`) only logs
+a warning at startup and is ignored, so its setting stays off. `--check`
+fails on it (`invalid_input`, exit 3), naming every unknown key by its
+dotted path; run it after every config edit. A key with no value
+(`bogus:`) counts too. `NCLI_*` env vars and the exact keys other commands
+read (`vault.password`, `signer`, `groups.identity`, ...) are not
+reported; anything else beside them (`query: {enabled: true}`) is.
+
 Foreground process; stops cleanly on SIGINT/SIGTERM. Logs go to stderr and
 to `<logdir>/nrelay.log` as JSON lines (or a custom `logs:` rotation block).
 `logs.level: debug` adds per-connection lines; `logs.file: false` keeps
@@ -712,10 +720,9 @@ Full route, metric and config reference: `references/admin-plane-reference.md`.
   (5) when each is left at zero.
 - POST /query and POST /events live under a nested `httpBridge:` key
   (`httpBridge.query.enabled`/`httpBridge.events.enabled`), not bare
-  top-level `query:`/`events:` keys -- viper silently drops an unknown
-  top-level key rather than erroring, so a config using the old flat shape
-  loads with no complaint and simply never mounts either endpoint. See
-  `examples/relay/app-backend-relay.yaml`.
+  top-level `query:`/`events:` keys. The old flat shape mounts neither
+  endpoint: startup only warns about the unknown keys, `--check` fails on
+  them. See `examples/relay/app-backend-relay.yaml`.
 - Gift wraps (kind 1059) are served only to the pubkey their `p` tag names,
   over REQ, COUNT and `/query`, unless `recipientOnlyKinds` says otherwise
   (omitted means `[1059]`; `[]` turns it off). An anonymous REQ for 1059 is
@@ -753,8 +760,9 @@ Full route, metric and config reference: `references/admin-plane-reference.md`.
   unless `pow.strict: true` — with `strict` unset/false, `min` only shows up
   in the relay's advertised `nip11.limitation.min_pow_difficulty` (a heads-up
   to clients), while every event is still accepted regardless of its actual
-  difficulty. Setting `nip11.limitation.min_pow_difficulty` directly in YAML
-  does nothing — `pow.min` is the only field that reaches it.
+  difficulty. `nip11.limitation.min_pow_difficulty` (like
+  `nip11.supported_nips`) is not a config key: a start warns that it is
+  unknown and ignores it, `--check` fails on it. Set `pow.min` instead.
 - Both `store` and `logdir`'s parent directories are auto-created on `ncli
   relay` startup, but a missing `store` value is caught at config-load time
   (before either directory is touched), same as a missing `nip11.pubkey`.

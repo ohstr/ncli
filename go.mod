@@ -41,7 +41,6 @@ require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/ebitengine/purego v0.8.0 // indirect
 	github.com/gdamore/encoding v1.0.0 // indirect
-	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/klauspost/compress v1.20.1 // indirect
@@ -100,6 +99,7 @@ require (
 	github.com/atotto/clipboard v0.1.4
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/ebitengine/oto/v3 v3.3.3
+	github.com/go-viper/mapstructure/v2 v2.5.0
 	github.com/minio/minio-go/v7 v7.4.1
 	github.com/ohstr/nmilat v0.5.0-rc.50.0.20261108135346-65c3b45b57f0
 	github.com/pion/opus v0.1.0

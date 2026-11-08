@@ -5,6 +5,7 @@
 ### Added
 
 - Adds roles that carry tasks (`membership.roles`): each NIP-43 role lists what its members may do, such as NIP-86 methods (`createclaim`, `banpubkey`), Blossom uploads, joining calls or creating groups (`groups.create`), and NIP-86 `supportedmethods` tells each caller its own set. Existing settings keep working unchanged. ([#243](https://github.com/ohstr/ncli/pull/243))
+- Adds unknown-key reporting to the relay config: `ncli relay --check` fails (`invalid_input`) naming every key the relay doesn't know, such as a typo, and a normal start logs a warning for each, on stderr and in the log file; a key left with no value counts too. ([#236](https://github.com/ohstr/ncli/pull/236))
 
 ### Changed
 

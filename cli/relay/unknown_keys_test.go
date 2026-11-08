@@ -224,6 +224,32 @@ membership:
 		require.EqualError(t, err, "unknown config keys: limits.connectionPerIP, membership.roles[Host].extraTasks, pprofAdr")
 	})
 
+	t.Run("NIP-11 keys the relay sets say what to use", func(t *testing.T) {
+		body := `
+nip11:
+  pubkey: bb50e2d89a4ed70663d080659fe0ad4b9bc3e06c17a227433966cb59ceee020d
+  supported_nips: [1, 11]
+  limitation:
+    min_pow_difficulty: 20
+store: test.db
+`
+		viper.Reset()
+		t.Cleanup(viper.Reset)
+		require.NoError(t, common.LoadViperConfig(writeRelayYAML(t, body)))
+		config = RelayConfig{}
+		require.EqualError(t, initConfig(true), "unknown config keys: nip11.limitation.min_pow_difficulty (use pow.min), nip11.supported_nips (computed by the relay)")
+
+		viper.Reset()
+		require.NoError(t, common.LoadViperConfig(writeRelayYAML(t, body)))
+		config = RelayConfig{}
+		var buf bytes.Buffer
+		prevLog := log.Logger
+		t.Cleanup(func() { log.Logger = prevLog })
+		log.Logger = zerolog.New(&buf)
+		require.NoError(t, initConfig(false))
+		require.Contains(t, buf.String(), `{"level":"warn","key":"nip11.limitation.min_pow_difficulty","hint":"use pow.min","message":"unknown config key, ignored"}`)
+	})
+
 	t.Run("a role id with a dot is refused as such", func(t *testing.T) {
 		viper.Reset()
 		t.Cleanup(viper.Reset)

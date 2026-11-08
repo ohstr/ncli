@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-viper/mapstructure/v2"
 	"github.com/ohstr/ncli/cli/common"
+	"github.com/rs/zerolog"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 )
@@ -170,14 +171,47 @@ func unknownNullKeys(v *viper.Viper) ([]string, error) {
 	return md.Unused, nil
 }
 
+// unknownKeyHints say what to use instead of a NIP-11 key the relay sets
+// itself, by lowercased key: an older config may still hold one.
+var unknownKeyHints = map[string]string{
+	"nip11.limitation.min_pow_difficulty": "use pow.min",
+	"nip11.supported_nips":                "computed by the relay",
+}
+
+// unknownKeyHint is the hint for key, or "".
+func unknownKeyHint(key string) string {
+	return unknownKeyHints[strings.ToLower(key)]
+}
+
+// describeUnknownKey is key with its hint, if it has one.
+func describeUnknownKey(key string) string {
+	if h := unknownKeyHint(key); h != "" {
+		return key + " (" + h + ")"
+	}
+	return key
+}
+
+// warnUnknownKey logs a start's warning for key, with its hint.
+func warnUnknownKey(ev *zerolog.Event, key string) {
+	ev = ev.Str("key", key)
+	if h := unknownKeyHint(key); h != "" {
+		ev = ev.Str("hint", h)
+	}
+	ev.Msg("unknown config key, ignored")
+}
+
 // unknownKeysError is --check's failure for keys the relay doesn't know.
 func unknownKeysError(unknown []string) error {
+	described := make([]string, len(unknown))
+	for i, k := range unknown {
+		described[i] = describeUnknownKey(k)
+	}
 	err := &common.CLIError{
-		Err:  fmt.Errorf("unknown config keys: %s", strings.Join(unknown, ", ")),
+		Err:  fmt.Errorf("unknown config keys: %s", strings.Join(described, ", ")),
 		Code: common.CodeInvalidInput,
 	}
 	if len(unknown) == 1 {
-		err.Err = errors.New("unknown config key: " + unknown[0])
+		err.Err = errors.New("unknown config key: " + described[0])
 		err.Input = unknown[0]
 	}
 	return err

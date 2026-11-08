@@ -528,7 +528,7 @@ func initConfig(check bool) error {
 			return unknownKeysError(unknown)
 		}
 		for _, k := range unknown {
-			log.Warn().Str("key", k).Msg("unknown config key, ignored")
+			warnUnknownKey(log.Warn(), k)
 		}
 	}
 
@@ -858,7 +858,7 @@ func logUnknownKeysToFile(level zerolog.Level) {
 	}
 	l := fl.Level(level)
 	for _, k := range unknownConfigKeys {
-		l.Warn().Str("key", k).Msg("unknown config key, ignored")
+		warnUnknownKey(l.Warn(), k)
 	}
 }
 

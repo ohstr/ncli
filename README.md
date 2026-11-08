@@ -348,6 +348,7 @@ More config blocks, each documented in
 - `membership.roles` — what each NIP-43 role may do, e.g. `greeter: {can: [createclaim]}`; `groups.create` says who may create a group.
 - `presence` — `POST /query` for kind 40902 answers who is online.
 - `blossom` — Blossom uploads and downloads on the relay's own origin, stored in a directory or S3/MinIO.
+- `limits` — opt-in rate limits per pubkey and per IP (EVENT, REQ/COUNT, the HTTP bridge, Blossom) and connections per IP. Unset means no limit; a public relay without any gets a warning.
 
 ### Example configs
 

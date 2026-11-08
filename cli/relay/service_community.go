@@ -15,6 +15,7 @@ import (
 	"github.com/ohstr/nmilat/nipB7"
 	"github.com/ohstr/nmilat/nipB7/server"
 	"github.com/ohstr/nmilat/relay"
+	"github.com/ohstr/nmilat/relay/ratelimit"
 )
 
 // CountConfig configures POST /count (NIP-45) on the HTTP bridge: the same
@@ -152,6 +153,15 @@ type BlossomS3 struct {
 
 func blossomEnabled() bool {
 	return config.Blossom != nil && config.Blossom.Enabled
+}
+
+// blossomUploadMembersOnly reports whether only members may upload:
+// blossom.membersOnly.upload, or, unset, nip11.limitation.membership_required.
+func (c *RelayConfig) blossomUploadMembersOnly() bool {
+	if c.Blossom != nil && c.Blossom.MembersOnly.Upload != nil {
+		return *c.Blossom.MembersOnly.Upload
+	}
+	return c.Nip11.Limitation.MembershipRequired
 }
 
 // blossomPublicURL is the origin blobs are served from.
@@ -322,12 +332,38 @@ func newBlobStore(c *RelayConfig) (server.Store, error) {
 	return server.NewDirStore(dir)
 }
 
+// relayAccess answers who is an admin (the relay key, nip86.admins) and who
+// is a member (a NIP-43 member or an admin); a banned key is neither.
+// membership may be set after the relayAccess is built, as long as it is
+// before the relay serves its first request.
+type relayAccess struct {
+	admins     []string
+	membership *relay.MembershipService
+	moderation *relayModeration
+}
+
+func newRelayAccess(membership *relay.MembershipService, moderation *relayModeration) *relayAccess {
+	return &relayAccess{admins: nip86Admins(), membership: membership, moderation: moderation}
+}
+
+func (a *relayAccess) isAdmin(pk string) bool {
+	return slices.ContainsFunc(a.admins, func(admin string) bool { return strings.EqualFold(admin, pk) })
+}
+
+func (a *relayAccess) isMember(pk string) bool {
+	if a.moderation.bannedPubkey(pk) {
+		return false
+	}
+	return a.isAdmin(pk) || (a.membership != nil && a.membership.IsMember(pk))
+}
+
 // newBlossomServer builds the Blossom server for c. Who may upload, download
 // and delete any blob are the tasks blossom.upload, blossom.download and
 // blossom.delete (tasks.go): the admins (the relay key, nip86.admins) hold all
 // three; blossom.membersOnly gives members the first two, and roles may carry
 // any of them. A banned key may neither upload nor download, admin or not.
-func newBlossomServer(c *RelayConfig, membership *relay.MembershipService, moderation *relayModeration) (*server.Server, error) {
+// limiter, when set, counts each request against limits.blossom.
+func newBlossomServer(c *RelayConfig, membership *relay.MembershipService, moderation *relayModeration, limiter *ratelimit.Limiter) (*server.Server, error) {
 	store, err := newBlobStore(c)
 	if err != nil {
 		return nil, err
@@ -342,6 +378,10 @@ func newBlossomServer(c *RelayConfig, membership *relay.MembershipService, moder
 	if b.MembersOnly.Download {
 		mayDownload = may(taskBlossomDownload)
 	}
+	var rateLimit func(*http.Request, bool, string) (time.Duration, bool)
+	if limiter != nil {
+		rateLimit = limiter.AllowBlossom
+	}
 	return server.New(server.Options{
 		Store:               store,
 		PublicURL:           c.blossomPublicURL(),
@@ -353,5 +393,6 @@ func newBlossomServer(c *RelayConfig, membership *relay.MembershipService, moder
 		MaxBlobBytes:        b.MaxBlobBytes,
 		MaxUploadsPerSigner: b.MaxUploadsPerSigner,
 		MaxUploads:          b.MaxConcurrentUploads,
+		RateLimit:           rateLimit,
 	})
 }

@@ -201,8 +201,7 @@ func TestScenario_CommunityRelay(t *testing.T) {
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 		var d nipB7.BlobDescriptor
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&d))
-		// BUD-02: the url ends in an extension for the type, .bin when unknown.
-		require.Equal(t, "https://relay.test/media/"+sha+".bin", d.URL)
+		require.Equal(t, "https://relay.test/media/"+sha+".bin", d.URL, "an untyped blob's URL ends in .bin")
 
 		get, err := http.Get(ts.URL + "/media/" + sha + ".txt")
 		require.NoError(t, err)

@@ -156,6 +156,19 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 	sessionConfig.RelayAuthoredKinds = config.relayAuthoredKinds()
 	sessionConfig.PresenceQueryKind = config.presenceKind()
 
+	// One limiter for the WebSocket, the HTTP bridge, Blossom and huddles,
+	// so a client is counted once across them. Its member check reads the
+	// membership service, which exists only once wsHandler does.
+	access := newRelayAccess(nil, moderation)
+	limiter, err := newRateLimiter(&config, access.isMember, m.RateLimited)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to build the rate limiter")
+	}
+	for _, w := range config.limitsWarnings() {
+		log.Warn().Msg(w)
+	}
+	sessionConfig.RateLimiter = limiter
+
 	wsHandler := relay.NewSessionHandler(
 		store,
 		&cfg.Nip11,
@@ -163,6 +176,7 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 		relay.WithSessionConfig(sessionConfig),
 	)
 	tasks.membership = wsHandler.Membership()
+	access.membership = wsHandler.Membership()
 	if membershipOn() && config.Membership != nil && len(config.Membership.Roles) > 0 {
 		if roles, err := (membershipAdmin{ws: wsHandler, store: store}).listRoles(context.Background()); err == nil {
 			ids := make([]string, 0, len(roles))
@@ -252,7 +266,7 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 	// and /count, so "/" hands those paths over itself.
 	var blossomHandler http.Handler
 	if blossomEnabled() {
-		blossom, err := newBlossomServer(&config, wsHandler.Membership(), moderation)
+		blossom, err := newBlossomServer(&config, wsHandler.Membership(), moderation, limiter)
 		if err != nil {
 			log.Fatal().Err(err).Msg("failed to start Blossom")
 		}
@@ -311,7 +325,8 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 		// reason /query shares it -- one live membership view, not a
 		// second cache.
 		mux.Handle("/events", m.HTTP("events", relay.NewEventsHandler(store, &cfg.Nip11.Limitation, wsHandler.Membership(), config.Nip11.Self,
-			relay.WithEventsPolicy(eventPolicy), relay.WithEventsRelayAuthoredKinds(config.relayAuthoredKinds()...))))
+			relay.WithEventsPolicy(eventPolicy), relay.WithEventsRelayAuthoredKinds(config.relayAuthoredKinds()...),
+			relay.WithEventsRateLimiter(limiter))))
 	}
 
 	if countEnabled() {
@@ -368,7 +383,7 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 
 	// Huddle first: both the membership admin routes and NIP-86 need the rooms
 	// manager so removing a member ends that member's live calls.
-	huddleRooms := registerHuddleRoutes(mux, wsHandler, config.Huddle, config.Nip11.URL, tasks)
+	huddleRooms := registerHuddleRoutes(mux, wsHandler, config.Huddle, config.Nip11.URL, tasks, limiter)
 
 	registerMembershipAdminRoutes(mux, wsHandler, store, huddleRooms, adminAuth)
 

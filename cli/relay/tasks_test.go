@@ -411,7 +411,7 @@ func TestHuddle_RoleCarriesJoin(t *testing.T) {
 	auth := newTaskAuthority(&cfg, wsHandler.Membership(), moderation)
 
 	mux := http.NewServeMux()
-	rooms := registerHuddleRoutes(mux, wsHandler, huddle, huddleRelayURL, auth)
+	rooms := registerHuddleRoutes(mux, wsHandler, huddle, huddleRelayURL, auth, nil)
 	t.Cleanup(func() { endHuddleRooms(rooms) })
 	ts := httptest.NewServer(mux)
 	t.Cleanup(ts.Close)

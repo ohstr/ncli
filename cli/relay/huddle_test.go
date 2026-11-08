@@ -204,7 +204,7 @@ func TestHuddleMembershipGate(t *testing.T) {
 		}
 
 		mux := http.NewServeMux()
-		rooms := registerHuddleRoutes(mux, wsHandler, &HuddleConfig{Enabled: true, RequireMembership: true}, huddleRelayURL, nil)
+		rooms := registerHuddleRoutes(mux, wsHandler, &HuddleConfig{Enabled: true, RequireMembership: true}, huddleRelayURL, nil, nil)
 		require.NotNil(t, rooms, "the endpoint should be mounted")
 		t.Cleanup(func() { endHuddleRooms(rooms) })
 
@@ -263,7 +263,7 @@ func TestHuddleRoomsAreEndedOnShutdown(t *testing.T) {
 	wsHandler := relay.NewSessionHandler(store, metadata, nil)
 
 	mux := http.NewServeMux()
-	rooms := registerHuddleRoutes(mux, wsHandler, &HuddleConfig{Enabled: true}, huddleRelayURL, nil)
+	rooms := registerHuddleRoutes(mux, wsHandler, &HuddleConfig{Enabled: true}, huddleRelayURL, nil, nil)
 	require.NotNil(t, rooms)
 
 	ts := httptest.NewServer(mux)
@@ -318,7 +318,7 @@ func TestWebSocketAndWebRTCPeersShareARoom(t *testing.T) {
 	wsHandler := relay.NewSessionHandler(store, metadata, nil)
 
 	mux := http.NewServeMux()
-	rooms := registerHuddleRoutes(mux, wsHandler, &HuddleConfig{Enabled: true, RTC: true}, huddleRelayURL, nil)
+	rooms := registerHuddleRoutes(mux, wsHandler, &HuddleConfig{Enabled: true, RTC: true}, huddleRelayURL, nil, nil)
 	require.NotNil(t, rooms)
 	t.Cleanup(func() { endHuddleRooms(rooms) })
 

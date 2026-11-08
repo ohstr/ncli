@@ -73,7 +73,7 @@ closest to what you're building and adapt its name/port/store.
 `port`/`listen`, `description`, `limitation.*`, `pow.*`, `cache.profiles.*` (search,
 stats, checks, scoring), `cache.zaps.*`, `cache.relay.stats.*`,
 `membership.*`, `nip86.*`, `agent_auth.*`, `httpBridge.*`, `presence.*`,
-`blossom.*`, `recipientOnlyKinds`,
+`blossom.*`, `recipientOnlyKinds`, `limits.*` (commented out),
 `handshakeTimeout`/`pingInterval`/`pongTimeout`/`writeTimeout`,
 `outgoingBufferSize`/`maxConcurrentStoreTasks`, `logs.*` rotation and
 `huddle.*`.
@@ -101,6 +101,80 @@ Foreground process; stops cleanly on SIGINT/SIGTERM. Logs go to stderr and
 to `<logdir>/nrelay.log` as JSON lines (or a custom `logs:` rotation block).
 `logs.level: debug` adds per-connection lines; `logs.file: false` keeps
 stderr only.
+
+## `limits:` — rate limits, opt-in
+
+**A limit that isn't set is no limit.** There are no defaults: without a
+`limits:` block the relay limits nothing, exactly as before. The one
+exception is Blossom's own caps (`blossom.maxBlobBytes` 100 MiB,
+`maxUploadsPerSigner` 2, `maxConcurrentUploads` 8), which are separate and
+keep their defaults.
+
+A public relay (`nip11.limitation.auth_required: false`) with no limits is
+warned about, never refused: `--check` exits 0 but logs `no rate limits
+configured (limits:)` on stderr (and lists it in `--json`'s `warnings`),
+and startup logs the same line. An `auth_required` relay isn't warned.
+A per-pubkey limit that never applies is warned about the same way:
+`blossom.downloads.perPubkey` while downloads are public (a GET or HEAD has
+no signer, so only DELETEs count), and `blossom.uploads.perPubkey` or
+`events.perPubkey` with `exempt: members` while only members may upload or
+write (every limited key is exempt).
+
+Recommended block for a public relay:
+
+```yaml
+limits:
+  events:                    # EVENT, WebSocket and POST /events
+    perPubkey: {events: 30, per: 1m, burst: 60}
+    perIP: {events: 120, per: 1m}
+  reads:                     # REQ, COUNT, NEG-OPEN and AUTH
+    perIP: {events: 60, per: 1m, burst: 120}
+  http:                      # POST /query, /count, /events
+    perIP: {events: 60, per: 1m}
+  blossom:
+    uploads: {perPubkey: {events: 20, per: 1h}, perIP: {events: 40, per: 1h}}
+    downloads: {perIP: {events: 600, per: 1m}}
+  connectionsPerIP: 20
+  exempt: members            # members and admins skip the per-pubkey limits
+  trustedProxies: [127.0.0.1]   # only your reverse proxy's own address
+```
+
+- Each rate is `events` per `per`, up to `burst` at once (default
+  `events`). Set only the ones you want; each counts on its own.
+- A refused EVENT or AUTH is `OK false "rate-limited: ..."`, a refused
+  REQ/COUNT is `CLOSED "rate-limited: ..."` (NEG-OPEN: `NEG-ERR`), HTTP and
+  Blossom get 429 with `Retry-After`, and a connection over
+  `connectionsPerIP` is refused 429 before the WebSocket upgrade.
+- `events.perPubkey` counts an EVENT against its author only on a
+  connection logged in (NIP-42) as that author, and only for an event the
+  relay doesn't already have; anything else is counted per IP alone. Over
+  `POST /events` the NIP-98 signer is the author, so it always counts.
+- `reads` counts REQ, COUNT and NEG-OPEN, and each AUTH takes one from the
+  IP's `reads.perIP`: a `reads.perIP` of 1 is spent by the login itself.
+- One limiter is shared: an author's EVENTs over the WebSocket and over
+  `POST /events` draw from the same budget, and `connectionsPerIP` counts
+  the relay's WebSocket and huddle ones (`/huddle/{id}/audio`, `/rtc`)
+  together.
+- `exempt: members` lifts only per-pubkey limits (never for a banned key);
+  per-IP limits still apply to members.
+- Behind a reverse proxy, list it in `trustedProxies`, or every client is
+  counted as the proxy's IP. The proxy must set or append
+  `X-Forwarded-For` (the client is the rightmost hop that isn't a trusted
+  proxy; one that passes a client's header through untouched lets the
+  client pick its own key). `X-Real-IP` is read only when there is no
+  `X-Forwarded-For`, and a client hop that isn't an address (`unknown`)
+  falls back to the proxy's own address. List the proxy's own address, not
+  its network: trusting a pod or cluster network (`10.0.0.0/8`) trusts
+  every in-cluster client to name itself. IPv6 clients are counted by
+  their /64.
+- `--check` rejects (`invalid_input`, `input` = the key or value) negative
+  numbers, `events` without `per` or the reverse, a bad duration, a rate
+  under 1ns an event (`input` = its `events`), a `burst` whose window
+  overflows (`input` = its `burst`), a bad CIDR and an `exempt` other than
+  `none`/`members`.
+- Refusals are counted in `ncli_relay_rate_limited_total{action,by}`
+  (`action`: event, read, http, upload, download, connection; `by`: ip or
+  pubkey) on `/metrics`.
 
 ## `ncli relay context` — stop repeating `--config`
 

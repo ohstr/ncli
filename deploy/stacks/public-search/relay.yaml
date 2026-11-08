@@ -34,3 +34,18 @@ cache:
   relay:
     stats:
       enabled: true
+
+# Rate limits, the recommended values for a public relay (a limit left
+# unset is no limit). See skills/ncli-relay-ops/SKILL.md for each key.
+limits:
+  events:                    # EVENT, WebSocket and POST /events
+    perPubkey: {events: 30, per: 1m, burst: 60}
+    perIP: {events: 120, per: 1m}
+  reads:                     # REQ, COUNT, NEG-OPEN and AUTH
+    perIP: {events: 60, per: 1m, burst: 120}
+  http:                      # POST /query, /count, /events
+    perIP: {events: 60, per: 1m}
+  connectionsPerIP: 20
+  # Behind a reverse proxy, list its own address as the relay sees it (not
+  # a whole network), or every client shares the proxy's per-IP limits:
+  # trustedProxies: [172.18.0.1]

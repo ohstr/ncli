@@ -235,6 +235,22 @@ func TestScenario_CommunityRelay(t *testing.T) {
 		defer func() { _ = get.Body.Close() }()
 		got, _ := io.ReadAll(get.Body)
 		require.Equal(t, blob, got)
+		require.Equal(t, "nosniff", get.Header.Get("X-Content-Type-Options"))
+		require.Contains(t, get.Header.Get("Content-Security-Policy"), "sandbox")
+		require.Equal(t, "application/octet-stream", get.Header.Get("Content-Type"), "an untyped blob is not typed by its URL")
+
+		// The blob headers stay on blobs: the homepage on the same origin
+		// still renders as a page.
+		req, err := http.NewRequest(http.MethodGet, ts.URL+"/", nil)
+		require.NoError(t, err)
+		req.Header.Set("Accept", "text/html")
+		page, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		_ = page.Body.Close()
+		require.Equal(t, http.StatusOK, page.StatusCode)
+		require.Contains(t, page.Header.Get("Content-Type"), "text/html")
+		require.NotContains(t, page.Header.Get("Content-Security-Policy"), "sandbox")
+		require.Empty(t, page.Header.Get("Content-Disposition"))
 
 		notBlob, err := http.Get(ts.URL + "/media/readme.txt")
 		require.NoError(t, err)

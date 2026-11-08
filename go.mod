@@ -101,7 +101,7 @@ require (
 	github.com/atotto/clipboard v0.1.4
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/ebitengine/oto/v3 v3.3.3
-	github.com/ohstr/nmilat v0.5.0-rc.50.0.20261108120836-17a03be96c58
+	github.com/ohstr/nmilat v0.5.0-rc.50.0.20261108135346-65c3b45b57f0
 	github.com/pion/opus v0.1.0
 	github.com/pion/rtcp v1.2.18
 	github.com/pion/rtp v1.10.5

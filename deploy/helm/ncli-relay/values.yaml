@@ -67,12 +67,17 @@ meilisearch:
 minio:
   enabled: false
   # MinIO no longer publishes images on Docker Hub; Chainguard builds them.
+  # Chainguard tags them only `latest`, so each is pinned by its multi-arch
+  # digest. To bump one, take the Digest line from
+  # `docker buildx imagetools inspect <repository>:latest`.
   image:
     repository: cgr.dev/chainguard/minio
     tag: latest
+    digest: sha256:a1ac4589a5f8136b616e667b48a0bea9719bb10bd45799ea946f24bbedfafde4
   clientImage:
     repository: cgr.dev/chainguard/minio-client
     tag: latest
+    digest: sha256:10388d580a724f356b94c9b2631b5a179039cabe8c76e9b37d86ed007d569b05
   bucket: ncli-media
   persistence:
     size: 20Gi

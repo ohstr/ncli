@@ -41,9 +41,10 @@ services:
       - meili_data:/meili_data
     restart: unless-stopped
 
-  # MinIO no longer publishes images on Docker Hub; Chainguard builds it.
+  # MinIO no longer publishes images on Docker Hub; Chainguard builds it,
+  # tagged only latest, so it is pinned by digest (see deploy/README.md).
   minio:
-    image: cgr.dev/chainguard/minio:latest
+    image: cgr.dev/chainguard/minio:latest@sha256:a1ac4589a5f8136b616e667b48a0bea9719bb10bd45799ea946f24bbedfafde4
     container_name: ncli_community_minio
     command: ["server", "/data", "--console-address", ":9001"]
     environment:
@@ -54,7 +55,7 @@ services:
     restart: unless-stopped
 
   minio-init:
-    image: cgr.dev/chainguard/minio-client:latest
+    image: cgr.dev/chainguard/minio-client:latest@sha256:10388d580a724f356b94c9b2631b5a179039cabe8c76e9b37d86ed007d569b05
     depends_on:
       - minio
     environment:

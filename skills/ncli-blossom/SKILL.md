@@ -110,13 +110,14 @@ ncli blossom download "https://relay.example.com/media/<hash>.jpg"
 
 A bare hash or a `blossom:` URI is tried on your configured servers in
 order, as `<server>/<hash>`. A full http(s) URL is fetched as is first
-and kept only if its bytes hash to the sha256 in its path; if that
+and kept only if its bytes hash to the sha256 in its path (a body over
+1 GiB is refused as `invalid_input`); if that
 fails, the hash is tried on `--server` or the configured servers (none
 are needed when the URL works). With nothing to fall back to, a URL
 serving other bytes is `not_found` (not retryable), while an unreachable
 one is `network`. Most servers don't require auth for a
 plain `GET`; pass `--identity` only if a server gates private blobs (the
-token then also names the URL's host).
+URL's host gets its own token, naming that host alone).
 
 ## Listing
 

@@ -145,12 +145,14 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 	}
 	// The task model (tasks.go): its membership view is filled in once the
 	// session handler exists, before anything is served. The event policy
-	// gates kind 9007 by group.create after the moderation checks.
+	// gates kind 9007 by group.create after the moderation checks; a NIP-43
+	// invite request (REQ 28935) needs createclaim, as NIP-86 does.
 	tasks := newTaskAuthority(&config, nil, moderation)
 	eventPolicy := tasks.gateGroupCreate(config.groupCreateRestricted(), moderation.eventPolicy)
 	sessionConfig.EventPolicy = eventPolicy
-	// TODO(nmilat#236): sessionConfig.InviteRequestAuthorizer from
-	// tasks.inviteRequestAllowed once go.mod pins an nmilat that has it.
+	sessionConfig.InviteRequestAuthorizer = func(_ context.Context, s *relay.Session) error {
+		return tasks.inviteRequestAllowed(s.Identities())
+	}
 	sessionConfig.RecipientOnlyKinds = config.recipientOnlyKinds()
 	sessionConfig.RelayAuthoredKinds = config.relayAuthoredKinds()
 	sessionConfig.PresenceQueryKind = config.presenceKind()

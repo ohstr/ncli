@@ -46,10 +46,6 @@ const (
 	taskGroupCreate     = "group.create"
 )
 
-// inviteRequestGated reports whether REQ 28935 is decided by createclaim
-// (inviteRequestAllowed). TODO(nmilat#236): true once it is wired.
-const inviteRequestGated = false
-
 // groups.create entries other than a role id.
 const (
 	groupCreateEveryone = "everyone"
@@ -509,17 +505,8 @@ func applyGroupTasks(groups any, a *taskAuthority, c *RelayConfig) bool {
 // inviteRequestAllowed decides a NIP-43 invite request (REQ kind 28935): the
 // same task as NIP-86 createclaim, held by any of the session's identities.
 // A NIP-AA virtual identity counts only for what its own key holds, as with
-// createclaim over NIP-86: it is not an enrolled member.
-//
-// TODO(nmilat#236): wire this as SessionConfig.InviteRequestAuthorizer
-// (relay.WithInviteRequestAuthorizer) once go.mod pins an nmilat with it:
-//
-//	sessionConfig.InviteRequestAuthorizer = func(_ context.Context, s *relay.Session) error {
-//		return auth.inviteRequestAllowed(s.Identities())
-//	}
-//
-// Until then any member may still request an invite over REQ 28935, and
-// inviteRequestGated stays false.
+// createclaim over NIP-86: it is not an enrolled member. It is the session's
+// InviteRequestAuthorizer; nmilat sends the refusal as `restricted: ...`.
 func (a *taskAuthority) inviteRequestAllowed(ids []relay.AuthedIdentity) error {
 	for _, id := range ids {
 		if a.can(id.Pubkey, nip86.MethodCreateClaim) {

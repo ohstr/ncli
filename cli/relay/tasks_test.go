@@ -523,9 +523,6 @@ func TestInviteRequestAllowed(t *testing.T) {
 }
 
 func TestScenario_InviteRequestNeedsCreateclaim(t *testing.T) {
-	if !inviteRequestGated {
-		t.Skip("TODO(nmilat#236): REQ 28935 is gated by createclaim once go.mod pins an nmilat with relay.WithInviteRequestAuthorizer")
-	}
 	no := false
 	cfg := communityRelayConfig(t)
 	cfg.Membership = rolesConfig()

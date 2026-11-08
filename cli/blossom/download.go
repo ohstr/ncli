@@ -233,13 +233,23 @@ func fetchVerified(ctx context.Context, hc *http.Client, rawURL, hash string, au
 	}
 	if got := hex.EncodeToString(h.Sum(nil)); got != hash {
 		_ = tmp.Close()
-		return nil, fmt.Errorf("%s served a blob whose sha256 is %s, not %s", rawURL, got, hash)
+		return nil, &hashMismatchError{url: rawURL, got: got, want: hash}
 	}
 	if _, err := f.Seek(0, io.SeekStart); err != nil {
 		_ = tmp.Close()
 		return nil, err
 	}
 	return tmp, nil
+}
+
+// hashMismatchError is a URL that answered with bytes that are not the
+// blob its path names. classifyHTTPError reports it as not_found: no
+// source served a blob with that hash, the same outcome as a server's 404
+// for it, and retrying the same URL serves the same wrong bytes.
+type hashMismatchError struct{ url, got, want string }
+
+func (e *hashMismatchError) Error() string {
+	return fmt.Sprintf("%s served a blob whose sha256 is %s, not %s", e.url, e.got, e.want)
 }
 
 // tempFile is a temporary file that removes itself on Close.

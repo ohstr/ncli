@@ -156,6 +156,44 @@ func TestBlossomDownload_FullURLFirst(t *testing.T) {
 		}
 	})
 
+	// errReport runs download and returns its one JSON error line.
+	errReport := func(t *testing.T, url string) (code string, retryable bool, exit int, stderr string) {
+		t.Helper()
+		_, stderr, exit = r.run("blossom", "download", url, "-o", filepath.Join(t.TempDir(), "out"), "--json")
+		var e struct {
+			Code      string `json:"code"`
+			Retryable bool   `json:"retryable"`
+		}
+		for _, line := range strings.Split(strings.TrimSpace(stderr), "\n") {
+			var m map[string]any
+			if json.Unmarshal([]byte(line), &m) == nil && m["code"] != nil {
+				_ = json.Unmarshal([]byte(line), &e)
+			}
+		}
+		return e.Code, e.Retryable, exit, stderr
+	}
+
+	t.Run("a URL serving other bytes with no servers is not_found, not retryable", func(t *testing.T) {
+		host, _ := pathServer(t, "/media/"+hash, []byte("not the blob"))
+		code, retryable, exit, stderr := errReport(t, host.URL+"/media/"+hash)
+		if code != "not_found" || exit != 4 || retryable {
+			t.Errorf("code=%q exit=%d retryable=%v, want not_found/4/false\nstderr: %s", code, exit, retryable, stderr)
+		}
+		if !strings.Contains(stderr, "sha256") {
+			t.Errorf("error does not name the mismatch: %s", stderr)
+		}
+	})
+
+	t.Run("an unreachable URL with no servers is network", func(t *testing.T) {
+		host, _ := pathServer(t, "/", nil)
+		url := host.URL + "/media/" + hash
+		host.Close()
+		code, retryable, exit, stderr := errReport(t, url)
+		if code != "network" || exit != 6 || !retryable {
+			t.Errorf("code=%q exit=%d retryable=%v, want network/6/true\nstderr: %s", code, exit, retryable, stderr)
+		}
+	})
+
 	t.Run("a missing URL with no servers is not_found", func(t *testing.T) {
 		host, _ := pathServer(t, "/elsewhere", blob)
 		_, stderr, code := download(host.URL + "/media/" + hash)

@@ -71,11 +71,23 @@ helm install community deploy/helm/ncli-relay \
 
 ## Images
 
-Every image is pinned, and `go test ./deploy/` fails on one that isn't:
+Every image is pinned, and `go test ./deploy/` fails on one that isn't
+(it also checks `examples/` and `integration/`):
 
-- The relay is `ghcr.io/ohstr/ncli` at a release: the chart's `appVersion`
-  and the stacks' `NCLI_VERSION` default. Move both to each new release.
+- The relay is `ghcr.io/ohstr/ncli` at the latest release: the chart's
+  `appVersion`, the stacks' `NCLI_VERSION` defaults (and `.env.example`),
+  `examples/signer/pod.yaml` and the agent-eval rig. The test fails once
+  the CHANGELOG starts the next release's section until all of them name
+  the release just cut.
 - Chainguard tags MinIO only `latest`, so it is pinned by digest. To bump
-  it, put the `Digest:` from `docker buildx imagetools inspect
-  cgr.dev/chainguard/minio:latest` (and `minio-client`) in the chart's
-  `values.yaml` and the community `compose.yaml`.
+  it, take the `Digest:` from `docker buildx imagetools inspect
+  cgr.dev/chainguard/minio:latest` (and `minio-client`) and put it in
+  every copy: the chart's `templates/_helpers.tpl`
+  (`ncli-relay.imageDigests`), the community stack's `compose.yaml`, and
+  ohstr/nmilat's CI workflow (its S3 tests).
+- The chart adds a pinned digest only to that exact default image. For a
+  mirror or another tag, set an exact `tag`, or the image's own `digest`.
+- `helm upgrade --reuse-values` keeps the values of the earlier install,
+  including an older chart's image tags and digests. Upgrade with
+  `--reset-then-reuse-values`, or set the images explicitly, to take the
+  new chart's defaults.

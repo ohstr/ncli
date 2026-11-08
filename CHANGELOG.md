@@ -6,6 +6,7 @@
 
 - Adds roles that carry tasks (`membership.roles`): each NIP-43 role lists what its members may do, such as NIP-86 methods (`createclaim`, `banpubkey`), Blossom uploads, joining calls or creating groups (`groups.create`), and NIP-86 `supportedmethods` tells each caller its own set. Existing settings keep working unchanged. ([#243](https://github.com/ohstr/ncli/pull/243))
 - Adds unknown-key reporting to the relay config: `ncli relay --check` fails (`invalid_input`) naming every key the relay doesn't know, such as a typo, and a normal start logs a warning for each, on stderr and in the log file; a key left with no value counts too. ([#236](https://github.com/ohstr/ncli/pull/236))
+- Adds `listen` (host:port) to the relay config, to bind one address instead of every interface on `port`. When set it wins over `port`, the admin listener's default port and the admin commands follow it, and `--check` rejects a host that does not resolve; `NCLI_LISTEN`/`NCLI_PORT` now reach the relay even with no such key in the file. ([#237](https://github.com/ohstr/ncli/pull/237))
 
 ### Changed
 

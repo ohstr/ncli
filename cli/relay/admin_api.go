@@ -59,10 +59,7 @@ func adminTarget(cmd *cobra.Command) (string, *tls.Config, error) {
 			return "", nil, &common.CLIError{Err: errors.New("the admin listener is off (admin.listen: off)"), Code: common.CodeUsage}
 		}
 		if listen == "" {
-			port := viper.GetInt("port")
-			if port == 0 {
-				port = defaultPort
-			}
+			_, port := relayDialAddr()
 			listen = net.JoinHostPort("127.0.0.1", strconv.Itoa(port+1))
 		}
 		host, port, err := net.SplitHostPort(listen)

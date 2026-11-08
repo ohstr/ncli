@@ -151,7 +151,8 @@ default, commented: [`examples/relay/full.yaml`](examples/relay/full.yaml)
 
 ```yaml
 # examples/relay/full.yaml
-port: 5500
+port: 5500                 # every interface
+# listen: 127.0.0.1:5500   # one address instead; wins over port
 
 nip11:
   name: ncli-dev-relay
@@ -465,7 +466,7 @@ and [`full.yaml`](examples/relay/full.yaml).
 ## `relay status`/`index`/`jobs`/`verify`/`dashboard`
 
 Monitor and maintain a running relay through its admin listener
-(default `127.0.0.1:<port+1>`), signed with `nip11.privkey`:
+(default `127.0.0.1:<port+1>`, from `listen`'s port when set), signed with `nip11.privkey`:
 
 ```sh
 # health and live metrics

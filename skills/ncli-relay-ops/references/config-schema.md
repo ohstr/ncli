@@ -21,6 +21,7 @@ of writing. Update by hand if the Go types change. -->
 | `httpBridge` | object | all off | NIP-98 HTTP endpoints: `query.enabled` (`POST /query`), `events.enabled` (`POST /events`), `count.enabled` (`POST /count`, NIP-45: the same request and access rules as `/query`, answered `{"count": n}`) |
 | `presence` | object | off | `enabled`, `kind` (default 40902): `POST /query` for `{"kinds":[40902],"authors":[...]}` answers one relay-signed kind 20001 per author (`online` while connected, its own latest kind 20001 status, else `offline`), never stored. Needs `nip11.privkey` and `httpBridge.query.enabled` |
 | `blossom` | object | off | Blossom (BUD-01/02) on the relay's origin: `enabled`, `publicURL` (default from `nip11.url`), `uploadPaths` (`[/upload, /media/upload]`), `blobPrefix` (`/media`), `maxBlobBytes` (100 MiB), `maxUploadsPerSigner` (2), `maxConcurrentUploads` (8), `membersOnly.upload` (default `limitation.membership_required`), `membersOnly.download` (`false`), `storage.kind` `dir` (`storage.dir`, default `<store>.blobs`) or `s3` (`storage.s3.endpoint/bucket/region/prefix/accessKey/secretKey/useSSL`, e.g. MinIO) |
+| `limits` | object | no limits | Rate limits — see `## limits` below. A limit that isn't set is no limit |
 | `handshakeTimeout` | Go duration string | relay-client default | |
 | `pingInterval` | Go duration string | relay-client default | |
 | `pongTimeout` | Go duration string | relay-client default | |
@@ -65,6 +66,28 @@ defaults shown here)
 | `compress` | bool | `true` |
 
 The file is JSON lines (`jq` reads it); stderr stays human-readable unless `--json`.
+
+## `limits`
+
+Every limit is off until set; without the block nothing is limited. Each
+rate is `{events, per, burst}`: `events` per `per` (Go duration), up to
+`burst` at once (default `events`). `events` needs `per` and the other way
+round; a negative number, bad duration or bad CIDR fails `--check` with
+`invalid_input` naming it.
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `events.perPubkey` / `events.perIP` | rate | none | EVENT over the WebSocket and `POST /events`, by author / client IP. Refused: `OK false "rate-limited: ..."` (429 over HTTP) |
+| `reads.perPubkey` / `reads.perIP` | rate | none | REQ and COUNT, by NIP-42 pubkey / client IP. Refused: `CLOSED "rate-limited: ..."` |
+| `http.perPubkey` / `http.perIP` | rate | none | `POST /query`, `/count`, `/events`, by NIP-98 signer / client IP. Refused: 429 with `Retry-After` |
+| `blossom.uploads.perPubkey` / `.perIP` | rate | none | Blossom uploads, by token signer / client IP. 429 with `Retry-After` |
+| `blossom.downloads.perPubkey` / `.perIP` | rate | none | Every other Blossom request (GET, HEAD, DELETE) |
+| `connectionsPerIP` | int | `0` (no cap) | Open WebSocket connections from one IP; one more is refused 429 before the upgrade |
+| `exempt` | `none`/`members` | `none` | `members`: NIP-43 members and admins (relay key, `nip86.admins`), unless banned, skip the per-pubkey limits. Per-IP limits apply to everyone |
+| `trustedProxies` | CIDR/IP list | `[]` | Reverse proxies whose `X-Forwarded-For`/`X-Real-IP` name the client. Without one, everyone behind a proxy shares its IP. IPv6 clients are keyed by their /64 |
+
+`blossom.maxBlobBytes`/`maxUploadsPerSigner`/`maxConcurrentUploads` are not
+part of `limits` and keep their defaults (100 MiB, 2, 8) either way.
 
 ## `pow`
 

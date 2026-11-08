@@ -61,7 +61,7 @@ closest to what you're building and adapt its name/port/store.
 `description`, `limitation.*`, `pow.*`, `cache.profiles.*` (search,
 stats, checks, scoring), `cache.zaps.*`, `cache.relay.stats.*`,
 `membership.*`, `nip86.*`, `agent_auth.*`, `httpBridge.*`, `presence.*`,
-`blossom.*`, `recipientOnlyKinds`,
+`blossom.*`, `recipientOnlyKinds`, `limits.*` (commented out),
 `handshakeTimeout`/`pingInterval`/`pongTimeout`/`writeTimeout`,
 `outgoingBufferSize`/`maxConcurrentStoreTasks`, `logs.*` rotation and
 `huddle.*`.
@@ -81,6 +81,54 @@ Foreground process; stops cleanly on SIGINT/SIGTERM. Logs go to stderr and
 to `<logdir>/nrelay.log` as JSON lines (or a custom `logs:` rotation block).
 `logs.level: debug` adds per-connection lines; `logs.file: false` keeps
 stderr only.
+
+## `limits:` — rate limits, opt-in
+
+**A limit that isn't set is no limit.** There are no defaults: without a
+`limits:` block the relay limits nothing, exactly as before. The one
+exception is Blossom's own caps (`blossom.maxBlobBytes` 100 MiB,
+`maxUploadsPerSigner` 2, `maxConcurrentUploads` 8), which are separate and
+keep their defaults.
+
+A public relay (`nip11.limitation.auth_required: false`) with no limits is
+warned about, never refused: `--check` exits 0 but logs `no rate limits
+configured (limits:)` on stderr (and lists it in `--json`'s `warnings`),
+and startup logs the same line. An `auth_required` relay isn't warned.
+
+Recommended block for a public relay:
+
+```yaml
+limits:
+  events:                    # EVENT, WebSocket and POST /events
+    perPubkey: {events: 30, per: 1m, burst: 60}
+    perIP: {events: 120, per: 1m}
+  reads:                     # REQ and COUNT
+    perIP: {events: 60, per: 1m, burst: 120}
+  http:                      # POST /query, /count, /events
+    perIP: {events: 60, per: 1m}
+  blossom:
+    uploads: {perPubkey: {events: 20, per: 1h}, perIP: {events: 40, per: 1h}}
+    downloads: {perIP: {events: 600, per: 1m}}
+  connectionsPerIP: 20
+  exempt: members            # members and admins skip the per-pubkey limits
+  trustedProxies: [10.0.0.0/8]   # your reverse proxy, or everyone shares its IP
+```
+
+- Each rate is `events` per `per`, up to `burst` at once (default
+  `events`). Set only the ones you want; each counts on its own.
+- A refused EVENT is `OK false "rate-limited: ..."`, a refused REQ/COUNT is
+  `CLOSED "rate-limited: ..."`, HTTP and Blossom get 429 with
+  `Retry-After`, and a connection over `connectionsPerIP` is refused 429
+  before the WebSocket upgrade.
+- One limiter is shared: an author's EVENTs over the WebSocket and over
+  `POST /events` draw from the same budget.
+- `exempt: members` lifts only per-pubkey limits (never for a banned key);
+  per-IP limits still apply to members.
+- Behind a reverse proxy, list it in `trustedProxies`, or every client is
+  counted as the proxy's IP. IPv6 clients are counted by their /64.
+- `--check` rejects (`invalid_input`, `input` = the key or value) negative
+  numbers, `events` without `per` or the reverse, a bad duration, a bad
+  CIDR and an `exempt` other than `none`/`members`.
 
 ## `ncli relay context` — stop repeating `--config`
 

@@ -82,6 +82,16 @@ jobs:
           echo "--- release notes ---"
           cat /tmp/release-notes.md
 
+      # A release ships pinned to itself: the chart's appVersion, the
+      # stacks' NCLI_VERSION defaults, the examples and the rigs must all
+      # name the version being tagged, or nothing is tagged. Bump them in
+      # the release PR (see deploy/README.md, "Images").
+      - name: Check relay image pins
+        working-directory: ncli
+        env:
+          NCLI_RELEASE_VERSION: ${{ steps.changelog.outputs.version }}
+        run: go test ./deploy -run '^TestRelayImagePinsVersion$' -count=1
+
       - name: Tag release
         working-directory: ncli
         env:

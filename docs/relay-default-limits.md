@@ -1,85 +1,83 @@
-# ncli relay — default limits: risks & decisions
+# ncli relay — limits: what shipped and what's open
 
-2026-11-08 · decided; this is the reference for the relay-hardening work
+2026-11-08 · record after v0.8.0-rc.51 (decided in [#233](https://github.com/ohstr/ncli/pull/233))
 
-## Summary
+## Rule
 
-Agreed rule: **a limit nobody configures is no limit**. No hidden defaults, no `-1`.
-One exception: **Blossom keeps its upload caps** (100 MiB per blob, 2 uploads in
-flight per key, 8 in total).
+**A limit nobody configures is no limit.** No hidden defaults, no `-1`. The
+exceptions are the protocol-level caps below, which always apply. A public
+relay that limits nothing is warned about, never refused.
 
-This report lists what a relay with no limit settings is exposed to, so the
-team can decide whether "unset = none" is right everywhere, or whether some
-areas need a default, a warning, or just a documented recommended value.
+## Limited with nothing configured
 
-## What is already limited with nothing configured
-
-| Limit | Value when unset | Where |
+| Limit | Value when unset | Config key |
 |---|---|---|
-| Blossom blob size | 100 MiB | nmilat `nipB7/server` (kept) |
-| Blossom uploads in flight per key / total | 2 / 8 | same (kept) |
-| WebSocket message size (`max_message_length`) | 1,101,005 bytes | nmilat `relay/session.go:35` |
-| Subscriptions per connection (`max_subscriptions`) | 355 | nmilat `relay/subscription.go:13` |
-| Events per filter (`max_limit`) | 10,000,000 (effectively none) | nmilat `relay/store.go:64` |
-| Store tasks in flight per connection | 2048 (internal, not configurable) | nmilat `relay/config.go:23` |
-| Concurrent store scans | 2 × workers (internal) | nmilat `relay/config.go:500` |
-| Proof-of-work | off unless `pow.min` set | relay config |
+| WebSocket message size | 1,101,005 bytes | `nip11.limitation.max_message_length` |
+| Subscriptions per connection | 355 | `nip11.limitation.max_subscriptions` |
+| Events per filter | 555,555 (ncli's default; nmilat alone would allow 10,000,000) | `nip11.limitation.max_limit` |
+| Indexable tags per filter | 5 | `nip11.limitation.max_indexable_tags` |
+| Store tasks in flight per connection | 2048 | `maxConcurrentStoreTasks` |
+| Concurrent store scans | 2 × CPUs | internal |
+| Blossom blob size | 100 MiB | `blossom.maxBlobBytes` |
+| Blossom uploads in flight per key / total | 2 / 8 | `blossom.maxUploadsPerSigner` / `blossom.maxConcurrentUploads` |
+| Proof-of-work | off | `pow.min`, `pow.strict` |
 
-**Not limited at all today:** events per pubkey/IP over time, REQ/COUNT rate,
-connections per IP, HTTP bridge requests (`/query`, `/count`, `/events`),
-Blossom downloads and request rate, storage per key or in total, listen
-interface (always all interfaces).
+## Opt-in limits (`limits:`, rc.51)
 
-## Risks of each unlimited-by-default area
+Each rate is `events` per `per`, up to `burst`. The recommended block for a
+public relay is in `skills/ncli-relay-ops/SKILL.md` and `examples/relay/full.yaml`,
+and the public examples and the public-search stack ship with it.
 
-| # | Area | What an abuser can do | Severity (public relay) | Severity (members-only relay) |
-|---|---|---|---|---|
-| 1 | Event writes per pubkey / IP | Flood events: storage grows, indexes (search, zaps, stats) rebuild slower, spam reaches readers. rc.49 test: 300 events in one burst, all accepted. | **High** | Low (only members can write) |
-| 2 | REQ / COUNT rate | Hammer queries; scans are capped at 2×workers so honest queries queue behind them (latency DoS). `max_limit` 10M allows huge result sets. | **High** | Medium (auth_required still lets members do it) |
-| 3 | Connections per IP | Open many sockets × 355 subs each: file descriptors and memory run out. | Medium | Medium (sockets open before auth) |
-| 4 | HTTP bridge (`/query`, `/count`, `/events`) | Same as REQ but stateless and cheaper for the attacker; NIP-98 only when membership is required. | Medium | Low |
-| 5 | Blossom requests over time | Uploads capped only by concurrency, so a key can upload back-to-back forever; any number of keys if upload is open. Downloads unlimited: egress bandwidth / S3 egress cost. | **High** if uploads open to anyone | Low |
-| 6 | Storage quota (events + blobs) | No per-key or total cap: disk / bucket fills, relay stops accepting writes or crashes. | **High** | Medium |
-| 7 | Listen address | Binds every interface; a relay meant for loopback is exposed unless a firewall is in front. Fixed by the planned `listen:` key. | Medium | Medium |
+| Key | Counts |
+|---|---|
+| `limits.events.perPubkey` / `perIP` | EVENT over the WebSocket and `POST /events`, one shared budget. Per pubkey only for a connection logged in as the author, and always over `POST /events` (its NIP-98 signer is the author). |
+| `limits.reads.perIP` | REQ, COUNT, NEG-OPEN and each AUTH |
+| `limits.http.perIP` | `POST /query`, `/count`, `/events` |
+| `limits.blossom.uploads` / `downloads` | Blossom requests per pubkey and per IP (a download has no signer, so per IP) |
+| `limits.connectionsPerIP` | WebSockets, huddle ones (`/huddle/{id}/audio`, `/rtc`) included |
+| `limits.exempt: members` | Members and admins skip the per-pubkey limits; never a banned key, never per-IP ones |
+| `limits.trustedProxies` | Proxies whose `X-Forwarded-For` names the client |
 
-**Mitigations available today without new code:** `pow.min`,
-`nip11.limitation.auth_required` / `membership_required`,
-`blossom.membersOnly.upload`, NIP-86 bans, and a reverse proxy
-(nginx `limit_req`, Traefik `RateLimit`) in front of the relay.
+Refusals are `rate-limited:` (OK, CLOSED, NEG-ERR) or 429 with `Retry-After`,
+counted in `ncli_relay_rate_limited_total`.
 
-## Options
+**Warnings** (startup and `relay --check --json`'s `"warnings"`): a public
+relay (no `auth_required`) without `limits:`; a per-pubkey limit that never
+applies; `listen` on loopback with per-IP limits but no `trustedProxies`
+covering it.
 
-- **A. Unset = none (current agreement).** Predictable, no surprise on upgrade;
-  a public relay is open to items 1–6 until the operator sets limits.
-- **B. A + recommended values in docs and examples.** `full.yaml` and the
-  relay-ops skill ship a commented `limits:` block with suggested numbers;
-  still nothing applied unless copied in.
-- **C. A + a `--check` / startup warning.** When the relay is public
-  (no `auth_required`) and no `limits:` is set, warn: "no rate limits
-  configured". No behaviour change, but the risk is visible.
-- **D. Defaults on.** Generous limits applied when unset. Safest out of the
-  box; contradicts the agreed rule and changes behaviour for existing relays.
+## Shipped in rc.51
 
-**Chosen:** A + B + C. Keeps the agreed rule, but no operator ends up
-unlimited without being told. Blossom's three caps stay as the only defaults.
+| PR | Content |
+|---|---|
+| [#234](https://github.com/ohstr/ncli/pull/234) | `membership.memberClaims` follows `membership_required` when unset |
+| [#235](https://github.com/ohstr/ncli/pull/235) | Chart and stacks pin every image (MinIO by digest, the relay by release) |
+| [#236](https://github.com/ohstr/ncli/pull/236) | `--check` fails on unknown config keys; startup warns |
+| [#237](https://github.com/ohstr/ncli/pull/237) | `listen` (host:port), winning over `port` |
+| [#238](https://github.com/ohstr/ncli/pull/238) | Blossom on the relay end to end, MinIO included |
+| [#241](https://github.com/ohstr/ncli/pull/241) | The `limits:` block and the no-limits warning |
+| [#243](https://github.com/ohstr/ncli/pull/243) (in [#246](https://github.com/ohstr/ncli/pull/246)) | Roles with tasks (`membership.roles`, `groups.create`); an invite request (kind 28935) needs `createclaim` |
+| [#244](https://github.com/ohstr/ncli/pull/244) (in [#246](https://github.com/ohstr/ncli/pull/246)) | Blossom blobs at the root; missing endpoints and 3xx/405/501 are `unsupported` |
+| [#245](https://github.com/ohstr/ncli/pull/245) | Every config warning in `--check --json`; the loopback/`trustedProxies` warning |
+| [#246](https://github.com/ohstr/ncli/pull/246) | `POST /events` applies NIP-29 group rules; Blossom blobs get `nosniff`, a sandboxing CSP and file extensions |
+
+rc.51's chart and stacks still ran the rc.50 image, which ignores every key
+above. From rc.52 a release ships pinned to itself, and the public configs
+carry `limits:` ([#248](https://github.com/ohstr/ncli/issues/248)).
 
 ## Decisions
 
-- [x] **Unset = none** for event, REQ/COUNT, HTTP bridge and Blossom request-rate limits (items 1, 2, 4, 5). Only Blossom's three upload caps keep defaults.
-- [x] **Connections per IP** (item 3): added to the `limits:` block, opt-in like every other limit.
-- [ ] **Storage quotas** (item 6): deferred to a separate item; needs per-key accounting in the nmilat store and Blossom.
-- [x] **Option B**: recommended values as a commented `limits:` block in `examples/relay/full.yaml` and the relay-ops skill.
-- [x] **Option C**: `--check` and startup warn when the relay is public (no `auth_required`) and no `limits:` is set.
-- [x] **nmilat internal caps** (2048 store tasks per connection, scans 2 × workers): kept as internal backpressure guards, not exposed in `relay.yaml`.
+- Unset is none for event, read, HTTP bridge, Blossom request and connection limits.
+- The protocol-level caps above keep their defaults.
+- Recommended values are documented and shipped in the public examples, not applied.
+- `--check` and startup warn instead of refusing.
+- nmilat's scan cap stays internal backpressure; `maxConcurrentStoreTasks` stays a tuning key.
 
-## Planned work
+## Still open
 
-| PR | Repo | Content |
-|---|---|---|
-| 1 | ncli | `listen:` key (wins over `port`) |
-| 2 | ncli | `--check` fails on unknown config keys, startup warns |
-| 3 | ncli | Pin MinIO / mc images in the Helm chart |
-| 4 | ncli | `membership.memberClaims` follows `membership_required` |
-| 5 | nmilat | Rate limiter: per pubkey + per IP, EVENT, REQ/COUNT, HTTP bridge, Blossom requests, connections per IP; each limit applied only when set |
-| 6 | ncli | `limits:` block wired to it, recommended values in docs (B), public-relay warning (C) |
-| 7 | nmilat + ncli | Blossom test gaps: overall upload cap, banned key, MinIO in CI, climatrix e2e on MinIO |
+| Item | Status |
+|---|---|
+| Storage quotas, per key and in total (events and blobs) | Not started: needs per-key accounting in the nmilat store and Blossom |
+| NIP-86 requests counted against `limits.http` | Open, [#247](https://github.com/ohstr/ncli/issues/247) |
+| NIP-86 IP block covering every HTTP bridge request | Open, [#247](https://github.com/ohstr/ncli/issues/247) |
+| A banned pubkey joining calls when `huddle.requireMembership` is off | Open, [#247](https://github.com/ohstr/ncli/issues/247) |

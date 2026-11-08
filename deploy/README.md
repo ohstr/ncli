@@ -74,11 +74,15 @@ helm install community deploy/helm/ncli-relay \
 Every image is pinned, and `go test ./deploy/` fails on one that isn't
 (it also checks `examples/` and `integration/`):
 
-- The relay is `ghcr.io/ohstr/ncli` at the latest release: the chart's
-  `appVersion`, the stacks' `NCLI_VERSION` defaults (and `.env.example`),
-  `examples/signer/pod.yaml` and the agent-eval rig. The test fails once
-  the CHANGELOG starts the next release's section until all of them name
-  the release just cut.
+- The relay is `ghcr.io/ohstr/ncli` at the release it ships with: the
+  chart's `appVersion`, the stacks' `NCLI_VERSION` defaults (and
+  `.env.example`), `examples/signer/pod.yaml` and the agent-eval rig. On a
+  PR the test accepts the CHANGELOG's top heading or the one below it.
+- Releasing: in the release PR, set every one of those pins to the
+  version being released and bump the chart's `version`. The release
+  workflow runs `NCLI_RELEASE_VERSION=<version> go test ./deploy -run
+  '^TestRelayImagePinsVersion$'` before tagging and refuses to release
+  unless every pin is that version.
 - Chainguard tags MinIO only `latest`, so it is pinned by digest. To bump
   it, take the `Digest:` from `docker buildx imagetools inspect
   cgr.dev/chainguard/minio:latest` (and `minio-client`) and put it in

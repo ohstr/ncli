@@ -161,6 +161,8 @@ func TestRelayCheck(t *testing.T) {
 		"unknown coin":            {"cache:\n  zaps:\n    coins: [btc]\n", "invalid_input"},
 		"limit over maxLimit":     {"cache:\n  zaps:\n    limit: 300\n    maxLimit: 100\n", "invalid_input"},
 		"relay stats without url": {"cache:\n  relay:\n    stats:\n      enabled: true\n", "usage"},
+		"listen not host:port":    {"listen: 7000\n", "invalid_input"},
+		"listen bad port":         {"listen: 127.0.0.1:70000\n", "invalid_input"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			body := "store: " + t.TempDir() + "/notes.db\nnip11:\n  privkey: " + priv + "\n" + c.yaml
@@ -197,4 +199,7 @@ func TestRelayCheck(t *testing.T) {
   relay: {stats: {enabled: true, interval: 1m}}
 `)
 	e.MustOK(t, "relay", "--config", full, "--check", "--json")
+
+	listen := e.WriteFile("listen.yaml", "store: "+t.TempDir()+"/notes.db\nport: 6000\nlisten: 127.0.0.1:7000\nnip11:\n  privkey: "+priv+"\n")
+	e.MustOK(t, "relay", "--config", listen, "--check", "--json")
 }

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"sync/atomic"
@@ -109,7 +108,7 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 		sessionConfig.ControlWriteTimeout = d
 	}
 
-	log.Info().Str("pubkey", config.Nip11.PubKey).Int("port", config.Port).Msg("server config check")
+	log.Info().Str("pubkey", config.Nip11.PubKey).Int("port", config.Port).Str("listen", config.listenAddr()).Msg("server config check")
 	sessionConfig.PrivKey = config.Nip11.PrivKey
 	sessionConfig.EnableProfileStats = config.profileStatsEnabled()
 	if sessionConfig.EnableProfileStats {
@@ -402,7 +401,7 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 		publisherDone:      publisherDone,
 		server: &http.Server{
 			Handler: moderation.ipGate(mux),
-			Addr:    fmt.Sprintf(":%d", config.Port),
+			Addr:    config.listenAddr(),
 		},
 	}
 

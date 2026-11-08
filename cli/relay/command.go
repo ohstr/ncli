@@ -89,6 +89,9 @@ type RelayConfig struct {
 	LogDir       string `mapstructure:"logdir"`
 	RelayNotesDb string `mapstructure:"store"`
 	Port         int    `mapstructure:"port"`
+	// Listen, as host:port, is the address the relay binds; it wins over
+	// Port, which alone binds every interface.
+	Listen string `mapstructure:"listen"`
 
 	Logs       *LogConfig         `mapstructure:"logs"`
 	Cache      *CacheConfig       `mapstructure:"cache"`
@@ -574,6 +577,9 @@ func initConfig() error {
 		return err
 	}
 
+	if err := checkListen(&config); err != nil {
+		return err
+	}
 	if config.Port == 0 {
 		config.Port = defaultPort
 	}

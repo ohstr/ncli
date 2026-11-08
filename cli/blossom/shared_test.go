@@ -316,6 +316,13 @@ func TestMirrorError_SourceMissingIsNotFound(t *testing.T) {
 		{"source blob not found", common.CodeNotFound},
 		{"Failed to fetch https://cdn.example/x.png: 404", common.CodeNotFound},
 		{"upstream returned 404 for the URL", common.CodeNotFound},
+		{"could not fetch the blob", common.CodeNotFound},
+		{"failed to download https://cdn.example/x.png", common.CodeNotFound},
+		{"blob not found at https://cdn.example/x.png", common.CodeNotFound},
+		// A bare "url" or "blob" names no source: the endpoint is missing.
+		{"unknown URL path", common.CodeUnsupported},
+		{"no such route: /mirror", common.CodeUnsupported},
+		{"Blob endpoint not found", common.CodeUnsupported},
 	}
 	for _, tc := range cases {
 		raw := &bclient.HTTPError{Server: "https://s.example", StatusCode: http.StatusNotFound, Reason: tc.reason}

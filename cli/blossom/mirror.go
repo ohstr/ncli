@@ -113,14 +113,23 @@ func newMirrorCommand() *cobra.Command {
 // mirrorError marks a mirror failure for classifying. BUD-04 gives no
 // status for a source the server could not fetch, and some servers answer
 // 404 for it, so a 404 is a missing source blob (not_found) when its
-// X-Reason talks about the source, the blob or its URL and does not say
-// the endpoint is off. Any other 404, a bare one included, is a server
+// X-Reason says the source could not be fetched (sourceMissingPhrases) and
+// does not say the endpoint is off. Any other 404, a bare one included, is a server
 // without mirror (unsupported), as optionalEndpointError has it.
 func mirrorError(err error) error {
 	if httpErr, ok := errors.AsType[*bclient.HTTPError](err); ok && httpErr.StatusCode == http.StatusNotFound && sourceMissingReason(httpErr.Reason) {
 		return err
 	}
 	return optionalEndpointError(err)
+}
+
+// sourceMissingPhrases are what an X-Reason says about a source the server
+// could not fetch. A bare "url" or "blob" is not one: "unknown URL path" is
+// a server without the endpoint.
+var sourceMissingPhrases = []string{
+	"source", "upstream", "not found at",
+	"could not fetch", "couldn't fetch", "failed to fetch", "unable to fetch",
+	"could not download", "failed to download", "unable to download",
 }
 
 func sourceMissingReason(reason string) bool {
@@ -130,8 +139,8 @@ func sourceMissingReason(reason string) bool {
 			return false
 		}
 	}
-	for _, about := range []string{"source", "blob", "url", "upstream", "fetch", "download"} {
-		if strings.Contains(r, about) {
+	for _, phrase := range sourceMissingPhrases {
+		if strings.Contains(r, phrase) {
 			return true
 		}
 	}

@@ -5,11 +5,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"net/http"
 	"time"
 
 	"github.com/ohstr/nmilat/huddle/room"
 	"github.com/ohstr/nmilat/nip86"
+	"github.com/ohstr/nmilat/nip98"
 	"github.com/ohstr/nmilat/relay"
+	"github.com/ohstr/nmilat/relay/ratelimit"
 )
 
 // defaultInviteTTL mirrors the relay SDK's own fallback, used when an operator
@@ -366,4 +370,47 @@ func newNip86Handler(wsHandler *relay.SessionHandler, store *relay.EventStore, r
 	}
 
 	return nip86.NewHandler(cfg), nil
+}
+
+// limitNip86 counts each NIP-86 POST against limits.http: per IP first, so
+// an unauthenticated flood is refused before it costs a signature check,
+// then per signer once NIP-98 verifies, when a per-pubkey limit is set. The
+// signer check runs the verification the handler runs; only a request that
+// passes it reaches next. A refusal is a 429 with Retry-After. A nil
+// limiter counts nothing.
+func limitNip86(limiter *ratelimit.Limiter, perPubkey bool, next http.Handler) http.Handler {
+	if limiter == nil {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if wait, ok := limiter.Allow(ratelimit.HTTP, limiter.ClientIP(r), ""); !ok {
+			ratelimit.Refuse(w, ratelimit.HTTP, wait)
+			return
+		}
+		if !perPubkey {
+			next.ServeHTTP(w, r)
+			return
+		}
+		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, nip86.MaxBodyBytes))
+		if err != nil {
+			http.Error(w, "request body too large or unreadable", http.StatusRequestEntityTooLarge)
+			return
+		}
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		signer, err := nip98.VerifyAnyPubkey(r, nip98.Options{Body: body, RequirePayload: true, NormalizeRootPath: true})
+		if err != nil {
+			// 401 is NIP-86's only status for a failed authentication.
+			http.Error(w, err.Error(), http.StatusUnauthorized)
+			return
+		}
+		if wait, ok := limiter.Allow(ratelimit.HTTP, "", signer); !ok {
+			ratelimit.Refuse(w, ratelimit.HTTP, wait)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }

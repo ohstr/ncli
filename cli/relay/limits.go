@@ -29,7 +29,8 @@ type LimitsConfig struct {
 	Events LimitConfig `mapstructure:"events"`
 	// Reads limits REQ, COUNT and NEG-OPEN; an AUTH takes from PerIP.
 	Reads LimitConfig `mapstructure:"reads"`
-	// HTTP limits the HTTP bridge: POST /query, /count and /events.
+	// HTTP limits the HTTP bridge (POST /query, /count and /events) and
+	// NIP-86: per IP before NIP-98 is checked, per signer after.
 	HTTP    LimitConfig        `mapstructure:"http"`
 	Blossom BlossomLimitConfig `mapstructure:"blossom"`
 	// ConnectionsPerIP caps one IP's open WebSocket connections, the

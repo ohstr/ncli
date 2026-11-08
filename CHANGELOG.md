@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.8.0-rc.51]
+
+### Changed
+
+- Changes the Helm chart and Compose stacks to pin their images: MinIO by digest, and the relay to `0.8.0-rc.50` instead of `latest`, which was the 0.6.0 release. A chart image also takes an optional `digest`.
+
 ## [0.8.0-rc.50]
 
 ### Added

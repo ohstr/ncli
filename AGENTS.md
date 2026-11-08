@@ -71,7 +71,7 @@ Every command's actual result goes to **stdout only**; progress narration
 and errors go to **stderr** — so piping stdout into `jq` or a script's
 parser never picks up log noise. `--json` and `-q/--quiet` are global flags
 (declared once on the root command, available on every subcommand) rather
-than per-command. `id`, `id list`, `id import`, `id relabel`, `id rm`, `id sign`, `version`, `skills list`/`show`/`install`, `id delegate`, `id attest`, `nip98`, `relay
+than per-command. `id`, `id list`, `id import`, `id relabel`, `id rm`, `id sign`, `version`, `skills list`/`show`/`install`, `id delegate`, `id attest`, `nip98`, `relay --check`, `relay
 status`/`index`/`jobs`/`verify`/`metrics token`, `relay members`/`invites`/`roles`, `ping`,
 `miner mine`/`check`, `publish`, `huddle list`, `space create`/
 `list`/`show`/`chat send`/`chat list`, `bunker`/`status`/`stop`/
@@ -138,7 +138,7 @@ and never when `NO_COLOR` is set or stderr is piped.
 | `conflict` | 5 | yes | collides with existing state (vault label taken, another job running on that index) |
 | `network` | 6 | yes | a remote call failed (relay connection, admin HTTP request, nip-05 fetch) |
 | `auth` | 7 | no | wrong credentials or a rejected signature |
-| `unsupported` | 8 | no | the target server doesn't support the requested capability at all (`blossom list` against a server with BUD-02 disabled, `huddle list`/`space join` against a relay with huddles disabled), distinct from `not_found`'s "this one specific resource is missing" |
+| `unsupported` | 8 | no | the target server doesn't support the requested capability at all (`blossom list`, `upload --optimize` or `mirror` against a server without that endpoint, or any Blossom endpoint answering 3xx, 405 or 501; `huddle list`/`space join` against a relay with huddles disabled), distinct from `not_found`'s "this one specific resource is missing" |
 | `internal` | 1 | no | anything else (fallback bucket) |
 
 A failed NIP-42 login (`publish`, `find`, `dump`, `apply` against a relay

@@ -202,22 +202,27 @@ func TestTemplateProblems(t *testing.T) {
 	}
 }
 
-func TestReleasedVersion(t *testing.T) {
+func TestAllowedRelayTags(t *testing.T) {
+	const two = "# Changelog\n\n## [0.8.0-rc.52]\n\n## [0.8.0-rc.51]\n\n## [0.8.0-rc.50]\n"
 	for _, tc := range []struct {
-		name, changelog, want string
+		name, changelog, release string
+		want                     []string
 	}{
-		{"next release on top", "# Changelog\n\n## [0.8.0-rc.51]\n\n## [0.8.0-rc.50]\n\n## [0.8.0-rc.49]\n", "0.8.0-rc.50"},
-		{"unreleased on top", "## [Unreleased]\n\n## [0.9.0]\n", "0.9.0"},
+		{"next release on top", two, "", []string{"0.8.0-rc.52", "0.8.0-rc.51"}},
+		{"releasing", two, "0.8.0-rc.52", []string{"0.8.0-rc.52"}},
+		{"just released", "## [0.8.0-rc.51]\n\n## [0.8.0-rc.50]\n", "", []string{"0.8.0-rc.51", "0.8.0-rc.50"}},
+		{"unreleased on top", "## [Unreleased]\n\n## [0.9.0]\n", "", []string{"0.9.0"}},
+		{"one heading", "## [0.1.0]\n", "", []string{"0.1.0"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := releasedVersion([]byte(tc.changelog))
-			if err != nil || got != tc.want {
-				t.Errorf("releasedVersion = %q, %v; want %q", got, err, tc.want)
+			got, err := allowedRelayTags([]byte(tc.changelog), tc.release)
+			if err != nil || strings.Join(got, ",") != strings.Join(tc.want, ",") {
+				t.Errorf("allowedRelayTags = %q, %v; want %q", got, err, tc.want)
 			}
 		})
 	}
-	if _, err := releasedVersion([]byte("## [0.1.0]\n")); err == nil {
-		t.Error("one heading: want an error")
+	if _, err := allowedRelayTags([]byte("## [Unreleased]\n"), ""); err == nil {
+		t.Error("no version heading: want an error")
 	}
 }
 

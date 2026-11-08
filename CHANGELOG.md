@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.8.0-rc.52]
+
+### Changed
+
+- Changes releases to ship pinned to themselves: the release workflow refuses to tag unless every relay image pin (chart, stacks, examples, rigs) names the version being released. Before, a release always pinned the one before it. ([#249](https://github.com/ohstr/ncli/pull/249))
+- Changes the public example relay configs and the public-search stack to ship with the recommended `limits:` block, so they no longer start with "no rate limits configured". ([#249](https://github.com/ohstr/ncli/pull/249))
+
+### Fixed
+
+- Fixes the Helm chart (now 0.3.0) and Compose stacks running the rc.50 relay image, which lacks rc.51's fixes and ignores its new keys (`limits`, `listen`, `membership.roles`, `groups.create`). They now run 0.8.0-rc.51, and the chart's notes say which image it runs. ([#249](https://github.com/ohstr/ncli/pull/249))
+
 ## [0.8.0-rc.51]
 
 ### Added

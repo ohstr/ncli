@@ -1,5 +1,8 @@
 ncli relay {{ include "ncli-relay.fullname" . }} is deployed.
 
+It runs {{ include "ncli-relay.image" (dict "image" .Values.image "default" .Chart.AppVersion) }}
+(chart {{ .Chart.Version }} defaults to ncli {{ .Chart.AppVersion }}; set image.tag to run another).
+
 {{- if .Values.ingress.enabled }}
 Clients connect to {{ if .Values.ingress.tlsSecretName }}wss{{ else }}ws{{ end }}://{{ .Values.ingress.host }}
 {{- else }}

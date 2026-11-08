@@ -1291,7 +1291,8 @@ ncli blossom servers remove https://blossom.example
 ```
 
 `upload`/`rm`/`mirror` go to every configured server and report each
-(item, server) result; `download` tries servers in order until one answers.
+(item, server) result; `download` of a full URL fetches that URL first, then
+asks the servers in order by hash until one answers.
 Commands that take an identity also accept someone else's:
 
 ```sh
@@ -1459,7 +1460,10 @@ just vhs
 > [CONTRIBUTING.md](CONTRIBUTING.md#getting-set-up).
 
 Releases are cut by hand with the `workflow_dispatch`-only
-[`.github/workflows/release.yml`](.github/workflows/release.yml).
+[`.github/workflows/release.yml`](.github/workflows/release.yml). The
+release PR first pins every relay image to the version being released
+([deploy/README.md](deploy/README.md#images)); the workflow refuses to
+tag otherwise.
 
 ## License
 

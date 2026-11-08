@@ -33,6 +33,16 @@ func splitListen(listen string) (string, int, error) {
 	return host, port, nil
 }
 
+// bindAddrEnv makes NCLI_LISTEN and NCLI_PORT reach viper.Unmarshal even
+// when the file has no listen or port key: AutomaticEnv alone only
+// overrides keys the file already has, while the admin commands read
+// viper.GetString("listen") and see the variable either way. Bound, the
+// relay binds the same address its clients dial.
+func bindAddrEnv(v *viper.Viper) {
+	_ = v.BindEnv("listen")
+	_ = v.BindEnv("port")
+}
+
 // checkListen validates listen and, when it is set, makes its port the
 // relay's port, so everything derived from the port (the admin listener's
 // default port+1) follows it.

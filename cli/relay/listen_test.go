@@ -3,6 +3,7 @@ package relay
 import (
 	"errors"
 	"net"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/ohstr/ncli/cli/relay/adminplane"
 	"github.com/ohstr/nmilat/nip11"
 	"github.com/ohstr/nmilat/relay"
+	"github.com/spf13/viper"
 )
 
 func TestCheckListen(t *testing.T) {
@@ -148,4 +150,77 @@ func TestNewServerBindsListenHost(t *testing.T) {
 		_ = conn.Close()
 		t.Errorf("relay answered on 127.0.0.1:%d; it should bind only 127.0.0.2", port)
 	}
+}
+
+// loadRelayEnvConfig loads body as relay.yaml with the root command's
+// NCLI_* env setup and runs initConfig on it.
+func loadRelayEnvConfig(t *testing.T, body string) error {
+	t.Helper()
+	prevConfig, prevAdmin := config, adminSettings
+	t.Cleanup(func() { config, adminSettings = prevConfig, prevAdmin })
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+	p := filepath.Join(t.TempDir(), "relay.yaml")
+	if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	viper.SetEnvPrefix("NCLI")
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	if err := common.LoadViperConfig(p); err != nil {
+		t.Fatal(err)
+	}
+	config = RelayConfig{}
+	return initConfig()
+}
+
+const envRelayYAML = `
+nip11:
+  pubkey: bb50e2d89a4ed70663d080659fe0ad4b9bc3e06c17a227433966cb59ceee020d
+store: test.db
+`
+
+// NCLI_LISTEN / NCLI_PORT with no listen/port in the file move the server
+// and its clients together.
+func TestListenEnvReachesServerAndClients(t *testing.T) {
+	t.Run("listen", func(t *testing.T) {
+		t.Setenv("NCLI_LISTEN", "127.0.0.2:7300")
+		if err := loadRelayEnvConfig(t, envRelayYAML); err != nil {
+			t.Fatal(err)
+		}
+		if got := config.listenAddr(); got != "127.0.0.2:7300" {
+			t.Errorf("server binds %q, want 127.0.0.2:7300", got)
+		}
+		if addr, _ := relayDialAddr(); addr != "127.0.0.2:7300" {
+			t.Errorf("clients dial %q, want 127.0.0.2:7300", addr)
+		}
+		if adminSettings == nil || adminSettings.Addr != "127.0.0.1:7301" {
+			t.Errorf("admin listener = %+v, want 127.0.0.1:7301", adminSettings)
+		}
+	})
+	t.Run("port", func(t *testing.T) {
+		t.Setenv("NCLI_PORT", "7400")
+		if err := loadRelayEnvConfig(t, envRelayYAML); err != nil {
+			t.Fatal(err)
+		}
+		if got := config.listenAddr(); got != ":7400" {
+			t.Errorf("server binds %q, want :7400", got)
+		}
+		if addr, _ := relayDialAddr(); addr != "localhost:7400" {
+			t.Errorf("clients dial %q, want localhost:7400", addr)
+		}
+	})
+	t.Run("garbage listen fails", func(t *testing.T) {
+		t.Setenv("NCLI_LISTEN", "garbage")
+		var ce *common.CLIError
+		if err := loadRelayEnvConfig(t, envRelayYAML); !errors.As(err, &ce) || ce.Code != common.CodeInvalidInput || ce.Input != "garbage" {
+			t.Errorf("err %v, want invalid_input naming garbage", err)
+		}
+	})
+	t.Run("garbage port fails", func(t *testing.T) {
+		t.Setenv("NCLI_PORT", "garbage")
+		var ce *common.CLIError
+		if err := loadRelayEnvConfig(t, envRelayYAML); !errors.As(err, &ce) || ce.Code != common.CodeInvalidInput {
+			t.Errorf("err %v, want invalid_input", err)
+		}
+	})
 }

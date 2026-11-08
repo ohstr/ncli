@@ -469,6 +469,7 @@ func initConfig() error {
 	if err := checkRenamedKeys(viper.GetViper()); err != nil {
 		return err
 	}
+	bindAddrEnv(viper.GetViper())
 	if err := viper.Unmarshal(&config); err != nil {
 		return &common.CLIError{Err: fmt.Errorf("unable to decode config: %w", err), Code: common.CodeInvalidInput}
 	}

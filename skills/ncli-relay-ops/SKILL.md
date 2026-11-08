@@ -77,6 +77,13 @@ ncli relay --config relay.yaml
 ncli relay --config relay.yaml --check
 ```
 
+A key the relay doesn't know (`htpBridge:`, `httpBridge.qurey`) only logs
+a warning at startup and is ignored, so its setting stays off. `--check`
+fails on it (`invalid_input`, exit 3), naming every unknown key by its
+dotted path; run it after every config edit. `NCLI_*` env vars and keys
+other commands read (`vault`, `signer`, `groups.identity`, ...) are not
+reported.
+
 Foreground process; stops cleanly on SIGINT/SIGTERM. Logs go to stderr and
 to `<logdir>/nrelay.log` as JSON lines (or a custom `logs:` rotation block).
 `logs.level: debug` adds per-connection lines; `logs.file: false` keeps
@@ -626,10 +633,9 @@ Full route, metric and config reference: `references/admin-plane-reference.md`.
   (5) when each is left at zero.
 - POST /query and POST /events live under a nested `httpBridge:` key
   (`httpBridge.query.enabled`/`httpBridge.events.enabled`), not bare
-  top-level `query:`/`events:` keys -- viper silently drops an unknown
-  top-level key rather than erroring, so a config using the old flat shape
-  loads with no complaint and simply never mounts either endpoint. See
-  `examples/relay/app-backend-relay.yaml`.
+  top-level `query:`/`events:` keys. The old flat shape mounts neither
+  endpoint: startup only warns about the unknown keys, `--check` fails on
+  them. See `examples/relay/app-backend-relay.yaml`.
 - Gift wraps (kind 1059) are served only to the pubkey their `p` tag names,
   over REQ, COUNT and `/query`, unless `recipientOnlyKinds` says otherwise
   (omitted means `[1059]`; `[]` turns it off). An anonymous REQ for 1059 is

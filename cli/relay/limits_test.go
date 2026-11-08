@@ -662,7 +662,6 @@ func must2[T any](v T, err error) T {
 	return v
 }
 
-// postNIP98With is postNIP98 with extra request headers.
 // nip86Raw calls NIP-86 method on ts, signed as privKey ("" sends no
 // Authorization), and returns the response whatever its status.
 func nip86Raw(t *testing.T, ts *httptest.Server, privKey, method string) *http.Response {
@@ -683,6 +682,7 @@ func nip86Raw(t *testing.T, ts *httptest.Server, privKey, method string) *http.R
 	return resp
 }
 
+// postNIP98With is postNIP98 with extra request headers.
 func postNIP98With(t *testing.T, ts *httptest.Server, path, privKey string, body []byte, headers map[string]string) *http.Response {
 	t.Helper()
 	target := ts.URL + path

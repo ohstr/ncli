@@ -460,7 +460,7 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 		stopSampling:       stopSampling,
 		publisherDone:      publisherDone,
 		server: &http.Server{
-			Handler: moderation.ipGate(mux),
+			Handler: newUntrustedProxyWarner(&config).wrap(moderation.ipGate(mux)),
 			Addr:    config.listenAddr(),
 		},
 	}

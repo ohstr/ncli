@@ -44,7 +44,9 @@ counted in `ncli_relay_rate_limited_total`.
 **Warnings** (startup and `relay --check --json`'s `"warnings"`): a public
 relay (no `auth_required`) without `limits:`; a per-pubkey limit that never
 applies; `listen` on loopback with per-IP limits but no `trustedProxies`
-covering it.
+covering it. While running, with per-IP limits set, the relay also warns
+(once per peer) about a request carrying `X-Forwarded-For` or `X-Real-IP`
+from a peer `trustedProxies` doesn't list.
 
 ## Shipped in rc.51
 

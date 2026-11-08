@@ -46,10 +46,12 @@ only one. `--check` rejects (`invalid_input`) a `listen` that isn't
 host:port with a port 1-65535, has stray whitespace, or names a host that
 doesn't resolve. On port 65535 set `admin.listen` (port + 1 doesn't
 exist). `NCLI_LISTEN`/`NCLI_PORT` apply even when the file has no
-`listen`/`port` key, to the relay and its admin commands alike. A
-loopback `listen` with per-IP `limits` warns unless `limits.trustedProxies`
-covers that address: behind a local proxy every client shares one per-IP
-limit.
+`listen`/`port` key, to the relay and its admin commands alike; a
+Docker-link value (`tcp://ip:port`, which Kubernetes sets as `NCLI_PORT`
+for a Service named `ncli`) is ignored. A loopback `listen` with per-IP
+`limits` warns unless `limits.trustedProxies` covers that address
+(`localhost` binds 127.0.0.1): behind a local proxy every client shares
+one per-IP limit.
 
 ## Scenario examples
 

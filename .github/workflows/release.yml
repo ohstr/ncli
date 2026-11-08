@@ -152,3 +152,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+
+      # The deploy pins (chart, stacks, examples) name this version, so the
+      # release is only done once its image is pullable. GoReleaser can
+      # publish the GitHub Release and still leave the manifest unpushed;
+      # fail the run then rather than ship pins to an image that isn't there.
+      - name: Verify relay image
+        env:
+          VERSION: ${{ steps.changelog.outputs.version }}
+        run: |
+          if ! docker buildx imagetools inspect "ghcr.io/ohstr/ncli:$VERSION"; then
+            echo "::error::ghcr.io/ohstr/ncli:$VERSION was not published; the deploy pins name it"
+            exit 1
+          fi

@@ -6,7 +6,7 @@ services:
     build:
       context: ../../..
       dockerfile: deploy/docker/Dockerfile
-    image: ncli:latest
+    image: ncli:dev
     container_name: ncli_relay
     command: ["relay", "--config", "/app/ncli/config.yaml"]
     ports:

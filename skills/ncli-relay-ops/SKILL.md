@@ -842,6 +842,10 @@ Full route, metric and config reference: `references/admin-plane-reference.md`.
   top-level `query:`/`events:` keys. The old flat shape mounts neither
   endpoint: startup only warns about the unknown keys, `--check` fails on
   them. See `examples/relay/app-backend-relay.yaml`.
+- POST /events applies a hosted group's rules: a non-member's event tagged
+  into a private, closed or restricted group is 403, and group moderation
+  kinds and requests (9000-9022) are 400 `restricted:` -- send those over a
+  WebSocket.
 - Gift wraps (kind 1059) are served only to the pubkey their `p` tag names,
   over REQ, COUNT and `/query`, unless `recipientOnlyKinds` says otherwise
   (omitted means `[1059]`; `[]` turns it off). An anonymous REQ for 1059 is
@@ -861,7 +865,11 @@ Full route, metric and config reference: `references/admin-plane-reference.md`.
   is `/<blobPrefix>/<sha256>.<ext>` (`/media` by default), which also
   serves the blob. It has no `list`, `mirror` or `upload --optimize`:
   those answer 404 with a "not supported" reason, which `ncli blossom`
-  reports as `unsupported` (exit 8). Keep S3 keys out of `relay.yaml`:
+  reports as `unsupported` (exit 8). A blob is served with `nosniff` and a
+  sandboxing CSP; an untyped one is `application/octet-stream`, and any type
+  but image, audio, video or plain text is a `Content-Disposition:
+  attachment`, so a link to it downloads rather than renders on the relay's
+  origin. Keep S3 keys out of `relay.yaml`:
   leave `accessKey: ""`/`secretKey: ""` and set
   `NCLI_BLOSSOM_STORAGE_S3_ACCESSKEY`/`_SECRETKEY` (an `NCLI_*` variable
   only overrides a key the file already has).

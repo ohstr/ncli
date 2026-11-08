@@ -1459,7 +1459,10 @@ just vhs
 > [CONTRIBUTING.md](CONTRIBUTING.md#getting-set-up).
 
 Releases are cut by hand with the `workflow_dispatch`-only
-[`.github/workflows/release.yml`](.github/workflows/release.yml).
+[`.github/workflows/release.yml`](.github/workflows/release.yml). The
+release PR first pins every relay image to the version being released
+([deploy/README.md](deploy/README.md#images)); the workflow refuses to
+tag otherwise.
 
 ## License
 

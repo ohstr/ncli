@@ -100,6 +100,31 @@ limits:
 		}
 	})
 
+	t.Run("a role-task warning is listed and logged once", func(t *testing.T) {
+		const unlisted = "membership.members.can does not list blossom.download although blossom.membersOnly.download is on"
+		path := e.WriteFile("role-tasks.yaml", base()+`  url: wss://relay.example.com
+  limitation:
+    auth_required: true
+membership:
+  enabled: true
+  members:
+    can: [createclaim]
+blossom:
+  enabled: true
+  membersOnly:
+    download: true
+`)
+		res := e.MustOK(t, "relay", "--config", path, "--check", "--json")
+		var got checked
+		res.JSON(t, &got)
+		if !got.OK || len(got.Warnings) != 1 || !strings.HasPrefix(got.Warnings[0], unlisted) {
+			t.Errorf("--check = %s", res.Stdout)
+		}
+		if n := strings.Count(res.Stderr, unlisted); n != 1 {
+			t.Errorf("%q logged %d times:\n%s", unlisted, n, res.Stderr)
+		}
+	})
+
 	t.Run("per-IP limits on loopback without a trusted proxy warn", func(t *testing.T) {
 		const loopback = "listen is on loopback, so clients probably arrive through a local proxy: add it to limits.trustedProxies or every client shares one per-IP limit"
 		limits := "limits:\n  events: {perIP: {events: 120, per: 1m}}\n  connectionsPerIP: 20\n"

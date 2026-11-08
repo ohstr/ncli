@@ -363,7 +363,7 @@ func (c *RelayConfig) grantCeiling() bool {
 	return c.delegatesGroupTasks()
 }
 
-// warnRoleTasks logs what a valid config still probably doesn't mean: with
+// warnRoleTasks records (see warn) what a valid config still probably doesn't mean: with
 // membership.members.can set, a member gets only what it lists, so a feature
 // restricted to members (blossom.membersOnly, huddle.requireMembership) that
 // it leaves out is now restricted to the admins and the roles that list it.
@@ -371,8 +371,7 @@ func (c *RelayConfig) grantCeiling() bool {
 // group:<kind> tasks.
 func (c *RelayConfig) warnRoleTasks() {
 	if c.Groups != nil && c.Groups.GrantCeiling != nil && !*c.Groups.GrantCeiling && c.delegatesGroupTasks() {
-		log.Warn().Str("setting", "groups.grantCeiling").
-			Msg("groups.grantCeiling is false while membership roles carry group:<kind> tasks: a role holding group:9000 can make its holder a group admin who keeps that seat after the role is revoked")
+		c.warn("groups.grantCeiling is false while membership roles carry group:<kind> tasks: a role holding group:9000 can make its holder a group admin who keeps that seat after the role is revoked")
 	}
 	m := c.Membership
 	if m == nil || !m.Enabled || m.Members == nil {
@@ -396,8 +395,7 @@ func (c *RelayConfig) warnRoleTasks() {
 	}
 	for _, task := range sortedKeys(restricted) {
 		if !members.has(task) {
-			log.Warn().Str("task", task).Str("setting", restricted[task]).
-				Msg("membership.members.can does not list this task: only admins and roles that list it may do it")
+			c.warn(fmt.Sprintf("membership.members.can does not list %s although %s is on: only admins and roles that list it may do it", task, restricted[task]))
 		}
 	}
 }

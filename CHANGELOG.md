@@ -2,11 +2,16 @@
 
 ## [0.8.0-rc.51]
 
+### Added
+
+- Adds roles that carry tasks (`membership.roles`): each NIP-43 role lists what its members may do, such as NIP-86 methods (`createclaim`, `banpubkey`), Blossom uploads, joining calls or creating groups (`groups.create`), and NIP-86 `supportedmethods` tells each caller its own set. Existing settings keep working unchanged. ([#243](https://github.com/ohstr/ncli/pull/243))
+
 ### Changed
 
 - Changes the Helm chart (now 0.2.0) and Compose stacks to pin their images: MinIO by digest, and the relay to the release candidate `0.8.0-rc.50` instead of `latest`, which was the 0.6.0 release. The relay pin moves to each new release. ([#235](https://github.com/ohstr/ncli/pull/235))
 - Lets a chart image take an optional `digest`, and adds the pinned MinIO digest only to the default image: pin a mirror or another tag with an exact `tag` or its own `digest`. `helm upgrade --reuse-values` keeps an older chart's images, so use `--reset-then-reuse-values`. ([#235](https://github.com/ohstr/ncli/pull/235))
 - Changes `membership.memberClaims`, when unset, to follow `nip11.limitation.membership_required`: on a relay with `membership_required` and NIP-86 enabled, a member's `createclaim` is now refused (401) and only admins mint invites. Set `memberClaims: true` to keep the old behaviour. ([#234](https://github.com/ohstr/ncli/pull/234))
+- Changes a NIP-43 invite request (REQ kind 28935) to need `createclaim`, as NIP-86 `createclaim` does: it now gives a code only to admins, members when `memberClaims` is on, and roles that list it. Before, any connection allowed to read got one. ([#243](https://github.com/ohstr/ncli/pull/243))
 
 ## [0.8.0-rc.50]
 

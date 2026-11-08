@@ -143,7 +143,16 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to load NIP-86 moderation state")
 	}
-	sessionConfig.EventPolicy = moderation.eventPolicy
+	// The task model (tasks.go): its membership view is filled in once the
+	// session handler exists, before anything is served. The event policy
+	// gates kind 9007 by group.create after the moderation checks; a NIP-43
+	// invite request (REQ 28935) needs createclaim, as NIP-86 does.
+	tasks := newTaskAuthority(&config, nil, moderation)
+	eventPolicy := tasks.gateGroupCreate(config.groupCreateRestricted(), moderation.eventPolicy)
+	sessionConfig.EventPolicy = eventPolicy
+	sessionConfig.InviteRequestAuthorizer = func(_ context.Context, s *relay.Session) error {
+		return tasks.inviteRequestAllowed(s.Identities())
+	}
 	sessionConfig.RecipientOnlyKinds = config.recipientOnlyKinds()
 	sessionConfig.RelayAuthoredKinds = config.relayAuthoredKinds()
 	sessionConfig.PresenceQueryKind = config.presenceKind()
@@ -154,6 +163,18 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 		searcher,
 		relay.WithSessionConfig(sessionConfig),
 	)
+	tasks.membership = wsHandler.Membership()
+	if membershipOn() && config.Membership != nil && len(config.Membership.Roles) > 0 {
+		if roles, err := (membershipAdmin{ws: wsHandler, store: store}).listRoles(context.Background()); err == nil {
+			ids := make([]string, 0, len(roles))
+			for _, r := range roles {
+				ids = append(ids, r.ID)
+			}
+			warnUndefinedRoles(&config, ids)
+		}
+	}
+	// group:<kind> role tasks and groups.grantCeiling (see applyGroupTasks).
+	applyGroupTasks(wsHandler.Groups(), tasks, &config)
 
 	// Profile checks and social scores serve only search and stats.
 	if config.searchEnabled() || config.profileStatsEnabled() {
@@ -272,7 +293,7 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 		// reason /query shares it -- one live membership view, not a
 		// second cache.
 		mux.Handle("/events", m.HTTP("events", relay.NewEventsHandler(store, &cfg.Nip11.Limitation, wsHandler.Membership(), config.Nip11.Self,
-			relay.WithEventsPolicy(moderation.eventPolicy), relay.WithEventsRelayAuthoredKinds(config.relayAuthoredKinds()...))))
+			relay.WithEventsPolicy(eventPolicy), relay.WithEventsRelayAuthoredKinds(config.relayAuthoredKinds()...))))
 	}
 
 	if countEnabled() {
@@ -332,7 +353,7 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 
 	// Huddle first: both the membership admin routes and NIP-86 need the rooms
 	// manager so removing a member ends that member's live calls.
-	huddleRooms := registerHuddleRoutes(mux, wsHandler, config.Huddle, config.Nip11.URL)
+	huddleRooms := registerHuddleRoutes(mux, wsHandler, config.Huddle, config.Nip11.URL, tasks)
 
 	registerMembershipAdminRoutes(mux, wsHandler, store, huddleRooms, adminAuth)
 

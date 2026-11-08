@@ -210,12 +210,23 @@ type MembershipConfig struct {
 	InviteMaxTTL string `mapstructure:"inviteMaxTTL"`
 
 	// MemberClaims, if true, lets a plain member -- not only an admin -- mint
-	// an invite via the NIP-86 createclaim method (newNip86Handler admits the
-	// member through nip86 Authorize; newNip86Router's Visible confines it to
-	// createclaim + supportedmethods). A nil pointer means unset, which follows
+	// an invite via the NIP-86 createclaim method: members then hold the
+	// createclaim task (tasks.go), which admits them to NIP-86 and shows them
+	// createclaim + supportedmethods. A nil pointer means unset, which follows
 	// nip11.limitation.membership_required: false on a members-only relay,
 	// where an invite is the way in, true otherwise. An explicit value wins.
 	MemberClaims *bool `mapstructure:"memberClaims"`
+
+	// Roles maps a NIP-43 role id (a kind 33534 d tag) to the tasks a member
+	// holding it may do; see tasks.go for the vocabulary. Role ids are matched
+	// case-insensitively, since config keys are lowercased.
+	Roles map[string]RoleTasks `mapstructure:"roles"`
+
+	// Members, when set, is what every enrolled member may do, replacing what
+	// memberClaims, blossom.membersOnly and huddle.requireMembership would
+	// otherwise give members (those then only say whether a task is
+	// restricted). An explicit memberClaims must agree with it.
+	Members *RoleTasks `mapstructure:"members"`
 
 	// PublishAddRemoveEvents, if true, makes the relay also publish a
 	// signed kind:8000/8001 event whenever membership changes via
@@ -263,7 +274,8 @@ func (c *RelayConfig) checkAndDefaultMembership() error {
 // memberClaimsDefault is memberClaims when unset: off on a members-only relay
 // (nip11.limitation.membership_required), where letting every member mint
 // uncapped invites should be an explicit choice, and on otherwise. It covers
-// only NIP-86 createclaim, not a NIP-43 invite request (REQ kind 28935). It has
+// NIP-86 createclaim and a NIP-43 invite request (REQ kind 28935) alike: both
+// need the createclaim task. It has
 // the same trigger as blossom.membersOnly.upload (membership_required) but the
 // opposite effect: that one turns on, this one turns off.
 func (c *RelayConfig) memberClaimsDefault() bool {
@@ -562,6 +574,9 @@ func initConfig() error {
 		}
 	}
 
+	if err := config.checkRoleTasks(); err != nil {
+		return err
+	}
 	if err := config.checkAndDefaultMembership(); err != nil {
 		return err
 	}
@@ -585,6 +600,7 @@ func initConfig() error {
 	if err := checkCommunityConfig(&config); err != nil {
 		return err
 	}
+	config.warnRoleTasks()
 
 	if config.Port == 0 {
 		config.Port = defaultPort

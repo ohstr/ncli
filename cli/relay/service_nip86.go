@@ -96,15 +96,19 @@ func membershipInviteAllowNoExpiry() bool {
 }
 
 // membershipMemberClaims reports whether a plain member (not an admin) may mint
-// an invite via createclaim. newNip86Handler (Authorize) and newNip86Router
-// (Visible) read it. Unset, it follows memberClaimsDefault: off on a
-// members-only relay, on otherwise. initConfig normally resolves it already;
-// the fallback covers a config built without it.
+// an invite via createclaim: resolveTaskGrants gives members createclaim when
+// it is on (unless membership.members.can is set). Unset, it follows
+// memberClaimsDefault: off on a members-only relay, on otherwise. initConfig
+// normally resolves it already; the fallback covers a config built without it.
 func membershipMemberClaims() bool {
-	if config.Membership == nil || config.Membership.MemberClaims == nil {
-		return config.memberClaimsDefault()
+	return config.memberClaims()
+}
+
+func (c *RelayConfig) memberClaims() bool {
+	if c.Membership == nil || c.Membership.MemberClaims == nil {
+		return c.memberClaimsDefault()
 	}
-	return *config.Membership.MemberClaims
+	return *c.Membership.MemberClaims
 }
 
 // newNip86Router binds the NIP-86 methods onto the same membershipAdmin the
@@ -112,38 +116,6 @@ func membershipMemberClaims() bool {
 // state that already existed; nothing here keeps state of its own.
 func newNip86Router(admin membershipAdmin) *nip86.Router {
 	router := nip86.NewRouter()
-
-	// Section B -- member claims. When membershipMemberClaims() is true a plain
-	// member key reaches the Router (newNip86Handler sets nip86.Config.Authorize
-	// to the membership IsMember check), so the Router must scope what a
-	// non-admin may do: a member sees (via supportedmethods) and may call ONLY
-	// createclaim + supportedmethods; every other method -- createclaimwithlimits,
-	// getclaim, listclaims, deleteclaim, the pubkey methods, the role methods and
-	// all moderation methods registered later -- is admin-only. Dispatch refuses
-	// a hidden method (reported as unknown), so this both filters the advertised
-	// list and enforces it. A non-admin that reaches here is necessarily a member,
-	// because Authorize 401s any other non-admin before Dispatch is consulted.
-	//
-	// When membershipMemberClaims() is false, Authorize stays nil so only admins
-	// reach the Router at all; leaving Visible nil then keeps the admin-only
-	// behaviour exactly as before.
-	if membershipMemberClaims() {
-		admins := nip86Admins()
-		isAdmin := func(caller string) bool {
-			for _, a := range admins {
-				if a == caller {
-					return true
-				}
-			}
-			return false
-		}
-		router.Visible = func(caller, method string) bool {
-			if isAdmin(caller) {
-				return true
-			}
-			return method == nip86.MethodCreateClaim || method == nip86.MethodSupportedMethods
-		}
-	}
 
 	router.Handle(nip86.MethodAllowPubkey, func(ctx context.Context, _ string, req nip86.Request) (any, error) {
 		pubkey, err := req.StringParam(0)
@@ -370,16 +342,20 @@ func newNip86Handler(wsHandler *relay.SessionHandler, store *relay.EventStore, r
 		AllowedOrigins: origins,
 	}
 
-	// Section B -- member claims. When membership is on and memberClaims is
-	// enabled, admit a verified member key that is not in AllowedPubkeys so it
-	// can reach the Router; NIP-98 still checks the signature/payload/URL for
-	// everyone, and the Router's Visible predicate (set in newNip86Router)
-	// confines a member to createclaim + supportedmethods. A verified key that
-	// is neither an admin nor a member is still a 401. Membership off, or
-	// memberClaims off, leaves Authorize nil: only AllowedPubkeys (the admins)
-	// pass, exactly as before.
-	if membershipOn() && membershipMemberClaims() {
-		cfg.Authorize = wsHandler.Membership().IsMember
+	// Who may call what is the task model (tasks.go): a NIP-86 method is a
+	// task, held by the admins (every method) and by whatever the config
+	// grants members and members' NIP-43 roles (memberClaims maps to members
+	// holding createclaim). NIP-98 still checks the signature, payload and URL
+	// for everyone. Authorize admits a non-admin key holding at least one
+	// method; Visible then confines every caller to the methods it holds, so
+	// supportedmethods answers each caller with its own set (the spec allows
+	// this) and a method it doesn't hold is refused as unknown. Membership
+	// off, nobody but the admins holds a method: Authorize stays nil and only
+	// AllowedPubkeys pass, as before.
+	auth := newTaskAuthority(&config, wsHandler.Membership(), moderation)
+	router.Visible = auth.nip86Visible
+	if membershipOn() {
+		cfg.Authorize = auth.mayUseNip86
 	}
 
 	return nip86.NewHandler(cfg), nil

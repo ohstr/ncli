@@ -337,6 +337,7 @@ More config blocks, each documented in
 - `recipientOnlyKinds` — gift wraps (kind 1059) go only to the pubkey in their `p` tag; default `[1059]`, `[]` turns it off.
 - `httpBridge.count` — `POST /count` (NIP-45), same rules as `/query`.
 - `groups.membershipNotices` — a relay-signed notice (kinds 44100/44101) to a member who gains or loses a seat in a group.
+- `membership.roles` — what each NIP-43 role may do, e.g. `greeter: {can: [createclaim]}`; `groups.create` says who may create a group.
 - `presence` — `POST /query` for kind 40902 answers who is online.
 - `blossom` — Blossom uploads and downloads on the relay's own origin, stored in a directory or S3/MinIO.
 

@@ -171,7 +171,8 @@ membership:
   inviteMaxUses: 1
 
   # If true, a plain member -- not only an admin -- may mint an invite via
-  # the NIP-86 createclaim method (nip86.enabled), with no per-member cap.
+  # the NIP-86 createclaim method (nip86.enabled) or a NIP-43 invite request
+  # (REQ kind 28935), with no per-member cap.
   # Unset follows nip11.limitation.membership_required: false on a
   # members-only relay, true otherwise. An explicit value always wins.
   # memberClaims: false

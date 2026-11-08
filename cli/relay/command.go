@@ -274,7 +274,8 @@ func (c *RelayConfig) checkAndDefaultMembership() error {
 // memberClaimsDefault is memberClaims when unset: off on a members-only relay
 // (nip11.limitation.membership_required), where letting every member mint
 // uncapped invites should be an explicit choice, and on otherwise. It covers
-// only NIP-86 createclaim, not a NIP-43 invite request (REQ kind 28935). It has
+// NIP-86 createclaim and a NIP-43 invite request (REQ kind 28935) alike: both
+// need the createclaim task. It has
 // the same trigger as blossom.membersOnly.upload (membership_required) but the
 // opposite effect: that one turns on, this one turns off.
 func (c *RelayConfig) memberClaimsDefault() bool {

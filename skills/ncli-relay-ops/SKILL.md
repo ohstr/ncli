@@ -266,9 +266,10 @@ A member's code uses the relay's configured defaults and carries no roles.
   member gets a **401** from the management API (admin-only), while invite
   redemption on join (kind 28934) is unaffected. With membership off,
   `memberClaims` has no effect.
-- `memberClaims` gates only NIP-86 `createclaim`. A NIP-43 invite request
-  (REQ kind 28935) still returns a fresh code to any connection allowed to
-  read -- on a members-only relay, any member -- whatever this is set to.
+- A NIP-43 invite request (REQ kind 28935) needs `createclaim` too, so
+  `memberClaims` decides it the same way: with it false, a member's request
+  is closed `restricted: ...` (an unauthenticated one `auth-required: ...`).
+  Older relays answered any connection allowed to read.
 
 **`unallowpubkey` ends the member's live huddle calls**, not just their next
 join — the other participants stay connected. `ncli relay members remove`
@@ -344,10 +345,9 @@ groups:
 - **`groups.grantCeiling: true`** stops a group member from handing out a
   role that can send a moderation kind they can't send themselves (put-user
   with roles). Off by default, since existing groups may rely on such grants.
-- **Not yet:** `group:<kind>` role tasks, `groups.grantCeiling`, and gating a
-  NIP-43 invite request (REQ kind 28935) by `createclaim` take effect with an
-  nmilat that has the hooks; on this build REQ 28935 still answers any member.
-  The `ncli relay members/invites/roles` admin HTTP routes stay admin-only.
+- A NIP-43 invite request (REQ kind 28935) is the `createclaim` task, like
+  NIP-86 `createclaim`: a greeter role can hand out codes either way.
+- The `ncli relay members/invites/roles` admin HTTP routes stay admin-only.
 
 ## Monitoring and index jobs — relay must be running
 

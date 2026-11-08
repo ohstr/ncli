@@ -50,7 +50,7 @@ spec:
         name: agent-signer-policy
   containers:
     - name: signer
-      image: ghcr.io/ohstr/ncli:latest
+      image: ghcr.io/ohstr/ncli:0.8.0-rc.50
       args:
         - signer
         - serve
@@ -97,7 +97,7 @@ spec:
 
     - name: agent
       # Your agent image, with ncli (or another bunker+unix:// client) on PATH.
-      image: example.com/agent:latest
+      image: example.com/agent:1.0.0
       env:
         - name: NOSTR_SIGNER
           value: bunker+unix:///run/signer/agent.sock

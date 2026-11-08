@@ -1,7 +1,7 @@
 // Package deploy holds no Go code; this test keeps every image the Compose
 // stacks, the Helm chart, the Dockerfiles, the examples and the
 // integration rigs pull pinned, so a release always names exact images,
-// and keeps the relay image at the latest release.
+// and keeps the relay image at the release in progress or the latest one.
 package deploy
 
 import (
@@ -19,7 +19,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// relayRepo is the relay image, kept at the latest release.
+// relayRepo is the relay image, kept at the current release.
 const relayRepo = "ghcr.io/ohstr/ncli"
 
 // chartDir is the Helm chart whose helper renders every chart image.
@@ -491,28 +491,52 @@ func TestImagesArePinned(t *testing.T) {
 
 var headingRe = regexp.MustCompile(`(?m)^## \[([^\]]+)\]`)
 
-// releasedVersion is the latest release: the CHANGELOG's second heading,
-// since the top one is the release in progress (released only once the
-// release workflow tags it).
-func releasedVersion(changelog []byte) (string, error) {
-	m := headingRe.FindAllSubmatch(changelog, 2)
-	if len(m) < 2 {
-		return "", errors.New("CHANGELOG.md has fewer than two ## [version] headings")
+// releaseVersionEnv names the version the release workflow is about to
+// tag. Set, every relay pin must be exactly that version.
+const releaseVersionEnv = "NCLI_RELEASE_VERSION"
+
+// allowedRelayTags is what the relay pins may be. During a release
+// (release set) only that version: a release ships pinned to itself.
+// Otherwise the CHANGELOG's top heading (the release in progress, which
+// its release PR pins before the workflow runs) or the one below it
+// (the latest release), so a pin two releases behind fails.
+func allowedRelayTags(changelog []byte, release string) ([]string, error) {
+	if release != "" {
+		return []string{release}, nil
 	}
-	return string(m[1][1]), nil
+	var tags []string
+	for _, m := range headingRe.FindAllSubmatch(changelog, 2) {
+		if v := string(m[1]); v != "Unreleased" {
+			tags = append(tags, v)
+		}
+	}
+	if len(tags) == 0 {
+		return nil, errors.New("CHANGELOG.md has no ## [version] heading")
+	}
+	return tags, nil
 }
 
 var envVersionRe = regexp.MustCompile(`(?m)^#?\s*NCLI_VERSION=(\S*)`)
 
-// TestRelayImageIsLatestRelease keeps every relay image (the chart's
+// TestRelayImagePinsVersion keeps every relay image (the chart's
 // appVersion, the stacks' NCLI_VERSION defaults, the examples and rigs)
-// at the latest release, so starting a CHANGELOG section for the next
-// release fails until the pin moves to the one just cut.
-func TestRelayImageIsLatestRelease(t *testing.T) {
-	want, err := releasedVersion(mustRead(t, "../CHANGELOG.md"))
+// at the release in progress or the latest one. The release workflow
+// runs it with NCLI_RELEASE_VERSION set, and refuses to tag unless every
+// pin is that version.
+func TestRelayImagePinsVersion(t *testing.T) {
+	allowed, err := allowedRelayTags(mustRead(t, "../CHANGELOG.md"), os.Getenv(releaseVersionEnv))
 	if err != nil {
 		t.Fatal(err)
 	}
+	ok := func(tag string) bool {
+		for _, a := range allowed {
+			if tag == a {
+				return true
+			}
+		}
+		return false
+	}
+	want := strings.Join(allowed, " or ")
 	found := 0
 	for _, r := range scanRepo(t).refs {
 		name, tag, _ := splitRef(r.ref)
@@ -520,8 +544,8 @@ func TestRelayImageIsLatestRelease(t *testing.T) {
 			continue
 		}
 		found++
-		if tag != want {
-			t.Errorf("%s: %s: want tag %s, the latest release in CHANGELOG.md", r.where, r.ref, want)
+		if !ok(tag) {
+			t.Errorf("%s: %s: want tag %s", r.where, r.ref, want)
 		}
 	}
 	if found == 0 {
@@ -533,7 +557,7 @@ func TestRelayImageIsLatestRelease(t *testing.T) {
 	}
 	for _, path := range envs {
 		for _, m := range envVersionRe.FindAllSubmatch(mustRead(t, path), -1) {
-			if got := string(m[1]); got != want {
+			if got := string(m[1]); !ok(got) {
 				t.Errorf("%s: NCLI_VERSION=%s, want %s", path, got, want)
 			}
 		}

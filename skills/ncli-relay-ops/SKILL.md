@@ -245,8 +245,10 @@ The set is scoped to the calling key: an admin's `supportedmethods` lists every
 method, whereas a plain member's lists only `createclaim` and
 `supportedmethods` (see member claims below).
 
-**Member claims (`membership.memberClaims`, bool, default true).** When
-membership is on and this is true, a plain member -- not only an admin -- may
+**Member claims (`membership.memberClaims`, bool).** Unset, it follows
+`nip11.limitation.membership_required`: **false on a members-only relay, true
+otherwise** (the same rule as `blossom.membersOnly.upload`); an explicit
+`true`/`false` always wins. When membership is on and this is true, a plain member -- not only an admin -- may
 mint an invite via `createclaim`, per NIP-43. The member's NIP-98 key is
 accepted even though it is not an admin, and the Relay Management API then
 scopes it to exactly `createclaim` + `supportedmethods`; calling any other
@@ -258,11 +260,13 @@ A member's code uses the relay's configured defaults and carries no roles.
   **401**, exactly as before.
 - **Risk / escape hatch:** there is **no per-member cap** on how many codes a
   member may mint -- the invite record has no creator field to count against.
-  An operator who does not want members minting codes sets
-  `membership.memberClaims: false`; a member then gets a **401** from the
-  management API (admin-only, as it was before this feature) while invite
+  That is why a members-only relay leaves it off unless set. With it false, a
+  member gets a **401** from the management API (admin-only), while invite
   redemption on join (kind 28934) is unaffected. With membership off,
   `memberClaims` has no effect.
+- `memberClaims` gates only NIP-86 `createclaim`. A NIP-43 invite request
+  (REQ kind 28935) still returns a fresh code to any connection allowed to
+  read -- on a members-only relay, any member -- whatever this is set to.
 
 **`unallowpubkey` ends the member's live huddle calls**, not just their next
 join — the other participants stay connected. `ncli relay members remove`
@@ -578,9 +582,10 @@ Full route, metric and config reference: `references/admin-plane-reference.md`.
   `inviteAllowNoExpiry` (bool, default false) gates whether a never-expiring
   code (`expires_at: 0`) is allowed at all. An unparseable or non-positive
   `inviteMaxTTL` is a config-load-time error. A requested limit outside
-  policy is refused, never silently clamped. `memberClaims` (bool, default
-  true) lets a plain member mint a code via `createclaim` when membership is
-  on; set it false to keep the management API admin-only. See "Member claims"
+  policy is refused, never silently clamped. `memberClaims` (bool; unset,
+  false on a members-only relay and true otherwise) lets a plain member mint a
+  code via `createclaim` when membership is on; false keeps the management API
+  admin-only. See "Member claims"
   under the Relay Management API section above, including the no-per-member-cap
   note.
 - Turning on `nip11.limitation.membership_required` is a real behavior

@@ -170,6 +170,12 @@ membership:
   # Request. 0 means unlimited.
   inviteMaxUses: 1
 
+  # If true, a plain member -- not only an admin -- may mint an invite via
+  # the NIP-86 createclaim method (nip86.enabled), with no per-member cap.
+  # Unset follows nip11.limitation.membership_required: false on a
+  # members-only relay, true otherwise. An explicit value always wins.
+  # memberClaims: false
+
   # If true, the relay also publishes a signed kind:8000/8001 event
   # whenever membership changes via Join/Leave Request, in addition to
   # updating its own internal membership store (authoritative either way).

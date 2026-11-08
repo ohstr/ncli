@@ -18,7 +18,7 @@
 ### Fixed
 
 - Fixes the Helm chart (now 0.3.1) and Compose stacks running the rc.50 relay image, which lacks rc.51's fixes and ignores its new keys (`limits`, `listen`, `membership.roles`, `groups.create`). They now run 0.8.0-rc.52, and the chart's notes say which image it runs. ([#249](https://github.com/ohstr/ncli/pull/249))
-- Fixes the relay publishing each hosted group's kind 39001 and 39003 under the default moderation policy at every start before applying `groups.roles` and `groups.roleDescriptions`, which briefly dropped every non-admin role from the group's admin list. Both are now in place before startup republishes them (nmilat v0.5.0-rc.52).
+- Fixes the relay publishing each hosted group's kind 39001 and 39003 under the default moderation policy at every start before applying `groups.roles` and `groups.roleDescriptions`, which briefly dropped every non-admin role from the group's admin list. Both are now in place before startup republishes them (nmilat v0.5.0-rc.52). ([#251](https://github.com/ohstr/ncli/pull/251))
 - Fixes the NIP-86 IP block not covering the HTTP bridge for some requests; only NIP-86 itself, at `/`, now stays reachable from a blocked IP. ([#250](https://github.com/ohstr/ncli/pull/250))
 - Fixes a banned key joining calls when `huddle.requireMembership` is off; a ban now refuses joins either way. ([#250](https://github.com/ohstr/ncli/pull/250))
 - Fixes `blossom list --all` reporting `unsupported` (exit 8) when another server failed with a retryable network error, and failing when a server answered with no blobs. It now fails only if no server answered, as `network` if any failure was retryable. ([#250](https://github.com/ohstr/ncli/pull/250))

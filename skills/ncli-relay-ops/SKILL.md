@@ -283,8 +283,14 @@ relay. `membership.roles` is where this relay says it: each NIP-43 role id
 it) maps to a list of **tasks**, named after the protocol verb that does
 them. A member's tasks are the union of its roles' lists plus
 `membership.members` (every enrolled member). A **banned** pubkey holds
-none — but a ban never takes what the config file gives: `nip11.pubkey` and
-`nip86.admins` hold every task (`*`), `groups.admins` holds `group:*`.
+none.
+
+`nip11.pubkey` and `nip86.admins` hold `*`: every task except `group:`
+ones. Banning one of them doesn't remove their NIP-86 access or huddle
+joins. Their events are still refused (the relay's own key is never
+banned), and Blossom refuses their uploads, and their downloads where
+`blossom.membersOnly.download` is on. Moderating every hosted group is for `groups.admins`
+(and the relay's own key) only, never `nip86.admins`.
 
 ```yaml
 membership:
@@ -307,24 +313,25 @@ groups:
 | `@roles` | `createrole`, `editrole`, `deleterole`, `assignrole`, `unassignrole` |
 | `@relayinfo` | `changerelayname`, `changerelaydescription`, `changerelayicon` |
 | `@policy` | `allowkind`, `disallowkind`, `listallowedkinds`, `listdisallowedkinds`, `blockip`, `unblockip`, `listblockedips` |
-| `group:<kind>` | that NIP-29 moderation kind (9000-9020) in **every** hosted group, e.g. `group:9005` (delete an event); `group:*` all of them |
+| `group:<kind>` | that NIP-29 moderation kind (9000-9020) in **every** hosted group, e.g. `group:9005` (delete an event); `group:*` all of them. `group:9007` is refused: creating a group is `group.create` |
 | `blossom.upload` / `blossom.download` | upload / download blobs where `blossom.membersOnly` restricts them |
 | `blossom.delete` | delete **any** blob, not only your own |
 | `huddle.join` | join calls where `huddle.requireMembership` restricts them |
 | `group.create` | create a group (kind 9007) where `groups.create` restricts it |
-| `*` | everything |
+| `*` | every task except `group:` ones, which a role must list (`group:*` or a kind) |
 
 - **How a client learns its tasks:** NIP-86 `supportedmethods`, signed with
   the key it will use, lists exactly the methods that key holds (the spec
   allows a per-caller answer). A key holding no method is a 401; a method it
   doesn't hold is refused as an unknown method.
-- **Existing settings map on, nothing changes by default:**
+- **Existing settings map on:**
   `memberClaims` = members get `createclaim`; `blossom.membersOnly.upload/
   download` = members get `blossom.upload/download` (off: everyone may);
   `huddle.requireMembership` = members get `huddle.join` (off: anyone may);
   `groups.create` omitted = everyone may create a group. Admins count as
   members everywhere (they already did for Blossom; a huddle with
-  `requireMembership` now admits them too).
+  `requireMembership` now admits them too). A banned member now loses
+  `createclaim` and huddle joins, as it already lost Blossom uploads.
 - **`membership.members.can` wins.** Set, it is the whole members grant: the
   old switches then only say whether a task is restricted. So with
   `blossom.membersOnly.upload: true` and `members: {can: [createclaim]}`, only
@@ -332,19 +339,39 @@ groups:
   `--check` logs a warning for each restricted task `members.can` leaves out.
   An explicit `memberClaims` must agree with whether `members.can` gives
   `createclaim`, or `--check` fails.
-- **`groups.create`** entries are `everyone`, `members` or a role id; `[]`
-  leaves group creation to the admins and roles whose tasks list
-  `group.create`. Refused creation is `OK false` `restricted: ...`.
+- **`groups.create`** entries are `everyone`, `members` or a role id, in
+  any case; `[]` leaves group creation to the admins and roles whose tasks
+  list `group.create`. Refused creation is `OK false` `restricted: ...`.
+- **Role ids are lowercase.** `assignrole`, `unassignrole`, enrolling and
+  invites store them lowercase and match in any case, so `unassignrole
+  host` also removes a `Host`. In `membership.roles`, `Host` and `host`
+  together, an id with a dot (a config key can't hold one) and the
+  keywords `everyone`/`members` fail `--check`. A kind 33534 role named
+  `everyone` or `members` is only a startup warning: `groups.create` reads
+  the keyword, never the role.
 - **Validated at `--check`** (`invalid_input`, exit 3, `input` = the bad
-  value): an unknown task, a `group:` kind outside 9000-9020, `roles`/`members`
+  value): an unknown task, a `group:` kind outside 9000-9020 or `group:9007`, `roles`/`members`
   without `membership.enabled`, a `groups.create` entry other than
   `everyone` without membership. A role id with no kind 33534 yet is only a
   warning at startup: roles can be created at runtime.
-- **`@roles` and `@members` are as good as `*`** in practice: whoever can
-  assign roles can give themselves any task, and `allowpubkey` makes members.
-- **`groups.grantCeiling: true`** stops a group member from handing out a
-  role that can send a moderation kind they can't send themselves (put-user
-  with roles). Off by default, since existing groups may rely on such grants.
+- **`@roles` is as good as `*`** in practice: whoever can assign roles can
+  give themselves any task a role in the config carries. `@members` only
+  admits pubkeys (`allowpubkey` on a member keeps its roles), so it hands out
+  what `membership.members` gives, not more.
+- **Tasks come from the config, not the role event.** `deleterole` removes
+  the kind 33534 definition but not the tasks: members still holding that
+  id keep them until `unassignrole` or a config edit.
+- **Losing `huddle.join` doesn't end a live call.** A role being unassigned,
+  or a ban, only stops the next join. Removing the member
+  (`unallowpubkey`, `relay members remove`) ends their calls.
+- **`groups.grantCeiling`** stops a group member from handing out a role
+  that can send a moderation kind they can't send themselves (put-user with
+  roles). Unset, it is **on exactly when a role (or `members`) carries a
+  `group:<kind>` task**. Without it, a `group:9000` role could seat its
+  holder as a group `admin` that outlives the role. With it, `group:9000`
+  adds plain members but can't grant `admin`. With no `group:` tasks it stays
+  off, so existing groups keep working. An explicit `false` still wins, with
+  a `--check` warning.
 - A NIP-43 invite request (REQ kind 28935) is the `createclaim` task, like
   NIP-86 `createclaim`: a greeter role can hand out codes either way.
 - The `ncli relay members/invites/roles` admin HTTP routes stay admin-only.

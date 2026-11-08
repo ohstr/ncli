@@ -13,6 +13,11 @@
 - Changes `membership.memberClaims`, when unset, to follow `nip11.limitation.membership_required`: on a relay with `membership_required` and NIP-86 enabled, a member's `createclaim` is now refused (401) and only admins mint invites. Set `memberClaims: true` to keep the old behaviour. ([#234](https://github.com/ohstr/ncli/pull/234))
 - Changes a NIP-43 invite request (REQ kind 28935) to need `createclaim`, as NIP-86 `createclaim` does: it now gives a code only to admins, members when `memberClaims` is on, and roles that list it. Before, any connection allowed to read got one. ([#243](https://github.com/ohstr/ncli/pull/243))
 
+### Fixed
+
+- Fixes the relay's Blossom answering 404 for a blob at the root (`/<sha256>`), where BUD-01 serves it; `/media/<sha256>` still works. `ncli blossom download` of a full URL now fetches that URL first, then asks servers by hash. ([#244](https://github.com/ohstr/ncli/pull/244))
+- Fixes `ncli blossom list`, `upload --optimize` and `mirror` reporting a server without that endpoint as `not_found` or a retryable `network` error; they now report `unsupported` (exit 8), and the relay says those endpoints are not supported. ([#244](https://github.com/ohstr/ncli/pull/244))
+
 ## [0.8.0-rc.50]
 
 ### Added

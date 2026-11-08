@@ -144,14 +144,12 @@ func testBlossomRelay(t *testing.T, storage map[string]any, env map[string]strin
 			"storage":      storage,
 		},
 	}, env)
-	// Uploads go to the relay's origin (PUT /upload); blobs are served,
-	// deleted and looked up under its blob prefix, so download and rm
-	// name that as the server.
-	// ohstr/ncli#239: download and rm against srv 404 today (the client
-	// asks for /<sha> at the root). Once fixed, use srv for them and drop
-	// media.
+	// Every command names the relay's origin (BUD-01 serves all endpoints
+	// at the root); blob URLs are under its blob prefix, which also works
+	// as a server for download.
 	srv := "http" + strings.TrimPrefix(r.URL, "ws")
 	media := srv + "/media"
+	var blobURL string
 	alice, eve := A(t, "alice"), A(t, "eve")
 	addMember(t, r, alice.PubHex)
 
@@ -176,6 +174,7 @@ func testBlossomRelay(t *testing.T, storage map[string]any, env map[string]strin
 		if want := srv + "/media/" + hash; !strings.HasPrefix(rep.Results[0].URL, want) {
 			t.Errorf("url = %q, want %s[.ext]", rep.Results[0].URL, want)
 		}
+		blobURL = rep.Results[0].URL
 		if !stored(t, hash) {
 			t.Errorf("blob %s is not in the configured store", hash)
 		}
@@ -183,34 +182,63 @@ func testBlossomRelay(t *testing.T, storage map[string]any, env map[string]strin
 
 	t.Run("download round-trips the bytes", func(t *testing.T) {
 		out := filepath.Join(e.Dir, "got.txt")
-		e.MustOK(t, "blossom", "download", hash, "-o", out, "--server", media, "--json")
+		e.MustOK(t, "blossom", "download", hash, "-o", out, "--server", srv, "--json")
 		if got, _ := os.ReadFile(out); string(got) != content {
 			t.Errorf("downloaded %q", got)
 		}
-		if res := e.MustOK(t, "blossom", "download", hash, "-o", "-", "--server", media); res.Stdout != content {
+		if res := e.MustOK(t, "blossom", "download", hash, "-o", "-", "--server", srv); res.Stdout != content {
 			t.Errorf("-o - wrote %q", res.Stdout)
 		}
-		resp, err := http.Get(media + "/" + hash + ".txt")
-		if err != nil {
-			t.Fatal(err)
+		// The blob prefix still works as a server.
+		if res := e.MustOK(t, "blossom", "download", hash, "-o", "-", "--server", media); res.Stdout != content {
+			t.Errorf("--server %s wrote %q", media, res.Stdout)
 		}
-		defer func() { _ = resp.Body.Close() }()
-		var body bytes.Buffer
-		_, _ = body.ReadFrom(resp.Body)
-		if resp.StatusCode != http.StatusOK || body.String() != content {
-			t.Errorf("GET /media/<sha>.txt: %d %q", resp.StatusCode, body.String())
+		for _, u := range []string{srv + "/" + hash + ".txt", media + "/" + hash + ".txt"} {
+			resp, err := http.Get(u)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var body bytes.Buffer
+			_, _ = body.ReadFrom(resp.Body)
+			_ = resp.Body.Close()
+			if resp.StatusCode != http.StatusOK || body.String() != content {
+				t.Errorf("GET %s: %d %q", u, resp.StatusCode, body.String())
+			}
 		}
 	})
 
-	// ohstr/ncli#240: the relay answers list with a plain 404, which the
-	// client reports as not_found. Once fixed, expect
-	// expectErr(t, "unsupported", ...) here instead of the 404.
-	t.Run("list fails: the relay serves no BUD-02 list", func(t *testing.T) {
+	t.Run("download by the descriptor URL needs no server", func(t *testing.T) {
+		if blobURL == "" {
+			t.Skip("upload failed")
+		}
+		var rep struct{ Server string }
+		out := filepath.Join(e.Dir, "by-url.txt")
+		e.MustOK(t, "blossom", "download", blobURL, "-o", out, "--json").JSON(t, &rep)
+		if got, _ := os.ReadFile(out); string(got) != content {
+			t.Errorf("downloaded %q", got)
+		}
+		if rep.Server != blobURL {
+			t.Errorf("served by %q, want the URL itself", rep.Server)
+		}
+	})
+
+	t.Run("list is unsupported: the relay serves no BUD-12 list", func(t *testing.T) {
 		for _, server := range []string{srv, media} {
-			res := e.Run(t, "blossom", "list", "--identity", alice.Nsec, "--server", server, "--json")
-			if res.Code == 0 || res.Stdout != "" || !strings.Contains(res.Stderr, "404") {
-				t.Errorf("list on %s should fail with the relay's 404\n%s", server, res)
-			}
+			e.Run(t, "blossom", "list", "--identity", alice.Nsec, "--server", server, "--json").ExpectErr(t, "unsupported")
+		}
+	})
+
+	t.Run("upload --optimize is unsupported: no BUD-05 media", func(t *testing.T) {
+		er := e.Run(t, "blossom", "upload", file, "--optimize", "--identity", alice.Nsec, "--server", srv, "--json").expectErr(t, "unsupported", true)
+		if !strings.Contains(er.Error, "media optimization is not supported") {
+			t.Errorf("error doesn't carry the relay's reason: %q", er.Error)
+		}
+	})
+
+	t.Run("mirror is unsupported: no BUD-04 mirror", func(t *testing.T) {
+		er := e.Run(t, "blossom", "mirror", srv+"/"+hash, "--identity", alice.Nsec, "--server", srv, "--json").expectErr(t, "unsupported", true)
+		if !strings.Contains(er.Error, "mirror is not supported") {
+			t.Errorf("error doesn't carry the relay's reason: %q", er.Error)
 		}
 	})
 
@@ -231,15 +259,15 @@ func testBlossomRelay(t *testing.T, storage map[string]any, env map[string]strin
 	})
 
 	t.Run("someone else can't delete it", func(t *testing.T) {
-		e.Run(t, "blossom", "rm", hash, "--identity", eve.Nsec, "--server", media, "--yes", "--json").expectErr(t, "auth", true)
+		e.Run(t, "blossom", "rm", hash, "--identity", eve.Nsec, "--server", srv, "--yes", "--json").expectErr(t, "auth", true)
 		if !stored(t, hash) {
 			t.Errorf("a refused delete removed the blob")
 		}
 	})
 
 	t.Run("the uploader deletes it", func(t *testing.T) {
-		e.MustOK(t, "blossom", "rm", hash, "--identity", alice.Nsec, "--server", media, "--yes", "--json")
-		e.Run(t, "blossom", "download", hash, "--server", media, "--json").ExpectErr(t, "not_found")
+		e.MustOK(t, "blossom", "rm", hash, "--identity", alice.Nsec, "--server", srv, "--yes", "--json")
+		e.Run(t, "blossom", "download", hash, "--server", srv, "--json").ExpectErr(t, "not_found")
 		if stored(t, hash) {
 			t.Errorf("blob %s is still in the store after rm", hash)
 		}

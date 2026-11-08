@@ -247,9 +247,28 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 		return md
 	})
 
+	// Built before "/" so that handler can reach it: BUD-01 serves every
+	// blob at the root of the domain, /<sha256>[.ext], and ServeMux can't
+	// take a "GET /{blob}" pattern beside the method-less /query, /events
+	// and /count, so "/" hands those paths over itself.
+	var blossomHandler http.Handler
+	if blossomEnabled() {
+		blossom, err := newBlossomServer(&config, wsHandler.Membership(), moderation)
+		if err != nil {
+			log.Fatal().Err(err).Msg("failed to start Blossom")
+		}
+		blossomMux := http.NewServeMux()
+		blossom.Register(blossomMux)
+		blossomHandler = m.HTTP("blossom", blossomMux)
+	}
+
 	mux := http.NewServeMux()
 	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
+			if blossomHandler != nil && isRootBlobRequest(r) {
+				blossomHandler.ServeHTTP(w, atBlobPrefix(r, config.Blossom.blobPrefix()))
+				return
+			}
 			http.NotFound(w, r)
 			return
 		}
@@ -302,17 +321,14 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 		mux.Handle("/count", m.HTTP("count", wsHandler.CountHandler()))
 	}
 
-	if blossomEnabled() {
-		blossom, err := newBlossomServer(&config, wsHandler.Membership(), moderation)
-		if err != nil {
-			log.Fatal().Err(err).Msg("failed to start Blossom")
-		}
-		blossomMux := http.NewServeMux()
-		blossom.Register(blossomMux)
+	if blossomHandler != nil {
 		for _, p := range config.Blossom.uploadPaths() {
-			mux.Handle(p, m.HTTP("blossom", blossomMux))
+			mux.Handle(p, blossomHandler)
 		}
-		mux.Handle(config.Blossom.blobPrefix()+"/", m.HTTP("blossom", blossomMux))
+		mux.Handle(config.Blossom.blobPrefix()+"/", blossomHandler)
+		for _, u := range config.Blossom.unsupportedRoutes() {
+			mux.Handle(u.pattern, m.HTTP("blossom", blossomUnsupported(u.reason)))
+		}
 	}
 
 	// ADMIN ENDPOINTS

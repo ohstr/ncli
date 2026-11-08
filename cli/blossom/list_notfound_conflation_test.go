@@ -20,14 +20,11 @@ import (
 // as a genuine "this one specific blob doesn't exist" 404 (e.g. from
 // `blossom download` against a real missing hash).
 //
-// Fix: list.go's classifyListError checks the 404's X-Reason for
-// disabled-capability phrasing (disabledCapabilityReasonKeywords) before
-// falling back to the shared classifyHTTPError, and returns the new
-// common.CodeUnsupported (exit 8) instead. Deliberately narrow and
-// best-effort -- BUD-01 defines X-Reason as diagnostic-only, not a
-// control-flow signal, so a differently-worded server still falls back to
-// not_found (covered below), and this heuristic is scoped to list.go
-// alone, not the shared classifier every other blossom command also uses.
+// Fix: list.go's classifyListError returns common.CodeUnsupported (exit 8)
+// for any 404 on list, whatever its X-Reason says: BUD-12 list never
+// answers 404 for anything it serves (an unknown pubkey is []), so the
+// 404 itself is the signal (ohstr/ncli#240). download keeps its 404 as
+// not_found, since there a 404 really is one missing blob.
 func TestBlossomList_DisabledEndpointGetsDistinctCode(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds and spawns the ncli binary; skipped in -short mode")
@@ -83,16 +80,15 @@ func TestBlossomList_DisabledEndpointGetsDistinctCode(t *testing.T) {
 		t.Errorf("disabled-capability and genuine-not-found reported the same code %q -- the two cases are no longer distinguishable", listPayload.Code)
 	}
 
-	// Case 3: a 404 from a server that phrases it differently (no
-	// recognized keyword) must still fall back to not_found -- the
-	// heuristic must not over-fire on every bare 404.
+	// Case 3: a 404 worded any other way is unsupported too -- list has
+	// no 404 of its own, so the reason text doesn't matter (#240).
 	genericServer := newFakeBlossomServer()
 	defer genericServer.Close()
 	genericServer.SetHooks(fakeServerHooks{FailStatus: 404})
 
 	_, genErrOut, genCode := r.run("blossom", "list", "--server", genericServer.URL, identity.PubKeyHex, "--json")
-	if genCode != 4 {
-		t.Errorf("generic 404 list exit code = %d, want 4 (not_found, no recognized disabled-capability phrasing)", genCode)
+	if genCode != 8 {
+		t.Errorf("generic 404 list exit code = %d, want 8 (unsupported)", genCode)
 	}
 	var genPayload struct {
 		Code string `json:"code"`
@@ -100,7 +96,7 @@ func TestBlossomList_DisabledEndpointGetsDistinctCode(t *testing.T) {
 	if err := json.Unmarshal([]byte(genErrOut), &genPayload); err != nil {
 		t.Fatalf("stderr is not valid JSON: %v\nstderr: %s", err, genErrOut)
 	}
-	if genPayload.Code != "not_found" {
-		t.Errorf("generic 404 list code = %q, want %q", genPayload.Code, "not_found")
+	if genPayload.Code != "unsupported" {
+		t.Errorf("generic 404 list code = %q, want %q", genPayload.Code, "unsupported")
 	}
 }

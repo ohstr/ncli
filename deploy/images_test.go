@@ -382,10 +382,26 @@ func templateProblems(path string, data []byte) []string {
 	return out
 }
 
+// goImageRe matches a Go const or var named ...Image (or ...image) set to a
+// string literal: how the integration rigs name the images they run.
+var goImageRe = regexp.MustCompile(`(?m)^\s*(?:(?:const|var)\s+)?([A-Za-z_][A-Za-z0-9_]*[Ii]mage)\s*(?:string\s*)?=\s*"([^"]*)"`)
+
+// goImages finds the images a Go file's ...Image constants and variables
+// name.
+func goImages(path string, data []byte) scanResult {
+	var res scanResult
+	for _, m := range goImageRe.FindAllSubmatchIndex(data, -1) {
+		line := bytes.Count(data[:m[0]], []byte("\n")) + 1
+		res.add(fmt.Sprintf("%s:%d: %s", path, line, data[m[2]:m[3]]), string(data[m[4]:m[5]]))
+	}
+	return res
+}
+
 // scanFile picks the scanner for a file by where it is and its name, or
 // none: Dockerfiles anywhere, compose files under deploy/ and
-// integration/, the chart's values and templates, and every YAML file
-// under examples/.
+// integration/, the chart's values and templates, every YAML file under
+// examples/, and the ...Image constants of the Go files under
+// integration/.
 func scanFile(path string, data []byte, chart chartInfo) (scanResult, bool) {
 	base := filepath.Base(path)
 	inExamples := strings.HasPrefix(filepath.ToSlash(path), "../examples/")
@@ -396,6 +412,8 @@ func scanFile(path string, data []byte, chart chartInfo) (scanResult, bool) {
 		return composeImages(path, data), true
 	case inExamples && (strings.HasSuffix(base, ".yaml") || strings.HasSuffix(base, ".yml")):
 		return manifestImages(path, data), true
+	case strings.HasPrefix(filepath.ToSlash(path), "../integration/") && strings.HasSuffix(base, ".go"):
+		return goImages(path, data), true
 	case strings.HasPrefix(filepath.ToSlash(path), "../"):
 		return scanResult{}, false
 	case filepath.Base(filepath.Dir(path)) == "templates":
@@ -454,6 +472,19 @@ func TestImagesArePinned(t *testing.T) {
 	for _, r := range res.refs {
 		if why := checkImageRef(r.ref); why != "" {
 			t.Errorf("%s: %s: %s", r.where, r.ref, why)
+		}
+	}
+	// The integration rigs' Go constants are scanned: a rename that hides
+	// one from goImageRe fails here rather than letting it float.
+	for _, name := range []string{"blossomImage", "minioImage", "meiliImage"} {
+		found := false
+		for _, r := range res.refs {
+			if strings.HasSuffix(r.where, ": "+name) {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("no %s constant found under integration/", name)
 		}
 	}
 }

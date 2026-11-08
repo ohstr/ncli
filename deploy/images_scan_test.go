@@ -159,6 +159,27 @@ func TestManifestImages(t *testing.T) {
 	}
 }
 
+func TestGoImages(t *testing.T) {
+	src := "package x\n\nconst blossomImage = \"ghcr.io/hzrd149/blossom-server:latest\"\n" +
+		"var (\n\tminioImage string = \"cgr.dev/m@" + digestA + "\"\n\tother = \"a/b:latest\"\n)\n" +
+		"func f() { relayImage := \"x:1\"; _ = relayImage }\n"
+	res := goImages("../integration/x_test.go", []byte(src))
+	if got := refsOf(res); strings.Join(got, ",") != "cgr.dev/m@"+digestA+",ghcr.io/hzrd149/blossom-server:latest" {
+		t.Errorf("refs %v", got)
+	}
+	for _, r := range res.refs {
+		if strings.HasSuffix(r.where, "blossomImage") && checkImageRef(r.ref) == "" {
+			t.Errorf("%s: floating %s passes as pinned", r.where, r.ref)
+		}
+	}
+	if _, ok := scanFile("../integration/climatrix/x_test.go", []byte(src), chartInfo{}); !ok {
+		t.Error("a Go file under integration/ is not scanned")
+	}
+	if _, ok := scanFile("../cli/x.go", []byte(src), chartInfo{}); ok {
+		t.Error("a Go file outside integration/ is scanned")
+	}
+}
+
 func TestTemplateProblems(t *testing.T) {
 	for _, tc := range []struct {
 		name, line string

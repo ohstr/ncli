@@ -6,6 +6,12 @@
 
 - Adds `listen` (host:port) to the relay config, to bind one address instead of every interface on `port`. When set it wins over `port`, the admin listener's default port and the admin commands follow it, and `--check` rejects a host that does not resolve; `NCLI_LISTEN`/`NCLI_PORT` now reach the relay even with no such key in the file. ([#237](https://github.com/ohstr/ncli/pull/237))
 - Adds opt-in rate limits to the relay (`limits`): EVENT, REQ/COUNT, the HTTP bridge and Blossom per pubkey and per IP, plus connections per IP, with members optionally exempt and refusals counted in `ncli_relay_rate_limited_total`. A limit left unset is no limit, and a public relay without any, or a per-pubkey limit that never applies, gets a warning, also listed in `relay --check --json`'s `"warnings"`. ([#241](https://github.com/ohstr/ncli/pull/241))
+- Adds a warning, at startup and in `relay --check`, when `listen` is on loopback with per-IP limits but `limits.trustedProxies` doesn't cover that address: behind a local reverse proxy every client would share one per-IP limit. ([#245](https://github.com/ohstr/ncli/pull/245))
+
+### Fixed
+
+- Fixes `relay --check --json` listing `"warnings": []` while logging that `port` is ignored because `listen` is set (or that `pow.strict` has no `pow.min`); it now lists every config warning, and startup logs each once. ([#245](https://github.com/ohstr/ncli/pull/245))
+- Fixes the Blossom blob URLs the relay returns having no file extension, which BUD-02 requires: they now end in one for the blob's type, or `.bin` when it is unknown (nmilat v0.5.0-rc.51). ([#245](https://github.com/ohstr/ncli/pull/245))
 
 ## [0.8.0-rc.50]
 

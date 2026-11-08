@@ -4,12 +4,19 @@
 
 ### Added
 
-- Adds roles that carry tasks (`membership.roles`): each NIP-43 role lists what its members may do, such as NIP-86 methods (`createclaim`, `banpubkey`), Blossom uploads, joining calls or creating groups (`groups.create`), and NIP-86 `supportedmethods` tells each caller its own set. Existing settings keep working unchanged. ([#243](https://github.com/ohstr/ncli/pull/243))
+- Adds roles that carry tasks (`membership.roles`): each NIP-43 role lists what its members may do, such as NIP-86 methods (`createclaim`, `banpubkey`), Blossom uploads, joining calls or creating groups (`groups.create`), and NIP-86 `supportedmethods` tells each caller its own set. Without `membership.roles` or `membership.members`, existing settings behave as before except for the changes listed under Changed. ([#243](https://github.com/ohstr/ncli/pull/243))
 
 ### Changed
 
 - Changes a NIP-43 invite request (REQ kind 28935) to need `createclaim`, as NIP-86 `createclaim` does: it now gives a code only to admins, members when `memberClaims` is on, and roles that list it. Before, any connection allowed to read got one. ([#243](https://github.com/ohstr/ncli/pull/243))
+- Changes `huddle.requireMembership` to admit the relay's admins (`nip11.pubkey`, `nip86.admins`) even when they are not members. ([#243](https://github.com/ohstr/ncli/pull/243))
+- Changes a banned member to lose `createclaim` (NIP-86 and invite requests) and joins to calls under `huddle.requireMembership`. Before, the ban only stopped its events and Blossom uploads. ([#243](https://github.com/ohstr/ncli/pull/243))
+- Changes NIP-43 role ids to be stored lowercase: `createrole`, `assignrole`, enrolling and invites lowercase them, and `unassignrole host` also removes `Host`. ([#243](https://github.com/ohstr/ncli/pull/243))
 - Changes `membership.memberClaims`, when unset, to follow `nip11.limitation.membership_required`: on a relay with `membership_required` and NIP-86 enabled, a member's `createclaim` is now refused (401) and only admins mint invites. Set `memberClaims: true` to keep the old behaviour. ([#234](https://github.com/ohstr/ncli/pull/234))
+
+### Fixed
+
+- Fixes NIP-86 `allowpubkey` on someone already a member, which re-enrolled them and dropped their roles: it now leaves the member unchanged. ([#243](https://github.com/ohstr/ncli/pull/243))
 
 ## [0.8.0-rc.50]
 

@@ -2,9 +2,15 @@
 
 ## [0.8.0-rc.52]
 
+### Added
+
+- Adds a warning, logged once per peer, when per-IP limits are set and a request carries `X-Forwarded-For` or `X-Real-IP` from a peer not in `limits.trustedProxies`: every client behind it shares one per-IP limit.
+
 ### Changed
 
-- Changes NIP-86 to count against `limits.http`: per IP before NIP-98 is checked, and per signer after it when `perPubkey` is set. A refusal is a 429 with `Retry-After`. ([#250](https://github.com/ohstr/ncli/pull/250))
+- Changes NIP-86 to count against `limits.http`: per IP, and per signer when `perPubkey` is set, but never the admins (relay key, `nip86.admins`), so a flood sharing their IP can't lock them out. A replayed header spends only the IP's budget, and a refusal is a 429 with `Retry-After`. ([#250](https://github.com/ohstr/ncli/pull/250))
+- Changes the shipped public configs and the recommended `limits:` block to allow 300 reads a minute per IP (burst 600) instead of 60, and 120 HTTP requests a minute instead of 60.
+- Changes the release workflow to fail when GoReleaser finishes without pushing `ghcr.io/ohstr/ncli:<version>`, which the release's own pins name.
 - Changes the JSON every command prints to keep `<`, `>` and `&` as written instead of `\u003c`, `\u003e` and `\u0026`, such as `group:<kind>` in `relay --check --json`'s warnings. ([#250](https://github.com/ohstr/ncli/pull/250))
 - Changes releases to ship pinned to themselves: the release workflow refuses to tag unless every relay image pin (chart, stacks, examples, rigs) names the version being released. Before, a release always pinned the one before it. ([#249](https://github.com/ohstr/ncli/pull/249))
 - Changes the public example relay configs and the public-search stack to ship with the recommended `limits:` block, so they no longer start with "no rate limits configured". ([#249](https://github.com/ohstr/ncli/pull/249))
@@ -15,7 +21,8 @@
 - Fixes the NIP-86 IP block not covering the HTTP bridge for some requests; only NIP-86 itself, at `/`, now stays reachable from a blocked IP. ([#250](https://github.com/ohstr/ncli/pull/250))
 - Fixes a banned key joining calls when `huddle.requireMembership` is off; a ban now refuses joins either way. ([#250](https://github.com/ohstr/ncli/pull/250))
 - Fixes `blossom list --all` reporting `unsupported` (exit 8) when another server failed with a retryable network error, and failing when a server answered with no blobs. It now fails only if no server answered, as `network` if any failure was retryable. ([#250](https://github.com/ohstr/ncli/pull/250))
-- Fixes `blossom mirror` reporting a 404 whose reason names the missing source blob as `unsupported`; it is now `not_found`, and a bare 404 stays `unsupported`. ([#250](https://github.com/ohstr/ncli/pull/250))
+- Fixes `blossom mirror` reporting a 404 whose reason says the source couldn't be fetched as `unsupported`; it is now `not_found`, while a bare 404, or one like "unknown URL path", stays `unsupported`. ([#250](https://github.com/ohstr/ncli/pull/250))
+- Fixes NIP-86's rate-limit (429) and failed-login (401) answers lacking the CORS headers of `nip86.allowedOrigins`, which hid them from a browser app.
 - Fixes unknown config keys being reported lowercased (`pprofadr`); they are now named as the file writes them. A role id with a dot gets its own error instead of an unknown key. ([#250](https://github.com/ohstr/ncli/pull/250))
 - Fixes `nip11.limitation.min_pow_difficulty` and `nip11.supported_nips` failing `--check` with no hint; the error now says to use `pow.min`, and that the relay computes `supported_nips`. ([#250](https://github.com/ohstr/ncli/pull/250))
 

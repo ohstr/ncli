@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0-rc.51]
+
+### Fixed
+
+- Fixes the relay's Blossom answering 404 for a blob at the root (`/<sha256>`), where BUD-01 serves it; `/media/<sha256>` still works. `ncli blossom download` of a full URL now fetches that URL first, then asks servers by hash. (#239)
+- Fixes `ncli blossom list`, `upload --optimize` and `mirror` reporting a server without that endpoint as `not_found` or a retryable `network` error; they now report `unsupported` (exit 8), and the relay says those endpoints are not supported. (#240)
+
 ## [0.8.0-rc.50]
 
 ### Added

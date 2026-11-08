@@ -263,40 +263,34 @@ func newBlobStore(c *RelayConfig) (server.Store, error) {
 	return server.NewDirStore(dir)
 }
 
-// newBlossomServer builds the Blossom server for c. Members are NIP-43
-// members; admins (the relay key, nip86.admins) count as members and may
-// delete any blob; a banned key may do neither.
+// newBlossomServer builds the Blossom server for c. Who may upload, download
+// and delete any blob are the tasks blossom.upload, blossom.download and
+// blossom.delete (tasks.go): the admins (the relay key, nip86.admins) hold all
+// three; blossom.membersOnly gives members the first two, and roles may carry
+// any of them. A banned key may neither upload nor download, admin or not.
 func newBlossomServer(c *RelayConfig, membership *relay.MembershipService, moderation *relayModeration) (*server.Server, error) {
 	store, err := newBlobStore(c)
 	if err != nil {
 		return nil, err
 	}
-	admins := nip86Admins()
-	isAdmin := func(pk string) bool {
-		return slices.ContainsFunc(admins, func(a string) bool { return strings.EqualFold(a, pk) })
+	auth := newTaskAuthority(c, membership, moderation)
+	may := func(task string) func(string) bool {
+		return func(pk string) bool { return !moderation.bannedPubkey(pk) && auth.can(pk, task) }
 	}
-	member := func(pk string) bool {
-		return !moderation.bannedPubkey(pk) && (isAdmin(pk) || membership.IsMember(pk))
-	}
-	anyone := func(pk string) bool { return !moderation.bannedPubkey(pk) }
 
 	b := c.Blossom
-	mayUpload := anyone
-	if up := b.MembersOnly.Upload; (up == nil && c.Nip11.Limitation.MembershipRequired) || (up != nil && *up) {
-		mayUpload = member
-	}
 	var mayDownload func(string) bool
 	if b.MembersOnly.Download {
-		mayDownload = member
+		mayDownload = may(taskBlossomDownload)
 	}
 	return server.New(server.Options{
 		Store:               store,
 		PublicURL:           c.blossomPublicURL(),
 		UploadPaths:         b.uploadPaths(),
 		BlobPrefix:          b.blobPrefix(),
-		MayUpload:           mayUpload,
+		MayUpload:           may(taskBlossomUpload),
 		MayDownload:         mayDownload,
-		IsAdmin:             isAdmin,
+		IsAdmin:             func(pk string) bool { return auth.can(pk, taskBlossomDelete) },
 		MaxBlobBytes:        b.MaxBlobBytes,
 		MaxUploadsPerSigner: b.MaxUploadsPerSigner,
 		MaxUploads:          b.MaxConcurrentUploads,

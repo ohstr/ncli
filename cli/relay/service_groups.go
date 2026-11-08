@@ -51,6 +51,12 @@ type GroupsConfig struct {
 	// MembershipNotices signs a seat notice for each member gained or lost;
 	// see MembershipNoticesConfig.
 	MembershipNotices *MembershipNoticesConfig `mapstructure:"membershipNotices"`
+
+	// Create says who may create a group (kind 9007): everyone, members, or
+	// a NIP-43 role id, any number of them. Omitted, everyone may. An empty
+	// list leaves it to the relay's admins and the roles whose
+	// membership.roles tasks list group.create.
+	Create []string `mapstructure:"create"`
 }
 
 // groupModerationPolicy is the moderation policy groups.roles describes, or

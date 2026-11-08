@@ -102,7 +102,10 @@ func huddleEnabled(cfg *HuddleConfig) bool {
 //
 // The path wildcard is read by the SDK handler via Request.PathValue, the same
 // mechanism the membership admin routes use.
-func registerHuddleRoutes(mux *http.ServeMux, wsHandler *relay.SessionHandler, cfg *HuddleConfig, relayURL string) *room.Manager {
+//
+// auth, when set, decides joins under requireMembership by the huddle.join
+// task; nil keeps the plain membership check.
+func registerHuddleRoutes(mux *http.ServeMux, wsHandler *relay.SessionHandler, cfg *HuddleConfig, relayURL string, auth *taskAuthority) *room.Manager {
 	if !huddleEnabled(cfg) {
 		return nil
 	}
@@ -133,6 +136,15 @@ func registerHuddleRoutes(mux *http.ServeMux, wsHandler *relay.SessionHandler, c
 				// Configured to require membership with no membership service
 				// to ask: fail closed rather than silently let everyone in.
 				return errors.New("membership is required but not configured")
+			}
+			if auth != nil {
+				// The task model: members hold huddle.join (unless
+				// membership.members.can leaves it out), so do the admins
+				// and any role that lists it; a banned key does not.
+				if !auth.can(pubkey, taskHuddleJoin) {
+					return errors.New("not allowed to join calls on this relay")
+				}
+				return nil
 			}
 			if !membership.IsMember(pubkey) {
 				return errors.New("not a relay member")

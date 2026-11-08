@@ -4,7 +4,7 @@
 
 ### Changed
 
-- Changes `membership.memberClaims`, when unset, to follow `nip11.limitation.membership_required`: on a members-only relay only admins mint invites through NIP-86 `createclaim`, elsewhere members still can. Set it true or false to override. ([#234](https://github.com/ohstr/ncli/pull/234))
+- Changes `membership.memberClaims`, when unset, to follow `nip11.limitation.membership_required`: on a relay with `membership_required` and NIP-86 enabled, a member's `createclaim` is now refused (401) and only admins mint invites. Set `memberClaims: true` to keep the old behaviour. ([#234](https://github.com/ohstr/ncli/pull/234))
 
 ## [0.8.0-rc.50]
 

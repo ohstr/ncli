@@ -54,7 +54,6 @@ require (
 	github.com/mattn/go-runewidth v0.0.27 // indirect
 	github.com/minio/crc64nvme v1.1.1 // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect
-	github.com/minio/minio-go/v7 v7.4.1 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
@@ -101,6 +100,7 @@ require (
 	github.com/atotto/clipboard v0.1.4
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/ebitengine/oto/v3 v3.3.3
+	github.com/minio/minio-go/v7 v7.4.1
 	github.com/ohstr/nmilat v0.5.0-rc.50.0.20261108135346-65c3b45b57f0
 	github.com/pion/opus v0.1.0
 	github.com/pion/rtcp v1.2.18

@@ -62,6 +62,8 @@ jobs:
         run: go test ./cli/relay/jobs/ -run TestMeili -v -count=1 -timeout 20m
 
       - name: Command matrix (local relays, blossom container)
+        env:
+          CLIMATRIX_REQUIRE_S3: "1"
         run: go test ./integration/climatrix/... -v -count=1 -timeout 20m
 
   dashboard:

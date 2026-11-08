@@ -6,12 +6,14 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,6 +21,7 @@ import (
 	"github.com/ohstr/nmilat/nip01"
 	"github.com/ohstr/nmilat/nip11"
 	"github.com/ohstr/nmilat/nip29"
+	"github.com/ohstr/nmilat/nip86"
 	"github.com/ohstr/nmilat/nipB7"
 	relayclient "github.com/ohstr/nmilat/relay/client"
 	"github.com/ohstr/nmilat/wire"
@@ -211,6 +214,296 @@ func TestScenario_CommunityRelay(t *testing.T) {
 		require.NoError(t, err)
 		_ = notBlob.Body.Close()
 		require.Equal(t, http.StatusNotFound, notBlob.StatusCode)
+	})
+}
+
+// Two more keys for the Blossom tests: one enrolled and then banned, one
+// named in nip86.admins without being a member.
+const (
+	blossomBannedPriv = "0000000000000000000000000000000000000000000000000000000000000003"
+	blossomAdminPriv  = "0000000000000000000000000000000000000000000000000000000000000004"
+)
+
+// blossomDo sends one Blossom request to ts as privKey ("" sends none),
+// with a token for verb and sha.
+func blossomDo(t *testing.T, ts *httptest.Server, method, path, privKey, verb, sha string, body io.Reader) *http.Response {
+	t.Helper()
+	req, err := http.NewRequest(method, ts.URL+path, body)
+	require.NoError(t, err)
+	if privKey != "" {
+		req.Header.Set("Authorization", blossomToken(t, privKey, verb, sha))
+	}
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = resp.Body.Close() })
+	return resp
+}
+
+func blossomUpload(t *testing.T, ts *httptest.Server, privKey string, blob []byte) *http.Response {
+	t.Helper()
+	return blossomDo(t, ts, http.MethodPut, "/upload", privKey, nipB7.VerbUpload, sha256Hex(blob), bytes.NewReader(blob))
+}
+
+func sha256Hex(b []byte) string {
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
+}
+
+// nip86As calls the relay's NIP-86 management API on ts as privKey and
+// fails the test unless the call succeeds.
+func nip86As(t *testing.T, ts *httptest.Server, privKey, method string, params ...any) {
+	t.Helper()
+	raw := make([]json.RawMessage, 0, len(params))
+	for _, p := range params {
+		b, err := json.Marshal(p)
+		require.NoError(t, err)
+		raw = append(raw, b)
+	}
+	body, err := json.Marshal(nip86.Request{Method: method, Params: raw})
+	require.NoError(t, err)
+	header, err := common.GenerateNIP98Header(privKey, ts.URL+"/", http.MethodPost, body)
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/", bytes.NewReader(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", nip86.ContentType)
+	req.Header.Set("Authorization", header)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var got nip86.Response
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&got))
+	require.Empty(t, got.Error, "%s failed", method)
+}
+
+// TestScenario_RelayBlossomPolicy checks who the relay lets upload,
+// download and delete: a NIP-86 ban outranks membership, only an uploader
+// or an admin deletes, and maxBlobBytes holds.
+func TestScenario_RelayBlossomPolicy(t *testing.T) {
+	cfg := communityRelayConfig(t)
+	adminPub := pubkeyOf(t, blossomAdminPriv)
+	cfg.Nip86 = &Nip86Config{Enabled: true, Admins: []string{adminPub}}
+	// The ban is saved beside the store, so give it one.
+	cfg.RelayNotesDb = filepath.Join(t.TempDir(), "relay.db")
+	cfg.Blossom.MembersOnly.Download = true
+	cfg.Blossom.MaxBlobBytes = 64
+	ts := bootScenario(t, cfg)
+	enrollMember(t, ts.URL, scenarioMemberPub)
+	enrollMember(t, ts.URL, pubkeyOf(t, blossomBannedPriv))
+
+	get := func(privKey, sha string) int {
+		return blossomDo(t, ts, http.MethodGet, "/media/"+sha, privKey, nipB7.VerbGet, sha, nil).StatusCode
+	}
+	del := func(privKey, sha string) int {
+		return blossomDo(t, ts, http.MethodDelete, "/media/"+sha, privKey, nipB7.VerbDelete, sha, nil).StatusCode
+	}
+
+	t.Run("a banned member may neither upload nor download", func(t *testing.T) {
+		before := []byte("uploaded before the ban")
+		require.Equal(t, http.StatusOK, blossomUpload(t, ts, blossomBannedPriv, before).StatusCode)
+		require.Equal(t, http.StatusOK, get(blossomBannedPriv, sha256Hex(before)))
+
+		nip86As(t, ts, testPrivKey, nip86.MethodBanPubkey, pubkeyOf(t, blossomBannedPriv), "spam")
+
+		require.Equal(t, http.StatusForbidden, blossomUpload(t, ts, blossomBannedPriv, []byte("after the ban")).StatusCode)
+		require.Equal(t, http.StatusForbidden, get(blossomBannedPriv, sha256Hex(before)))
+		require.Equal(t, http.StatusOK, get(scenarioMemberPriv, sha256Hex(before)), "the blob itself stays up for members")
+	})
+
+	t.Run("download needs a member's get token", func(t *testing.T) {
+		blob := []byte("members only download")
+		require.Equal(t, http.StatusOK, blossomUpload(t, ts, scenarioMemberPriv, blob).StatusCode)
+		require.Equal(t, http.StatusUnauthorized, get("", sha256Hex(blob)))
+		require.Equal(t, http.StatusForbidden, get(scenarioAgentPriv, sha256Hex(blob)))
+		require.Equal(t, http.StatusOK, get(blossomAdminPriv, sha256Hex(blob)), "an admin counts as a member")
+	})
+
+	t.Run("only the uploader or an admin deletes", func(t *testing.T) {
+		for name, admin := range map[string]string{"nip86.admins": blossomAdminPriv, "relay key": testPrivKey} {
+			blob := []byte("deleted by the " + name)
+			sha := sha256Hex(blob)
+			require.Equal(t, http.StatusOK, blossomUpload(t, ts, scenarioMemberPriv, blob).StatusCode)
+			require.Equal(t, http.StatusForbidden, del(scenarioAgentPriv, sha), "a non-uploader non-admin must not delete")
+			require.Equal(t, http.StatusOK, get(scenarioMemberPriv, sha))
+			require.Equal(t, http.StatusOK, del(admin, sha), "the %s deletes any blob", name)
+			require.Equal(t, http.StatusNotFound, get(scenarioMemberPriv, sha))
+		}
+
+		own := []byte("deleted by its uploader")
+		require.Equal(t, http.StatusOK, blossomUpload(t, ts, scenarioMemberPriv, own).StatusCode)
+		require.Equal(t, http.StatusOK, del(scenarioMemberPriv, sha256Hex(own)))
+		require.Equal(t, http.StatusNotFound, get(scenarioMemberPriv, sha256Hex(own)))
+	})
+
+	t.Run("maxBlobBytes", func(t *testing.T) {
+		big := bytes.Repeat([]byte("x"), 65)
+		require.Equal(t, http.StatusRequestEntityTooLarge, blossomUpload(t, ts, scenarioMemberPriv, big).StatusCode, "declared Content-Length")
+		// No Content-Length: the relay must still stop reading at the cap.
+		chunked := blossomDo(t, ts, http.MethodPut, "/upload", scenarioMemberPriv, nipB7.VerbUpload, sha256Hex(big), io.MultiReader(bytes.NewReader(big)))
+		require.Equal(t, http.StatusRequestEntityTooLarge, chunked.StatusCode, "chunked body")
+		require.Equal(t, http.StatusNotFound, get(scenarioMemberPriv, sha256Hex(big)))
+		require.Equal(t, http.StatusOK, blossomUpload(t, ts, scenarioMemberPriv, big[:64]).StatusCode, "exactly the cap is allowed")
+	})
+}
+
+// stalledUpload is an upload that has sent part of its body and waits.
+type stalledUpload struct {
+	pw   *io.PipeWriter
+	rest []byte
+	tr   *http.Transport
+
+	// answered is closed once code/err hold the relay's answer.
+	answered chan struct{}
+	code     int
+	err      error
+
+	once   sync.Once
+	result int
+	failed error
+}
+
+var errUploadAborted = errors.New("held upload aborted")
+
+// startStalledUpload starts an upload as privKey that sends the first
+// bytes of blob and then waits for finish. It asks for 100-continue, so
+// the body is only sent once the relay holds a slot for it and reads it;
+// an upload refused a slot gets its 429 at once instead of the relay
+// blocking on a body nobody sends. Its cleanup, registered after
+// bootScenario's, runs before the server's Close and ends the upload, so
+// a failing test never leaves Close waiting on it.
+func startStalledUpload(t *testing.T, ts *httptest.Server, privKey string, blob []byte) *stalledUpload {
+	t.Helper()
+	pr, pw := io.Pipe()
+	s := &stalledUpload{
+		pw:       pw,
+		rest:     blob[4:],
+		tr:       &http.Transport{ExpectContinueTimeout: time.Minute},
+		answered: make(chan struct{}),
+	}
+	// Closing the body closes the pipe, so a write to an upload the
+	// client gave up on fails instead of blocking.
+	body := struct {
+		io.Reader
+		io.Closer
+	}{io.MultiReader(bytes.NewReader(blob[:4]), pr), pr}
+	req, err := http.NewRequest(http.MethodPut, ts.URL+"/upload", body)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", blossomToken(t, privKey, nipB7.VerbUpload, sha256Hex(blob)))
+	req.Header.Set("Expect", "100-continue")
+	t.Cleanup(func() { _, _ = s.end(true) })
+	go func() {
+		defer close(s.answered)
+		resp, err := (&http.Client{Transport: s.tr}).Do(req)
+		if err != nil {
+			s.err = err
+			return
+		}
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+		s.code = resp.StatusCode
+	}()
+	return s
+}
+
+// end sends the rest of the body (or, with abort, fails it) and waits for
+// the relay's answer. Only the first call does anything.
+func (s *stalledUpload) end(abort bool) (int, error) {
+	s.once.Do(func() {
+		if abort {
+			_ = s.pw.CloseWithError(errUploadAborted)
+		} else {
+			go func() {
+				_, _ = s.pw.Write(s.rest)
+				_ = s.pw.Close()
+			}()
+		}
+		select {
+		case <-s.answered:
+			s.result, s.failed = s.code, s.err
+		case <-time.After(10 * time.Second):
+			_ = s.pw.CloseWithError(errUploadAborted)
+			s.failed = errors.New("the relay never answered the held upload")
+		}
+		s.tr.CloseIdleConnections()
+	})
+	return s.result, s.failed
+}
+
+// finish sends the rest of the body and returns the relay's answer.
+func (s *stalledUpload) finish(t *testing.T) int {
+	t.Helper()
+	code, err := s.end(false)
+	require.NoError(t, err, "the held upload failed")
+	return code
+}
+
+// probeUpload uploads as privKey with a token for other bytes than it
+// sends: it gets past the in-flight limits to a 403, or stops at them
+// with a 429, and never stores anything.
+func probeUpload(t *testing.T, ts *httptest.Server, privKey string) int {
+	t.Helper()
+	body := []byte("probe")
+	return blossomDo(t, ts, http.MethodPut, "/upload", privKey, nipB7.VerbUpload, sha256Hex([]byte("not the probe")), bytes.NewReader(body)).StatusCode
+}
+
+// holdUpload starts an upload as holder and returns once the relay counts
+// it in flight, which is when a probe as prober is first turned away
+// with a 429. A probe that raced the holder for the one slot gets the
+// holder a 429 instead; that holder is ended and started again.
+func holdUpload(t *testing.T, ts *httptest.Server, holder, prober string, blob []byte) *stalledUpload {
+	t.Helper()
+	for range 10 {
+		s := startStalledUpload(t, ts, holder, blob)
+	probe:
+		for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); {
+			select {
+			case <-s.answered:
+				code, err := s.end(true)
+				require.NoError(t, err, "the held upload failed")
+				require.Equal(t, http.StatusTooManyRequests, code, "the held upload ended early")
+				break probe
+			default:
+			}
+			code := probeUpload(t, ts, prober)
+			if code == http.StatusTooManyRequests {
+				return s
+			}
+			require.Equal(t, http.StatusForbidden, code)
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+	t.Fatal("the held upload never counted as in flight")
+	return nil
+}
+
+// TestScenario_RelayBlossomUploadLimits checks the relay applies
+// maxUploadsPerSigner and maxConcurrentUploads to uploads in flight.
+func TestScenario_RelayBlossomUploadLimits(t *testing.T) {
+	blob := []byte("a slow upload held open")
+
+	t.Run("maxUploadsPerSigner", func(t *testing.T) {
+		cfg := communityRelayConfig(t)
+		cfg.Blossom.MaxUploadsPerSigner = 1
+		ts := bootScenario(t, cfg)
+		enrollMember(t, ts.URL, scenarioMemberPub)
+
+		held := holdUpload(t, ts, scenarioMemberPriv, scenarioMemberPriv, blob)
+		require.Equal(t, http.StatusTooManyRequests, blossomUpload(t, ts, scenarioMemberPriv, []byte("second")).StatusCode)
+		require.Equal(t, http.StatusOK, blossomUpload(t, ts, testPrivKey, []byte("another signer")).StatusCode, "the cap is per signer")
+		require.Equal(t, http.StatusOK, held.finish(t))
+		require.Equal(t, http.StatusOK, blossomUpload(t, ts, scenarioMemberPriv, []byte("third")).StatusCode, "the slot is released")
+	})
+
+	t.Run("maxConcurrentUploads", func(t *testing.T) {
+		cfg := communityRelayConfig(t)
+		cfg.Blossom.MaxConcurrentUploads = 1
+		ts := bootScenario(t, cfg)
+		enrollMember(t, ts.URL, scenarioMemberPub)
+
+		held := holdUpload(t, ts, scenarioMemberPriv, testPrivKey, blob)
+		require.Equal(t, http.StatusTooManyRequests, blossomUpload(t, ts, testPrivKey, []byte("another signer")).StatusCode, "the cap is relay-wide")
+		require.Equal(t, http.StatusOK, held.finish(t))
+		require.Equal(t, http.StatusOK, blossomUpload(t, ts, testPrivKey, []byte("another signer")).StatusCode, "the slot is released")
 	})
 }
 

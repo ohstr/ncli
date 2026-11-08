@@ -100,6 +100,26 @@ limits:
 		}
 	})
 
+	t.Run("per-IP limits on loopback without a trusted proxy warn", func(t *testing.T) {
+		const loopback = "listen is on loopback, so clients probably arrive through a local proxy: add it to limits.trustedProxies or every client shares one per-IP limit"
+		limits := "limits:\n  events: {perIP: {events: 120, per: 1m}}\n  connectionsPerIP: 20\n"
+		path := e.WriteFile("loopback.yaml", base()+"listen: 127.0.0.1:7000\n"+limits)
+		res := e.MustOK(t, "relay", "--config", path, "--check", "--json")
+		var got checked
+		res.JSON(t, &got)
+		if !got.OK || len(got.Warnings) != 1 || got.Warnings[0] != loopback || strings.Count(res.Stderr, loopback) != 1 {
+			t.Errorf("--check:\n%s", res)
+		}
+
+		trusted := e.WriteFile("loopback-trusted.yaml", base()+"listen: 127.0.0.1:7000\n"+limits+"  trustedProxies: [127.0.0.1]\n")
+		res = e.MustOK(t, "relay", "--config", trusted, "--check", "--json")
+		got = checked{}
+		res.JSON(t, &got)
+		if !got.OK || len(got.Warnings) != 0 || strings.Contains(res.Stderr, loopback) {
+			t.Errorf("--check with the proxy trusted:\n%s", res)
+		}
+	})
+
 	for name, c := range map[string]struct{ yaml, input string }{
 		"negative events":    {"events: {perIP: {events: -1, per: 1m}}", "limits.events.perIP.events"},
 		"events without per": {"reads: {perPubkey: {events: 5}}", "limits.reads.perPubkey.per"},

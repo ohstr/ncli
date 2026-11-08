@@ -83,6 +83,11 @@ Every image is pinned, and `go test ./deploy/` fails on one that isn't
   workflow runs `NCLI_RELEASE_VERSION=<version> go test ./deploy -run
   '^TestRelayImagePinsVersion$'` before tagging and refuses to release
   unless every pin is that version.
+- So once the release PR is merged, main's pins name the release being
+  prepared, and `ghcr.io/ohstr/ncli:<version>` appears only when the
+  release workflow runs. Until then, deploy from the previous release's
+  tag. The workflow fails if GoReleaser finishes without pushing that
+  image.
 - Chainguard tags MinIO only `latest`, so it is pinned by digest. To bump
   it, take the `Digest:` from `docker buildx imagetools inspect
   cgr.dev/chainguard/minio:latest` (and `minio-client`) and put it in

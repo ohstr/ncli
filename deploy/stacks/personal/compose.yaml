@@ -4,7 +4,7 @@
 # Set nip11.pubkey in relay.yaml to your own key first.
 services:
   relay:
-    image: ghcr.io/ohstr/ncli:${NCLI_VERSION:-0.8.0-rc.51}
+    image: ghcr.io/ohstr/ncli:${NCLI_VERSION:-0.8.0-rc.52}
     container_name: ncli_relay
     command: ["relay", "--config", "/app/ncli/config.yaml"]
     ports:

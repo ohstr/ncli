@@ -7,8 +7,10 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
+	"github.com/ohstr/ncli/cli/relay/adminplane"
 	"github.com/ohstr/nmilat/huddle/room"
 	"github.com/ohstr/nmilat/nip86"
 	"github.com/ohstr/nmilat/nip98"
@@ -372,45 +374,116 @@ func newNip86Handler(wsHandler *relay.SessionHandler, store *relay.EventStore, r
 	return nip86.NewHandler(cfg), nil
 }
 
-// limitNip86 counts each NIP-86 POST against limits.http: per IP first, so
-// an unauthenticated flood is refused before it costs a signature check,
-// then per signer once NIP-98 verifies, when a per-pubkey limit is set. The
-// signer check runs the verification the handler runs; only a request that
-// passes it reaches next. A refusal is a 429 with Retry-After. A nil
-// limiter counts nothing.
-func limitNip86(limiter *ratelimit.Limiter, perPubkey bool, next http.Handler) http.Handler {
+// nip86Limit is what limitNip86 needs besides the limiter: who the admins
+// are, the CORS allowlist the NIP-86 handler answers with, and the replay
+// guard in front of it.
+type nip86Limit struct {
+	// perPubkey is whether limits.http.perPubkey is set.
+	perPubkey bool
+	// admins are never limited: the relay key and nip86.admins.
+	admins []string
+	// origins is nip86.allowedOrigins.
+	origins []string
+	// replay is the guard ServeOnce consults, read here without recording.
+	replay *adminplane.ReplayGuard
+}
+
+// limitNip86 counts each NIP-86 POST against limits.http. A request with
+// no Authorization is charged per IP. One with a header already used (the
+// replay guard, peeked, not recorded) is charged per IP only, so a replay
+// never spends its signer's budget, and next refuses it. Any other header
+// is NIP-98 verified first, as the handler verifies it: a failure is
+// charged per IP, then a 401; an admin (the relay key, nip86.admins) is
+// not limited at all, so a flood sharing its IP can't lock it out; any
+// other signer is charged per IP and, when a per-pubkey limit is set, per
+// signer. A refusal is a 429 with Retry-After, and a refusal or 401 carries
+// the CORS headers the NIP-86 handler would. A nil limiter counts nothing.
+func limitNip86(limiter *ratelimit.Limiter, opts nip86Limit, next http.Handler) http.Handler {
 	if limiter == nil {
 		return next
+	}
+	admins := make(map[string]bool, len(opts.admins))
+	for _, a := range opts.admins {
+		admins[a] = true
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if wait, ok := limiter.Allow(ratelimit.HTTP, limiter.ClientIP(r), ""); !ok {
+		ip := limiter.ClientIP(r)
+		refuse := func(wait time.Duration) {
+			nip86CORS(w, r, opts.origins)
 			ratelimit.Refuse(w, ratelimit.HTTP, wait)
-			return
 		}
-		if !perPubkey {
+		auth := r.Header.Get("Authorization")
+		if auth == "" || (opts.replay != nil && opts.replay.Used(auth, time.Now())) {
+			if wait, ok := limiter.Allow(ratelimit.HTTP, ip, ""); !ok {
+				refuse(wait)
+				return
+			}
 			next.ServeHTTP(w, r)
 			return
 		}
 		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, nip86.MaxBodyBytes))
 		if err != nil {
+			nip86CORS(w, r, opts.origins)
 			http.Error(w, "request body too large or unreadable", http.StatusRequestEntityTooLarge)
 			return
 		}
 		r.Body = io.NopCloser(bytes.NewReader(body))
 		signer, err := nip98.VerifyAnyPubkey(r, nip98.Options{Body: body, RequirePayload: true, NormalizeRootPath: true})
 		if err != nil {
+			if wait, ok := limiter.Allow(ratelimit.HTTP, ip, ""); !ok {
+				refuse(wait)
+				return
+			}
 			// 401 is NIP-86's only status for a failed authentication.
+			nip86CORS(w, r, opts.origins)
 			http.Error(w, err.Error(), http.StatusUnauthorized)
 			return
 		}
-		if wait, ok := limiter.Allow(ratelimit.HTTP, "", signer); !ok {
-			ratelimit.Refuse(w, ratelimit.HTTP, wait)
+		if admins[signer] {
+			next.ServeHTTP(w, r)
+			return
+		}
+		pubkey := ""
+		if opts.perPubkey {
+			pubkey = signer
+		}
+		if wait, ok := limiter.Allow(ratelimit.HTTP, ip, pubkey); !ok {
+			refuse(wait)
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// nip86CORS sets the CORS headers nmilat's nip86.Handler answers with, for
+// a response limitNip86 writes before it: Access-Control-Allow-Origin from
+// nip86.allowedOrigins (any origin when empty), and Vary: Origin when it
+// names one. Without them a browser hides the 429 or 401 from the page.
+func nip86CORS(w http.ResponseWriter, r *http.Request, origins []string) {
+	allowed := ""
+	if len(origins) == 0 {
+		allowed = "*"
+	}
+	origin := r.Header.Get("Origin")
+	for _, candidate := range origins {
+		if candidate == "*" {
+			allowed = "*"
+			break
+		}
+		if origin != "" && strings.EqualFold(candidate, origin) {
+			allowed = origin
+			break
+		}
+	}
+	if allowed == "" {
+		return
+	}
+	w.Header().Set("Access-Control-Allow-Origin", allowed)
+	if allowed != "*" {
+		w.Header().Add("Vary", "Origin")
+	}
 }

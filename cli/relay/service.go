@@ -167,11 +167,13 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 	config.logConfigWarnings()
 	sessionConfig.RateLimiter = limiter
 
+	// The groups' moderation policy and role descriptions go in before the
+	// handler's startup republish of kind:39001/39003 (groupsSessionOptions).
 	wsHandler := relay.NewSessionHandler(
 		store,
 		&cfg.Nip11,
 		searcher,
-		relay.WithSessionConfig(sessionConfig),
+		append([]relay.SessionOption{relay.WithSessionConfig(sessionConfig)}, groupsSessionOptions(&config)...)...,
 	)
 	tasks.membership = wsHandler.Membership()
 	access.membership = wsHandler.Membership()
@@ -192,8 +194,8 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 		wsHandler.VerificationWorker.Start(config.VerificationWorkers)
 	}
 
-	// groups: roles, role descriptions, extra group admins, moderation log
-	// and pending joins. initConfig already validated it.
+	// groups: extra group admins, moderation log, pending joins and member
+	// notices. initConfig already validated it.
 	applyGroupsConfig(wsHandler.Groups(), &config)
 
 	// NIP-98: the admin endpoints below require HTTP auth, a capability
@@ -205,7 +207,16 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 	// variable and reads it per request, so the order here does not matter.
 	var nip86Handler *nip86.Handler
 	nip86Replay := adminplane.NewReplayGuard()
-	nip86Metered := m.HTTP("nip86", limitNip86(limiter, config.Limits != nil && config.Limits.HTTP.PerPubkey.Events > 0,
+	var nip86Origins []string
+	if config.Nip86 != nil {
+		nip86Origins = config.Nip86.AllowedOrigins
+	}
+	nip86Metered := m.HTTP("nip86", limitNip86(limiter, nip86Limit{
+		perPubkey: config.Limits != nil && config.Limits.HTTP.PerPubkey.Events > 0,
+		admins:    nip86Admins(),
+		origins:   nip86Origins,
+		replay:    nip86Replay,
+	},
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			adminplane.ServeOnce(nip86Replay, nip86Handler, w, r)
 		})))
@@ -451,7 +462,7 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 		stopSampling:       stopSampling,
 		publisherDone:      publisherDone,
 		server: &http.Server{
-			Handler: moderation.ipGate(mux),
+			Handler: newUntrustedProxyWarner(&config).wrap(moderation.ipGate(mux)),
 			Addr:    config.listenAddr(),
 		},
 	}

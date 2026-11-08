@@ -14,8 +14,8 @@ import (
 //
 //	limits:
 //	  events:   {perPubkey: {events: 30, per: 1m, burst: 60}, perIP: {events: 120, per: 1m}}
-//	  reads:    {perIP: {events: 60, per: 1m}}
-//	  http:     {perIP: {events: 60, per: 1m}}
+//	  reads:    {perIP: {events: 300, per: 1m, burst: 600}}
+//	  http:     {perIP: {events: 120, per: 1m}}
 //	  blossom:
 //	    uploads:   {perPubkey: {events: 20, per: 1h}}
 //	    downloads: {perIP: {events: 600, per: 1m}}
@@ -30,7 +30,8 @@ type LimitsConfig struct {
 	// Reads limits REQ, COUNT and NEG-OPEN; an AUTH takes from PerIP.
 	Reads LimitConfig `mapstructure:"reads"`
 	// HTTP limits the HTTP bridge (POST /query, /count and /events) and
-	// NIP-86: per IP before NIP-98 is checked, per signer after.
+	// NIP-86. NIP-86 is counted per IP and per signer, except for the
+	// admins (the relay key, nip86.admins), which it never counts.
 	HTTP    LimitConfig        `mapstructure:"http"`
 	Blossom BlossomLimitConfig `mapstructure:"blossom"`
 	// ConnectionsPerIP caps one IP's open WebSocket connections, the

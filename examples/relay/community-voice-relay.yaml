@@ -93,9 +93,9 @@ limits:
     perPubkey: {events: 30, per: 1m, burst: 60}
     perIP: {events: 120, per: 1m}
   reads:                     # REQ, COUNT, NEG-OPEN and AUTH
-    perIP: {events: 60, per: 1m, burst: 120}
-  http:                      # POST /query, /count, /events
-    perIP: {events: 60, per: 1m}
+    perIP: {events: 300, per: 1m, burst: 600}
+  http:                      # POST /query, /count, /events and NIP-86
+    perIP: {events: 120, per: 1m}
   connectionsPerIP: 20        # WebSockets and huddle ones together
   # Behind a reverse proxy, list its own address, or every client shares
   # the proxy's per-IP limits:

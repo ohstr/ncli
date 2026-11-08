@@ -180,7 +180,8 @@ a NIP-56-style report type (`spam`, `malware`, `illegal`, `nudity`, ...).
   `upload --optimize` or `mirror` answered 404, or any command got a
   redirect, 405 or 501. Don't retry it against that server. A
   `download`'s 404 is still `not_found`: that one blob isn't there, and so
-  is a `mirror` 404 whose reason names the source blob or URL. `list
+  is a `mirror` 404 whose reason says the source couldn't be fetched
+  ("source", "upstream", "could not fetch", "not found at"). `list
   --all` fails only if no server answered, as `network` if any could.
 - Nothing here blocks on a prompt an agent can't answer: `rm` requires
   `--yes` non-interactively instead of hanging, and every other command

@@ -137,18 +137,32 @@ func checkGroupsConfig(cfg *RelayConfig) error {
 	return nil
 }
 
-// applyGroupsConfig configures the relay's groups service from the groups
-// block (already validated by checkGroupsConfig). The relay's own key stays
-// a group admin alongside groups.admins.
+// groupsSessionOptions are the groups block's settings the session handler
+// must have before it is built: the moderation policy (groups.roles) and
+// the role descriptions. NewSessionHandler republishes every hosted
+// group's kind:39001 and kind:39003 at startup, so setting them afterwards
+// would first publish both under the default policy, then again.
+func groupsSessionOptions(cfg *RelayConfig) []relay.SessionOption {
+	if cfg.Groups == nil {
+		return nil
+	}
+	var opts []relay.SessionOption
+	if policy, _ := groupModerationPolicy(cfg); policy != nil {
+		opts = append(opts, relay.WithGroupsModerationPolicy(policy))
+	}
+	if len(cfg.Groups.RoleDescriptions) > 0 {
+		opts = append(opts, relay.WithGroupsRoleDescriptions(cfg.Groups.RoleDescriptions))
+	}
+	return opts
+}
+
+// applyGroupsConfig configures the rest of the relay's groups service from
+// the groups block (already validated by checkGroupsConfig); the policy and
+// role descriptions come in at construction (groupsSessionOptions). The
+// relay's own key stays a group admin alongside groups.admins.
 func applyGroupsConfig(groups *relay.GroupsService, cfg *RelayConfig) {
 	if cfg.Groups == nil {
 		return
-	}
-	if policy, _ := groupModerationPolicy(cfg); policy != nil {
-		groups.SetModerationPolicy(policy)
-	}
-	if len(cfg.Groups.RoleDescriptions) > 0 {
-		groups.SetRoleDescriptions(cfg.Groups.RoleDescriptions)
 	}
 	if admins, _ := groupAdmins(cfg); len(admins) > 0 {
 		groups.SetRelayAdmins(append([]string{cfg.Nip11.Self}, admins...)...)

@@ -32,7 +32,7 @@ and the public examples and the public-search stack ship with it.
 |---|---|
 | `limits.events.perPubkey` / `perIP` | EVENT over the WebSocket and `POST /events`, one shared budget. Per pubkey only for a connection logged in as the author, and always over `POST /events` (its NIP-98 signer is the author). |
 | `limits.reads.perIP` | REQ, COUNT, NEG-OPEN and each AUTH |
-| `limits.http.perIP` | `POST /query`, `/count`, `/events` |
+| `limits.http.perPubkey` / `perIP` | `POST /query`, `/count`, `/events` and NIP-86 (from rc.52; NIP-86 never counts its admins) |
 | `limits.blossom.uploads` / `downloads` | Blossom requests per pubkey and per IP (a download has no signer, so per IP) |
 | `limits.connectionsPerIP` | WebSockets, huddle ones (`/huddle/{id}/audio`, `/rtc`) included |
 | `limits.exempt: members` | Members and admins skip the per-pubkey limits; never a banned key, never per-IP ones |
@@ -44,7 +44,9 @@ counted in `ncli_relay_rate_limited_total`.
 **Warnings** (startup and `relay --check --json`'s `"warnings"`): a public
 relay (no `auth_required`) without `limits:`; a per-pubkey limit that never
 applies; `listen` on loopback with per-IP limits but no `trustedProxies`
-covering it.
+covering it. While running, with per-IP limits set, the relay also warns
+(once per peer) about a request carrying `X-Forwarded-For` or `X-Real-IP`
+from a peer `trustedProxies` doesn't list.
 
 ## Shipped in rc.51
 
@@ -78,6 +80,6 @@ carry `limits:` ([#248](https://github.com/ohstr/ncli/issues/248)).
 | Item | Status |
 |---|---|
 | Storage quotas, per key and in total (events and blobs) | Not started: needs per-key accounting in the nmilat store and Blossom |
-| NIP-86 requests counted against `limits.http` | Open, [#247](https://github.com/ohstr/ncli/issues/247) |
-| NIP-86 IP block covering every HTTP bridge request | Open, [#247](https://github.com/ohstr/ncli/issues/247) |
-| A banned pubkey joining calls when `huddle.requireMembership` is off | Open, [#247](https://github.com/ohstr/ncli/issues/247) |
+| NIP-86 requests counted against `limits.http` | Fixed in rc.52 ([#250](https://github.com/ohstr/ncli/pull/250)) |
+| NIP-86 IP block covering every HTTP bridge request | Fixed in rc.52 ([#250](https://github.com/ohstr/ncli/pull/250)) |
+| A banned pubkey joining calls when `huddle.requireMembership` is off | Fixed in rc.52 ([#250](https://github.com/ohstr/ncli/pull/250)) |

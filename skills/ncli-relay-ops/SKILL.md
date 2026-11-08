@@ -133,9 +133,9 @@ limits:
     perPubkey: {events: 30, per: 1m, burst: 60}
     perIP: {events: 120, per: 1m}
   reads:                     # REQ, COUNT, NEG-OPEN and AUTH
-    perIP: {events: 60, per: 1m, burst: 120}
+    perIP: {events: 300, per: 1m, burst: 600}
   http:                      # POST /query, /count, /events and NIP-86
-    perIP: {events: 60, per: 1m}
+    perIP: {events: 120, per: 1m}
   blossom:
     uploads: {perPubkey: {events: 20, per: 1h}, perIP: {events: 40, per: 1h}}
     downloads: {perIP: {events: 600, per: 1m}}

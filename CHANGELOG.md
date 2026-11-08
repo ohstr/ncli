@@ -2,6 +2,10 @@
 
 ## [0.8.0-rc.51]
 
+### Added
+
+- Adds roles that carry tasks (`membership.roles`): each NIP-43 role lists what its members may do, such as NIP-86 methods (`createclaim`, `banpubkey`), Blossom uploads, joining calls or creating groups (`groups.create`), and NIP-86 `supportedmethods` tells each caller its own set. Existing settings keep working unchanged.
+
 ### Changed
 
 - Changes `membership.memberClaims`, when unset, to follow `nip11.limitation.membership_required`: on a relay with `membership_required` and NIP-86 enabled, a member's `createclaim` is now refused (401) and only admins mint invites. Set `memberClaims: true` to keep the old behaviour. ([#234](https://github.com/ohstr/ncli/pull/234))

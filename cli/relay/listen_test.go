@@ -30,7 +30,7 @@ func TestCheckListen(t *testing.T) {
 		{"127.0.0.1:7000", 6000, 7000, "127.0.0.1:7000"}, // listen wins
 		{":7000", 0, 7000, ":7000"},
 		{"[::1]:7000", 0, 7000, "[::1]:7000"},
-		{"relay.internal:443", 0, 443, "relay.internal:443"},
+		{"localhost:443", 0, 443, "localhost:443"},
 		{"0.0.0.0:65535", 0, 65535, "0.0.0.0:65535"},
 	}
 	for _, g := range good {
@@ -44,7 +44,7 @@ func TestCheckListen(t *testing.T) {
 		}
 	}
 
-	for _, bad := range []string{"7000", "127.0.0.1", "127.0.0.1:", "127.0.0.1:0", "127.0.0.1:65536", "127.0.0.1:-1", "127.0.0.1:http", "::1:7000", "a:b:c"} {
+	for _, bad := range []string{"7000", "127.0.0.1", "127.0.0.1:", "127.0.0.1:0", "127.0.0.1:65536", "127.0.0.1:-1", "127.0.0.1:http", "::1:7000", "a:b:c", " 127.0.0.1:7000", "127.0.0.1:7000 ", "127.0.0.1:7000\n", "nonexistent.invalid:7402"} {
 		err := checkListen(&RelayConfig{Listen: bad})
 		var ce *common.CLIError
 		if !errors.As(err, &ce) || ce.Code != common.CodeInvalidInput || ce.Input != bad {

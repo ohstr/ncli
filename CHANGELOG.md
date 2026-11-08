@@ -4,7 +4,7 @@
 
 ### Added
 
-- Adds unknown-key reporting to the relay config: `ncli relay --check` fails (`invalid_input`) naming every key the relay doesn't know, such as a typo, and a normal start logs a warning for each.
+- Adds unknown-key reporting to the relay config: `ncli relay --check` fails (`invalid_input`) naming every key the relay doesn't know, such as a typo, and a normal start logs a warning for each. ([#236](https://github.com/ohstr/ncli/pull/236))
 
 ## [0.8.0-rc.50]
 

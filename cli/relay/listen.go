@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/ohstr/ncli/cli/common"
-	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 )
 
@@ -65,7 +64,7 @@ func checkListen(c *RelayConfig) error {
 		return &common.CLIError{Err: fmt.Errorf("listen %q: %w", c.Listen, err), Code: common.CodeInvalidInput, Input: c.Listen}
 	}
 	if c.Port != 0 && c.Port != port {
-		log.Warn().Int("port", c.Port).Str("listen", c.Listen).Msg("port is ignored: listen sets the relay's address")
+		c.warn(portIgnoredWarning)
 	}
 	c.Port = port
 	return nil

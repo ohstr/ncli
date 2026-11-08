@@ -113,6 +113,9 @@ type RelayConfig struct {
 	// Limits is the relay's rate limits; nil limits nothing.
 	Limits *LimitsConfig `mapstructure:"limits"`
 
+	// warnings are the config warnings initConfig recorded (see warn).
+	warnings []string
+
 	HandshakeTimeout string `mapstructure:"handshakeTimeout"`
 	PingInterval     string `mapstructure:"pingInterval"`
 	PongTimeout      string `mapstructure:"pongTimeout"`
@@ -451,10 +454,7 @@ func NewRelayCommand() *cobra.Command {
 			jsonMode, _ := cmd.Flags().GetBool("json")
 			if check, _ := cmd.Flags().GetBool("check"); check {
 				// initConfig, in PreRunE, already validated everything.
-				warnings := config.limitsWarnings()
-				for _, w := range warnings {
-					log.Warn().Msg(w)
-				}
+				warnings := config.logConfigWarnings()
 				if jsonMode {
 					common.PrintJSON(map[string]any{"ok": true, "config": viper.ConfigFileUsed(), "warnings": warnings})
 				} else {
@@ -509,6 +509,7 @@ func initConfig(check bool) error {
 		return err
 	}
 	bindAddrEnv(viper.GetViper())
+	config.warnings = nil
 	unknown, err := decodeRelayConfig(viper.GetViper(), &config)
 	unknownConfigKeys = unknown
 	if err != nil {
@@ -592,7 +593,7 @@ func initConfig(check bool) error {
 			return &common.CLIError{Err: errors.New("pow.min must be >= 0"), Code: common.CodeInvalidInput}
 		}
 		if config.Pow.Strict && config.Pow.Min == 0 {
-			log.Warn().Msg("pow.strict is true but pow.min is 0 -- there is no difficulty requirement to enforce")
+			config.warn(powStrictWithoutMinWarning)
 		}
 		if config.Pow.Min > 0 {
 			mode := "advisory (advertised via NIP-11, not enforced)"

@@ -136,6 +136,22 @@ store: test.db
 	}
 }
 
+// A key with no value is reported too; a known one with no value isn't.
+func TestDecodeRelayConfigReportsNullKeys(t *testing.T) {
+	p := writeRelayYAML(t, `
+nip11:
+  pubkey: bb50e2d89a4ed70663d080659fe0ad4b9bc3e06c17a227433966cb59ceee020d
+  url:
+  bogus2:
+store: test.db
+bogus:
+port:
+query:
+  identity:
+`)
+	require.Equal(t, []string{"bogus", "nip11.bogus2"}, loadUnknownKeys(t, p))
+}
+
 func TestDecodeRelayConfigIgnoresEnv(t *testing.T) {
 	t.Setenv("NCLI_HTTPBRIDGE_QUREY", "1")
 	t.Setenv("NCLI_BOGUS", "1")

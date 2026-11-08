@@ -45,6 +45,11 @@ func decodeRelayConfig(v *viper.Viper, cfg *RelayConfig) ([]string, error) {
 		return nil, err
 	}
 	unused := md.Unused
+	nullUnused, err := unknownNullKeys(v)
+	if err != nil {
+		return nil, err
+	}
+	unused = append(unused, nullUnused...)
 
 	leaves := v.AllKeys()
 	seen := map[string]bool{}
@@ -79,6 +84,44 @@ func decodeRelayConfig(v *viper.Viper, cfg *RelayConfig) ([]string, error) {
 	}
 	sort.Strings(unknown)
 	return unknown, nil
+}
+
+// unknownNullKeys returns the keys with no value ("bogus:") that RelayConfig
+// doesn't know. viper.Unmarshal never sees them (AllSettings drops a nil
+// value, though AllKeys keeps it), so they're decoded again on their own,
+// as nil, which any field accepts.
+func unknownNullKeys(v *viper.Viper) ([]string, error) {
+	nulls := map[string]any{}
+	found := false
+	for _, k := range v.AllKeys() {
+		if v.Get(k) != nil {
+			continue
+		}
+		found = true
+		parts := strings.Split(k, ".")
+		m := nulls
+		for _, p := range parts[:len(parts)-1] {
+			sub, ok := m[p].(map[string]any)
+			if !ok {
+				sub = map[string]any{}
+				m[p] = sub
+			}
+			m = sub
+		}
+		m[parts[len(parts)-1]] = nil
+	}
+	if !found {
+		return nil, nil
+	}
+	var md mapstructure.Metadata
+	dec, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{Metadata: &md, Result: new(RelayConfig)})
+	if err != nil {
+		return nil, err
+	}
+	if err := dec.Decode(nulls); err != nil {
+		return nil, err
+	}
+	return md.Unused, nil
 }
 
 // unknownKeysError is --check's failure for keys the relay doesn't know.

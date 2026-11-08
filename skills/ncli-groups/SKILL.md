@@ -67,6 +67,12 @@ ncli groups show standup
 ncli groups show standup --identity mykey
 ```
 
+A relay may limit who creates a group (`groups.create` in its config:
+everyone, members, or certain NIP-43 roles); `create` is then refused with
+`restricted: you may not create groups on this relay` for anyone else. Its
+roles may also carry a moderation kind in every group (`group:<kind>`), so
+a key that is no group admin can still moderate there.
+
 Output matches `ncli publish`'s own shape: a `published <id> to <relay>`
 line (or `failed ... : <reason>`) in text mode, the full `PublishReport` as
 structured JSON under `--json`. `list`/`show` instead print a table/detail

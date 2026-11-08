@@ -243,7 +243,8 @@ Both proposed methods are detectable via `supportedmethods`, which a client
 MUST call with the **same key** it will use before offering per-invite limits.
 The set is scoped to the calling key: an admin's `supportedmethods` lists every
 method, whereas a plain member's lists only `createclaim` and
-`supportedmethods` (see member claims below).
+`supportedmethods` (see member claims below), plus whatever its NIP-43 roles
+give (see "Roles and tasks").
 
 **Member claims (`membership.memberClaims`, bool).** Unset, it follows
 `nip11.limitation.membership_required`: **false on a members-only relay, true
@@ -272,6 +273,81 @@ A member's code uses the relay's configured defaults and carries no roles.
 **`unallowpubkey` ends the member's live huddle calls**, not just their next
 join — the other participants stay connected. `ncli relay members remove`
 does the same.
+
+## Roles and tasks — what a NIP-43 role may do
+
+NIP-29, NIP-43 and NIP-86 define roles but leave what a role may do to the
+relay. `membership.roles` is where this relay says it: each NIP-43 role id
+(the `d` tag of its kind 33534, as `relay roles create`/`createrole` make
+it) maps to a list of **tasks**, named after the protocol verb that does
+them. A member's tasks are the union of its roles' lists plus
+`membership.members` (every enrolled member). A **banned** pubkey holds
+none — but a ban never takes what the config file gives: `nip11.pubkey` and
+`nip86.admins` hold every task (`*`), `groups.admins` holds `group:*`.
+
+```yaml
+membership:
+  enabled: true
+  roles:
+    host:     { can: ["@claims", "@members", banpubkey, banevent, "group:9005"] }
+    greeter:  { can: [createclaim] }        # greeters may invite
+    uploader: { can: [blossom.upload] }
+  members:  { can: [createclaim] }          # every member
+groups:
+  create: [members]                         # who may create a group (kind 9007)
+```
+
+| task | what it allows |
+|---|---|
+| a NIP-86 method name | that method: `createclaim`, `banpubkey`, `changerelayname`, ... (incl. `createclaimwithlimits`, `getclaim`) |
+| `@claims` | `createclaim`, `createclaimwithlimits`, `getclaim`, `listclaims`, `deleteclaim` |
+| `@members` | `allowpubkey`, `unallowpubkey`, `listallowedpubkeys` |
+| `@bans` | `banpubkey`, `unbanpubkey`, `listbannedpubkeys`, `banevent`, `allowevent`, `listbannedevents`, `listeventsneedingmoderation` |
+| `@roles` | `createrole`, `editrole`, `deleterole`, `assignrole`, `unassignrole` |
+| `@relayinfo` | `changerelayname`, `changerelaydescription`, `changerelayicon` |
+| `@policy` | `allowkind`, `disallowkind`, `listallowedkinds`, `listdisallowedkinds`, `blockip`, `unblockip`, `listblockedips` |
+| `group:<kind>` | that NIP-29 moderation kind (9000-9020) in **every** hosted group, e.g. `group:9005` (delete an event); `group:*` all of them |
+| `blossom.upload` / `blossom.download` | upload / download blobs where `blossom.membersOnly` restricts them |
+| `blossom.delete` | delete **any** blob, not only your own |
+| `huddle.join` | join calls where `huddle.requireMembership` restricts them |
+| `group.create` | create a group (kind 9007) where `groups.create` restricts it |
+| `*` | everything |
+
+- **How a client learns its tasks:** NIP-86 `supportedmethods`, signed with
+  the key it will use, lists exactly the methods that key holds (the spec
+  allows a per-caller answer). A key holding no method is a 401; a method it
+  doesn't hold is refused as an unknown method.
+- **Existing settings map on, nothing changes by default:**
+  `memberClaims` = members get `createclaim`; `blossom.membersOnly.upload/
+  download` = members get `blossom.upload/download` (off: everyone may);
+  `huddle.requireMembership` = members get `huddle.join` (off: anyone may);
+  `groups.create` omitted = everyone may create a group. Admins count as
+  members everywhere (they already did for Blossom; a huddle with
+  `requireMembership` now admits them too).
+- **`membership.members.can` wins.** Set, it is the whole members grant: the
+  old switches then only say whether a task is restricted. So with
+  `blossom.membersOnly.upload: true` and `members: {can: [createclaim]}`, only
+  admins and roles listing `blossom.upload` (the `uploader` above) may upload;
+  `--check` logs a warning for each restricted task `members.can` leaves out.
+  An explicit `memberClaims` must agree with whether `members.can` gives
+  `createclaim`, or `--check` fails.
+- **`groups.create`** entries are `everyone`, `members` or a role id; `[]`
+  leaves group creation to the admins and roles whose tasks list
+  `group.create`. Refused creation is `OK false` `restricted: ...`.
+- **Validated at `--check`** (`invalid_input`, exit 3, `input` = the bad
+  value): an unknown task, a `group:` kind outside 9000-9020, `roles`/`members`
+  without `membership.enabled`, a `groups.create` entry other than
+  `everyone` without membership. A role id with no kind 33534 yet is only a
+  warning at startup: roles can be created at runtime.
+- **`@roles` and `@members` are as good as `*`** in practice: whoever can
+  assign roles can give themselves any task, and `allowpubkey` makes members.
+- **`groups.grantCeiling: true`** stops a group member from handing out a
+  role that can send a moderation kind they can't send themselves (put-user
+  with roles). Off by default, since existing groups may rely on such grants.
+- **Not yet:** `group:<kind>` role tasks, `groups.grantCeiling`, and gating a
+  NIP-43 invite request (REQ kind 28935) by `createclaim` take effect with an
+  nmilat that has the hooks; on this build REQ 28935 still answers any member.
+  The `ncli relay members/invites/roles` admin HTTP routes stay admin-only.
 
 ## Monitoring and index jobs — relay must be running
 

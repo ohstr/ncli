@@ -176,6 +176,21 @@ membership:
   # members-only relay, true otherwise. An explicit value always wins.
   # memberClaims: false
 
+  # What each NIP-43 role (the d tag of its kind 33534) may do: NIP-86
+  # method names (aliases @claims, @members, @bans, @roles, @relayinfo,
+  # @policy), group:<kind> (a NIP-29 moderation kind in every group;
+  # group:* all), blossom.upload/download/delete, huddle.join, group.create,
+  # or * for everything. A banned pubkey gets nothing. Needs enabled: true.
+  # roles:
+  #   host:     { can: ["@claims", "@members", banpubkey, banevent, "group:9005"] }
+  #   greeter:  { can: [createclaim] }
+  #   uploader: { can: [blossom.upload] }
+
+  # What every member may do. Set, it replaces what memberClaims,
+  # blossom.membersOnly and huddle.requireMembership give members; those
+  # then only say whether a task is restricted.
+  # members: { can: [createclaim] }
+
   # If true, the relay also publishes a signed kind:8000/8001 event
   # whenever membership changes via Join/Leave Request, in addition to
   # updating its own internal membership store (authoritative either way).
@@ -232,6 +247,15 @@ groups:
   # admins to accept (members add) or decline (members remove), instead of
   # refusing it. Off by default.
   pendingJoins: false
+
+  # Who may create a group (kind 9007): everyone, members, or NIP-43 role
+  # ids (membership.roles). Omitted, everyone may; [] leaves it to the
+  # admins and roles whose tasks list group.create.
+  # create: [members]
+
+  # Refuse a grant of a role that may send a moderation kind the granter
+  # may not send itself. Off by default.
+  grantCeiling: false
 
   # A relay-signed seat notice to each pubkey that gains (added) or loses
   # (removed) a seat in a hosted group, by any path: tags p (member),

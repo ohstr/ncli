@@ -191,6 +191,21 @@ func TestRelayCheck(t *testing.T) {
 		}
 	}
 
+	// An unknown key is named as written, with a hint for a NIP-11 key the
+	// relay sets itself.
+	for written, want := range map[string]string{
+		"pprofAdr: 127.0.0.1:6060\n":                  "unknown config key: pprofAdr",
+		"limits:\n  connectionPerIP: 5\n":             "unknown config key: limits.connectionPerIP",
+		"  supported_nips: [1]\n":                     "unknown config key: nip11.supported_nips (computed by the relay)",
+		"  limitation:\n    min_pow_difficulty: 20\n": "unknown config key: nip11.limitation.min_pow_difficulty (use pow.min)",
+	} {
+		body := "store: " + t.TempDir() + "/notes.db\nnip11:\n  privkey: " + priv + "\n" + written
+		er := e.Run(t, "relay", "--config", e.WriteFile("unknown.yaml", body), "--check", "--json").ExpectErr(t, "invalid_input")
+		if er.Error != want {
+			t.Errorf("%q: error %q, want %q", written, er.Error, want)
+		}
+	}
+
 	full := e.WriteFile("full-cache.yaml", "store: "+t.TempDir()+"/notes.db\nnip11:\n  privkey: "+priv+"\n  url: wss://relay.example.com\n"+`cache:
   profiles:
     stats: {enabled: true}

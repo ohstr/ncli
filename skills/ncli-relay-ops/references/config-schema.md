@@ -166,5 +166,8 @@ Omitting the whole `membership:` block is identical to `{enabled: false}`
 |---|---|---|---|
 | `enabled` | bool | `false` | Requires `nip11.privkey`; fatal at config load if `true` without it |
 | `inviteTTL` | Go duration string | `24h` | How long an issued invite claim (kind 28935) stays valid; unset/unparseable falls back to the default |
-| `inviteMaxUses` | int | `0` (unlimited) | How many times a single invite claim may be consumed via a Join Request; must be `>= 0` |
+| `inviteMaxUses` | int | `0` (unlimited) | How many times a single invite claim may be consumed via a Join Request; must be `>= 0`. `0` means a code admits joins until it expires, so set it (often `1`) |
+| `inviteMaxTTL` | Go duration string | `720h` (30 days) | Ceiling on an explicit expiry requested through `createclaimwithlimits`; must be positive and `<= 10` years |
+| `inviteAllowNoExpiry` | bool | `false` | Lets `createclaimwithlimits` mint a code that never expires (`expires_at: 0`) |
+| `memberClaims` | bool | `false` when `nip11.limitation.membership_required` is true, else `true` | Lets a plain member (not only an admin) mint a code through NIP-86 `createclaim`; an explicit value wins. Does not cover a NIP-43 invite request (REQ kind 28935) |
 | `publishAddRemoveEvents` | bool | `false` | Also publish a signed kind:8000/8001 event on membership changes, in addition to the relay's own internal membership store |

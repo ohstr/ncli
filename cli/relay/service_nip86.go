@@ -96,12 +96,13 @@ func membershipInviteAllowNoExpiry() bool {
 }
 
 // membershipMemberClaims reports whether a plain member (not an admin) may mint
-// an invite via createclaim. Default true, per the NIP-43 spec. The integration
-// pass (section B) reads this to decide the nip86 Authorize/Visible wiring; it
-// has no effect until that wiring lands.
+// an invite via createclaim. newNip86Handler (Authorize) and newNip86Router
+// (Visible) read it. Unset, it follows memberClaimsDefault: off on a
+// members-only relay, on otherwise. initConfig normally resolves it already;
+// the fallback covers a config built without it.
 func membershipMemberClaims() bool {
 	if config.Membership == nil || config.Membership.MemberClaims == nil {
-		return true
+		return config.memberClaimsDefault()
 	}
 	return *config.Membership.MemberClaims
 }

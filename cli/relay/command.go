@@ -209,11 +209,12 @@ type MembershipConfig struct {
 	// expiry is refused, never clamped. Validated at startup (parses, > 0).
 	InviteMaxTTL string `mapstructure:"inviteMaxTTL"`
 
-	// MemberClaims, if true (the default), lets a plain member -- not only an
-	// admin -- mint an invite via the NIP-86 createclaim method. The
-	// integration pass (section B) wires this to the nip86 Authorize/Visible
-	// gate; it has no effect until that wiring lands. A nil pointer means
-	// unset, which defaults to true.
+	// MemberClaims, if true, lets a plain member -- not only an admin -- mint
+	// an invite via the NIP-86 createclaim method (newNip86Handler admits the
+	// member through nip86 Authorize; newNip86Router's Visible confines it to
+	// createclaim + supportedmethods). A nil pointer means unset, which follows
+	// nip11.limitation.membership_required: false on a members-only relay,
+	// where an invite is the way in, true otherwise. An explicit value wins.
 	MemberClaims *bool `mapstructure:"memberClaims"`
 
 	// PublishAddRemoveEvents, if true, makes the relay also publish a
@@ -224,7 +225,8 @@ type MembershipConfig struct {
 }
 
 // checkAndDefaultMembership validates the membership block's standalone
-// invariants and fills in its defaults (memberClaims -> true when unset).
+// invariants and fills in its defaults (memberClaims, when unset, from
+// memberClaimsDefault).
 // Split out of initConfig so a test can exercise the real guards without
 // standing up the rest of config loading.
 func (c *RelayConfig) checkAndDefaultMembership() error {
@@ -249,13 +251,23 @@ func (c *RelayConfig) checkAndDefaultMembership() error {
 			return &common.CLIError{Err: errors.New("membership.inviteMaxTTL must be <= 10 years"), Code: common.CodeUsage}
 		}
 	}
-	// Default memberClaims to true when unset, so the resolved config is
-	// concrete for the integration pass (section B) that will read it.
+	// Resolve an unset memberClaims now, so the config newNip86Handler reads
+	// is concrete.
 	if c.Membership.MemberClaims == nil {
-		enabled := true
+		enabled := c.memberClaimsDefault()
 		c.Membership.MemberClaims = &enabled
 	}
 	return nil
+}
+
+// memberClaimsDefault is memberClaims when unset: off on a members-only relay
+// (nip11.limitation.membership_required), where letting every member mint
+// uncapped invites should be an explicit choice, and on otherwise. It covers
+// only NIP-86 createclaim, not a NIP-43 invite request (REQ kind 28935). It has
+// the same trigger as blossom.membersOnly.upload (membership_required) but the
+// opposite effect: that one turns on, this one turns off.
+func (c *RelayConfig) memberClaimsDefault() bool {
+	return !c.Nip11.Limitation.MembershipRequired
 }
 
 // Nip86Config configures NIP-86, the Relay Management API: membership

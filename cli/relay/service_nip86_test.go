@@ -554,17 +554,29 @@ func callHandler(t *testing.T, h *nip86.Handler, privKey, method string, params 
 // nonMemberPrivKey's is not. It returns the handler and the backing store.
 func newMemberClaimHandler(t *testing.T, memberClaims bool) (*nip86.Handler, *relay.EventStore) {
 	t.Helper()
+	mc := memberClaims
+	return newMemberClaimHandlerOn(t, &mc, false)
+}
+
+// newMemberClaimHandlerOn is newMemberClaimHandler with memberClaims possibly
+// unset (nil) and the relay members-only (nip11.limitation.membership_required)
+// or open. The config is not run through checkAndDefaultMembership, so an unset
+// memberClaims exercises membershipMemberClaims' own default.
+func newMemberClaimHandlerOn(t *testing.T, memberClaims *bool, membershipRequired bool) (*nip86.Handler, *relay.EventStore) {
+	t.Helper()
 	wsHandler, store := newTestWSHandler(t)
 	adminPub := pubkeyOf(t, testPrivKey)
 	require.NoError(t, wsHandler.Membership().Join(pubkeyOf(t, memberPrivKey), nil))
 
 	prev := config
 	t.Cleanup(func() { config = prev })
-	mc := memberClaims
+	md := nip11.Metadata{PubKey: adminPub, PrivKey: testPrivKey, Self: adminPub}
+	md.Limitation.MembershipRequired = membershipRequired
+	md.Limitation.AuthRequired = membershipRequired
 	config = RelayConfig{
-		Nip11:      nip11.Metadata{PubKey: adminPub, PrivKey: testPrivKey, Self: adminPub},
+		Nip11:      md,
 		Nip86:      &Nip86Config{Enabled: true},
-		Membership: &MembershipConfig{Enabled: true, MemberClaims: &mc},
+		Membership: &MembershipConfig{Enabled: true, MemberClaims: memberClaims},
 	}
 
 	moderation, err := loadModeration(filepath.Join(t.TempDir(), "moderation.json"), adminPub)
@@ -696,6 +708,48 @@ func TestNip86_MemberClaims_AdminReachesEveryMethod(t *testing.T) {
 	require.Empty(t, listed.resp.Error)
 }
 
+// memberClaims unset follows nip11.limitation.membership_required: a
+// members-only relay keeps createclaim admin-only (a member is a 401), an open
+// relay lets a member mint. An explicit value wins either way.
+func TestNip86_MemberClaims_DefaultFollowsMembershipRequired(t *testing.T) {
+	yes, no := true, false
+	cases := []struct {
+		name               string
+		memberClaims       *bool
+		membershipRequired bool
+		memberMints        bool
+	}{
+		{"members-only relay, unset: member refused", nil, true, false},
+		{"open relay, unset: member mints", nil, false, true},
+		{"members-only relay, explicit true: member mints", &yes, true, true},
+		{"open relay, explicit false: member refused", &no, false, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			h, store := newMemberClaimHandlerOn(t, c.memberClaims, c.membershipRequired)
+
+			const code = "member-code-default01"
+			got := callHandler(t, h, memberPrivKey, nip86.MethodCreateClaim, `"`+code+`"`)
+			stored, err := store.GetInviteClaim(code)
+			require.NoError(t, err)
+			if c.memberMints {
+				require.Equal(t, http.StatusOK, got.status)
+				require.Empty(t, got.resp.Error)
+				require.NotNil(t, stored, "the member's invite was minted")
+			} else {
+				require.Equal(t, http.StatusUnauthorized, got.status)
+				require.Nil(t, stored, "no invite was minted")
+			}
+
+			// The admin is unaffected: createclaim works for it either way.
+			const adminCode = "admin-code-default001"
+			admin := callHandler(t, h, testPrivKey, nip86.MethodCreateClaim, `"`+adminCode+`"`)
+			require.Equal(t, http.StatusOK, admin.status)
+			require.Empty(t, admin.resp.Error)
+		})
+	}
+}
+
 /////////////////////////////////////////////////////////////////////
 // F: kind 28934 enforcement for a createclaimwithlimits-created claim
 /////////////////////////////////////////////////////////////////////
@@ -821,7 +875,7 @@ membership:
 		require.Error(t, cfg.checkAndDefaultMembership())
 	})
 
-	t.Run("memberClaims defaults to true when unset", func(t *testing.T) {
+	t.Run("memberClaims defaults to true when unset on an open relay", func(t *testing.T) {
 		cfg := RelayConfig{
 			Nip11:      nip11.Metadata{PrivKey: testPrivKey},
 			Membership: &MembershipConfig{Enabled: true},
@@ -829,6 +883,55 @@ membership:
 		require.NoError(t, cfg.checkAndDefaultMembership())
 		require.NotNil(t, cfg.Membership.MemberClaims)
 		require.True(t, *cfg.Membership.MemberClaims)
+	})
+
+	t.Run("memberClaims defaults to false when unset on a members-only relay", func(t *testing.T) {
+		cfg := loadRelayConfigFromYAML(t, `
+nip11:
+  privkey: "`+testPrivKey+`"
+  limitation:
+    auth_required: true
+    membership_required: true
+membership:
+  enabled: true
+`)
+		require.True(t, cfg.Nip11.Limitation.MembershipRequired)
+		require.NoError(t, cfg.checkAndDefaultMembership())
+		require.NotNil(t, cfg.Membership.MemberClaims)
+		require.False(t, *cfg.Membership.MemberClaims)
+	})
+
+	t.Run("an explicit memberClaims wins over the default", func(t *testing.T) {
+		yes, no := true, false
+		membersOnly := RelayConfig{
+			Nip11:      nip11.Metadata{PrivKey: testPrivKey},
+			Membership: &MembershipConfig{Enabled: true, MemberClaims: &yes},
+		}
+		membersOnly.Nip11.Limitation.MembershipRequired = true
+		require.NoError(t, membersOnly.checkAndDefaultMembership())
+		require.True(t, *membersOnly.Membership.MemberClaims)
+
+		open := RelayConfig{
+			Nip11:      nip11.Metadata{PrivKey: testPrivKey},
+			Membership: &MembershipConfig{Enabled: true, MemberClaims: &no},
+		}
+		require.NoError(t, open.checkAndDefaultMembership())
+		require.False(t, *open.Membership.MemberClaims)
+	})
+
+	t.Run("membershipMemberClaims follows membership_required when unset", func(t *testing.T) {
+		prev := config
+		t.Cleanup(func() { config = prev })
+
+		config = RelayConfig{Membership: &MembershipConfig{Enabled: true}}
+		require.True(t, membershipMemberClaims(), "open relay")
+
+		config.Nip11.Limitation.MembershipRequired = true
+		require.False(t, membershipMemberClaims(), "members-only relay")
+
+		yes := true
+		config.Membership.MemberClaims = &yes
+		require.True(t, membershipMemberClaims(), "explicit true wins")
 	})
 }
 

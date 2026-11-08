@@ -297,6 +297,70 @@ func TestScenario_EnterpriseComplianceRelay_PoWStillAppliesToAnEnrolledMember(t 
 	require.Contains(t, ok.Message, "pow:", "rejection message should name the pow check, not a membership one")
 }
 
+// TestScenario_MembersOnlyRelay_MemberClaimsDefaultFromYAML boots a relay
+// from members-only YAML with memberClaims unset, through initConfig (the
+// production path that resolves the default), not a hand-built RelayConfig.
+// A member's createclaim is refused; the admin's is served.
+func TestScenario_MembersOnlyRelay_MemberClaimsDefaultFromYAML(t *testing.T) {
+	prevConfig, prevAdmin := config, adminSettings
+	t.Cleanup(func() { config, adminSettings = prevConfig, prevAdmin; viper.Reset() })
+
+	tmpDir := t.TempDir()
+	yamlPath := filepath.Join(tmpDir, "relay.yaml")
+	require.NoError(t, os.WriteFile(yamlPath, []byte(`
+port: 3334
+store: "`+filepath.Join(tmpDir, "relay.db")+`"
+nip11:
+  name: "members only"
+  privkey: "`+testPrivKey+`"
+  url: "`+huddleRelayURL+`"
+  limitation:
+    auth_required: true
+    membership_required: true
+membership:
+  enabled: true
+nip86:
+  enabled: true
+`), 0o600))
+
+	viper.Reset()
+	config = RelayConfig{}
+	require.NoError(t, common.LoadViperConfig(yamlPath))
+	require.NoError(t, initConfig())
+	require.NotNil(t, config.Membership.MemberClaims, "initConfig resolves an unset memberClaims")
+	require.False(t, *config.Membership.MemberClaims, "members-only relay defaults memberClaims to false")
+
+	ts := bootScenario(t, config)
+	enrollMember(t, ts.URL, scenarioMemberPub)
+
+	createClaim := func(privKey, code string) int {
+		t.Helper()
+		body := []byte(`{"method":"createclaim","params":["` + code + `"]}`)
+		header, err := common.GenerateNIP98Header(privKey, ts.URL+"/", http.MethodPost, body)
+		require.NoError(t, err)
+		req, err := http.NewRequest(http.MethodPost, ts.URL+"/", strings.NewReader(string(body)))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/nostr+json+rpc")
+		req.Header.Set("Authorization", header)
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode == http.StatusOK {
+			var out struct {
+				Error string `json:"error"`
+			}
+			require.NoError(t, json.NewDecoder(resp.Body).Decode(&out))
+			require.Empty(t, out.Error, "createclaim answered with an error")
+		}
+		return resp.StatusCode
+	}
+
+	require.Equal(t, http.StatusUnauthorized, createClaim(scenarioMemberPriv, "member-code-yaml0001"),
+		"a member's createclaim is refused when memberClaims is left unset on a members-only relay")
+	require.Equal(t, http.StatusOK, createClaim(testPrivKey, "admin-code-yaml00001"),
+		"the admin's createclaim is served")
+}
+
 /////////////////////////////////////////////////////////////////////
 // tracked-membership-relay.yaml -- membership.enabled without
 // membership_required tracks a roster but gates nothing

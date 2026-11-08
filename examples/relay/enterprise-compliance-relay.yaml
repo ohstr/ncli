@@ -29,6 +29,10 @@ nip11:
 membership:
   enabled: true
   publishAddRemoveEvents: true
+  # Only admins mint invite codes through NIP-86 createclaim. false is
+  # already the default on a membership_required relay; true restores
+  # member self-service (any member may mint a code).
+  memberClaims: false
 
 pow:
   strict: true

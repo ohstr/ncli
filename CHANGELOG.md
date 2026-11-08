@@ -22,7 +22,7 @@
 - Fixes the relay's Blossom answering 404 for a blob at the root (`/<sha256>`), where BUD-01 serves it; `/media/<sha256>` still works. `ncli blossom download` of a full URL now fetches that URL first, then asks servers by hash, and reports a URL serving other bytes as `not_found`. ([#244](https://github.com/ohstr/ncli/pull/244))
 - Fixes `ncli blossom list`, `upload --optimize` and `mirror` reporting a server without that endpoint as `not_found` or a retryable `network` error; they now report `unsupported` (exit 8), and the relay says those endpoints are not supported. A 3xx, 405 or 501 from any Blossom endpoint is now `unsupported` too, where it was `network` or `invalid_input`. ([#244](https://github.com/ohstr/ncli/pull/244))
 - Fixes `relay --check --json` listing `"warnings": []` while logging that `port` is ignored because `listen` is set (or that `pow.strict` has no `pow.min`); it now lists every config warning, and startup logs each once. ([#245](https://github.com/ohstr/ncli/pull/245))
-- Fixes the Blossom blob URLs the relay returns having no file extension, which BUD-02 requires: they now end in one for the blob's type, or `.bin` when it is unknown (nmilat v0.5.0-rc.51). ([#245](https://github.com/ohstr/ncli/pull/245))
+- Fixes the Blossom blob URLs the relay returns having no file extension, which BUD-02 requires: they now end in one for the blob's type, or `.bin` when it is unknown (nmilat v0.5.0-rc.51). ([#243](https://github.com/ohstr/ncli/pull/243))
 
 ## [0.8.0-rc.50]
 

@@ -1,7 +1,6 @@
 package dm
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -94,7 +93,7 @@ func runProve(cmd *cobra.Command, args []string) error {
 		}
 		return keyresolve.SignerError(cmd, "", err)
 	}
-	raw, err := json.MarshalIndent(proof, "", "  ")
+	raw, err := common.MarshalJSON(proof, "  ")
 	if err != nil {
 		return common.RuntimeError(cmd, err)
 	}

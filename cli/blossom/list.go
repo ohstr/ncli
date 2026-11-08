@@ -17,6 +17,7 @@ import (
 	"github.com/ohstr/nmilat/nip01"
 	"github.com/ohstr/nmilat/nipB7"
 	bclient "github.com/ohstr/nmilat/nipB7/client"
+	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )
 
@@ -136,18 +137,22 @@ address, and defaults to --identity's pubkey.`,
 // passed to every server as-is (so each server does its own pagination),
 // but query.Limit is then re-applied as a cap on the merged, newest-first
 // result too -- otherwise "--all --limit N" across S servers could return
-// up to N*S entries instead of the N a caller asked for. Returns an
-// aggregate error only if every server failed and none returned anything.
+// up to N*S entries instead of the N a caller asked for. A server that
+// answers counts as a success even with no blobs: the others' failures are
+// then logged and skipped. Only when every server failed is there an
+// error, an *allListsFailedError.
 func listAllServers(ctx context.Context, hc *bclient.Client, servers []string, pubKeyHex string, query nipB7.ListQuery, auth *nip01.Event) ([]nipB7.BlobDescriptor, error) {
 	seen := make(map[string]bool)
 	var merged []nipB7.BlobDescriptor
 	var errs []error
+	answered := 0
 	for _, server := range servers {
 		descriptors, err := hc.List(ctx, server, pubKeyHex, query, auth)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", server, optionalEndpointError(err)))
 			continue
 		}
+		answered++
 		for _, d := range descriptors {
 			if seen[d.Sha256] {
 				continue
@@ -156,8 +161,11 @@ func listAllServers(ctx context.Context, hc *bclient.Client, servers []string, p
 			merged = append(merged, d)
 		}
 	}
-	if len(merged) == 0 && len(errs) > 0 {
-		return nil, errors.Join(errs...)
+	if answered == 0 && len(errs) > 0 {
+		return nil, &allListsFailedError{errs: errs}
+	}
+	for _, err := range errs {
+		log.Warn().Err(err).Msg("skipping a server that failed to list")
 	}
 	nipB7.SortDescending(merged)
 	if query.Limit > 0 && len(merged) > query.Limit {
@@ -171,8 +179,42 @@ func listAllServers(ctx context.Context, hc *bclient.Client, servers []string, p
 // like a 405, 501 or redirect, means the server has no list endpoint:
 // UnsupportedError (exit 8), which an agent should not retry, rather than
 // not_found, which reads as "this pubkey has nothing". Under --all, every
-// server failed; one without a list endpoint makes the whole run
-// unsupported.
+// server failed, and the run takes the most actionable of their codes: a
+// retryable one (network, conflict) if any server's failure may pass, else
+// any other failure (auth, invalid_input), and unsupported only when no
+// server has a list endpoint.
 func classifyListError(cmd *cobra.Command, input string, err error) error {
-	return classifyHTTPError(cmd, input, optionalEndpointError(err))
+	all, ok := errors.AsType[*allListsFailedError](err)
+	if !ok {
+		return classifyHTTPError(cmd, input, optionalEndpointError(err))
+	}
+	rank := func(code common.ErrorCode) int {
+		switch code {
+		case common.CodeNetwork, common.CodeConflict:
+			return 0
+		case common.CodeUnsupported:
+			return 2
+		}
+		return 1
+	}
+	var chosen *common.CLIError
+	for _, e := range all.errs {
+		ce, ok := classifyHTTPError(cmd, input, e).(*common.CLIError)
+		if ok && (chosen == nil || rank(ce.Code) < rank(chosen.Code)) {
+			chosen = ce
+		}
+	}
+	if chosen == nil {
+		return common.NetworkError(cmd, input, all)
+	}
+	// Every server's failure is reported, under the chosen code.
+	chosen.Err = all
+	return chosen
 }
+
+// allListsFailedError is list --all's failure when no server answered: each
+// server's error, in order.
+type allListsFailedError struct{ errs []error }
+
+func (e *allListsFailedError) Error() string   { return errors.Join(e.errs...).Error() }
+func (e *allListsFailedError) Unwrap() []error { return e.errs }

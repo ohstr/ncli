@@ -21,6 +21,7 @@ import (
 	"github.com/ohstr/ncli/cli/relay/metrics"
 	"github.com/ohstr/nmilat/nip01"
 	"github.com/ohstr/nmilat/nip11"
+	"github.com/ohstr/nmilat/nip86"
 	"github.com/ohstr/nmilat/nipB7"
 	relayclient "github.com/ohstr/nmilat/relay/client"
 	"github.com/ohstr/nmilat/relay/ratelimit"
@@ -447,6 +448,40 @@ func TestRateLimits_Relay(t *testing.T) {
 		require.Equal(t, http.StatusTooManyRequests, postNIP98With(t, ts, "/query", scenarioAgentPriv, body, map[string]string{"X-Forwarded-For": "203.0.113.2"}).StatusCode)
 	})
 
+	t.Run("nip86: the http limit counts per IP before NIP-98", func(t *testing.T) {
+		cfg := communityRelayConfig(t)
+		cfg.Nip86 = &Nip86Config{Enabled: true}
+		cfg.Limits = &LimitsConfig{HTTP: LimitConfig{PerIP: RateConfig{Events: 2, Per: "1h"}}}
+		ts := bootScenario(t, cfg)
+		// Unsigned requests spend the IP's budget too: a 401 each, then 429.
+		for range 2 {
+			require.Equal(t, http.StatusUnauthorized, nip86Raw(t, ts, "", nip86.MethodSupportedMethods).StatusCode)
+		}
+		resp := nip86Raw(t, ts, testPrivKey, nip86.MethodSupportedMethods)
+		require.Equal(t, http.StatusTooManyRequests, resp.StatusCode)
+		require.NotEmpty(t, resp.Header.Get("Retry-After"))
+		// The bridge shares the budget.
+		require.Equal(t, http.StatusTooManyRequests, postNIP98(t, ts, "/query", scenarioAgentPriv, []byte(`[{"kinds":[1]}]`)).StatusCode)
+	})
+
+	t.Run("nip86: the http limit counts per signer after NIP-98", func(t *testing.T) {
+		cfg := communityRelayConfig(t)
+		cfg.Nip86 = &Nip86Config{Enabled: true}
+		cfg.Membership.MemberClaims = new(true)
+		cfg.Limits = &LimitsConfig{HTTP: LimitConfig{PerPubkey: RateConfig{Events: 2, Per: "1h"}}}
+		ts := bootScenario(t, cfg)
+		enrollMember(t, ts.URL, scenarioMemberPub)
+		for i := range 2 {
+			require.Equal(t, http.StatusOK, nip86Raw(t, ts, scenarioMemberPriv, nip86.MethodCreateClaim).StatusCode, "claim %d", i)
+		}
+		resp := nip86Raw(t, ts, scenarioMemberPriv, nip86.MethodCreateClaim)
+		require.Equal(t, http.StatusTooManyRequests, resp.StatusCode)
+		require.NotEmpty(t, resp.Header.Get("Retry-After"))
+		// Another signer has its own budget; a bad signature is still a 401.
+		require.Equal(t, http.StatusOK, nip86Raw(t, ts, testPrivKey, nip86.MethodSupportedMethods).StatusCode)
+		require.Equal(t, http.StatusUnauthorized, nip86Raw(t, ts, "", nip86.MethodSupportedMethods).StatusCode)
+	})
+
 	t.Run("blossom: uploads per IP", func(t *testing.T) {
 		ts := limitedRelay(t, &LimitsConfig{Blossom: BlossomLimitConfig{Uploads: LimitConfig{PerIP: RateConfig{Events: 1, Per: "1h"}}}})
 		enrollMember(t, ts.URL, scenarioMemberPub)
@@ -628,6 +663,26 @@ func must2[T any](v T, err error) T {
 }
 
 // postNIP98With is postNIP98 with extra request headers.
+// nip86Raw calls NIP-86 method on ts, signed as privKey ("" sends no
+// Authorization), and returns the response whatever its status.
+func nip86Raw(t *testing.T, ts *httptest.Server, privKey, method string) *http.Response {
+	t.Helper()
+	body, err := json.Marshal(nip86.Request{Method: method, Params: []json.RawMessage{}})
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/", bytes.NewReader(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", nip86.ContentType)
+	if privKey != "" {
+		header, err := common.GenerateNIP98Header(privKey, ts.URL+"/", http.MethodPost, body)
+		require.NoError(t, err)
+		req.Header.Set("Authorization", header)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = resp.Body.Close() })
+	return resp
+}
+
 func postNIP98With(t *testing.T, ts *httptest.Server, path, privKey string, body []byte, headers map[string]string) *http.Response {
 	t.Helper()
 	target := ts.URL + path

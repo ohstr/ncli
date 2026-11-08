@@ -77,7 +77,7 @@ httpBridge:
 
 func TestDecodeRelayConfigReportsEveryUnknownKey(t *testing.T) {
 	require.Equal(t,
-		[]string{"htpbridge", "httpBridge.qurey", "nip11.limitaton"},
+		[]string{"htpBridge", "httpBridge.qurey", "nip11.limitaton"},
 		loadUnknownKeys(t, writeRelayYAML(t, typoConfig)))
 }
 
@@ -185,7 +185,7 @@ func TestInitConfigUnknownKeys(t *testing.T) {
 		var ce *common.CLIError
 		require.True(t, errors.As(err, &ce), "%v", err)
 		require.Equal(t, common.CodeInvalidInput, ce.Code)
-		require.Equal(t, "unknown config keys: htpbridge, httpBridge.qurey, nip11.limitaton", ce.Error())
+		require.Equal(t, "unknown config keys: htpBridge, httpBridge.qurey, nip11.limitaton", ce.Error())
 		require.Empty(t, ce.Input)
 	})
 
@@ -204,6 +204,70 @@ prot: 1
 		require.Equal(t, "prot", ce.Input)
 	})
 
+	t.Run("keys are named as written", func(t *testing.T) {
+		viper.Reset()
+		t.Cleanup(viper.Reset)
+		require.NoError(t, common.LoadViperConfig(writeRelayYAML(t, `
+nip11:
+  pubkey: bb50e2d89a4ed70663d080659fe0ad4b9bc3e06c17a227433966cb59ceee020d
+store: test.db
+pprofAdr: 127.0.0.1:6060
+limits:
+  connectionPerIP: 5
+membership:
+  enabled: true
+  roles:
+    Host: {can: [createclaim], extraTasks: [x]}
+`)))
+		config = RelayConfig{}
+		err := initConfig(true)
+		require.EqualError(t, err, "unknown config keys: limits.connectionPerIP, membership.roles[Host].extraTasks, pprofAdr")
+	})
+
+	t.Run("NIP-11 keys the relay sets say what to use", func(t *testing.T) {
+		body := `
+nip11:
+  pubkey: bb50e2d89a4ed70663d080659fe0ad4b9bc3e06c17a227433966cb59ceee020d
+  supported_nips: [1, 11]
+  limitation:
+    min_pow_difficulty: 20
+store: test.db
+`
+		viper.Reset()
+		t.Cleanup(viper.Reset)
+		require.NoError(t, common.LoadViperConfig(writeRelayYAML(t, body)))
+		config = RelayConfig{}
+		require.EqualError(t, initConfig(true), "unknown config keys: nip11.limitation.min_pow_difficulty (use pow.min), nip11.supported_nips (computed by the relay)")
+
+		viper.Reset()
+		require.NoError(t, common.LoadViperConfig(writeRelayYAML(t, body)))
+		config = RelayConfig{}
+		var buf bytes.Buffer
+		prevLog := log.Logger
+		t.Cleanup(func() { log.Logger = prevLog })
+		log.Logger = zerolog.New(&buf)
+		require.NoError(t, initConfig(false))
+		require.Contains(t, buf.String(), `{"level":"warn","key":"nip11.limitation.min_pow_difficulty","hint":"use pow.min","message":"unknown config key, ignored"}`)
+	})
+
+	t.Run("a role id with a dot is refused as such", func(t *testing.T) {
+		viper.Reset()
+		t.Cleanup(viper.Reset)
+		require.NoError(t, common.LoadViperConfig(writeRelayYAML(t, `
+nip11:
+  pubkey: bb50e2d89a4ed70663d080659fe0ad4b9bc3e06c17a227433966cb59ceee020d
+store: test.db
+membership:
+  enabled: true
+  roles:
+    every.one: {can: [createclaim]}
+`)))
+		config = RelayConfig{}
+		err := initConfig(true)
+		require.ErrorContains(t, err, `role id "every.one" contains a dot`)
+		require.NotContains(t, err.Error(), "unknown config key")
+	})
+
 	t.Run("start warns and goes on", func(t *testing.T) {
 		viper.Reset()
 		t.Cleanup(viper.Reset)
@@ -214,7 +278,7 @@ prot: 1
 		t.Cleanup(func() { log.Logger = prevLog })
 		log.Logger = zerolog.New(&buf)
 		require.NoError(t, initConfig(false))
-		for _, k := range []string{"htpbridge", "httpBridge.qurey", "nip11.limitaton"} {
+		for _, k := range []string{"htpBridge", "httpBridge.qurey", "nip11.limitaton"} {
 			require.Contains(t, buf.String(), `{"level":"warn","key":"`+k+`","message":"unknown config key, ignored"}`)
 		}
 	})

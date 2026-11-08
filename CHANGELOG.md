@@ -4,12 +4,20 @@
 
 ### Changed
 
+- Changes NIP-86 to count against `limits.http`: per IP before NIP-98 is checked, and per signer after it when `perPubkey` is set. A refusal is a 429 with `Retry-After`. ([#250](https://github.com/ohstr/ncli/pull/250))
+- Changes the JSON every command prints to keep `<`, `>` and `&` as written instead of `\u003c`, `\u003e` and `\u0026`, such as `group:<kind>` in `relay --check --json`'s warnings. ([#250](https://github.com/ohstr/ncli/pull/250))
 - Changes releases to ship pinned to themselves: the release workflow refuses to tag unless every relay image pin (chart, stacks, examples, rigs) names the version being released. Before, a release always pinned the one before it. ([#249](https://github.com/ohstr/ncli/pull/249))
 - Changes the public example relay configs and the public-search stack to ship with the recommended `limits:` block, so they no longer start with "no rate limits configured". ([#249](https://github.com/ohstr/ncli/pull/249))
 
 ### Fixed
 
 - Fixes the Helm chart (now 0.3.0) and Compose stacks running the rc.50 relay image, which lacks rc.51's fixes and ignores its new keys (`limits`, `listen`, `membership.roles`, `groups.create`). They now run 0.8.0-rc.51, and the chart's notes say which image it runs. ([#249](https://github.com/ohstr/ncli/pull/249))
+- Fixes the NIP-86 IP block not covering the HTTP bridge for some requests; only NIP-86 itself, at `/`, now stays reachable from a blocked IP. ([#250](https://github.com/ohstr/ncli/pull/250))
+- Fixes a banned key joining calls when `huddle.requireMembership` is off; a ban now refuses joins either way. ([#250](https://github.com/ohstr/ncli/pull/250))
+- Fixes `blossom list --all` reporting `unsupported` (exit 8) when another server failed with a retryable network error, and failing when a server answered with no blobs. It now fails only if no server answered, as `network` if any failure was retryable. ([#250](https://github.com/ohstr/ncli/pull/250))
+- Fixes `blossom mirror` reporting a 404 whose reason names the missing source blob as `unsupported`; it is now `not_found`, and a bare 404 stays `unsupported`. ([#250](https://github.com/ohstr/ncli/pull/250))
+- Fixes unknown config keys being reported lowercased (`pprofadr`); they are now named as the file writes them. A role id with a dot gets its own error instead of an unknown key. ([#250](https://github.com/ohstr/ncli/pull/250))
+- Fixes `nip11.limitation.min_pow_difficulty` and `nip11.supported_nips` failing `--check` with no hint; the error now says to use `pow.min`, and that the relay computes `supported_nips`. ([#250](https://github.com/ohstr/ncli/pull/250))
 
 ## [0.8.0-rc.51]
 

@@ -5,6 +5,24 @@ import (
 	"testing"
 )
 
+// TestRelayCheckWarningsUnescaped: --check --json prints a warning as
+// written: "<" is not HTML-escaped to a \u escape.
+func TestRelayCheckWarningsUnescaped(t *testing.T) {
+	e := NewEnv(t)
+	priv := A(t, "operator").PrivHex
+	path := e.WriteFile("ceiling.yaml", "store: "+t.TempDir()+"/notes.db\nnip11:\n  privkey: "+priv+"\n  url: wss://relay.example.com\n  limitation:\n    auth_required: true\n"+`membership:
+  enabled: true
+  roles:
+    mod: {can: ["group:9000"]}
+groups:
+  grantCeiling: false
+`)
+	res := e.MustOK(t, "relay", "--config", path, "--check", "--json")
+	if !strings.Contains(res.Stdout, "group:<kind>") || strings.Contains(res.Stdout, `\`+"u003c") {
+		t.Errorf("--check --json:\n%s", res.Stdout)
+	}
+}
+
 // TestRelayCheckLimits: --check validates limits: and warns, without
 // failing, about a public relay that limits nothing.
 func TestRelayCheckLimits(t *testing.T) {

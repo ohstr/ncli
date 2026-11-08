@@ -104,8 +104,9 @@ func huddleEnabled(cfg *HuddleConfig) bool {
 // The path wildcard is read by the SDK handler via Request.PathValue, the same
 // mechanism the membership admin routes use.
 //
-// auth, when set, decides joins under requireMembership by the huddle.join
-// task; nil keeps the plain membership check. limiter, when set, counts
+// auth, when set, decides every join by the huddle.join task, so a banned
+// key is refused with or without requireMembership; nil keeps the plain
+// membership check under requireMembership. limiter, when set, counts
 // each huddle WebSocket against limits.connectionsPerIP alongside the
 // relay's own connections.
 func registerHuddleRoutes(mux *http.ServeMux, wsHandler *relay.SessionHandler, cfg *HuddleConfig, relayURL string, auth *taskAuthority, limiter *ratelimit.Limiter) *room.Manager {
@@ -129,25 +130,31 @@ func registerHuddleRoutes(mux *http.ServeMux, wsHandler *relay.SessionHandler, c
 		handlerConfig.PingInterval = d
 	}
 
-	if cfg.RequireMembership {
-		// Resolved once here rather than per join: Membership() is the same
-		// service for the life of the handler, and IsMember reads a cache built
-		// for exactly this kind of hot lookup.
-		membership := wsHandler.Membership()
+	// Resolved once here rather than per join: Membership() is the same
+	// service for the life of the handler, and IsMember reads a cache built
+	// for exactly this kind of hot lookup.
+	membership := wsHandler.Membership()
+	switch {
+	case auth != nil:
+		// The task model decides every join, requireMembership or not:
+		// without it everyone holds huddle.join, with it members do (unless
+		// membership.members.can leaves it out), and so do the admins and
+		// any role that lists it. A banned key holds none either way.
 		handlerConfig.Authorize = func(_ context.Context, _, pubkey string) error {
-			if membership == nil {
+			if cfg.RequireMembership && membership == nil {
 				// Configured to require membership with no membership service
 				// to ask: fail closed rather than silently let everyone in.
 				return errors.New("membership is required but not configured")
 			}
-			if auth != nil {
-				// The task model: members hold huddle.join (unless
-				// membership.members.can leaves it out), so do the admins
-				// and any role that lists it; a banned key does not.
-				if !auth.can(pubkey, taskHuddleJoin) {
-					return errors.New("not allowed to join calls on this relay")
-				}
-				return nil
+			if !auth.can(pubkey, taskHuddleJoin) {
+				return errors.New("not allowed to join calls on this relay")
+			}
+			return nil
+		}
+	case cfg.RequireMembership:
+		handlerConfig.Authorize = func(_ context.Context, _, pubkey string) error {
+			if membership == nil {
+				return errors.New("membership is required but not configured")
 			}
 			if !membership.IsMember(pubkey) {
 				return errors.New("not a relay member")
@@ -155,13 +162,19 @@ func registerHuddleRoutes(mux *http.ServeMux, wsHandler *relay.SessionHandler, c
 			return nil
 		}
 	}
+	// Listing live rooms asks for a login only under requireMembership; a
+	// relay that lets everyone join lets everyone see what to join.
+	var listAuthorize func(ctx context.Context, roomID, pubkey string) error
+	if cfg.RequireMembership {
+		listAuthorize = handlerConfig.Authorize
+	}
 
 	mux.Handle("/huddle/{id}/audio", limitConns(limiter, wsaudio.NewHandler(handlerConfig)))
 
 	// Discovery for `ncli huddle list`. A room id is otherwise pure
 	// out-of-band knowledge, and a typo silently opens an empty room rather
 	// than failing, so a joiner needs a way to see what is actually live.
-	mux.Handle("GET /huddle/rooms", huddleRoomsHandler(rooms, handlerConfig.Authorize))
+	mux.Handle("GET /huddle/rooms", huddleRoomsHandler(rooms, listAuthorize))
 
 	log.Info().
 		Bool("requireMembership", cfg.RequireMembership).

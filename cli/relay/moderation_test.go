@@ -105,8 +105,8 @@ func TestModeration_IPGate(t *testing.T) {
 
 	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusTeapot) })
 	gate := m.ipGate(next)
-	serve := func(addr, contentType string) int {
-		r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("{}"))
+	serveAt := func(path, addr, contentType string) int {
+		r := httptest.NewRequest(http.MethodPost, path, strings.NewReader("{}"))
 		r.RemoteAddr = addr
 		if contentType != "" {
 			r.Header.Set("Content-Type", contentType)
@@ -115,9 +115,14 @@ func TestModeration_IPGate(t *testing.T) {
 		gate.ServeHTTP(w, r)
 		return w.Code
 	}
+	serve := func(addr, contentType string) int { return serveAt("/", addr, contentType) }
 	require.Equal(t, http.StatusForbidden, serve("192.0.2.7:4000", ""))
 	require.Equal(t, http.StatusTeapot, serve("192.0.2.8:4000", ""))
 	require.Equal(t, http.StatusTeapot, serve("192.0.2.7:4000", nip86.ContentType), "an admin must not lock themselves out")
+	// NIP-86's content type gets past the block only at "/", where NIP-86 is.
+	for _, path := range []string{"/query", "/count", "/events", "/upload", "/" + strings.Repeat("a", 64), "/media/x"} {
+		require.Equal(t, http.StatusForbidden, serveAt(path, "192.0.2.7:4000", nip86.ContentType), path)
+	}
 
 	require.Empty(t, call(t, router, methodUnblockIP, `"192.0.2.7"`).Error)
 	require.Equal(t, http.StatusTeapot, serve("192.0.2.7:4000", ""))

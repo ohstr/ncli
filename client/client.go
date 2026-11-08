@@ -337,7 +337,7 @@ loop:
 		events = []*nip01.Event{}
 	}
 
-	data, err := json.MarshalIndent(events, "", "    ")
+	data, err := common.MarshalJSON(events, "    ")
 	if err != nil {
 		return err
 	}

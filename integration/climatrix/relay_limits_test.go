@@ -84,6 +84,22 @@ limits:
 		}
 	})
 
+	t.Run("every config warning is listed and logged once", func(t *testing.T) {
+		const portIgnored = "port is ignored: listen sets the relay's address"
+		path := e.WriteFile("port-and-listen.yaml", base()+"port: 6000\nlisten: 127.0.0.1:7000\n")
+		res := e.MustOK(t, "relay", "--config", path, "--check", "--json")
+		var got checked
+		res.JSON(t, &got)
+		if !got.OK || len(got.Warnings) != 2 || got.Warnings[0] != portIgnored || got.Warnings[1] != warning {
+			t.Errorf("--check = %s", res.Stdout)
+		}
+		for _, w := range []string{portIgnored, warning} {
+			if n := strings.Count(res.Stderr, w); n != 1 {
+				t.Errorf("%q logged %d times:\n%s", w, n, res.Stderr)
+			}
+		}
+	})
+
 	for name, c := range map[string]struct{ yaml, input string }{
 		"negative events":    {"events: {perIP: {events: -1, per: 1m}}", "limits.events.perIP.events"},
 		"events without per": {"reads: {perPubkey: {events: 5}}", "limits.reads.perPubkey.per"},

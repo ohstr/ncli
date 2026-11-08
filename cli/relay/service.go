@@ -155,9 +155,7 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to build the rate limiter")
 	}
-	for _, w := range config.limitsWarnings() {
-		log.Warn().Msg(w)
-	}
+	config.logConfigWarnings()
 	sessionConfig.RateLimiter = limiter
 
 	wsHandler := relay.NewSessionHandler(

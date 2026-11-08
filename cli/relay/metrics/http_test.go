@@ -39,3 +39,24 @@ func TestAdminDeniedReasonsPreRegistered(t *testing.T) {
 		t.Errorf("admin_denied_total series = %d, want 7 (host, cidr, token, nip98, session, csrf, replay)", n)
 	}
 }
+
+// Every rate-limit series exists from the start: five actions by ip and
+// by pubkey, and connection by ip.
+func TestRateLimitedPreRegisteredAndCounted(t *testing.T) {
+	m := New("test")
+	if n := testutil.CollectAndCount(m.rateLimited); n != 11 {
+		t.Errorf("rate_limited_total series = %d, want 11", n)
+	}
+	m.RateLimited("event", "pubkey")
+	m.RateLimited("event", "pubkey")
+	m.RateLimited("connection", "ip")
+	m.RateLimited("future", "ip") // an action this build doesn't know still counts
+	for _, c := range []struct {
+		action, by string
+		want       float64
+	}{{"event", "pubkey", 2}, {"event", "ip", 0}, {"connection", "ip", 1}, {"future", "ip", 1}} {
+		if got := testutil.ToFloat64(m.rateLimited.WithLabelValues(c.action, c.by)); got != c.want {
+			t.Errorf("rate_limited_total{action=%q,by=%q} = %v, want %v", c.action, c.by, got, c.want)
+		}
+	}
+}

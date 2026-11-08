@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ohstr/nmilat/relay"
+	"github.com/ohstr/nmilat/relay/ratelimit"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 )
@@ -55,6 +56,17 @@ type Metrics struct {
 	adminDenied    *prometheus.CounterVec
 	indexTxSeconds *prometheus.HistogramVec
 	jobRuns        *prometheus.CounterVec
+	rateLimited    *prometheus.CounterVec
+	// rateLimitedBy holds rateLimited's children by action, then by bucket,
+	// resolved once; it is read-only after New.
+	rateLimitedBy map[string]map[string]prometheus.Counter
+}
+
+// RateLimitActions are the actions ratelimit.Config.OnRefuse reports: each
+// ratelimit.Action's String, then ratelimit.ConnAction.
+var RateLimitActions = []string{
+	ratelimit.Event.String(), ratelimit.Read.String(), ratelimit.HTTP.String(),
+	ratelimit.Upload.String(), ratelimit.Download.String(), ratelimit.ConnAction,
 }
 
 const (
@@ -133,7 +145,30 @@ func New(version string) *Metrics {
 		Namespace: Namespace, Name: "index_txn_seconds", Help: "Time an index job held the store writer, per transaction.", Buckets: latencyBuckets,
 	}, []string{"index"})
 	reg.MustRegister(m.indexTxSeconds)
+	m.rateLimited = f.counterVec("rate_limited_total", "Requests and connections refused by limits:, by action and by the bucket (ip or pubkey) that was empty.", "action", "by")
+	m.rateLimitedBy = make(map[string]map[string]prometheus.Counter, len(RateLimitActions))
+	for _, a := range RateLimitActions {
+		by := []string{"ip", "pubkey"}
+		if a == ratelimit.ConnAction {
+			by = by[:1]
+		}
+		m.rateLimitedBy[a] = make(map[string]prometheus.Counter, len(by))
+		for _, b := range by {
+			m.rateLimitedBy[a][b] = m.rateLimited.WithLabelValues(a, b)
+		}
+	}
 	return m
+}
+
+// RateLimited counts one refusal by the relay's rate limiter; it fits
+// ratelimit.Config.OnRefuse. action is a RateLimitActions entry and by is
+// "ip" or "pubkey".
+func (m *Metrics) RateLimited(action, by string) {
+	if c, ok := m.rateLimitedBy[action][by]; ok {
+		c.Inc()
+		return
+	}
+	m.rateLimited.WithLabelValues(action, by).Inc()
 }
 
 // SessionOpened implements relay.Observer.

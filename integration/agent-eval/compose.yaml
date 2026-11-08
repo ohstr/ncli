@@ -18,7 +18,7 @@
 
 services:
   relay:
-    image: ghcr.io/ohstr/ncli:${NCLI_VERSION:-0.8.0-rc.51}
+    image: ghcr.io/ohstr/ncli:${NCLI_VERSION:-0.8.0-rc.52}
     command: ["relay", "--config", "/config/relay.yaml"]
     volumes:
       - ./relay/relay.yaml:/config/relay.yaml:ro

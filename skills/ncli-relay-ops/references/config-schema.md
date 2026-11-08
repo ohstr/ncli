@@ -7,7 +7,8 @@ of writing. Update by hand if the Go types change. -->
 
 | Field | Type | Default | Notes |
 |---|---|---|---|
-| `port` | int | `5500` | |
+| `port` | int | `5500` | Binds every interface; `NCLI_PORT` applies even with no `port` key |
+| `listen` | `host:port` | unset | The one address the relay binds; wins over `port`, and the admin listener defaults to `127.0.0.1:<its port + 1>` (set `admin.listen` on port 65535). Prefer an IP literal: a hostname with several addresses binds only one. `--check` rejects stray whitespace or a host that doesn't resolve. `NCLI_LISTEN` applies even with no `listen` key |
 | `nip11` | object | required | See below |
 | `store` | string | required | Path to the bbolt event store |
 | `logdir` | string | cwd if unset | Also read by `logs:` block's own default filename |

@@ -4,7 +4,8 @@
 
 # Binds every interface on this port. To bind one address instead, set
 # listen (host:port); it wins over port, and the admin listener's default
-# port follows it (port + 1).
+# port follows it (port + 1). Prefer an IP literal: a hostname with
+# several addresses binds only one.
 port: 5500
 # listen: 127.0.0.1:5500
 

@@ -511,6 +511,11 @@ func initConfig(check bool) error {
 	if err := checkRenamedKeys(viper.GetViper()); err != nil {
 		return err
 	}
+	// Before unknown keys: viper splits a role id holding a dot into nested
+	// keys, which would otherwise be reported as unknown ones.
+	if err := checkRoleKeysInFile(used); err != nil {
+		return err
+	}
 	bindAddrEnv(viper.GetViper())
 	config.warnings = nil
 	unknown, err := decodeRelayConfig(viper.GetViper(), &config)
@@ -607,9 +612,6 @@ func initConfig(check bool) error {
 		}
 	}
 
-	if err := checkRoleKeysInFile(viper.ConfigFileUsed()); err != nil {
-		return err
-	}
 	if err := config.checkRoleTasks(); err != nil {
 		return err
 	}

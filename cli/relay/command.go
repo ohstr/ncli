@@ -102,6 +102,8 @@ type RelayConfig struct {
 	Presence   *PresenceConfig    `mapstructure:"presence"`
 	Blossom    *BlossomConfig     `mapstructure:"blossom"`
 	Admin      *adminplane.Config `mapstructure:"admin"`
+	// Limits is the relay's rate limits; nil limits nothing.
+	Limits *LimitsConfig `mapstructure:"limits"`
 
 	HandshakeTimeout string `mapstructure:"handshakeTimeout"`
 	PingInterval     string `mapstructure:"pingInterval"`
@@ -416,8 +418,12 @@ func NewRelayCommand() *cobra.Command {
 			jsonMode, _ := cmd.Flags().GetBool("json")
 			if check, _ := cmd.Flags().GetBool("check"); check {
 				// initConfig, in PreRunE, already validated everything.
+				warnings := config.limitsWarnings()
+				for _, w := range warnings {
+					log.Warn().Msg(w)
+				}
 				if jsonMode {
-					common.PrintJSON(map[string]any{"ok": true, "config": viper.ConfigFileUsed()})
+					common.PrintJSON(map[string]any{"ok": true, "config": viper.ConfigFileUsed(), "warnings": warnings})
 				} else {
 					fmt.Printf("%s is valid\n", viper.ConfigFileUsed())
 				}
@@ -571,6 +577,10 @@ func initConfig() error {
 	}
 
 	if err := checkCommunityConfig(&config); err != nil {
+		return err
+	}
+
+	if err := checkLimits(&config); err != nil {
 		return err
 	}
 

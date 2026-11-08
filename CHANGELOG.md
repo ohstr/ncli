@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.8.0-rc.51]
+
+### Added
+
+- Adds opt-in rate limits to the relay (`limits`): EVENT, REQ/COUNT, the HTTP bridge and Blossom per pubkey and per IP, plus connections per IP, with members optionally exempt. A limit left unset is no limit, and a public relay without any gets a warning.
+
 ## [0.8.0-rc.50]
 
 ### Added

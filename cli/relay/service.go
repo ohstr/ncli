@@ -148,12 +148,26 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 	sessionConfig.RelayAuthoredKinds = config.relayAuthoredKinds()
 	sessionConfig.PresenceQueryKind = config.presenceKind()
 
+	// One limiter for the WebSocket, the HTTP bridge and Blossom, so a
+	// client is counted once across them. Its member check reads the
+	// membership service, which exists only once wsHandler does.
+	access := newRelayAccess(nil, moderation)
+	limiter, err := newRateLimiter(&config, access.isMember)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to build the rate limiter")
+	}
+	if limiter == nil && !config.Nip11.Limitation.AuthRequired {
+		log.Warn().Msg(noLimitsWarning)
+	}
+	sessionConfig.RateLimiter = limiter
+
 	wsHandler := relay.NewSessionHandler(
 		store,
 		&cfg.Nip11,
 		searcher,
 		relay.WithSessionConfig(sessionConfig),
 	)
+	access.membership = wsHandler.Membership()
 
 	// Profile checks and social scores serve only search and stats.
 	if config.searchEnabled() || config.profileStatsEnabled() {
@@ -272,7 +286,8 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 		// reason /query shares it -- one live membership view, not a
 		// second cache.
 		mux.Handle("/events", m.HTTP("events", relay.NewEventsHandler(store, &cfg.Nip11.Limitation, wsHandler.Membership(), config.Nip11.Self,
-			relay.WithEventsPolicy(moderation.eventPolicy), relay.WithEventsRelayAuthoredKinds(config.relayAuthoredKinds()...))))
+			relay.WithEventsPolicy(moderation.eventPolicy), relay.WithEventsRelayAuthoredKinds(config.relayAuthoredKinds()...),
+			relay.WithEventsRateLimiter(limiter))))
 	}
 
 	if countEnabled() {
@@ -282,7 +297,7 @@ func newServer(store *relay.EventStore, meili *meilisearch.MeiliClient, m *metri
 	}
 
 	if blossomEnabled() {
-		blossom, err := newBlossomServer(&config, wsHandler.Membership(), moderation)
+		blossom, err := newBlossomServer(&config, access, limiter)
 		if err != nil {
 			log.Fatal().Err(err).Msg("failed to start Blossom")
 		}

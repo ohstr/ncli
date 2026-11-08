@@ -3,6 +3,7 @@ package relay
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"net/url"
 	"path/filepath"
 	"slices"
@@ -12,6 +13,7 @@ import (
 	"github.com/ohstr/ncli/cli/common"
 	"github.com/ohstr/nmilat/nipB7/server"
 	"github.com/ohstr/nmilat/relay"
+	"github.com/ohstr/nmilat/relay/ratelimit"
 )
 
 // CountConfig configures POST /count (NIP-45) on the HTTP bridge: the same
@@ -263,22 +265,42 @@ func newBlobStore(c *RelayConfig) (server.Store, error) {
 	return server.NewDirStore(dir)
 }
 
+// relayAccess answers who is an admin (the relay key, nip86.admins) and who
+// is a member (a NIP-43 member or an admin); a banned key is neither.
+// membership may be set after the relayAccess is built, as long as it is
+// before the relay serves its first request.
+type relayAccess struct {
+	admins     []string
+	membership *relay.MembershipService
+	moderation *relayModeration
+}
+
+func newRelayAccess(membership *relay.MembershipService, moderation *relayModeration) *relayAccess {
+	return &relayAccess{admins: nip86Admins(), membership: membership, moderation: moderation}
+}
+
+func (a *relayAccess) isAdmin(pk string) bool {
+	return slices.ContainsFunc(a.admins, func(admin string) bool { return strings.EqualFold(admin, pk) })
+}
+
+func (a *relayAccess) isMember(pk string) bool {
+	if a.moderation.bannedPubkey(pk) {
+		return false
+	}
+	return a.isAdmin(pk) || (a.membership != nil && a.membership.IsMember(pk))
+}
+
 // newBlossomServer builds the Blossom server for c. Members are NIP-43
 // members; admins (the relay key, nip86.admins) count as members and may
-// delete any blob; a banned key may do neither.
-func newBlossomServer(c *RelayConfig, membership *relay.MembershipService, moderation *relayModeration) (*server.Server, error) {
+// delete any blob; a banned key may do neither. limiter, when set, counts
+// each request against limits.blossom.
+func newBlossomServer(c *RelayConfig, access *relayAccess, limiter *ratelimit.Limiter) (*server.Server, error) {
 	store, err := newBlobStore(c)
 	if err != nil {
 		return nil, err
 	}
-	admins := nip86Admins()
-	isAdmin := func(pk string) bool {
-		return slices.ContainsFunc(admins, func(a string) bool { return strings.EqualFold(a, pk) })
-	}
-	member := func(pk string) bool {
-		return !moderation.bannedPubkey(pk) && (isAdmin(pk) || membership.IsMember(pk))
-	}
-	anyone := func(pk string) bool { return !moderation.bannedPubkey(pk) }
+	member := access.isMember
+	anyone := func(pk string) bool { return !access.moderation.bannedPubkey(pk) }
 
 	b := c.Blossom
 	mayUpload := anyone
@@ -289,6 +311,10 @@ func newBlossomServer(c *RelayConfig, membership *relay.MembershipService, moder
 	if b.MembersOnly.Download {
 		mayDownload = member
 	}
+	var rateLimit func(*http.Request, bool, string) (time.Duration, bool)
+	if limiter != nil {
+		rateLimit = limiter.AllowBlossom
+	}
 	return server.New(server.Options{
 		Store:               store,
 		PublicURL:           c.blossomPublicURL(),
@@ -296,9 +322,10 @@ func newBlossomServer(c *RelayConfig, membership *relay.MembershipService, moder
 		BlobPrefix:          b.blobPrefix(),
 		MayUpload:           mayUpload,
 		MayDownload:         mayDownload,
-		IsAdmin:             isAdmin,
+		IsAdmin:             access.isAdmin,
 		MaxBlobBytes:        b.MaxBlobBytes,
 		MaxUploadsPerSigner: b.MaxUploadsPerSigner,
 		MaxUploads:          b.MaxConcurrentUploads,
+		RateLimit:           rateLimit,
 	})
 }

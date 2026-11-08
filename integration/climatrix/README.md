@@ -27,7 +27,9 @@ go test -short ./integration/climatrix/   # fast subset (also in `just check`)
   `CLIMATRIX_EXAMPLES=<dir>` points it at another set (e.g. a branch's).
 - **Docker**: the reference Blossom server and MinIO (`TestBlossomRelay`'s
   S3 storage) run in containers, skipped without Docker; set `CLIMATRIX_DOCKER_HOST` when
-  published ports aren't on localhost (Docker-out-of-Docker).
+  published ports aren't on localhost (Docker-out-of-Docker), and
+  `CLIMATRIX_REQUIRE_S3=1` (as CI does) to fail instead of skip when MinIO
+  can't start.
 - **Terminal**: `RunTTY`/`startTTY` use `script(1)` for a real pty.
 
 Inside a parent `go.work` that maps this module elsewhere, run with

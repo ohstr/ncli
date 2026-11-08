@@ -31,24 +31,43 @@ type MinIO struct {
 	client    *minio.Client
 }
 
+// skipS3 skips a test that needs MinIO, or fails it when
+// CLIMATRIX_REQUIRE_S3=1 (set in CI, where a skip would hide that the S3
+// storage went untested).
+func skipS3(t *testing.T, format string, args ...any) {
+	t.Helper()
+	if os.Getenv("CLIMATRIX_REQUIRE_S3") == "1" {
+		t.Fatalf("CLIMATRIX_REQUIRE_S3=1: "+format, args...)
+	}
+	t.Skipf(format, args...)
+}
+
 // StartMinIO runs MinIO in Docker and creates a bucket; skips when Docker
-// isn't available.
+// isn't available or the container doesn't start (fails instead under
+// CLIMATRIX_REQUIRE_S3=1).
 func StartMinIO(t *testing.T) *MinIO {
 	t.Helper()
 	if _, err := exec.LookPath("docker"); err != nil {
-		t.Skip("docker not available")
+		skipS3(t, "docker not available")
 	}
 	m := &MinIO{AccessKey: "climatrix", SecretKey: "climatrix-secret", Bucket: "ncli-media"}
 	port := allocPort(t)
 	name := fmt.Sprintf("climatrix-minio-%d-%d", os.Getpid(), port)
-	out, err := exec.Command("docker", "run", "-d", "--rm", "--name", name,
+	// Removed whatever happens below: a run that was cut short, or a
+	// container created but never started (a port collision), isn't
+	// removed by --rm.
+	t.Cleanup(func() { _ = exec.Command("docker", "rm", "-f", name).Run() })
+	// Bounded, so a stuck pull ends as a skip (or failure) of this test
+	// rather than the package timeout, which runs no cleanup.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "docker", "run", "-d", "--rm", "--name", name,
 		"-p", fmt.Sprintf("%d:9000", port),
 		"-e", "MINIO_ROOT_USER="+m.AccessKey, "-e", "MINIO_ROOT_PASSWORD="+m.SecretKey,
 		minioImage, "server", "/data").CombinedOutput()
 	if err != nil {
-		t.Skipf("can't start %s: %v\n%s", minioImage, err, out)
+		skipS3(t, "can't start %s: %v\n%s", minioImage, err, out)
 	}
-	t.Cleanup(func() { _ = exec.Command("docker", "rm", "-f", name).Run() })
 
 	m.Endpoint = fmt.Sprintf("%s:%d", dockerHost(), port)
 	m.client, err = minio.New(m.Endpoint, &minio.Options{Creds: credentials.NewStaticV4(m.AccessKey, m.SecretKey, "")})

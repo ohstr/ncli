@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.8.0-rc.51]
+
+### Added
+
+- Adds unknown-key reporting to the relay config: `ncli relay --check` fails (`invalid_input`) naming every key the relay doesn't know, such as a typo, and a normal start logs a warning for each.
+
 ## [0.8.0-rc.50]
 
 ### Added

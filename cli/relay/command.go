@@ -407,7 +407,8 @@ func NewRelayCommand() *cobra.Command {
 					return err
 				}
 			}
-			if err := initConfig(); err != nil {
+			check, _ := cmd.Flags().GetBool("check")
+			if err := initConfig(check); err != nil {
 				return common.RuntimeError(cmd, err)
 			}
 			return nil
@@ -451,7 +452,10 @@ func NewRelayCommand() *cobra.Command {
 // (rather than at PreRunE's own common.RuntimeError call) -- wrapCLIError
 // keeps an already-classified error's code as-is when a caller re-wraps it,
 // so this one classification covers the single call site for free.
-func initConfig() error {
+//
+// A config key RelayConfig doesn't know (a typo turns a setting off) fails
+// with check (--check) and is a warning otherwise.
+func initConfig(check bool) error {
 	used := viper.ConfigFileUsed()
 	if used != "" {
 		ev := log.Info().Str("config", used)
@@ -466,8 +470,17 @@ func initConfig() error {
 	if err := checkRenamedKeys(viper.GetViper()); err != nil {
 		return err
 	}
-	if err := viper.Unmarshal(&config); err != nil {
+	unknown, err := decodeRelayConfig(viper.GetViper(), &config)
+	if err != nil {
 		return &common.CLIError{Err: fmt.Errorf("unable to decode config: %w", err), Code: common.CodeInvalidInput}
+	}
+	if len(unknown) > 0 {
+		if check {
+			return unknownKeysError(unknown)
+		}
+		for _, k := range unknown {
+			log.Warn().Str("key", k).Msg("unknown config key, ignored")
+		}
 	}
 
 	if config.Nip11.PrivKey != "" {

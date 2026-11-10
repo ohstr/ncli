@@ -8,7 +8,7 @@
 # the stack's network; minio-init creates the bucket once and exits.
 services:
   relay:
-    image: ghcr.io/ohstr/ncli:${NCLI_VERSION:-0.8.0-rc.53}
+    image: ghcr.io/ohstr/ncli:${NCLI_VERSION:-0.8.0-rc.54}
     container_name: ncli_community_relay
     command: ["relay", "--config", "/app/ncli/config.yaml"]
     ports:

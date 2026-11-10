@@ -50,7 +50,7 @@ spec:
         name: agent-signer-policy
   containers:
     - name: signer
-      image: ghcr.io/ohstr/ncli:0.8.0-rc.53
+      image: ghcr.io/ohstr/ncli:0.8.0-rc.54
       args:
         - signer
         - serve

@@ -203,13 +203,13 @@ func TestTemplateProblems(t *testing.T) {
 }
 
 func TestAllowedRelayTags(t *testing.T) {
-	const two = "# Changelog\n\n## [0.8.0-rc.52]\n\n## [0.8.0-rc.51]\n\n## [0.8.0-rc.50]\n"
+	const two = "# Changelog\n\n## [0.8.0-rc.53]\n\n## [0.8.0-rc.51]\n\n## [0.8.0-rc.50]\n"
 	for _, tc := range []struct {
 		name, changelog, release string
 		want                     []string
 	}{
-		{"next release on top", two, "", []string{"0.8.0-rc.52", "0.8.0-rc.51"}},
-		{"releasing", two, "0.8.0-rc.52", []string{"0.8.0-rc.52"}},
+		{"next release on top", two, "", []string{"0.8.0-rc.53", "0.8.0-rc.51"}},
+		{"releasing", two, "0.8.0-rc.53", []string{"0.8.0-rc.53"}},
 		{"just released", "## [0.8.0-rc.51]\n\n## [0.8.0-rc.50]\n", "", []string{"0.8.0-rc.51", "0.8.0-rc.50"}},
 		{"unreleased on top", "## [Unreleased]\n\n## [0.9.0]\n", "", []string{"0.9.0"}},
 		{"one heading", "## [0.1.0]\n", "", []string{"0.1.0"}},

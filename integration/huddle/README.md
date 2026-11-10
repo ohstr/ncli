@@ -46,7 +46,7 @@ peer out of the next scenario's roster -- and `maxRooms` sits above the
 scenario count rather than exactly on it, because that teardown is not
 instant.
 
-Fourteen scenarios. The first nine drive the WebSocket door:
+Eighteen scenarios. The first nine drive the WebSocket door:
 
 - **`TwoPeersHearEachOther`** -- the core guarantee: the Opus payload
   crosses the relay **byte-identical**, attributed to its author, with the
@@ -79,7 +79,7 @@ Fourteen scenarios. The first nine drive the WebSocket door:
   `upgrade_required` naming the room's version, rather than silently
   mis-parsing the routing prefix (whose shape differs between v2 and v3).
 
-The remaining five drive the WebRTC door. Each publishing peer sends a
+The next five drive the WebRTC door. Each publishing peer sends a
 random payload per track, recorded and matched on arrival, so a crossed
 stream fails rather than a count merely coming out right. The relay never
 decodes any of it, which is what makes byte-identity the assertion:
@@ -101,6 +101,22 @@ decodes any of it, which is what makes byte-identity the assertion:
   offer, which is the order a browser actually produces. The relay used to
   reject and discard them, which cost the call every path it could not
   rediscover.
+
+The last four cover the control plane over the WebRTC door -- what a peer
+*says* it is doing, as opposed to what its packets happen to be doing:
+
+- **`StoppedCameraIsAnnounced`** -- a browser stopping its camera only
+  detaches the track, so to everyone else the picture just stops, which looks
+  exactly like loss. The publisher announces `media` camera `off`; the other
+  browser must hear it within a few seconds with a later `seq` than the
+  `live`, and no camera packets may keep arriving after it.
+- **`MicStateRoundTrip`** -- mute and unmute announced as `media` mic, so a
+  mute icon is as current as the relay.
+- **`LeaveVersusDrop`** -- a peer that says `leave` is reported `left` with
+  reason `leave`; one whose socket just closes is reported `dropped`.
+- **`LateJoinerSeesMediaState`** -- a browser arriving mid-call finds each
+  incumbent's announced media in its own `joined` roster, oldest change
+  first.
 
 Audio and video are labelled differently on the wire, and a peer reading
 them has to know that. An outbound audio track is renamed after its speaker

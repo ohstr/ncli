@@ -135,6 +135,12 @@ func TestHuddleIntegration(t *testing.T) {
 	t.Run("WebSocketPeerSeesNoVideo", testHuddleWebSocketPeerSeesNoVideo)
 	t.Run("LateJoinerGetsTheLiveCall", testHuddleLateJoinerGetsTheLiveCall)
 	t.Run("CandidatesBeforeTheOffer", testHuddleCandidatesBeforeTheOffer)
+
+	// The control plane over /rtc: media state and leave reasons.
+	t.Run("StoppedCameraIsAnnounced", testHuddleStoppedCameraIsAnnounced)
+	t.Run("MicStateRoundTrip", testHuddleMicStateRoundTrip)
+	t.Run("LeaveVersusDrop", testHuddleLeaveVersusDrop)
+	t.Run("LateJoinerSeesMediaState", testHuddleLateJoinerSeesMediaState)
 }
 
 // testHuddleTwoPeersHearEachOther is the core guarantee: the payload crosses the

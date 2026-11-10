@@ -21,7 +21,7 @@ huddle:
   # rooms only. Each scenario uses its own room id to stay isolated, and a room
   # is dropped when its last peer leaves -- but that teardown is not instant, so
   # this sits comfortably above the scenario count rather than exactly on it.
-  maxRooms: 16
+  maxRooms: 24
   # Left false on purpose: the membership gate has unit coverage, and enabling it
   # here would make every scenario enrol first for no added signal.
   requireMembership: false

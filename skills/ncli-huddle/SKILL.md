@@ -48,6 +48,15 @@ them by repacketization (huddle frame <-> RTP), not transcoding. Video exists
 only among WebRTC peers, so a WebSocket-only client in a screen-share call
 hears everything and simply misses the picture.
 
+A WebRTC peer also gets the room's control over its signalling socket: others
+joining and leaving (`left` carries `reason`: `leave`, `evicted` or
+`dropped`), and each peer's announced media (`{"type":"media","kind":
+"mic|camera|screen","state":"live|off"}`, also listed per peer on `joined`).
+A client says `{"type":"leave"}` before hanging up, and announces media when
+it starts or stops it, so the others can tell a stopped camera or a hang-up
+from a lost connection. `joined` lists `features` so a client can detect all
+this; the full shapes are in `huddle/sfu/sfu.go`.
+
 ## Hosting: the relay side
 
 In `relay.yaml`:

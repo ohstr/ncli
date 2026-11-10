@@ -4,11 +4,11 @@
 
 ### Added
 
-- Adds a control plane to the huddle `/rtc` door on `ncli relay`: a client announces `media` (mic, camera or screen share `live`/`off`) and says `leave` before hanging up, the relay fans both out with each peer's media also listed on `joined`, and `left` now carries `reason` (`leave`, `evicted` or `dropped`). A stopped camera or a hang-up no longer looks like a lost connection to the other side; `joined` lists `features` so clients can tell.
+- Adds a control plane to the huddle `/rtc` door on `ncli relay`: a client announces `media` (mic, camera or screen share `live`/`off`) and says `leave` before hanging up, the relay fans both out with each peer's media also listed on `joined`, and `left` now carries `reason` (`leave`, `evicted` or `dropped`). A stopped camera or a hang-up no longer looks like a lost connection to the other side; `joined` lists `features` so clients can tell. ([#253](https://github.com/ohstr/ncli/pull/253))
 
 ### Fixed
 
-- Fixes WebRTC huddle peers on `ncli relay` never hearing about anyone else joining or leaving: the room's control messages were discarded for them. Revoking a peer's relay membership now also closes its WebRTC session instead of leaving it connected outside the room.
+- Fixes WebRTC huddle peers on `ncli relay` never hearing about anyone else joining or leaving: the room's control messages were discarded for them. Revoking a peer's relay membership now also closes its WebRTC session instead of leaving it connected outside the room. ([#253](https://github.com/ohstr/ncli/pull/253))
 - Fixes the relay's own NIP-66 stats (kind 30166) keeping stale zap totals until another event arrived, when the zap ranking refreshed after the stats were published. ([#258](https://github.com/ohstr/ncli/pull/258))
 - Fixes `ncli bunker` sometimes missing its identity's profile name and NIP-05 when a relay sent the profile and EOSE together. ([#260](https://github.com/ohstr/ncli/pull/260))
 

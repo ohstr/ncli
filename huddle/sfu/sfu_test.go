@@ -30,6 +30,36 @@ const (
 	window    = 20 * time.Second
 )
 
+// connectWindow outlasts pion's own 25s ICE failure timeout, so on a loaded
+// -race run pion, not this timer, decides a slow handshake is dead (#220).
+const connectWindow = 60 * time.Second
+
+// waitConnected waits for pc to connect, failing as soon as pion gives up on
+// it. logs, when set, adds the server's log to the failure.
+func waitConnected(t *testing.T, pc *webrtc.PeerConnection, logs func() string) {
+	t.Helper()
+	detail := func() string {
+		if logs == nil {
+			return ""
+		}
+		return "\n" + logs()
+	}
+	deadline := time.Now().Add(connectWindow)
+	for {
+		switch state := pc.ConnectionState(); state {
+		case webrtc.PeerConnectionStateConnected:
+			return
+		case webrtc.PeerConnectionStateFailed, webrtc.PeerConnectionStateClosed:
+			t.Fatalf("the peer connection %s (ice %s)%s", state, pc.ICEConnectionState(), detail())
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the peer connection never connected in %s (state %s, ice %s)%s",
+				connectWindow, pc.ConnectionState(), pc.ICEConnectionState(), detail())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 // message is the loose shape of a signalling frame, for the client side.
 type message struct {
 	Type      string                   `json:"type"`
@@ -296,14 +326,6 @@ func TestBrowserAudioReachesAWebSocketPeer(t *testing.T) {
 		send(map[string]any{"type": "candidate", "candidate": init})
 	})
 
-	connected := make(chan struct{})
-	var once sync.Once
-	client.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
-		if state == webrtc.PeerConnectionStateConnected {
-			once.Do(func() { close(connected) })
-		}
-	})
-
 	offer, err := client.CreateOffer(nil)
 	if err != nil {
 		t.Fatalf("CreateOffer: %v", err)
@@ -348,11 +370,7 @@ func TestBrowserAudioReachesAWebSocketPeer(t *testing.T) {
 		}
 	}()
 
-	select {
-	case <-connected:
-	case <-time.After(window):
-		t.Fatalf("the peer connection never reached connected (state %s)", client.ConnectionState())
-	}
+	waitConnected(t, client, nil)
 
 	// Now speak. Keep sending: the first packets can land before the SFU has
 	// finished wiring its reader, and audio is lossy by design.
@@ -408,9 +426,8 @@ func TestBrowserAudioReachesAWebSocketPeer(t *testing.T) {
 // signalling pump that drives it. pion plays both ends, so none of this needs a
 // browser or a display.
 type browser struct {
-	pc        *webrtc.PeerConnection
-	conn      *websocket.Conn
-	connected chan struct{}
+	pc   *webrtc.PeerConnection
+	conn *websocket.Conn
 }
 
 // connectBrowser authenticates, publishes what opts asks for, and completes the
@@ -442,7 +459,7 @@ func connectBrowserWith(t *testing.T, h *harness, roomID, privKey string, publis
 	}
 	t.Cleanup(func() { _ = pc.Close() })
 
-	b := &browser{pc: pc, conn: conn, connected: make(chan struct{})}
+	b := &browser{pc: pc, conn: conn}
 
 	for _, handler := range onTrack {
 		pc.OnTrack(handler)
@@ -494,12 +511,6 @@ func connectBrowserWith(t *testing.T, h *harness, roomID, privKey string, publis
 		init := c.ToJSON()
 		send(map[string]any{"type": "candidate", "candidate": init})
 	})
-	var once sync.Once
-	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
-		if state == webrtc.PeerConnectionStateConnected {
-			once.Do(func() { close(b.connected) })
-		}
-	})
 
 	offer, err := pc.CreateOffer(nil)
 	if err != nil {
@@ -549,11 +560,7 @@ func connectBrowserWith(t *testing.T, h *harness, roomID, privKey string, publis
 		}
 	}()
 
-	select {
-	case <-b.connected:
-	case <-time.After(window):
-		t.Fatalf("the peer connection never connected (state %s)", pc.ConnectionState())
-	}
+	waitConnected(t, pc, nil)
 	return b, track, videos
 }
 
@@ -967,14 +974,6 @@ func TestCandidatesBeforeTheOfferAreNotDropped(t *testing.T) {
 		send(map[string]any{"type": "candidate", "candidate": init})
 	})
 
-	connected := make(chan struct{})
-	var connectedOnce sync.Once
-	client.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
-		if state == webrtc.PeerConnectionStateConnected {
-			connectedOnce.Do(func() { close(connected) })
-		}
-	})
-
 	offer, err := client.CreateOffer(nil)
 	if err != nil {
 		t.Fatalf("CreateOffer: %v", err)
@@ -1002,11 +1001,7 @@ func TestCandidatesBeforeTheOfferAreNotDropped(t *testing.T) {
 
 	go pumpSignalling(conn, client, send)
 
-	select {
-	case <-connected:
-	case <-time.After(window):
-		t.Fatalf("the peer connection never reached connected (state %s)\n%s", client.ConnectionState(), h.logs())
-	}
+	waitConnected(t, client, h.logs)
 	assertNoDroppedCandidates(t, h)
 }
 

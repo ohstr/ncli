@@ -366,13 +366,15 @@ func TestIndexLifecycle_KilledMidRebuildResumes(t *testing.T) {
 	if buckets["+Inf"] == 0 {
 		t.Fatalf("no index transactions recorded")
 	}
-	// Short batches, judged with room for a loaded machine: a few may pass 50ms
-	// when the scheduler stalls (#220), but no honest batch comes near 500ms.
+	// Short batches, judged with room for a loaded runner (#220): a few may pass
+	// 50ms when it stalls (CI has seen 3%, and one over 500ms), but none may hold
+	// the writer past the 1s a publish above is allowed to wait; an unbatched
+	// rebuild holds it for seconds.
 	if over := buckets["+Inf"] - buckets["0.05"]; over > buckets["+Inf"]/20 {
 		t.Errorf("index transactions over 50ms: %v of %v, want at most 5%%", over, buckets["+Inf"])
 	}
-	if buckets["0.5"] != buckets["+Inf"] {
-		t.Errorf("index transactions over 500ms: %v of %v", buckets["+Inf"]-buckets["0.5"], buckets["+Inf"])
+	if buckets["1"] != buckets["+Inf"] {
+		t.Errorf("index transactions over 1s: %v of %v", buckets["+Inf"]-buckets["1"], buckets["+Inf"])
 	}
 }
 

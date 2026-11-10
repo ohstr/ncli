@@ -3,6 +3,7 @@ package relay
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
@@ -139,6 +140,36 @@ func TestRelayStatsPublisher_TagsFollowFeatures(t *testing.T) {
 	assert.Equal(t, [][]string{{"zap-ranking", "windows", "24h", "all"}, {"zap-ranking", "coins", "sats", "loki"}}, tagsOf(ev, "zap-ranking"))
 	assert.Equal(t, [][]string{{"k", "1"}, {"k", "9735"}, {"k", "!4"}}, tagsOf(ev, "k"))
 	assert.Contains(t, tagsOf(ev, "N"), []string{"N", "11"})
+}
+
+// The zap ranking cache refreshes in the background, so its totals can change
+// with no write to the store; the next tick must still publish them (#257).
+func TestRelayStatsPublisher_PublishesTotalsThatChangeWithoutAWrite(t *testing.T) {
+	withStatsConfig(t, &CacheConfig{
+		Zaps:  &ZapsConfig{Enabled: true},
+		Relay: &RelayCacheConfig{Stats: &RelayStatsConfig{Enabled: true}},
+	})
+	store := newProfilesStore(t)
+	ctx := context.Background()
+	p := newRelayStatsPublisher(store, staticInfo(nil, nil))
+	totals := map[relay.Coin]uint64{relay.CoinSats: 21_000}
+	p.zapTotals = func(context.Context, relay.ZapRankingConfig) (map[relay.Coin]uint64, error) {
+		return maps.Clone(totals), nil
+	}
+
+	_, err := p.tick(ctx)
+	require.NoError(t, err)
+	_, err = p.tick(ctx) // settles on the relay's own event
+	require.NoError(t, err)
+	published, err := p.tick(ctx)
+	require.NoError(t, err)
+	require.False(t, published, "nothing changed: nothing published")
+
+	totals[relay.CoinLoki] = 7_000
+	published, err = p.tick(ctx)
+	require.NoError(t, err)
+	assert.True(t, published, "the refreshed totals are published")
+	assert.Contains(t, tagsOf(statsEvents(t, store)[0], "total"), []string{"total", "zaps", "7", "loki"})
 }
 
 func TestRelayStatsPublisher_RunStopsWithItsContext(t *testing.T) {

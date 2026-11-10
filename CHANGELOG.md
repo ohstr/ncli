@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.8.0-rc.54]
+
+### Fixed
+
+- Fixes the relay's own NIP-66 stats (kind 30166) keeping stale zap totals until another event arrived, when the zap ranking refreshed after the stats were published. ([#258](https://github.com/ohstr/ncli/pull/258))
+
 ## [0.8.0-rc.53]
 
 ### Changed

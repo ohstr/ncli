@@ -20,6 +20,7 @@ import (
 	"github.com/ohstr/nmilat/nip46"
 	"github.com/ohstr/nmilat/nip46/bunker"
 	relayclient "github.com/ohstr/nmilat/relay/client"
+	"github.com/ohstr/nmilat/wire"
 )
 
 // DaemonConfig is everything Daemon needs to start listening. Store/Queue
@@ -403,13 +404,24 @@ func (d *Daemon) fetchProfileFrom(ctx context.Context, u *url.URL) bool {
 	}
 	defer conn.Close()
 
-	_, events, done := conn.Subscribe(nip01.NewSubscriptionFilterGroup(&nip01.SubscriptionFilter{
+	_, events, _ := conn.Subscribe(nip01.NewSubscriptionFilterGroup(&nip01.SubscriptionFilter{
 		Kinds:   []int{0},
 		Authors: []string{d.cfg.IdentityPub},
 		Limit:   1,
 	}))
+	latest, ok := newestEvent(ctx, events, 5*time.Second)
+	if !ok {
+		return false
+	}
+	return d.applyProfile(latest)
+}
 
-	timeout := time.NewTimer(5 * time.Second)
+// newestEvent reads events until it closes (EOSE) or wait passes, and
+// returns the newest; false if ctx ended first. It never selects on the
+// subscription's done: that closes together with events, and picking it could
+// skip an event still buffered there (#259).
+func newestEvent(ctx context.Context, events <-chan *wire.EventSubscriptionResponse, wait time.Duration) (*nip01.Event, bool) {
+	timeout := time.NewTimer(wait)
 	defer timeout.Stop()
 
 	var latest *nip01.Event
@@ -417,17 +429,15 @@ func (d *Daemon) fetchProfileFrom(ctx context.Context, u *url.URL) bool {
 		select {
 		case ev, ok := <-events:
 			if !ok {
-				return d.applyProfile(latest)
+				return latest, true
 			}
 			if latest == nil || ev.Event.CreatedAt > latest.CreatedAt {
 				latest = ev.Event
 			}
-		case <-done:
-			return d.applyProfile(latest)
 		case <-timeout.C:
-			return d.applyProfile(latest)
+			return latest, true
 		case <-ctx.Done():
-			return false
+			return nil, false
 		}
 	}
 }

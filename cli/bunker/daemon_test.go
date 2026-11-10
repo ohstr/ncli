@@ -1577,6 +1577,24 @@ func TestDaemon_FetchProfile(t *testing.T) {
 	}
 }
 
+// TestNewestEvent_ReadsWhatEOSELeftBuffered is the moment EOSE arrives right
+// behind the stored event: nmilat's client has queued the event and closed
+// the subscription, so both are ready at once (#259).
+func TestNewestEvent_ReadsWhatEOSELeftBuffered(t *testing.T) {
+	older := &nip01.Event{ID: "older", CreatedAt: 1}
+	newer := &nip01.Event{ID: "newer", CreatedAt: 2}
+	for range 100 {
+		events := make(chan *wire.EventSubscriptionResponse, 2)
+		events <- &wire.EventSubscriptionResponse{Event: older}
+		events <- &wire.EventSubscriptionResponse{Event: newer}
+		close(events)
+		got, ok := newestEvent(context.Background(), events, time.Minute)
+		if !ok || got != newer {
+			t.Fatalf("newestEvent = %v, %v; want the newer buffered event", got, ok)
+		}
+	}
+}
+
 // TestDaemon_FetchProfileNoneFound checks fetchProfile leaves Profile()
 // at its empty zero value when no relay has anything for the identity --
 // the permanent, ordinary state for a signer with no published kind:0,
